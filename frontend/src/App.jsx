@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+// Emily Digital Marketing Agent - Main App Component
 import Login from './components/Login'
 import Dashboard from './components/Dashboard'
 import ContentDashboard from './components/ContentDashboard'
