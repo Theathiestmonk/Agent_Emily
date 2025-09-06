@@ -47,20 +47,27 @@ app = FastAPI(
 
 # CORS configuration
 environment = os.getenv("ENVIRONMENT", "development")
-if environment == "production":
-    # Production CORS - restrict to your production domains
-    cors_origins = [
-        "https://emily-frontend.vercel.app",
-        "https://your-production-domain.vercel.app"
-    ]
+
+# Read CORS origins from environment variable
+cors_origins_env = os.getenv("CORS_ORIGINS", "")
+if cors_origins_env:
+    # Parse comma-separated origins from environment variable
+    cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 else:
-    # Development CORS - allow localhost
-    cors_origins = [
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:5173",
-        "https://emily-frontend.vercel.app"
-    ]
+    # Fallback to default origins based on environment
+    if environment == "production":
+        cors_origins = [
+            "https://agentemily.vercel.app",
+            "https://agent-emily.onrender.com"
+        ]
+    else:
+        cors_origins = [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:5173",
+            "https://agentemily.vercel.app",
+            "https://agent-emily.onrender.com"
+        ]
 
 app.add_middleware(
     CORSMiddleware,
