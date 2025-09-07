@@ -307,9 +307,11 @@ const ContentDashboard = () => {
       
       console.log('Posting content to', content.platform, ':', content)
       
-      // For now, we'll implement Facebook posting
+      // Handle different platforms
       if (content.platform.toLowerCase() === 'facebook') {
         await postToFacebook(content)
+      } else if (content.platform.toLowerCase() === 'instagram') {
+        await postToInstagram(content)
       } else {
         // For other platforms, show a message
         showError(`${content.platform} posting not yet implemented`)
@@ -368,6 +370,49 @@ const ContentDashboard = () => {
       
     } catch (error) {
       console.error('Error posting to Facebook:', error)
+      throw error
+    }
+  }
+
+  const postToInstagram = async (content) => {
+    try {
+      const authToken = await getAuthToken()
+      
+      const response = await fetch(`${API_BASE_URL}/connections/instagram/post`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          message: content.content,
+          title: content.title,
+          hashtags: content.hashtags || [],
+          content_id: content.id
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}: ${errorText}`)
+      }
+
+      const result = await response.json()
+      console.log('Instagram post result:', result)
+      
+      showSuccess(`Successfully posted to Instagram!`)
+      
+      // Update the content status to published
+      setScheduledContent(prev => 
+        prev.map(item => 
+          item.id === content.id 
+            ? { ...item, status: 'published' }
+            : item
+        )
+      )
+      
+    } catch (error) {
+      console.error('Error posting to Instagram:', error)
       throw error
     }
   }

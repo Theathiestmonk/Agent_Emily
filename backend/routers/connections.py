@@ -297,6 +297,12 @@ async def handle_oauth_callback(
             "last_sync": datetime.now().isoformat()
         }
         
+        # Add platform-specific fields
+        if platform == "instagram":
+            connection_data["instagram_id"] = account_info.get('instagram_id')
+            connection_data["account_type"] = account_info.get('account_type')
+            connection_data["media_count"] = account_info.get('media_count', 0)
+        
         # Try to insert, if it fails due to duplicate key, update instead
         try:
             connection_response = supabase_admin.table("platform_connections").insert(connection_data).execute()
@@ -467,6 +473,8 @@ def exchange_code_for_tokens(platform: str, code: str) -> dict:
     """Exchange OAuth code for access tokens"""
     if platform == "facebook":
         return exchange_facebook_code_for_tokens(code)
+    elif platform == "instagram":
+        return exchange_instagram_code_for_tokens(code)
     else:
         raise ValueError(f"Unsupported platform: {platform}")
 
@@ -515,10 +523,58 @@ def exchange_facebook_code_for_tokens(code: str) -> dict:
         "expires_in": long_lived_data.get('expires_in', 3600)
     }
 
+def exchange_instagram_code_for_tokens(code: str) -> dict:
+    """Exchange Instagram OAuth code for access tokens"""
+    import requests
+    
+    # Instagram uses the same credentials as Facebook
+    instagram_app_id = os.getenv('INSTAGRAM_CLIENT_ID') or os.getenv('FACEBOOK_CLIENT_ID')
+    instagram_app_secret = os.getenv('INSTAGRAM_CLIENT_SECRET') or os.getenv('FACEBOOK_CLIENT_SECRET')
+    redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/instagram/callback"
+    
+    if not instagram_app_id or not instagram_app_secret:
+        raise ValueError("Instagram app credentials not configured")
+    
+    # Exchange code for access token
+    token_url = "https://graph.facebook.com/v18.0/oauth/access_token"
+    token_params = {
+        'client_id': instagram_app_id,
+        'client_secret': instagram_app_secret,
+        'redirect_uri': redirect_uri,
+        'code': code
+    }
+    
+    response = requests.get(token_url, params=token_params)
+    response.raise_for_status()
+    
+    token_data = response.json()
+    
+    # Get long-lived access token
+    long_lived_url = "https://graph.facebook.com/v18.0/oauth/access_token"
+    long_lived_params = {
+        'grant_type': 'fb_exchange_token',
+        'client_id': instagram_app_id,
+        'client_secret': instagram_app_secret,
+        'fb_exchange_token': token_data['access_token']
+    }
+    
+    long_lived_response = requests.get(long_lived_url, params=long_lived_params)
+    long_lived_response.raise_for_status()
+    
+    long_lived_data = long_lived_response.json()
+    
+    return {
+        "access_token": long_lived_data['access_token'],
+        "refresh_token": "",  # Instagram doesn't use refresh tokens
+        "expires_in": long_lived_data.get('expires_in', 3600)
+    }
+
 def get_account_info(platform: str, access_token: str) -> dict:
     """Get account information from platform API"""
     if platform == "facebook":
         return get_facebook_account_info(access_token)
+    elif platform == "instagram":
+        return get_instagram_account_info(access_token)
     else:
         raise ValueError(f"Unsupported platform: {platform}")
 
@@ -551,6 +607,61 @@ def get_facebook_account_info(access_token: str) -> dict:
         "follower_count": page.get('followers_count', 0),
         "page_access_token": page.get('access_token', '')
     }
+
+def get_instagram_account_info(access_token: str):
+    """Get Instagram account information using Graph API"""
+    try:
+        # Get Instagram Business Account ID
+        pages_url = f"https://graph.facebook.com/v18.0/me/accounts?access_token={access_token}"
+        pages_response = requests.get(pages_url)
+        
+        if pages_response.status_code != 200:
+            print(f"❌ Error fetching pages: {pages_response.status_code} - {pages_response.text}")
+            return None
+        
+        pages_data = pages_response.json()
+        pages = pages_data.get('data', [])
+        
+        if not pages:
+            print("❌ No pages found")
+            return None
+        
+        # Find page with Instagram account
+        instagram_account = None
+        for page in pages:
+            if page.get('instagram_business_account'):
+                instagram_account = page['instagram_business_account']
+                break
+        
+        if not instagram_account:
+            print("❌ No Instagram account found connected to any page")
+            return None
+        
+        instagram_id = instagram_account['id']
+        
+        # Get Instagram account details
+        instagram_url = f"https://graph.facebook.com/v18.0/{instagram_id}?fields=id,username,account_type,media_count,followers_count&access_token={access_token}"
+        instagram_response = requests.get(instagram_url)
+        
+        if instagram_response.status_code != 200:
+            print(f"❌ Error fetching Instagram account: {instagram_response.status_code} - {instagram_response.text}")
+            return None
+        
+        instagram_data = instagram_response.json()
+        
+        return {
+            'instagram_id': instagram_data['id'],
+            'username': instagram_data['username'],
+            'account_type': instagram_data['account_type'],
+            'media_count': instagram_data.get('media_count', 0),
+            'follower_count': instagram_data.get('followers_count', 0),
+            'page_id': pages[0]['id'],  # Use the first page ID
+            'page_name': pages[0]['name']
+        }
+        
+    except Exception as e:
+        print(f"❌ Error getting Instagram account info: {e}")
+        return None
 
 def revoke_tokens(platform: str, access_token: str) -> bool:
     """Revoke tokens with platform API"""
@@ -806,4 +917,209 @@ async def post_to_facebook(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to post to Facebook: {str(e)}"
+        )
+
+@router.get("/instagram/debug")
+async def debug_instagram_connection(
+    current_user: User = Depends(get_current_user)
+):
+    """Debug Instagram connection data"""
+    try:
+        print(f"🔍 Debug Instagram connection for user: {current_user.id}")
+        
+        # Get user's Instagram connection
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "instagram").eq("is_active", True).execute()
+        
+        if not response.data:
+            return {"error": "No active Instagram connection found"}
+        
+        connection = response.data[0]
+        
+        # Try to decrypt the token
+        try:
+            access_token = decrypt_token(connection['access_token_encrypted'])
+            token_status = "encrypted"
+        except:
+            access_token = connection['access_token_encrypted']
+            token_status = "unencrypted"
+        
+        return {
+            "connection_id": connection['id'],
+            "instagram_id": connection.get('instagram_id'),
+            "username": connection.get('page_username'),
+            "token_length": len(access_token),
+            "token_start": access_token[:20] + "..." if len(access_token) > 20 else access_token,
+            "token_status": token_status,
+            "is_active": connection['is_active'],
+            "connected_at": connection['connected_at']
+        }
+        
+    except Exception as e:
+        print(f"❌ Debug error: {e}")
+        return {"error": str(e)}
+
+@router.post("/instagram/post")
+async def post_to_instagram(
+    post_data: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Post content to Instagram"""
+    try:
+        print(f"📱 Instagram post request from user: {current_user.id}")
+        print(f"📝 Post data: {post_data}")
+        
+        # Get user's Instagram connection
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "instagram").eq("is_active", True).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active Instagram connection found. Please connect your Instagram account first."
+            )
+        
+        connection = response.data[0]
+        print(f"🔗 Found Instagram connection: {connection['id']}")
+        
+        # Decrypt the access token
+        try:
+            access_token = decrypt_token(connection['access_token_encrypted'])
+            print(f"🔓 Decrypted access token: {access_token[:20]}...")
+        except Exception as e:
+            print(f"❌ Error decrypting token: {e}")
+            
+            # Check if the token is already in plaintext (not encrypted)
+            if connection.get('access_token_encrypted', '').startswith('EAAB'):
+                print("🔓 Token appears to be unencrypted, using directly")
+                access_token = connection['access_token_encrypted']
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to decrypt access token. Please reconnect your Instagram account."
+                )
+        
+        # Prepare the post message
+        message = post_data.get('message', '')
+        title = post_data.get('title', '')
+        hashtags = post_data.get('hashtags', [])
+        
+        # Combine title, message, and hashtags
+        full_message = ""
+        if title:
+            full_message += f"{title}\n\n"
+        full_message += message
+        if hashtags:
+            hashtag_string = " ".join([f"#{tag}" for tag in hashtags])
+            full_message += f"\n\n{hashtag_string}"
+        
+        print(f"📄 Full message to post: {full_message}")
+        
+        # Get Instagram Business Account ID
+        instagram_id = connection.get('instagram_id')
+        if not instagram_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Instagram account ID not found. Please reconnect your Instagram account."
+            )
+        
+        # Create media container first
+        create_media_url = f"https://graph.facebook.com/v18.0/{instagram_id}/media"
+        
+        # For text-only posts, we need to create a media container with a caption
+        media_data = {
+            "caption": full_message,
+            "access_token": access_token
+        }
+        
+        print(f"🌐 Creating Instagram media container: {create_media_url}")
+        print(f"📄 Media data: {media_data}")
+        
+        # Create the media container
+        media_response = requests.post(create_media_url, data=media_data)
+        
+        if media_response.status_code != 200:
+            try:
+                error_data = media_response.json()
+                print(f"❌ Instagram API error (JSON): {media_response.status_code} - {error_data}")
+            except:
+                error_text = media_response.text
+                print(f"❌ Instagram API error (Text): {media_response.status_code} - {error_text}")
+                error_data = {"error": {"message": error_text}}
+            
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Instagram API error: {error_data.get('error', {}).get('message', 'Unknown error')}"
+            )
+        
+        media_result = media_response.json()
+        media_id = media_result.get('id')
+        
+        if not media_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create Instagram media container"
+            )
+        
+        print(f"✅ Instagram media container created: {media_id}")
+        
+        # Publish the media
+        publish_url = f"https://graph.facebook.com/v18.0/{instagram_id}/media_publish"
+        publish_data = {
+            "creation_id": media_id,
+            "access_token": access_token
+        }
+        
+        print(f"🌐 Publishing Instagram media: {publish_url}")
+        publish_response = requests.post(publish_url, data=publish_data)
+        
+        if publish_response.status_code != 200:
+            try:
+                error_data = publish_response.json()
+                print(f"❌ Instagram publish error (JSON): {publish_response.status_code} - {error_data}")
+            except:
+                error_text = publish_response.text
+                print(f"❌ Instagram publish error (Text): {publish_response.status_code} - {error_text}")
+                error_data = {"error": {"message": error_text}}
+            
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Instagram publish error: {error_data.get('error', {}).get('message', 'Unknown error')}"
+            )
+        
+        publish_result = publish_response.json()
+        post_id = publish_result.get('id')
+        
+        print(f"✅ Instagram post published: {post_id}")
+        
+        # Update content status in Supabase to 'published'
+        try:
+            content_id = post_data.get('content_id')
+            if content_id:
+                update_response = supabase_admin.table("content_posts").update({
+                    "status": "published",
+                    "published_at": datetime.now().isoformat(),
+                    "instagram_post_id": post_id
+                }).eq("id", content_id).execute()
+                
+                print(f"✅ Updated content status in database: {update_response}")
+            else:
+                print("⚠️  No content_id provided, skipping database update")
+        except Exception as e:
+            print(f"⚠️  Error updating content status in database: {e}")
+            # Don't fail the whole request if database update fails
+        
+        return {
+            "success": True,
+            "platform": "instagram",
+            "post_id": post_id,
+            "message": "Content posted to Instagram successfully!",
+            "url": f"https://instagram.com/p/{post_id}" if post_id else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error posting to Instagram: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to post to Instagram: {str(e)}"
         )
