@@ -615,6 +615,30 @@ async def post_to_facebook(
         
         print(f"📄 Full message to post: {full_message}")
         
+        # First, validate the access token by getting page info
+        try:
+            validate_url = f"https://graph.facebook.com/v18.0/{connection['page_id']}?access_token={access_token}"
+            print(f"🔍 Validating token with URL: {validate_url}")
+            
+            validate_response = requests.get(validate_url)
+            print(f"🔍 Token validation response: {validate_response.status_code}")
+            
+            if validate_response.status_code != 200:
+                validate_error = validate_response.json() if validate_response.headers.get('content-type', '').startswith('application/json') else {"error": validate_response.text}
+                print(f"❌ Token validation failed: {validate_error}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Invalid or expired access token: {validate_error.get('error', {}).get('message', 'Token validation failed')}"
+                )
+            
+            page_info = validate_response.json()
+            print(f"✅ Token valid, page info: {page_info}")
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"⚠️  Token validation error (continuing anyway): {e}")
+        
         # Post to Facebook
         facebook_url = f"https://graph.facebook.com/v18.0/{connection['page_id']}/feed"
         
@@ -624,8 +648,14 @@ async def post_to_facebook(
         }
         
         print(f"🌐 Posting to Facebook URL: {facebook_url}")
+        print(f"📄 Payload: {payload}")
+        print(f"🔑 Access token length: {len(access_token)}")
+        print(f"📱 Page ID: {connection['page_id']}")
         
         response = requests.post(facebook_url, data=payload)
+        
+        print(f"📊 Facebook API response status: {response.status_code}")
+        print(f"📄 Facebook API response headers: {dict(response.headers)}")
         
         if response.status_code == 200:
             result = response.json()
@@ -639,12 +669,30 @@ async def post_to_facebook(
                 "url": f"https://facebook.com/{result.get('id')}" if result.get('id') else None
             }
         else:
-            error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {"error": response.text}
-            print(f"❌ Facebook API error: {response.status_code} - {error_data}")
+            try:
+                error_data = response.json()
+                print(f"❌ Facebook API error (JSON): {response.status_code} - {error_data}")
+            except:
+                error_text = response.text
+                print(f"❌ Facebook API error (Text): {response.status_code} - {error_text}")
+                error_data = {"error": {"message": error_text}}
+            
+            # More specific error handling
+            error_message = "Unknown error"
+            if isinstance(error_data, dict):
+                if "error" in error_data:
+                    if isinstance(error_data["error"], dict):
+                        error_message = error_data["error"].get("message", "Unknown error")
+                    else:
+                        error_message = str(error_data["error"])
+                else:
+                    error_message = str(error_data)
+            
+            print(f"🔍 Parsed error message: {error_message}")
             
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Facebook API error: {error_data.get('error', {}).get('message', 'Unknown error')}"
+                detail=f"Facebook API error: {error_message}"
             )
             
     except HTTPException:
