@@ -342,7 +342,8 @@ const ContentDashboard = () => {
         body: JSON.stringify({
           message: content.content,
           title: content.title,
-          hashtags: content.hashtags || []
+          hashtags: content.hashtags || [],
+          content_id: content.id
         })
       })
 

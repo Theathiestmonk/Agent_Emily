@@ -747,6 +747,24 @@ async def post_to_facebook(
             result = response.json()
             print(f"✅ Facebook post successful: {result}")
             
+            # Update content status in Supabase to 'published'
+            try:
+                # Get the content ID from the post data (we need to add this to the request)
+                content_id = post_data.get('content_id')
+                if content_id:
+                    update_response = supabase_admin.table("content_posts").update({
+                        "status": "published",
+                        "published_at": datetime.now().isoformat(),
+                        "facebook_post_id": result.get('id')
+                    }).eq("id", content_id).execute()
+                    
+                    print(f"✅ Updated content status in database: {update_response}")
+                else:
+                    print("⚠️  No content_id provided, skipping database update")
+            except Exception as e:
+                print(f"⚠️  Error updating content status in database: {e}")
+                # Don't fail the whole request if database update fails
+            
             return {
                 "success": True,
                 "platform": "facebook",
