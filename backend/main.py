@@ -57,21 +57,19 @@ cors_origins_env = os.getenv("CORS_ORIGINS", "")
 if cors_origins_env:
     # Parse comma-separated origins from environment variable
     cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+    logger.info(f"CORS origins loaded from environment: {cors_origins}")
 else:
-    # Fallback to default origins based on environment
+    # Fallback to localhost for development only
     if environment == "production":
-        cors_origins = [
-            "https://agentemily.vercel.app",
-            "https://agent-emily.onrender.com"
-        ]
+        # In production, CORS_ORIGINS must be set in environment variables
+        raise ValueError("CORS_ORIGINS environment variable must be set in production")
     else:
         cors_origins = [
             "http://localhost:3000",
             "http://localhost:3001",
-            "http://localhost:5173",
-            "https://agentemily.vercel.app",
-            "https://agent-emily.onrender.com"
+            "http://localhost:5173"
         ]
+        logger.info(f"CORS origins set to development defaults: {cors_origins}")
 
 app.add_middleware(
     CORSMiddleware,
