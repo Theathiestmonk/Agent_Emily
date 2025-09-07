@@ -7,7 +7,6 @@ import { contentAPI } from '../services/content'
 import { supabase } from '../lib/supabase'
 import ContentProgress from './ContentProgress'
 import SideNavbar from './SideNavbar'
-import LoadingBar from './LoadingBar'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 import { 
@@ -71,9 +70,6 @@ const ContentDashboard = () => {
       
       console.log('Fetched content data:', result)
       console.log('Cache status:', getCacheStatus())
-      console.log('Backend date:', result.date)
-      console.log('Backend timezone:', result.timezone)
-      console.log('Frontend current date:', new Date().toISOString().split('T')[0])
       
       if (result.data) {
         console.log('Content items:', result.data)
@@ -370,12 +366,10 @@ const ContentDashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center">
-        <div className="w-full max-w-md px-8">
-          <LoadingBar 
-            message="Loading your content..." 
-            className="text-center"
-          />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your content...</p>
         </div>
       </div>
     )
@@ -540,7 +534,7 @@ const ContentDashboard = () => {
                       <Calendar className="w-4 h-4 text-white" />
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-600">Total</p>
+                      <p className="text-xs font-medium text-gray-600">Today's Content</p>
                       <p className="text-lg font-bold text-gray-900">{scheduledContent.length}</p>
                     </div>
                   </div>
@@ -585,9 +579,7 @@ const ContentDashboard = () => {
                   className="flex items-center space-x-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
                 >
                   {generating ? (
-                    <div className="w-4 h-4 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center">
-                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                    </div>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
                     <Sparkles className="w-4 h-4" />
                   )}
@@ -668,7 +660,7 @@ const ContentDashboard = () => {
                 <div className="w-24 h-24 bg-gradient-to-r from-pink-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
                   <Sparkles className="w-12 h-12 text-pink-500" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No content available</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No content for today</h3>
                 <p className="text-gray-500 mb-6">Generate content to see it displayed here</p>
                 <button
                   onClick={handleGenerateContent}
@@ -677,9 +669,7 @@ const ContentDashboard = () => {
                 >
                   {generating ? (
                     <>
-                      <div className="w-5 h-5 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center">
-                        <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse"></div>
-                      </div>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
                       <span>Generating Content...</span>
                     </>
                   ) : (
@@ -792,9 +782,7 @@ const ContentDashboard = () => {
                           title={content.status === 'published' ? 'Already Published' : postingContent.has(content.id) ? 'Posting...' : `Post to ${content.platform}`}
                         >
                           {postingContent.has(content.id) ? (
-                            <div className="w-4 h-4 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center">
-                              <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                            </div>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
                           ) : (
                             <Share2 className="w-4 h-4" />
                           )}

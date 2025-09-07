@@ -3,7 +3,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { useContentCache } from '../contexts/ContentCacheContext'
 import { contentAPI } from '../services/content'
 import SideNavbar from './SideNavbar'
-import LoadingBar from './LoadingBar'
 import { 
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -44,12 +43,6 @@ const ContentCalendar = () => {
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState(null)
   const [selectedDateContent, setSelectedDateContent] = useState([])
-
-  // Get current date in a consistent way (same as backend logic)
-  const getCurrentDate = () => {
-    const now = new Date()
-    return now.toISOString().split('T')[0] // Returns YYYY-MM-DD format
-  }
 
   // Platform icons mapping
   const platformIcons = {
@@ -197,17 +190,15 @@ const ContentCalendar = () => {
 
   const isToday = (date) => {
     if (!date) return false
-    const todayStr = getCurrentDate()
-    const dateStr = date.toISOString().split('T')[0]
-    console.log('Calendar isToday check:', { dateStr, todayStr, isToday: dateStr === todayStr })
-    return dateStr === todayStr
+    const today = new Date()
+    return date.toDateString() === today.toDateString()
   }
 
   const isPastDate = (date) => {
     if (!date) return false
-    const todayStr = getCurrentDate()
-    const dateStr = date.toISOString().split('T')[0]
-    return dateStr < todayStr
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return date < today
   }
 
   const days = getDaysInMonth(currentDate)
@@ -215,12 +206,10 @@ const ContentCalendar = () => {
 
   if (loading || contentLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center">
-        <div className="w-full max-w-md px-8">
-          <LoadingBar 
-            message="Loading content calendar..." 
-            className="text-center"
-          />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 animate-spin text-pink-500 mx-auto mb-4" />
+          <p className="text-gray-600">Loading content calendar...</p>
         </div>
       </div>
     )
