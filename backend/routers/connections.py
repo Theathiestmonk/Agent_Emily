@@ -69,7 +69,7 @@ def get_current_user(authorization: str = Header(None)):
                     id=user_data.id,
                     email=user_data.email or "unknown@example.com",
                     name=user_data.user_metadata.get('name', user_data.email or "Unknown User"),
-                    created_at=user_data.created_at
+                    created_at=user_data.created_at.isoformat() if hasattr(user_data.created_at, 'isoformat') else str(user_data.created_at)
                 )
             else:
                 print("❌ No user found in response, using mock user")
