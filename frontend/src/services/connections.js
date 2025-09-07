@@ -1,12 +1,18 @@
 import { supabase } from '../lib/supabase'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+
+// Helper function to build API URLs
+const buildApiUrl = (endpoint) => {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+  return `${API_BASE_URL}${cleanEndpoint}`
+}
 
 class ConnectionsAPI {
   // Get all connections for current user
   async getConnections() {
     try {
-      const response = await fetch(`${API_BASE_URL}/connections/`, {
+      const response = await fetch(buildApiUrl('/connections/'), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -29,7 +35,7 @@ class ConnectionsAPI {
   // Initiate OAuth connection for a platform
   async initiateConnection(platform) {
     try {
-      const response = await fetch(`${API_BASE_URL}/connections/auth/${platform}/connect/`, {
+      const response = await fetch(buildApiUrl(`/connections/auth/${platform}/connect/`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -52,7 +58,7 @@ class ConnectionsAPI {
   // Handle OAuth callback (this will be called by the backend)
   async handleCallback(platform, code, state) {
     try {
-      const response = await fetch(`${API_BASE_URL}/connections/auth/${platform}/callback/`, {
+      const response = await fetch(buildApiUrl(`/connections/auth/${platform}/callback/`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,7 +82,7 @@ class ConnectionsAPI {
   // Disconnect an account
   async disconnectAccount(connectionId) {
     try {
-      const response = await fetch(`${API_BASE_URL}/connections/${connectionId}/`, {
+      const response = await fetch(buildApiUrl(`/connections/${connectionId}/`), {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -99,7 +105,7 @@ class ConnectionsAPI {
   // Refresh connection tokens
   async refreshConnection(connectionId) {
     try {
-      const response = await fetch(`${API_BASE_URL}/connections/${connectionId}/refresh/`, {
+      const response = await fetch(buildApiUrl(`/connections/${connectionId}/refresh/`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -122,7 +128,7 @@ class ConnectionsAPI {
   // Update connection settings
   async updateConnectionSettings(connectionId, settings) {
     try {
-      const response = await fetch(`${API_BASE_URL}/connections/${connectionId}/settings/`, {
+      const response = await fetch(buildApiUrl(`/connections/${connectionId}/settings/`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -146,7 +152,7 @@ class ConnectionsAPI {
   // Get connection analytics
   async getConnectionAnalytics(connectionId) {
     try {
-      const response = await fetch(`${API_BASE_URL}/connections/${connectionId}/analytics/`, {
+      const response = await fetch(buildApiUrl(`/connections/${connectionId}/analytics/`), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

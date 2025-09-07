@@ -9,7 +9,7 @@ const DebugPanel = () => {
     const checkEnvironment = async () => {
       const info = {
         // Environment variables
-        apiUrl: import.meta.env.VITE_API_URL,
+        apiUrl: (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, ''),
         supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
         nodeEnv: import.meta.env.MODE,
         
@@ -62,7 +62,8 @@ const DebugPanel = () => {
 
   const testFacebookConnection = async () => {
     try {
-      const response = await fetch(`${debugInfo.apiUrl}/connections/auth/facebook/connect/`, {
+      const apiUrl = debugInfo.apiUrl.replace(/\/$/, '')
+      const response = await fetch(`${apiUrl}/connections/auth/facebook/connect/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
