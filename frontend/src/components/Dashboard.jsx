@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { onboardingAPI } from '../services/onboarding'
 import SideNavbar from './SideNavbar'
+import LoadingBar from './LoadingBar'
 import ConnectionCards from './ConnectionCards'
 import DebugPanel from './DebugPanel'
 import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar } from 'lucide-react'
@@ -38,14 +39,7 @@ function Dashboard() {
   }, [user])
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your dashboard...</p>
-        </div>
-      </div>
-    )
+    return <LoadingBar message="Loading your dashboard..." />
   }
 
   if (!user) {

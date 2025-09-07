@@ -6,6 +6,7 @@ import { useContentCache } from '../contexts/ContentCacheContext'
 import { contentAPI } from '../services/content'
 import { supabase } from '../lib/supabase'
 import ContentProgress from './ContentProgress'
+import LoadingBar from './LoadingBar'
 import SideNavbar from './SideNavbar'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
@@ -365,14 +366,7 @@ const ContentDashboard = () => {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your content...</p>
-        </div>
-      </div>
-    )
+    return <LoadingBar message="Loading your content..." />
   }
 
   const handleProgressComplete = () => {

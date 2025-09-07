@@ -7,6 +7,7 @@ import ContentDashboard from './components/ContentDashboard'
 import ContentCalendar from './components/ContentCalendar'
 import Onboarding from './components/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
+import LoadingBar from './components/LoadingBar'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { NotificationProvider, useNotifications } from './contexts/NotificationContext'
 import { ContentCacheProvider } from './contexts/ContentCacheContext'
@@ -40,14 +41,7 @@ function ProtectedRoute({ children }) {
   }, [isAuthenticated, user])
 
   if (loading || checkingOnboarding) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
+    return <LoadingBar message="Loading..." />
   }
 
   if (!isAuthenticated) {
