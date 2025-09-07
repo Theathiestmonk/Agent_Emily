@@ -125,16 +125,31 @@ async def initiate_connection(
             detail=f"Failed to initiate connection: {str(e)}"
         )
 
-@router.post("/auth/{platform}/callback")
+@router.get("/auth/{platform}/callback")
 async def handle_oauth_callback(
     platform: str,
-    callback_data: dict,
+    code: str = None,
+    state: str = None,
+    error: str = None,
     current_user: User = Depends(get_current_user)
 ):
     """Handle OAuth callback and store connection"""
     try:
+        # Check for OAuth error
+        if error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"OAuth error: {error}"
+            )
+        
+        if not code or not state:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing code or state parameter"
+            )
+        
         # Verify state
-        state_response = supabase.table("oauth_states").select("*").eq("state", callback_data.get("state")).eq("user_id", current_user.id).eq("platform", platform).execute()
+        state_response = supabase.table("oauth_states").select("*").eq("state", state).eq("user_id", current_user.id).eq("platform", platform).execute()
         
         if not state_response.data:
             raise HTTPException(
@@ -143,7 +158,7 @@ async def handle_oauth_callback(
             )
         
         # Exchange code for tokens (mock for now)
-        tokens = exchange_code_for_tokens(platform, callback_data.get("code"))
+        tokens = exchange_code_for_tokens(platform, code)
         
         # Get account information (mock for now)
         account_info = get_account_info(platform, tokens['access_token'])
@@ -166,18 +181,40 @@ async def handle_oauth_callback(
         connection_response = supabase.table("platform_connections").insert(connection_data).execute()
         
         # Remove used state
-        supabase.table("oauth_states").delete().eq("state", callback_data.get("state")).execute()
+        supabase.table("oauth_states").delete().eq("state", state).execute()
         
-        return {
-            "success": True,
-            "connection": {
-                "id": connection_response.data[0]["id"],
-                "platform": platform,
-                "page_name": account_info.get('page_name'),
-                "follower_count": account_info.get('follower_count', 0),
-                "connection_status": 'active'
-            }
-        }
+        # Return HTML page that redirects back to frontend
+        frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Connection Successful</title>
+        </head>
+        <body>
+            <script>
+                // Close the popup window or redirect
+                if (window.opener) {{
+                    window.opener.postMessage({{
+                        type: 'OAUTH_SUCCESS',
+                        platform: '{platform}',
+                        connection: {{
+                            id: '{connection_response.data[0]["id"]}',
+                            platform: '{platform}',
+                            page_name: '{account_info.get('page_name', '')}',
+                            follower_count: {account_info.get('follower_count', 0)},
+                            connection_status: 'active'
+                        }}
+                    }}, '*');
+                    window.close();
+                }} else {{
+                    window.location.href = '{frontend_url}';
+                }}
+            </script>
+            <p>Connection successful! You can close this window.</p>
+        </body>
+        </html>
+        """
         
     except Exception as e:
         raise HTTPException(

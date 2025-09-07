@@ -103,8 +103,44 @@ const ConnectionCards = () => {
         return
       }
       
-      // Redirect to OAuth URL
-      window.location.href = authUrl
+      // Open OAuth in popup window
+      const popup = window.open(
+        authUrl,
+        'oauth',
+        'width=600,height=700,scrollbars=yes,resizable=yes'
+      )
+      
+      // Listen for OAuth completion
+      const checkClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkClosed)
+          setConnecting(null)
+          // Refresh connections
+          fetchConnections()
+        }
+      }, 1000)
+      
+      // Listen for postMessage from popup
+      const handleMessage = (event) => {
+        if (event.data.type === 'OAUTH_SUCCESS') {
+          popup.close()
+          clearInterval(checkClosed)
+          setConnecting(null)
+          // Refresh connections
+          fetchConnections()
+        }
+      }
+      
+      window.addEventListener('message', handleMessage)
+      
+      // Clean up listener when popup closes
+      const cleanup = () => {
+        window.removeEventListener('message', handleMessage)
+        clearInterval(checkClosed)
+      }
+      
+      popup.addEventListener('beforeunload', cleanup)
+      
     } catch (error) {
       console.error('Failed to connect:', error)
       setConnecting(null)
