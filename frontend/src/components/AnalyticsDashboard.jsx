@@ -80,6 +80,9 @@ const AnalyticsDashboard = () => {
       )
       
       console.log('📊 Has analytics data:', hasData)
+      console.log('📊 Analytics structure:', JSON.stringify(data, null, 2))
+      console.log('📊 Analytics keys:', Object.keys(data?.analytics || {}))
+      console.log('📊 Overview data:', data?.analytics?.overview)
       setAnalytics(data.analytics || {})
       
       if (forceRefresh) {
@@ -159,7 +162,14 @@ const AnalyticsDashboard = () => {
   }
 
   const connectedPlatforms = connections.filter(conn => conn.is_active)
-  const hasAnalytics = Object.keys(analytics).length > 0
+  const hasAnalytics = analytics && (
+    Object.keys(analytics).length > 1 || // More than just overview
+    (analytics.overview && (
+      analytics.overview.total_reach > 0 ||
+      analytics.overview.total_engagement > 0 ||
+      analytics.overview.total_posts > 0
+    ))
+  )
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
