@@ -423,7 +423,7 @@ const ContentDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
       {/* Progress Bar */}
       <ContentProgress 
         isVisible={showProgress} 
@@ -434,9 +434,9 @@ const ContentDashboard = () => {
       <SideNavbar />
       
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="bg-white shadow-sm border-b">
+      <div className="ml-64 flex flex-col min-h-screen">
+        {/* Fixed Header */}
+        <div className="fixed top-0 right-0 left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center space-x-8">
@@ -546,7 +546,8 @@ const ContentDashboard = () => {
           </div>
         </div>
 
-        <div className="flex-1 p-6">
+        {/* Scrollable Content */}
+        <div className="flex-1 p-6 pt-24">
           {/* Status Message */}
           {generationStatus && (
             <div className={`mb-6 p-4 rounded-lg ${

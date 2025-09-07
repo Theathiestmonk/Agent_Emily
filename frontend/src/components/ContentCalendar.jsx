@@ -217,14 +217,14 @@ const ContentCalendar = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50">
       {/* Side Navbar */}
       <SideNavbar />
       
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="bg-white shadow-sm border-b">
+      <div className="ml-64 flex flex-col min-h-screen">
+        {/* Fixed Header */}
+        <div className="fixed top-0 right-0 left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
@@ -252,7 +252,8 @@ const ContentCalendar = () => {
           </div>
         </div>
 
-        <div className="flex-1 p-6">
+        {/* Scrollable Content */}
+        <div className="flex-1 p-6 pt-24">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Calendar */}
           <div className="lg:col-span-3">

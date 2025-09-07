@@ -71,9 +71,9 @@ const SideNavbar = () => {
   }
 
   return (
-    <div className={`bg-white shadow-lg transition-all duration-300 ${
+    <div className={`bg-white shadow-lg transition-all duration-300 fixed left-0 top-0 h-screen z-50 ${
       isCollapsed ? 'w-16' : 'w-64'
-    } min-h-screen flex flex-col`}>
+    } flex flex-col overflow-hidden`} style={{position: 'fixed', zIndex: 50}}>
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">

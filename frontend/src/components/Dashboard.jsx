@@ -60,14 +60,14 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
       {/* Side Navbar */}
       <SideNavbar />
       
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="bg-white shadow-sm border-b">
+      <div className="ml-64 flex flex-col min-h-screen">
+        {/* Fixed Header */}
+        <div className="fixed top-0 right-0 left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-6 py-4">
             <div className="flex justify-between items-center">
               <div>
@@ -93,23 +93,10 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="flex-1 p-6">
-        {/* Welcome Section */}
+        {/* Scrollable Content */}
+        <div className="flex-1 p-6 pt-24">
+        {/* Feature Cards Section */}
         <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
-          <div className="flex items-center mb-6">
-            <div className="w-16 h-16 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mr-4">
-              <Sparkles className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                Welcome back, {profile?.business_name || user?.user_metadata?.name || 'there'}! 👋
-              </h2>
-              <p className="text-gray-600">
-                Ready to take your {profile?.industry?.join(', ') || 'business'} to the next level?
-              </p>
-            </div>
-          </div>
-
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-gradient-to-r from-pink-50 to-pink-100 p-6 rounded-xl">
               <TrendingUp className="w-8 h-8 text-pink-600 mb-3" />
