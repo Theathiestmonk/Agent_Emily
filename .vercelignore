@@ -52,3 +52,4 @@ tmp/
 *.sqlite3
 *.bak
 *.backup
+frontend-backup/
