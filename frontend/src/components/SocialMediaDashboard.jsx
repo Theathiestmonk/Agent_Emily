@@ -34,6 +34,7 @@ const SocialMediaDashboard = () => {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
+  const [debugData, setDebugData] = useState(null)
 
   useEffect(() => {
     fetchData()
@@ -57,6 +58,8 @@ const SocialMediaDashboard = () => {
   const fetchConnections = async () => {
     try {
       const authToken = await getAuthToken()
+      console.log('🔗 Fetching connections with token:', authToken ? 'present' : 'missing')
+      
       const response = await fetch(`${API_BASE_URL}/connections`, {
         method: 'GET',
         headers: {
@@ -65,12 +68,24 @@ const SocialMediaDashboard = () => {
         }
       })
 
+      console.log('🔗 Connections response status:', response.status)
+
       if (!response.ok) {
+        const errorText = await response.text()
+        console.error('🔗 Connections API error:', errorText)
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const data = await response.json()
-      setConnections(data.connections || [])
+      console.log('🔗 Connections data:', data)
+      console.log('🔗 Data type:', typeof data)
+      console.log('🔗 Is array:', Array.isArray(data))
+      console.log('🔗 Data length:', data?.length)
+      
+      // The API returns an array directly, not wrapped in an object
+      const connectionsArray = Array.isArray(data) ? data : (data.connections || [])
+      console.log('🔗 Connections array:', connectionsArray)
+      setConnections(connectionsArray)
     } catch (error) {
       console.error('Error fetching connections:', error)
       throw error
@@ -80,6 +95,8 @@ const SocialMediaDashboard = () => {
   const fetchLatestPosts = async () => {
     try {
       const authToken = await getAuthToken()
+      console.log('📱 Fetching latest posts with token:', authToken ? 'present' : 'missing')
+      
       const response = await fetch(`${API_BASE_URL}/social-media/latest-posts`, {
         method: 'GET',
         headers: {
@@ -88,11 +105,16 @@ const SocialMediaDashboard = () => {
         }
       })
 
+      console.log('📱 Posts response status:', response.status)
+
       if (!response.ok) {
+        const errorText = await response.text()
+        console.error('📱 Posts API error:', errorText)
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const data = await response.json()
+      console.log('📱 Posts data:', data)
       setPosts(data.posts || {})
     } catch (error) {
       console.error('Error fetching latest posts:', error)
@@ -112,6 +134,33 @@ const SocialMediaDashboard = () => {
       showError('Failed to refresh data', error.message)
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  const handleDebugConnections = async () => {
+    try {
+      const authToken = await getAuthToken()
+      console.log('🔍 Debugging connections...')
+      
+      const response = await fetch(`${API_BASE_URL}/social-media/debug-connections`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log('🔍 Debug data:', data)
+      setDebugData(data)
+      showSuccess('Debug data loaded! Check console for details.')
+    } catch (error) {
+      console.error('Error debugging connections:', error)
+      showError('Failed to debug connections', error.message)
     }
   }
 
@@ -213,6 +262,12 @@ const SocialMediaDashboard = () => {
 
   const connectedPlatforms = connections.filter(conn => conn.is_active)
   const hasPosts = Object.keys(posts).length > 0
+  
+  console.log('🔍 Debug state:')
+  console.log('  - connections:', connections)
+  console.log('  - connectedPlatforms:', connectedPlatforms)
+  console.log('  - posts:', posts)
+  console.log('  - hasPosts:', hasPosts)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -254,6 +309,15 @@ const SocialMediaDashboard = () => {
                   </div>
                 </div>
                 
+                {/* Debug Button */}
+                <button
+                  onClick={handleDebugConnections}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-yellow-500 transition-all duration-300"
+                >
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Debug</span>
+                </button>
+                
                 {/* Refresh Button */}
                 <button
                   onClick={handleRefresh}
@@ -276,6 +340,29 @@ const SocialMediaDashboard = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 p-6 pt-24">
+          {/* Debug Data Display */}
+          {debugData && (
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <h3 className="text-lg font-semibold text-yellow-800 mb-2">Debug Information</h3>
+              <div className="text-sm text-yellow-700">
+                <p><strong>User ID:</strong> {debugData.user_id}</p>
+                <p><strong>Total Connections:</strong> {debugData.total_connections}</p>
+                <p><strong>Active Connections:</strong> {debugData.active_connections}</p>
+                <div className="mt-2">
+                  <p><strong>Active Connections:</strong></p>
+                  <ul className="list-disc list-inside ml-4">
+                    {debugData.active_connections_data.map((conn, index) => (
+                      <li key={index}>
+                        {conn.platform} - {conn.page_name} (ID: {conn.page_id}) - 
+                        Token: {conn.has_access_token ? 'Yes' : 'No'} - 
+                        Status: {conn.connection_status}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
           {connectedPlatforms.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-24 h-24 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6">
