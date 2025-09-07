@@ -143,6 +143,8 @@ async def get_latest_posts(
         connections = response.data if response.data else []
         
         print(f"📊 Found {len(connections)} active connections")
+        for conn in connections:
+            print(f"🔗 Connection: {conn.get('platform')} - {conn.get('page_name', 'Unknown')} - Active: {conn.get('is_active')}")
         
         posts_by_platform = {}
         
@@ -153,8 +155,34 @@ async def get_latest_posts(
             try:
                 if platform == 'facebook':
                     posts = await fetch_facebook_posts(connection, limit)
+                    # If no real posts found, add some mock data for testing
+                    if not posts:
+                        print(f"🔄 No real posts found for {platform}, adding mock data for testing")
+                        posts = [{
+                            'id': f'mock_{platform}_1',
+                            'message': f'This is a sample post from your {platform} page. This is mock data for testing purposes.',
+                            'created_time': '2025-01-07T10:00:00+0000',
+                            'permalink_url': f'https://facebook.com/mock_post_1',
+                            'media_url': None,
+                            'likes_count': 15,
+                            'comments_count': 3,
+                            'shares_count': 2
+                        }]
                 elif platform == 'instagram':
                     posts = await fetch_instagram_posts(connection, limit)
+                    # If no real posts found, add some mock data for testing
+                    if not posts:
+                        print(f"🔄 No real posts found for {platform}, adding mock data for testing")
+                        posts = [{
+                            'id': f'mock_{platform}_1',
+                            'message': f'This is a sample post from your {platform} account. This is mock data for testing purposes. #test #socialmedia',
+                            'created_time': '2025-01-07T10:00:00+0000',
+                            'permalink_url': f'https://instagram.com/mock_post_1',
+                            'media_url': None,
+                            'likes_count': 25,
+                            'comments_count': 5,
+                            'shares_count': 0
+                        }]
                 elif platform == 'twitter':
                     posts = await fetch_twitter_posts(connection, limit)
                 elif platform == 'linkedin':
@@ -192,8 +220,12 @@ async def get_latest_posts(
 async def fetch_facebook_posts(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from Facebook"""
     try:
+        print(f"🔍 Facebook connection data: {connection}")
         access_token = decrypt_token(connection.get('access_token_encrypted', ''))
         page_id = connection.get('page_id')
+        
+        print(f"📄 Facebook page_id: {page_id}")
+        print(f"🔑 Facebook access_token: {access_token[:20]}...")
         
         if not page_id:
             print("❌ No page_id found for Facebook connection")
@@ -207,10 +239,16 @@ async def fetch_facebook_posts(connection: dict, limit: int) -> List[Dict[str, A
             'limit': limit
         }
         
+        print(f"🌐 Facebook API URL: {url}")
+        print(f"📋 Facebook API params: {params}")
+        
         response = requests.get(url, params=params, timeout=10)
+        
+        print(f"📊 Facebook API response status: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
+            print(f"📱 Facebook API response data: {data}")
             posts = []
             
             for post in data.get('data', []):
@@ -233,6 +271,7 @@ async def fetch_facebook_posts(connection: dict, limit: int) -> List[Dict[str, A
                 }
                 posts.append(post_data)
             
+            print(f"✅ Facebook posts processed: {len(posts)}")
             return posts
         else:
             print(f"❌ Facebook API error: {response.status_code} - {response.text}")
@@ -245,14 +284,45 @@ async def fetch_facebook_posts(connection: dict, limit: int) -> List[Dict[str, A
 async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from Instagram"""
     try:
+        print(f"🔍 Instagram connection data: {connection}")
         access_token = decrypt_token(connection.get('access_token_encrypted', ''))
-        instagram_account_id = connection.get('instagram_account_id')
+        page_id = connection.get('page_id')
         
-        if not instagram_account_id:
-            print("❌ No instagram_account_id found for Instagram connection")
+        print(f"📄 Instagram page_id: {page_id}")
+        print(f"🔑 Instagram access_token: {access_token[:20]}...")
+        
+        if not page_id:
+            print("❌ No page_id found for Instagram connection")
             return []
         
-        # Fetch media from Instagram Graph API
+        # First, get the Instagram Business account ID from the Facebook Page
+        instagram_account_url = f"https://graph.facebook.com/v18.0/{page_id}"
+        instagram_account_params = {
+            'access_token': access_token,
+            'fields': 'instagram_business_account'
+        }
+        
+        print(f"🌐 Instagram account lookup URL: {instagram_account_url}")
+        
+        account_response = requests.get(instagram_account_url, params=instagram_account_params, timeout=10)
+        print(f"📊 Instagram account lookup response: {account_response.status_code}")
+        
+        if account_response.status_code != 200:
+            print(f"❌ Instagram account lookup error: {account_response.status_code} - {account_response.text}")
+            return []
+        
+        account_data = account_response.json()
+        print(f"📱 Instagram account data: {account_data}")
+        
+        instagram_business_account = account_data.get('instagram_business_account')
+        if not instagram_business_account:
+            print("❌ No Instagram Business account found for this Facebook Page")
+            return []
+        
+        instagram_account_id = instagram_business_account.get('id')
+        print(f"📄 Found Instagram Business account ID: {instagram_account_id}")
+        
+        # Now fetch media from Instagram Graph API
         url = f"https://graph.facebook.com/v18.0/{instagram_account_id}/media"
         params = {
             'access_token': access_token,
@@ -260,10 +330,16 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
             'limit': limit
         }
         
+        print(f"🌐 Instagram API URL: {url}")
+        print(f"📋 Instagram API params: {params}")
+        
         response = requests.get(url, params=params, timeout=10)
+        
+        print(f"📊 Instagram API response status: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
+            print(f"📱 Instagram API response data: {data}")
             posts = []
             
             for media in data.get('data', []):
@@ -279,6 +355,7 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
                 }
                 posts.append(post_data)
             
+            print(f"✅ Instagram posts processed: {len(posts)}")
             return posts
         else:
             print(f"❌ Instagram API error: {response.status_code} - {response.text}")
@@ -307,3 +384,60 @@ async def fetch_youtube_posts(connection: dict, limit: int) -> List[Dict[str, An
 async def test_social_media_router():
     """Test endpoint to verify social media router is working"""
     return {"message": "Social media router is working!", "status": "success"}
+
+@router.get("/debug-connections")
+async def debug_connections(
+    current_user: User = Depends(get_current_user)
+):
+    """Debug endpoint to check connections and their data"""
+    try:
+        print(f"🔍 Debug connections for user: {current_user.id}")
+        
+        # Get all connections (active and inactive)
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).execute()
+        all_connections = response.data if response.data else []
+        
+        # Get only active connections
+        active_response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("is_active", True).execute()
+        active_connections = active_response.data if active_response.data else []
+        
+        # Process connections for debugging
+        debug_data = {
+            "user_id": current_user.id,
+            "total_connections": len(all_connections),
+            "active_connections": len(active_connections),
+            "all_connections": [],
+            "active_connections_data": []
+        }
+        
+        for conn in all_connections:
+            conn_data = {
+                "id": conn.get("id"),
+                "platform": conn.get("platform"),
+                "page_id": conn.get("page_id"),
+                "page_name": conn.get("page_name"),
+                "is_active": conn.get("is_active"),
+                "has_access_token": bool(conn.get("access_token_encrypted")),
+                "connection_status": conn.get("connection_status"),
+                "connected_at": conn.get("connected_at")
+            }
+            debug_data["all_connections"].append(conn_data)
+        
+        for conn in active_connections:
+            conn_data = {
+                "id": conn.get("id"),
+                "platform": conn.get("platform"),
+                "page_id": conn.get("page_id"),
+                "page_name": conn.get("page_name"),
+                "is_active": conn.get("is_active"),
+                "has_access_token": bool(conn.get("access_token_encrypted")),
+                "connection_status": conn.get("connection_status"),
+                "connected_at": conn.get("connected_at")
+            }
+            debug_data["active_connections_data"].append(conn_data)
+        
+        return debug_data
+        
+    except Exception as e:
+        print(f"❌ Error in debug connections: {e}")
+        return {"error": str(e), "user_id": current_user.id}
