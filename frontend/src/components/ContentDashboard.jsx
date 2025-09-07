@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase'
 import ContentProgress from './ContentProgress'
 import SideNavbar from './SideNavbar'
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 import { 
   Calendar, 
   Image, 

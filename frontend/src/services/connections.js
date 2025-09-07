@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 
 // Helper function to build API URLs
 const buildApiUrl = (endpoint) => {
