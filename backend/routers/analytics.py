@@ -142,8 +142,15 @@ async def get_analytics_insights(
         response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("is_active", True).execute()
         connections = response.data if response.data else []
         
+        print(f"📊 User ID: {current_user.id}")
         print(f"📊 Found {len(connections)} active connections")
         print(f"📊 Connection details: {connections}")
+        
+        # Also check all connections for this user (not just active ones)
+        all_connections_response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).execute()
+        all_connections = all_connections_response.data if all_connections_response.data else []
+        print(f"📊 All connections for user: {len(all_connections)}")
+        print(f"📊 All connection details: {all_connections}")
         
         if not connections:
             print("⚠️ No active connections found - returning empty analytics")
