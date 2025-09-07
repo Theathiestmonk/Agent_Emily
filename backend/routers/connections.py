@@ -163,8 +163,11 @@ async def initiate_connection(
 ):
     """Initiate OAuth connection for platform"""
     try:
+        print(f"🔗 Initiating {platform} connection for user: {current_user.id}")
+        
         # Generate secure state
         state = generate_oauth_state()
+        print(f"Generated OAuth state: {state[:10]}...")
         
         # Store state in Supabase
         oauth_state_data = {
@@ -175,9 +178,12 @@ async def initiate_connection(
         }
         
         supabase_admin.table("oauth_states").insert(oauth_state_data).execute()
+        print(f"✅ OAuth state stored in database")
         
         # Generate OAuth URL based on platform
+        print(f"🔧 Generating OAuth URL for {platform}...")
         oauth_url = generate_oauth_url(platform, state)
+        print(f"✅ Generated OAuth URL: {oauth_url[:100]}...")
         
         return {"auth_url": oauth_url, "state": state}
     except Exception as e:
@@ -351,9 +357,6 @@ def generate_oauth_url(platform: str, state: str) -> str:
         'youtube': os.getenv('YOUTUBE_CLIENT_ID')
     }
     
-    if not client_ids.get(platform):
-        raise ValueError(f"App ID not configured for platform: {platform}")
-    
     # Get API base URL and ensure no trailing slash
     api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
     
@@ -370,10 +373,21 @@ def generate_oauth_url(platform: str, state: str) -> str:
     client_id = client_ids.get(platform)
     redirect_uri = redirect_uris.get(platform)
     
-    if not all([base_url, client_id, redirect_uri]):
+    # Better error handling with specific details
+    missing_config = []
+    if not base_url:
+        missing_config.append(f"base_url for {platform}")
+    if not client_id:
+        missing_config.append(f"client_id for {platform} (check {platform.upper()}_APP_ID env var)")
+    if not redirect_uri:
+        missing_config.append(f"redirect_uri for {platform}")
+    
+    if missing_config:
+        error_msg = f"Platform {platform} not configured. Missing: {', '.join(missing_config)}"
+        print(f"❌ OAuth configuration error: {error_msg}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Platform {platform} not configured"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_msg
         )
     
     # Platform-specific OAuth parameters
