@@ -7,6 +7,7 @@ import { contentAPI } from '../services/content'
 import { supabase } from '../lib/supabase'
 import ContentProgress from './ContentProgress'
 import SideNavbar from './SideNavbar'
+import LoadingBar from './LoadingBar'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 import { 
@@ -366,10 +367,12 @@ const ContentDashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your content...</p>
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center">
+        <div className="w-full max-w-md px-8">
+          <LoadingBar 
+            message="Loading your content..." 
+            className="text-center"
+          />
         </div>
       </div>
     )
@@ -579,7 +582,9 @@ const ContentDashboard = () => {
                   className="flex items-center space-x-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
                 >
                   {generating ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <div className="w-4 h-4 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center">
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                    </div>
                   ) : (
                     <Sparkles className="w-4 h-4" />
                   )}
@@ -669,7 +674,9 @@ const ContentDashboard = () => {
                 >
                   {generating ? (
                     <>
-                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <div className="w-5 h-5 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse"></div>
+                      </div>
                       <span>Generating Content...</span>
                     </>
                   ) : (
@@ -782,7 +789,9 @@ const ContentDashboard = () => {
                           title={content.status === 'published' ? 'Already Published' : postingContent.has(content.id) ? 'Posting...' : `Post to ${content.platform}`}
                         >
                           {postingContent.has(content.id) ? (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <div className="w-4 h-4 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center">
+                              <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                            </div>
                           ) : (
                             <Share2 className="w-4 h-4" />
                           )}

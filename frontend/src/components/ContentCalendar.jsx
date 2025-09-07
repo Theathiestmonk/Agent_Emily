@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useContentCache } from '../contexts/ContentCacheContext'
 import { contentAPI } from '../services/content'
 import SideNavbar from './SideNavbar'
+import LoadingBar from './LoadingBar'
 import { 
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -206,10 +207,12 @@ const ContentCalendar = () => {
 
   if (loading || contentLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="w-8 h-8 animate-spin text-pink-500 mx-auto mb-4" />
-          <p className="text-gray-600">Loading content calendar...</p>
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center">
+        <div className="w-full max-w-md px-8">
+          <LoadingBar 
+            message="Loading content calendar..." 
+            className="text-center"
+          />
         </div>
       </div>
     )
