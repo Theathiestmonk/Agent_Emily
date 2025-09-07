@@ -15,6 +15,7 @@ from scheduler.content_scheduler import ContentScheduler
 from scheduler.background_scheduler import start_background_scheduler, stop_background_scheduler
 from routers.connections import router as connections_router
 from routers.content import router as content_router
+from routers.social_media import router as social_media_router
 
 # Load environment variables
 load_dotenv()
@@ -50,6 +51,7 @@ app = FastAPI(
 # Include routers
 app.include_router(connections_router)
 app.include_router(content_router)
+app.include_router(social_media_router)
 
 # Health check endpoint
 @app.get("/health")
