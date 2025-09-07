@@ -471,7 +471,8 @@ def generate_oauth_url(platform: str, state: str) -> str:
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,pages_manage_metadata,pages_messaging,pages_manage_engagement,pages_read_user_content"
     elif platform == 'instagram':
         # Instagram uses Facebook OAuth with Instagram-specific scopes
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish"
+        # Added pages_manage_posts for proper Instagram Business account access
+        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
     elif platform == 'linkedin':
         return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=w_member_social"
     elif platform == 'twitter':
@@ -660,11 +661,28 @@ def get_instagram_account_info(access_token: str):
         
         for page in pages:
             print(f"🔍 Checking page: {page.get('name', 'Unknown')} (ID: {page.get('id', 'Unknown')})")
+            print(f"🔍 Page data: {page}")
+            
+            # Check for Instagram Business account
             if page.get('instagram_business_account'):
                 instagram_account = page['instagram_business_account']
                 instagram_page = page
                 print(f"✅ Found Instagram account: {instagram_account}")
                 break
+            else:
+                print(f"❌ No Instagram Business account found on page: {page.get('name', 'Unknown')}")
+                
+                # Try to get more details about this page to see why no Instagram account
+                try:
+                    page_details_url = f"https://graph.facebook.com/v18.0/{page['id']}?fields=instagram_business_account,connected_instagram_account&access_token={access_token}"
+                    page_details_response = requests.get(page_details_url)
+                    if page_details_response.status_code == 200:
+                        page_details = page_details_response.json()
+                        print(f"🔍 Page details: {page_details}")
+                    else:
+                        print(f"❌ Could not get page details: {page_details_response.status_code}")
+                except Exception as e:
+                    print(f"❌ Error getting page details: {e}")
         
         if not instagram_account:
             print("❌ No Instagram Business account found connected to any Facebook page")
@@ -1050,6 +1068,49 @@ async def test_instagram_account(
         
     except Exception as e:
         print(f"❌ Test error: {e}")
+        return {"error": str(e)}
+
+@router.get("/instagram/test-pages")
+async def test_instagram_pages(
+    current_user: User = Depends(get_current_user)
+):
+    """Test what pages and Instagram accounts are accessible"""
+    try:
+        print(f"🔍 Testing Instagram pages access for user: {current_user.id}")
+        
+        # Get a fresh access token by simulating the OAuth flow
+        facebook_app_id = os.getenv('FACEBOOK_CLIENT_ID')
+        facebook_app_secret = os.getenv('FACEBOOK_CLIENT_SECRET')
+        
+        if not facebook_app_id or not facebook_app_secret:
+            return {"error": "Facebook app credentials not configured"}
+        
+        # Generate a test OAuth URL with more detailed scopes
+        state = generate_oauth_state()
+        
+        # Test with more comprehensive scopes
+        test_oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri=https://agent-emily.onrender.com/connections/auth/instagram/callback&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
+        
+        return {
+            "message": "Test Instagram pages access",
+            "test_oauth_url": test_oauth_url,
+            "debug_steps": [
+                "1. Click the test OAuth URL above",
+                "2. Grant ALL permissions (especially pages_manage_posts)",
+                "3. Check the callback for detailed page information",
+                "4. Look for Instagram Business account in the response"
+            ],
+            "common_issues": [
+                "Instagram not properly linked to Facebook Page",
+                "Missing pages_manage_posts permission",
+                "Instagram account is Creator instead of Business",
+                "Facebook Page doesn't have Instagram Business account"
+            ],
+            "facebook_app_id": facebook_app_id
+        }
+        
+    except Exception as e:
+        print(f"❌ Test pages error: {e}")
         return {"error": str(e)}
 
 @router.post("/instagram/post")
