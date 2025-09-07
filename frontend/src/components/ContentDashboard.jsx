@@ -215,6 +215,8 @@ const ContentDashboard = () => {
       instagram: <Instagram className="w-5 h-5" />,
       linkedin: <Linkedin className="w-5 h-5" />,
       twitter: <Twitter className="w-5 h-5" />,
+      'twitter/x': <Twitter className="w-5 h-5" />,
+      'x': <Twitter className="w-5 h-5" />,
       tiktok: <div className="w-5 h-5 bg-black rounded text-white flex items-center justify-center text-xs font-bold">TT</div>,
       youtube: <Youtube className="w-5 h-5" />,
       unknown: <div className="w-5 h-5 bg-gray-500 rounded text-white flex items-center justify-center text-xs">?</div>
@@ -240,6 +242,100 @@ const ContentDashboard = () => {
       youtube: 'from-red-500 to-red-600'
     }
     return colors[platform] || 'from-gray-500 to-gray-600'
+  }
+
+  const getPlatformCardTheme = (platform) => {
+    // Normalize platform name to lowercase for consistent matching
+    const normalizedPlatform = platform?.toLowerCase()?.trim()
+    
+    const themes = {
+      facebook: {
+        bg: 'bg-white/50',
+        border: 'border-blue-300',
+        iconBg: 'bg-blue-600',
+        text: 'text-blue-800',
+        accent: 'bg-blue-200'
+      },
+      instagram: {
+        bg: 'bg-white/50',
+        border: 'border-pink-300',
+        iconBg: 'bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500',
+        text: 'text-pink-800',
+        accent: 'bg-pink-200'
+      },
+      linkedin: {
+        bg: 'bg-white/50',
+        border: 'border-blue-300',
+        iconBg: 'bg-blue-700',
+        text: 'text-blue-800',
+        accent: 'bg-blue-200'
+      },
+      twitter: {
+        bg: 'bg-white/50',
+        border: 'border-sky-300',
+        iconBg: 'bg-sky-500',
+        text: 'text-sky-800',
+        accent: 'bg-sky-200'
+      },
+      'twitter/x': {
+        bg: 'bg-white/50',
+        border: 'border-sky-300',
+        iconBg: 'bg-sky-500',
+        text: 'text-sky-800',
+        accent: 'bg-sky-200'
+      },
+      'x': {
+        bg: 'bg-white/50',
+        border: 'border-sky-300',
+        iconBg: 'bg-sky-500',
+        text: 'text-sky-800',
+        accent: 'bg-sky-200'
+      },
+      tiktok: {
+        bg: 'bg-white/50',
+        border: 'border-gray-300',
+        iconBg: 'bg-black',
+        text: 'text-gray-800',
+        accent: 'bg-gray-200'
+      },
+      youtube: {
+        bg: 'bg-white/50',
+        border: 'border-red-300',
+        iconBg: 'bg-red-600',
+        text: 'text-red-800',
+        accent: 'bg-red-200'
+      },
+      // Additional variations
+      'linkedin': {
+        bg: 'bg-white/50',
+        border: 'border-blue-300',
+        iconBg: 'bg-blue-700',
+        text: 'text-blue-800',
+        accent: 'bg-blue-200'
+      },
+      'youtube': {
+        bg: 'bg-white/50',
+        border: 'border-red-300',
+        iconBg: 'bg-red-600',
+        text: 'text-red-800',
+        accent: 'bg-red-200'
+      }
+    }
+    
+    const theme = themes[normalizedPlatform]
+    if (theme) {
+      return theme
+    }
+    
+    // Fallback theme
+    console.warn('Unknown platform for theme:', platform, 'normalized:', normalizedPlatform)
+    return {
+      bg: 'bg-white/50',
+      border: 'border-gray-300',
+      iconBg: 'bg-gray-500',
+      text: 'text-gray-800',
+      accent: 'bg-gray-200'
+    }
   }
 
   const getStatusColor = (status) => {
@@ -586,22 +682,27 @@ const ContentDashboard = () => {
               </div>
             ) : (
               <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1'}`}>
-                {filteredContent.map((content) => (
-                  <div key={content.id} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getPlatformColor(content.platform)}`}>
-                          {getPlatformIcon(content.platform)}
+                {filteredContent.map((content) => {
+                  const theme = getPlatformCardTheme(content.platform)
+                  console.log('Content platform:', content.platform, 'Theme:', theme)
+                  return (
+                    <div key={content.id} className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm p-6 hover:shadow-lg transition-all duration-300 hover:scale-[1.02]`}>
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-12 h-12 ${theme.iconBg} rounded-xl flex items-center justify-center shadow-sm`}>
+                            <div className="text-white">
+                              {getPlatformIcon(content.platform)}
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className={`font-semibold capitalize ${theme.text}`}>{content.platform}</h4>
+                            <p className="text-sm text-gray-500">{content.status}</p>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-semibold text-gray-900 capitalize">{content.platform}</h4>
-                          <p className="text-sm text-gray-500">{content.status}</p>
+                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(content.status)}`}>
+                          {content.status}
                         </div>
                       </div>
-                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(content.status)}`}>
-                        {content.status}
-                      </div>
-                    </div>
                     
                     {content.title && (
                       <h5 className="font-medium text-gray-900 mb-3">{content.title}</h5>
@@ -612,7 +713,7 @@ const ContentDashboard = () => {
                     {content.hashtags && content.hashtags.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-4">
                         {content.hashtags.map((tag, index) => (
-                          <span key={index} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                          <span key={index} className={`text-xs ${theme.accent} ${theme.text} px-2 py-1 rounded-lg`}>
                             #{tag}
                           </span>
                         ))}
@@ -640,10 +741,10 @@ const ContentDashboard = () => {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="View">
+                        <button className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`} title="View">
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Edit">
+                        <button className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`} title="Edit">
                           <Edit className="w-4 h-4" />
                         </button>
                       </div>
@@ -657,7 +758,7 @@ const ContentDashboard = () => {
                             ? 'bg-green-100 text-green-700 cursor-not-allowed' 
                             : postingContent.has(content.id)
                             ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
-                            : `bg-gradient-to-r ${getPlatformColor(content.platform)} text-white hover:opacity-90`
+                            : `${theme.iconBg} text-white hover:opacity-90 shadow-sm`
                         }`}
                         title={content.status === 'published' ? 'Already Published' : postingContent.has(content.id) ? 'Posting...' : `Post to ${content.platform}`}
                       >
@@ -674,7 +775,8 @@ const ContentDashboard = () => {
                       </button>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
