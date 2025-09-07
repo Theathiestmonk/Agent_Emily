@@ -3,8 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { contentAPI } from '../services/content'
+import { supabase } from '../lib/supabase'
 import ContentProgress from './ContentProgress'
 import SideNavbar from './SideNavbar'
+
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
 import { 
   Calendar, 
   Image, 
@@ -27,25 +30,29 @@ import {
   Sparkles,
   Target,
   Users,
-  BarChart3
+  BarChart3,
+  Facebook,
+  Instagram,
+  Linkedin,
+  Twitter,
+  Youtube
 } from 'lucide-react'
 
 const ContentDashboard = () => {
   const { user } = useAuth()
   const { showContentGeneration, showSuccess, showError, showLoading } = useNotifications()
   const navigate = useNavigate()
-  const [campaigns, setCampaigns] = useState([])
-  const [posts, setPosts] = useState([])
-  const [selectedCampaign, setSelectedCampaign] = useState(null)
+  const [scheduledContent, setScheduledContent] = useState([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
   const [filterPlatform, setFilterPlatform] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
-  const [expandedCampaigns, setExpandedCampaigns] = useState(new Set())
   const [generating, setGenerating] = useState(false)
   const [generationStatus, setGenerationStatus] = useState(null) // 'success', 'error', null
   const [generationMessage, setGenerationMessage] = useState('')
   const [showProgress, setShowProgress] = useState(false)
+  const [contentDate, setContentDate] = useState('')
+  const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
 
   useEffect(() => {
     fetchData()
@@ -54,15 +61,18 @@ const ContentDashboard = () => {
   const fetchData = async () => {
     try {
       setLoading(true)
-      const [campaignsResult, postsResult] = await Promise.all([
-        contentAPI.getCampaigns(),
-        contentAPI.getAllPosts()
-      ])
+      const result = await contentAPI.getScheduledContent()
       
-      if (campaignsResult.data) setCampaigns(campaignsResult.data)
-      if (postsResult.data) setPosts(postsResult.data)
+      console.log('Fetched content data:', result)
+      
+      if (result.data) {
+        console.log('Content items:', result.data)
+        console.log('Platform values in content:', result.data.map(item => ({ id: item.id, platform: item.platform })))
+        setScheduledContent(result.data)
+        setContentDate(result.date)
+      }
     } catch (error) {
-      console.error('Error fetching data:', error)
+      console.error('Error fetching scheduled content:', error)
     } finally {
       setLoading(false)
     }
@@ -182,24 +192,39 @@ const ContentDashboard = () => {
     setExpandedCampaigns(newExpanded)
   }
 
-  const filteredPosts = posts.filter(post => {
-    const matchesPlatform = filterPlatform === 'all' || post.platform === filterPlatform
+  const filteredContent = scheduledContent.filter(content => {
+    const matchesPlatform = filterPlatform === 'all' || content.platform === filterPlatform
     const matchesSearch = searchTerm === '' || 
-      post.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      post.title?.toLowerCase().includes(searchTerm.toLowerCase())
+      content.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      content.title?.toLowerCase().includes(searchTerm.toLowerCase())
     return matchesPlatform && matchesSearch
   })
 
   const getPlatformIcon = (platform) => {
+    // Normalize platform name to lowercase for consistent matching
+    const normalizedPlatform = platform?.toLowerCase()?.trim()
+    
+    // Debug log to see what platform values we're getting
+    console.log('Platform icon requested for:', platform, 'normalized to:', normalizedPlatform)
+    
     const icons = {
-      facebook: '📘',
-      instagram: '📷',
-      linkedin: '💼',
-      twitter: '🐦',
-      tiktok: '🎵',
-      youtube: '📺'
+      facebook: <Facebook className="w-5 h-5" />,
+      instagram: <Instagram className="w-5 h-5" />,
+      linkedin: <Linkedin className="w-5 h-5" />,
+      twitter: <Twitter className="w-5 h-5" />,
+      tiktok: <div className="w-5 h-5 bg-black rounded text-white flex items-center justify-center text-xs font-bold">TT</div>,
+      youtube: <Youtube className="w-5 h-5" />,
+      unknown: <div className="w-5 h-5 bg-gray-500 rounded text-white flex items-center justify-center text-xs">?</div>
     }
-    return icons[platform] || '📱'
+    
+    const icon = icons[normalizedPlatform]
+    if (icon) {
+      return icon
+    }
+    
+    // Fallback with debug info
+    console.warn('Unknown platform:', platform, 'normalized:', normalizedPlatform)
+    return <div className="w-5 h-5 bg-gray-400 rounded text-white flex items-center justify-center text-xs" title={`Unknown platform: ${platform}`}>?</div>
   }
 
   const getPlatformColor = (platform) => {
@@ -275,6 +300,82 @@ const ContentDashboard = () => {
     fetchData() // Refresh the data
   }
 
+  const handlePostContent = async (content) => {
+    try {
+      // Add content to posting set
+      setPostingContent(prev => new Set([...prev, content.id]))
+      
+      console.log('Posting content to', content.platform, ':', content)
+      
+      // For now, we'll implement Facebook posting
+      if (content.platform.toLowerCase() === 'facebook') {
+        await postToFacebook(content)
+      } else {
+        // For other platforms, show a message
+        showError(`${content.platform} posting not yet implemented`)
+        return
+      }
+      
+    } catch (error) {
+      console.error('Error posting content:', error)
+      showError(`Failed to post to ${content.platform}: ${error.message}`)
+    } finally {
+      // Remove content from posting set
+      setPostingContent(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(content.id)
+        return newSet
+      })
+    }
+  }
+
+  const postToFacebook = async (content) => {
+    try {
+      const authToken = await getAuthToken()
+      
+      const response = await fetch(`${API_BASE_URL}/connections/facebook/post`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          message: content.content,
+          title: content.title,
+          hashtags: content.hashtags || []
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}: ${errorText}`)
+      }
+
+      const result = await response.json()
+      console.log('Facebook post result:', result)
+      
+      showSuccess(`Successfully posted to Facebook!`)
+      
+      // Update the content status to published
+      setScheduledContent(prev => 
+        prev.map(item => 
+          item.id === content.id 
+            ? { ...item, status: 'published' }
+            : item
+        )
+      )
+      
+    } catch (error) {
+      console.error('Error posting to Facebook:', error)
+      throw error
+    }
+  }
+
+  const getAuthToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex">
       {/* Progress Bar */}
@@ -316,110 +417,24 @@ const ContentDashboard = () => {
                   )}
                   <span>{generating ? 'Generating...' : 'Generate Content'}</span>
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 p-6">
-        {/* Status Message */}
-        {generationStatus && (
-          <div className={`mb-6 p-4 rounded-lg ${
-            generationStatus === 'success' 
-              ? 'bg-green-50 border border-green-200 text-green-800' 
-              : 'bg-red-50 border border-red-200 text-red-800'
-          }`}>
-            <div className="flex items-center">
-              {generationStatus === 'success' ? (
-                <Sparkles className="w-5 h-5 mr-2" />
-              ) : (
-                <RefreshCw className="w-5 h-5 mr-2" />
-              )}
-              <span className="font-medium">{generationMessage}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Column 1: Stats Cards */}
-          <div className="lg:col-span-1">
-            <div className="space-y-4">
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center mr-4">
-                    <Calendar className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Campaigns</p>
-                    <p className="text-2xl font-bold text-gray-900">{campaigns.length}</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center mr-4">
-                    <FileText className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Posts</p>
-                    <p className="text-2xl font-bold text-gray-900">{posts.length}</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mr-4">
-                    <Image className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">AI Images</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {posts.reduce((acc, post) => acc + (post.content_images?.length || 0), 0)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg flex items-center justify-center mr-4">
-                    <TrendingUp className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Platforms</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {new Set(posts.map(post => post.platform)).size}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Column 2: Main Content */}
-          <div className="lg:col-span-3">
-            {/* Filters and Search */}
-            <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
+                
+                {/* Filter and View Controls */}
                 <div className="flex items-center space-x-4">
                   <div className="relative">
-                    <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                     <input
                       type="text"
                       placeholder="Search content..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
                     />
                   </div>
                   
                   <select
                     value={filterPlatform}
                     onChange={(e) => setFilterPlatform(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
                   >
                     <option value="all">All Platforms</option>
                     <option value="facebook">Facebook</option>
@@ -429,206 +444,220 @@ const ContentDashboard = () => {
                     <option value="tiktok">TikTok</option>
                     <option value="youtube">YouTube</option>
                   </select>
+                  
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      <Grid className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      <List className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 p-6">
+          {/* Status Message */}
+          {generationStatus && (
+            <div className={`mb-6 p-4 rounded-lg ${
+              generationStatus === 'success' 
+                ? 'bg-green-50 border border-green-200 text-green-800' 
+                : 'bg-red-50 border border-red-200 text-red-800'
+            }`}>
+              <div className="flex items-center">
+                {generationStatus === 'success' ? (
+                  <Sparkles className="w-5 h-5 mr-2" />
+                ) : (
+                  <RefreshCw className="w-5 h-5 mr-2" />
+                )}
+                <span className="font-medium">{generationMessage}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Two Column Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            {/* Column 1: Stats Cards */}
+            <div className="lg:col-span-1">
+              <div className="space-y-4">
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center mr-4">
+                      <Calendar className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total Content</p>
+                      <p className="text-2xl font-bold text-gray-900">{scheduledContent.length}</p>
+                    </div>
+                  </div>
                 </div>
                 
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
-                  >
-                    <Grid className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
-                  >
-                    <List className="w-5 h-5" />
-                  </button>
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center mr-4">
+                      <FileText className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Platforms</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {new Set(scheduledContent.map(content => content.platform)).size}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mr-4">
+                      <Image className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">With Media</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {scheduledContent.filter(content => content.media_url).length}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Campaigns */}
-            <div className="space-y-6">
-              {campaigns.map((campaign) => {
-                const campaignPosts = posts.filter(post => post.campaign_id === campaign.id)
-                const isExpanded = expandedCampaigns.has(campaign.id)
-                
-                return (
-                  <div key={campaign.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
-                    <div 
-                      className="p-6 cursor-pointer hover:bg-gray-50 transition-colors"
-                      onClick={() => toggleCampaignExpansion(campaign.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-600 rounded-lg flex items-center justify-center">
-                            <Calendar className="w-5 h-5 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900">{campaign.campaign_name}</h3>
-                            <p className="text-sm text-gray-500">
-                              {formatDate(campaign.week_start_date)} - {formatDate(campaign.week_end_date)}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center space-x-4">
-                          <div className="text-right">
-                            <p className="text-sm text-gray-500">Posts</p>
-                            <p className="text-lg font-semibold text-gray-900">
-                              {campaign.generated_posts} / {campaign.total_posts}
-                            </p>
-                          </div>
-                          <div className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(campaign.status)}`}>
-                            {campaign.status}
-                          </div>
-                          {isExpanded ? (
-                            <ChevronDown className="w-5 h-5 text-gray-400" />
-                          ) : (
-                            <ChevronRight className="w-5 h-5 text-gray-400" />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {isExpanded && (
-                      <div className="border-t border-gray-200 p-6">
-                        {campaignPosts.length === 0 ? (
-                          <div className="text-center py-8">
-                            <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                            <p className="text-gray-500">No posts in this campaign yet</p>
-                          </div>
-                        ) : (
-                          <div className={`grid gap-4 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
-                            {campaignPosts.map((post) => (
-                              <div key={post.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                                <div className="flex items-start justify-between mb-3">
-                                  <div className="flex items-center space-x-2">
-                                    <span className="text-2xl">{getPlatformIcon(post.platform)}</span>
-                                    <div>
-                                      <h4 className="font-medium text-gray-900 capitalize">{post.platform}</h4>
-                                      <p className="text-sm text-gray-500">{post.post_type}</p>
-                                    </div>
-                                  </div>
-                                  <div className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(post.status)}`}>
-                                    {post.status}
-                                  </div>
-                                </div>
-                                
-                                {post.title && (
-                                  <h5 className="font-medium text-gray-900 mb-2">{post.title}</h5>
-                                )}
-                                
-                                <p className="text-gray-700 text-sm mb-3 line-clamp-3">{post.content}</p>
-                                
-                                {post.hashtags && post.hashtags.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mb-3">
-                                    {post.hashtags.map((tag, index) => (
-                                      <span key={index} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                                        #{tag}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                                
-                                <div className="flex items-center justify-between text-sm text-gray-500">
-                                  <div className="flex items-center space-x-1">
-                                    <Clock className="w-4 h-4" />
-                                    <span>{formatDate(post.scheduled_date)} at {formatTime(post.scheduled_time)}</span>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <button className="p-1 hover:bg-gray-100 rounded">
-                                      <Eye className="w-4 h-4" />
-                                    </button>
-                                    <button className="p-1 hover:bg-gray-100 rounded">
-                                      <Edit className="w-4 h-4" />
-                                    </button>
-                                    <button className="p-1 hover:bg-gray-100 rounded">
-                                      <Share2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                </div>
-                                
-                                {post.content_images && post.content_images.length > 0 && (
-                                  <div className="mt-3">
-                                    <div className="flex space-x-2">
-                                      {post.content_images.slice(0, 3).map((image, index) => (
-                                        <div key={index} className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden">
-                                          <img 
-                                            src={image.image_url} 
-                                            alt={`Generated image ${index + 1}`}
-                                            className="w-full h-full object-cover"
-                                          />
-                                        </div>
-                                      ))}
-                                      {post.content_images.length > 3 && (
-                                        <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
-                                          <span className="text-xs text-gray-500">+{post.content_images.length - 3}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+            {/* Column 2: Main Content */}
+            <div className="lg:col-span-3">
 
-              {campaigns.length === 0 && (
-                <div className="text-center py-12">
-                  <div className="w-24 h-24 bg-gradient-to-r from-pink-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <Sparkles className="w-12 h-12 text-pink-500" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No content campaigns yet</h3>
-                  <p className="text-gray-500 mb-6">Generate your first AI-powered content campaign to get started</p>
-                  <div className="flex space-x-4">
+
+              {/* Content Cards */}
+              <div className="space-y-6">
+                {filteredContent.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="w-24 h-24 bg-gradient-to-r from-pink-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Sparkles className="w-12 h-12 text-pink-500" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No content available</h3>
+                    <p className="text-gray-500 mb-6">Generate content to see it displayed here</p>
                     <button
                       onClick={handleGenerateContent}
                       disabled={generating}
-                      className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                      className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2 mx-auto"
                     >
                       {generating ? (
                         <>
                           <RefreshCw className="w-5 h-5 animate-spin" />
-                          <span>Generating Your First Campaign...</span>
+                          <span>Generating Content...</span>
                         </>
                       ) : (
                         <>
                           <Sparkles className="w-5 h-5" />
-                          <span>Generate Your First Campaign</span>
-                        </>
-                      )}
-                    </button>
-                    
-                    <button
-                      onClick={handleTriggerWeekly}
-                      disabled={generating}
-                      className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-indigo-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
-                    >
-                      {generating ? (
-                        <>
-                          <RefreshCw className="w-5 h-5 animate-spin" />
-                          <span>Triggering Weekly Generation...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Calendar className="w-5 h-5" />
-                          <span>Trigger Weekly Generation</span>
+                          <span>Generate Content</span>
                         </>
                       )}
                     </button>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
+                    {filteredContent.map((content) => (
+                      <div key={content.id} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getPlatformColor(content.platform)}`}>
+                              {getPlatformIcon(content.platform)}
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-gray-900 capitalize">{content.platform}</h4>
+                              <p className="text-sm text-gray-500">{content.status}</p>
+                            </div>
+                          </div>
+                          <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(content.status)}`}>
+                            {content.status}
+                          </div>
+                        </div>
+                        
+                        {content.title && (
+                          <h5 className="font-medium text-gray-900 mb-3">{content.title}</h5>
+                        )}
+                        
+                        <p className="text-gray-700 text-sm mb-4 line-clamp-3">{content.content}</p>
+                        
+                        {content.hashtags && content.hashtags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-4">
+                            {content.hashtags.map((tag, index) => (
+                              <span key={index} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                          <div className="flex items-center space-x-1">
+                            <Clock className="w-4 h-4" />
+                            <span>{formatDate(content.scheduled_at)}</span>
+                          </div>
+                        </div>
+                        
+                        {content.media_url && (
+                          <div className="mb-4">
+                            <div className="w-full h-32 bg-gray-100 rounded-lg overflow-hidden">
+                              <img 
+                                src={content.media_url} 
+                                alt="Content media"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="View">
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Edit">
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          </div>
+                          
+                          {/* Post Button */}
+                          <button
+                            onClick={() => handlePostContent(content)}
+                            disabled={content.status === 'published' || postingContent.has(content.id)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
+                              content.status === 'published' 
+                                ? 'bg-green-100 text-green-700 cursor-not-allowed' 
+                                : postingContent.has(content.id)
+                                ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                : `bg-gradient-to-r ${getPlatformColor(content.platform)} text-white hover:opacity-90`
+                            }`}
+                            title={content.status === 'published' ? 'Already Published' : postingContent.has(content.id) ? 'Posting...' : `Post to ${content.platform}`}
+                          >
+                            {postingContent.has(content.id) ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Share2 className="w-4 h-4" />
+                            )}
+                            <span>
+                              {content.status === 'published' ? 'Published' : 
+                               postingContent.has(content.id) ? 'Posting...' : 
+                               'Post Now'}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
         </div>
       </div>
     </div>

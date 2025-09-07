@@ -538,3 +538,93 @@ def refresh_platform_token(platform: str, refresh_token: str) -> dict:
         "refresh_token": f"refreshed_refresh_token_{platform}",
         "expires_in": 3600
     }
+
+@router.post("/facebook/post")
+async def post_to_facebook(
+    post_data: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Post content to Facebook"""
+    try:
+        print(f"📱 Facebook post request from user: {current_user.id}")
+        print(f"📝 Post data: {post_data}")
+        
+        # Get user's Facebook connection
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "facebook").eq("is_active", True).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active Facebook connection found. Please connect your Facebook account first."
+            )
+        
+        connection = response.data[0]
+        print(f"🔗 Found Facebook connection: {connection['id']}")
+        
+        # Decrypt the access token
+        try:
+            access_token = decrypt_token(connection['access_token'])
+            print(f"🔓 Decrypted access token: {access_token[:20]}...")
+        except Exception as e:
+            print(f"❌ Error decrypting token: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to decrypt access token"
+            )
+        
+        # Prepare the post message
+        message = post_data.get('message', '')
+        title = post_data.get('title', '')
+        hashtags = post_data.get('hashtags', [])
+        
+        # Combine title, message, and hashtags
+        full_message = ""
+        if title:
+            full_message += f"{title}\n\n"
+        full_message += message
+        if hashtags:
+            hashtag_string = " ".join([f"#{tag}" for tag in hashtags])
+            full_message += f"\n\n{hashtag_string}"
+        
+        print(f"📄 Full message to post: {full_message}")
+        
+        # Post to Facebook
+        facebook_url = f"https://graph.facebook.com/v18.0/{connection['page_id']}/feed"
+        
+        payload = {
+            "message": full_message,
+            "access_token": access_token
+        }
+        
+        print(f"🌐 Posting to Facebook URL: {facebook_url}")
+        
+        response = requests.post(facebook_url, data=payload)
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ Facebook post successful: {result}")
+            
+            return {
+                "success": True,
+                "platform": "facebook",
+                "post_id": result.get('id'),
+                "message": "Content posted to Facebook successfully!",
+                "url": f"https://facebook.com/{result.get('id')}" if result.get('id') else None
+            }
+        else:
+            error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {"error": response.text}
+            print(f"❌ Facebook API error: {response.status_code} - {error_data}")
+            
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Facebook API error: {error_data.get('error', {}).get('message', 'Unknown error')}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error posting to Facebook: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to post to Facebook: {str(e)}"
+        )

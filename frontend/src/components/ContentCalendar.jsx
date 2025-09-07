@@ -125,17 +125,19 @@ const ContentCalendar = () => {
     const dateStr = date.toISOString().split('T')[0]
     
     const filteredPosts = posts.filter(post => {
-      if (!post.scheduled_date) return false
+      // Check both scheduled_date and scheduled_at fields for compatibility
+      const scheduledDate = post.scheduled_date || post.scheduled_at
+      if (!scheduledDate) return false
       
       // Handle both DATE and TIMESTAMP formats
       let postDateStr
-      if (post.scheduled_date.includes('T')) {
+      if (scheduledDate.includes('T')) {
         // It's a timestamp
-        const postDate = new Date(post.scheduled_date)
+        const postDate = new Date(scheduledDate)
         postDateStr = postDate.toISOString().split('T')[0]
       } else {
         // It's already a date string
-        postDateStr = post.scheduled_date
+        postDateStr = scheduledDate
       }
       
       return postDateStr === dateStr
@@ -349,7 +351,9 @@ const ContentCalendar = () => {
                   <span className="text-sm text-gray-600">This Month</span>
                   <span className="text-sm font-medium text-gray-900">
                     {posts.filter(post => {
-                      const postDate = new Date(post.scheduled_date)
+                      const scheduledDate = post.scheduled_date || post.scheduled_at
+                      if (!scheduledDate) return false
+                      const postDate = new Date(scheduledDate)
                       return postDate.getMonth() === currentDate.getMonth() && 
                              postDate.getFullYear() === currentDate.getFullYear()
                     }).length}
