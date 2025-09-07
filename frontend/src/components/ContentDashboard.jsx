@@ -71,6 +71,9 @@ const ContentDashboard = () => {
       
       console.log('Fetched content data:', result)
       console.log('Cache status:', getCacheStatus())
+      console.log('Backend date:', result.date)
+      console.log('Backend timezone:', result.timezone)
+      console.log('Frontend current date:', new Date().toISOString().split('T')[0])
       
       if (result.data) {
         console.log('Content items:', result.data)

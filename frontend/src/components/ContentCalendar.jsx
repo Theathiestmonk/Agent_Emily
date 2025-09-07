@@ -45,6 +45,12 @@ const ContentCalendar = () => {
   const [selectedDate, setSelectedDate] = useState(null)
   const [selectedDateContent, setSelectedDateContent] = useState([])
 
+  // Get current date in a consistent way (same as backend logic)
+  const getCurrentDate = () => {
+    const now = new Date()
+    return now.toISOString().split('T')[0] // Returns YYYY-MM-DD format
+  }
+
   // Platform icons mapping
   const platformIcons = {
     'Facebook': Facebook,
@@ -191,15 +197,17 @@ const ContentCalendar = () => {
 
   const isToday = (date) => {
     if (!date) return false
-    const today = new Date()
-    return date.toDateString() === today.toDateString()
+    const todayStr = getCurrentDate()
+    const dateStr = date.toISOString().split('T')[0]
+    console.log('Calendar isToday check:', { dateStr, todayStr, isToday: dateStr === todayStr })
+    return dateStr === todayStr
   }
 
   const isPastDate = (date) => {
     if (!date) return false
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return date < today
+    const todayStr = getCurrentDate()
+    const dateStr = date.toISOString().split('T')[0]
+    return dateStr < todayStr
   }
 
   const days = getDaysInMonth(currentDate)
