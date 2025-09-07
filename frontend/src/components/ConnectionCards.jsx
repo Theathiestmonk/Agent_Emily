@@ -200,7 +200,11 @@ const ConnectionCards = ({ compact = false }) => {
   if (loading) {
     return (
       <div className="flex justify-center items-center p-8">
-        <RefreshCw className="w-6 h-6 animate-spin text-pink-500" />
+        <div className="flex space-x-1">
+          <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce"></div>
+          <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+          <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+        </div>
       </div>
     )
   }
@@ -286,10 +290,14 @@ const ConnectionCards = ({ compact = false }) => {
                   : 'bg-gray-300'
               }`} />
               
-              {/* Loading Spinner */}
+              {/* Loading Dots */}
               {isConnecting && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <RefreshCw className="w-3 h-3 animate-spin text-blue-600" />
+                  <div className="flex space-x-1">
+                    <div className="w-1 h-1 bg-blue-600 rounded-full animate-bounce"></div>
+                    <div className="w-1 h-1 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                    <div className="w-1 h-1 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                  </div>
                 </div>
               )}
             </button>
@@ -368,7 +376,11 @@ const ConnectionCards = ({ compact = false }) => {
                 <div className="flex items-center space-x-1 mb-2">
                   {isConnecting ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
+                      <div className="flex space-x-1">
+                        <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce"></div>
+                        <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                        <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                      </div>
                       <span className="text-xs text-blue-600">Connecting...</span>
                     </>
                   ) : isConnected ? (
@@ -403,7 +415,11 @@ const ConnectionCards = ({ compact = false }) => {
                 <div className="mt-2">
                   {isConnecting ? (
                     <div className="w-full h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
+                      <div className="flex space-x-1">
+                        <div className="w-1 h-1 bg-blue-600 rounded-full animate-bounce"></div>
+                        <div className="w-1 h-1 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                        <div className="w-1 h-1 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                      </div>
                     </div>
                   ) : isConnected ? (
                     <div className="w-full h-8 bg-red-500 hover:bg-red-600 rounded-lg flex items-center justify-center transition-colors">
