@@ -37,10 +37,9 @@ import {
 
 const ContentCalendar = () => {
   const { user } = useAuth()
-  const { scheduledContent, loading: contentLoading, fetchScheduledContent } = useContentCache()
+  const { allContent, loading: contentLoading, fetchAllContent } = useContentCache()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [campaigns, setCampaigns] = useState([])
-  const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState(null)
   const [selectedDateContent, setSelectedDateContent] = useState([])
@@ -85,9 +84,8 @@ const ContentCalendar = () => {
         setCampaigns(campaignsResponse.data)
       }
       
-      // Use cached content instead of fetching posts separately
-      // The scheduledContent from cache will be used as posts
-      await fetchScheduledContent()
+      // Use cached all content for calendar display
+      await fetchAllContent()
       
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -124,8 +122,8 @@ const ContentCalendar = () => {
     
     const dateStr = date.toISOString().split('T')[0]
     
-    // Use scheduledContent from cache instead of posts
-    const filteredPosts = scheduledContent.filter(post => {
+    // Use allContent from cache for calendar display
+    const filteredPosts = allContent.filter(post => {
       // Check both scheduled_date and scheduled_at fields for compatibility
       const scheduledDate = post.scheduled_date || post.scheduled_at
       if (!scheduledDate) return false
@@ -347,12 +345,12 @@ const ContentCalendar = () => {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Total Posts</span>
-                  <span className="text-sm font-medium text-gray-900">{posts.length}</span>
+                  <span className="text-sm font-medium text-gray-900">{allContent.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">This Month</span>
                   <span className="text-sm font-medium text-gray-900">
-                    {posts.filter(post => {
+                    {allContent.filter(post => {
                       const scheduledDate = post.scheduled_date || post.scheduled_at
                       if (!scheduledDate) return false
                       const postDate = new Date(scheduledDate)
@@ -368,7 +366,7 @@ const ContentCalendar = () => {
                 <h4 className="text-sm font-medium text-gray-900 mb-3">Platform Distribution</h4>
                 <div className="space-y-2">
                   {Object.entries(platformIcons).map(([platform, IconComponent]) => {
-                    const count = posts.filter(post => post.platform === platform).length
+                    const count = allContent.filter(post => post.platform === platform).length
                     const colorClass = platformColors[platform] || 'bg-gray-500'
                     
                     if (count === 0) return null

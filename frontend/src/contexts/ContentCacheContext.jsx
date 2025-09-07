@@ -15,10 +15,13 @@ export function useContentCache() {
 export function ContentCacheProvider({ children }) {
   const { user, isAuthenticated } = useAuth()
   const [scheduledContent, setScheduledContent] = useState([])
+  const [allContent, setAllContent] = useState([])
   const [contentDate, setContentDate] = useState('')
   const [loading, setLoading] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState(null)
+  const [lastAllContentFetchTime, setLastAllContentFetchTime] = useState(null)
   const [cacheValid, setCacheValid] = useState(false)
+  const [allContentCacheValid, setAllContentCacheValid] = useState(false)
 
   // Cache duration: 5 minutes (300000 ms)
   const CACHE_DURATION = 5 * 60 * 1000
@@ -28,9 +31,12 @@ export function ContentCacheProvider({ children }) {
     if (!isAuthenticated || !user) {
       console.log('User logged out, clearing content cache')
       setScheduledContent([])
+      setAllContent([])
       setContentDate('')
       setLastFetchTime(null)
+      setLastAllContentFetchTime(null)
       setCacheValid(false)
+      setAllContentCacheValid(false)
     }
   }, [isAuthenticated, user])
 
@@ -39,6 +45,13 @@ export function ContentCacheProvider({ children }) {
     if (!lastFetchTime || !cacheValid) return false
     const now = Date.now()
     return (now - lastFetchTime) < CACHE_DURATION
+  }
+
+  // Check if all content cache is still valid
+  const isAllContentCacheValid = () => {
+    if (!lastAllContentFetchTime || !allContentCacheValid) return false
+    const now = Date.now()
+    return (now - lastAllContentFetchTime) < CACHE_DURATION
   }
 
   // Fetch content with caching
@@ -84,9 +97,58 @@ export function ContentCacheProvider({ children }) {
     }
   }
 
+  // Fetch all content with caching
+  const fetchAllContent = async (forceRefresh = false) => {
+    // If cache is valid and not forcing refresh, return cached data
+    if (!forceRefresh && isAllContentCacheValid()) {
+      console.log('Using cached all content data')
+      return { data: allContent, fromCache: true }
+    }
+
+    try {
+      setLoading(true)
+      console.log('Fetching fresh all content data from API')
+      
+      const result = await contentAPI.getAllContent()
+      
+      if (result.data) {
+        console.log('All content fetched successfully, updating cache')
+        setAllContent(result.data)
+        setLastAllContentFetchTime(Date.now())
+        setAllContentCacheValid(true)
+        
+        return { 
+          data: result.data, 
+          fromCache: false 
+        }
+      } else {
+        console.error('No data received from all content API')
+        return { data: [], fromCache: false }
+      }
+    } catch (error) {
+      console.error('Error fetching all content:', error)
+      // If we have cached data and API fails, return cached data
+      if (allContent.length > 0) {
+        console.log('API failed, returning cached all content data as fallback')
+        return { data: allContent, fromCache: true }
+      }
+      return { data: [], fromCache: false }
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Update content in cache (for when content is posted/updated)
   const updateContentInCache = (contentId, updates) => {
     setScheduledContent(prev => 
+      prev.map(item => 
+        item.id === contentId 
+          ? { ...item, ...updates }
+          : item
+      )
+    )
+    // Also update in allContent cache
+    setAllContent(prev => 
       prev.map(item => 
         item.id === contentId 
           ? { ...item, ...updates }
@@ -98,43 +160,55 @@ export function ContentCacheProvider({ children }) {
   // Add new content to cache
   const addContentToCache = (newContent) => {
     setScheduledContent(prev => [newContent, ...prev])
+    setAllContent(prev => [newContent, ...prev])
   }
 
   // Remove content from cache
   const removeContentFromCache = (contentId) => {
     setScheduledContent(prev => prev.filter(item => item.id !== contentId))
+    setAllContent(prev => prev.filter(item => item.id !== contentId))
   }
 
   // Clear cache manually
   const clearCache = () => {
     console.log('Manually clearing content cache')
     setScheduledContent([])
+    setAllContent([])
     setContentDate('')
     setLastFetchTime(null)
+    setLastAllContentFetchTime(null)
     setCacheValid(false)
+    setAllContentCacheValid(false)
   }
 
   // Get cache status
   const getCacheStatus = () => {
     return {
       hasData: scheduledContent.length > 0,
+      hasAllContentData: allContent.length > 0,
       isValid: isCacheValid(),
+      allContentValid: isAllContentCacheValid(),
       lastFetch: lastFetchTime,
-      itemCount: scheduledContent.length
+      lastAllContentFetch: lastAllContentFetchTime,
+      itemCount: scheduledContent.length,
+      allContentCount: allContent.length
     }
   }
 
   const value = {
     scheduledContent,
+    allContent,
     contentDate,
     loading,
     fetchScheduledContent,
+    fetchAllContent,
     updateContentInCache,
     addContentToCache,
     removeContentFromCache,
     clearCache,
     getCacheStatus,
-    isCacheValid: isCacheValid()
+    isCacheValid: isCacheValid(),
+    isAllContentCacheValid: isAllContentCacheValid()
   }
 
   return (
