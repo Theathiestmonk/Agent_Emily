@@ -12,20 +12,31 @@ class ConnectionsAPI {
   // Get all connections for current user
   async getConnections() {
     try {
+      const authToken = await this.getAuthToken()
+      console.log('Fetching connections with token:', authToken ? 'present' : 'missing')
+      
       const response = await fetch(buildApiUrl('/connections/'), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await this.getAuthToken()}`
+          'Authorization': `Bearer ${authToken}`
         }
       })
 
+      console.log('Connections response status:', response.status)
+      
       if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Connections API error:', errorText)
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const data = await response.json()
-      return { data: data.connections, error: null }
+      console.log('Connections data:', data)
+      
+      // Handle both array response and object with connections property
+      const connections = Array.isArray(data) ? data : (data.connections || [])
+      return { data: connections, error: null }
     } catch (error) {
       console.error('Error fetching connections:', error)
       return { data: null, error: error.message }

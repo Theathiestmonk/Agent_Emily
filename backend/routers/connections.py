@@ -163,7 +163,7 @@ async def handle_oauth_callback(
         # Get account information (mock for now)
         account_info = get_account_info(platform, tokens['access_token'])
         
-        # Store connection in Supabase
+        # Store connection in Supabase (upsert - update if exists, insert if not)
         connection_data = {
             "user_id": current_user.id,
             "platform": platform,
@@ -178,10 +178,26 @@ async def handle_oauth_callback(
             "last_sync": datetime.now().isoformat()
         }
         
-        connection_response = supabase.table("platform_connections").insert(connection_data).execute()
+        # Try to insert, if it fails due to duplicate key, update instead
+        try:
+            connection_response = supabase.table("platform_connections").insert(connection_data).execute()
+        except Exception as e:
+            if "duplicate key value violates unique constraint" in str(e):
+                # Update existing connection
+                connection_response = supabase.table("platform_connections").update(connection_data).eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
+            else:
+                raise e
         
         # Remove used state
         supabase.table("oauth_states").delete().eq("state", state).execute()
+        
+        # Get the connection ID (handle both insert and update responses)
+        if connection_response.data and len(connection_response.data) > 0:
+            connection_id = connection_response.data[0]["id"]
+        else:
+            # If update didn't return data, get the existing connection
+            existing_connection = supabase.table("platform_connections").select("id").eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
+            connection_id = existing_connection.data[0]["id"] if existing_connection.data else "unknown"
         
         # Return HTML page that redirects back to frontend
         frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
@@ -199,7 +215,7 @@ async def handle_oauth_callback(
                         type: 'OAUTH_SUCCESS',
                         platform: '{platform}',
                         connection: {{
-                            id: '{connection_response.data[0]["id"]}',
+                            id: '{connection_id}',
                             platform: '{platform}',
                             page_name: '{account_info.get('page_name', '')}',
                             follower_count: {account_info.get('follower_count', 0)},
