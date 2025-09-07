@@ -1011,6 +1011,47 @@ async def debug_instagram_connection(
         print(f"❌ Debug error: {e}")
         return {"error": str(e)}
 
+@router.get("/instagram/test-account")
+async def test_instagram_account(
+    current_user: User = Depends(get_current_user)
+):
+    """Test Instagram account setup without storing connection"""
+    try:
+        print(f"🔍 Testing Instagram account setup for user: {current_user.id}")
+        
+        # Get a fresh access token by simulating the OAuth flow
+        # This will help us debug what's happening
+        facebook_app_id = os.getenv('FACEBOOK_CLIENT_ID')
+        facebook_app_secret = os.getenv('FACEBOOK_CLIENT_SECRET')
+        
+        if not facebook_app_id or not facebook_app_secret:
+            return {"error": "Facebook app credentials not configured"}
+        
+        # Generate a test OAuth URL
+        state = generate_oauth_state()
+        oauth_url = generate_oauth_url("instagram", state)
+        
+        return {
+            "message": "Use this URL to test Instagram connection",
+            "oauth_url": oauth_url,
+            "instructions": [
+                "1. Click the OAuth URL above",
+                "2. Grant permissions for Instagram",
+                "3. Check if you see any error messages",
+                "4. If successful, the callback will show detailed debug info"
+            ],
+            "facebook_app_id": facebook_app_id,
+            "required_setup": [
+                "Instagram Business account",
+                "Connected to Facebook Page",
+                "Page has Instagram Business account linked"
+            ]
+        }
+        
+    except Exception as e:
+        print(f"❌ Test error: {e}")
+        return {"error": str(e)}
+
 @router.post("/instagram/post")
 async def post_to_instagram(
     post_data: dict,
