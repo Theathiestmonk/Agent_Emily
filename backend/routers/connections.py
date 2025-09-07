@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import os
 from cryptography.fernet import Fernet
 import json
+import requests
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
