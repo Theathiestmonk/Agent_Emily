@@ -122,7 +122,9 @@ const ConnectionCards = () => {
       
       // Listen for postMessage from popup
       const handleMessage = (event) => {
-        if (event.data.type === 'OAUTH_SUCCESS') {
+        console.log('Received message from popup:', event.data)
+        if (event.data && event.data.type === 'OAUTH_SUCCESS') {
+          console.log('OAuth success received, closing popup and refreshing connections')
           popup.close()
           clearInterval(checkClosed)
           setConnecting(null)
@@ -135,11 +137,20 @@ const ConnectionCards = () => {
       
       // Clean up listener when popup closes
       const cleanup = () => {
+        console.log('Cleaning up popup listeners')
         window.removeEventListener('message', handleMessage)
         clearInterval(checkClosed)
       }
       
       popup.addEventListener('beforeunload', cleanup)
+      
+      // Also clean up after a timeout as fallback
+      setTimeout(() => {
+        if (!popup.closed) {
+          console.log('Popup still open after 30 seconds, cleaning up')
+          cleanup()
+        }
+      }, 30000)
       
     } catch (error) {
       console.error('Failed to connect:', error)
@@ -179,6 +190,17 @@ const ConnectionCards = () => {
     )
   }
 
+  const handleRefresh = () => {
+    console.log('Manual refresh triggered')
+    console.log('Current connections before refresh:', connections)
+    fetchConnections()
+  }
+
+  // Debug: Log connections whenever they change
+  useEffect(() => {
+    console.log('Connections updated:', connections)
+  }, [connections])
+
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
       <div className="flex items-center justify-between mb-6">
@@ -186,8 +208,17 @@ const ConnectionCards = () => {
           <h3 className="text-xl font-semibold text-gray-900">Social Media Connections</h3>
           <p className="text-sm text-gray-500">Connect your accounts to enable automated posting</p>
         </div>
-        <div className="text-sm text-gray-500">
-          {connections.filter(conn => conn.connection_status === 'active').length} of {platforms.length} connected
+        <div className="flex items-center space-x-4">
+          <div className="text-sm text-gray-500">
+            {connections.filter(conn => conn.connection_status === 'active').length} of {platforms.length} connected
+          </div>
+          <button
+            onClick={handleRefresh}
+            className="flex items-center space-x-2 px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span className="text-sm font-medium">Refresh</span>
+          </button>
         </div>
       </div>
 
