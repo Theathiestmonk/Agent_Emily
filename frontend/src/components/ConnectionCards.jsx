@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { connectionsAPI } from '../services/connections'
 
-const ConnectionCards = () => {
+const ConnectionCards = ({ compact = false }) => {
   const [connections, setConnections] = useState([])
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(null)
@@ -212,6 +212,92 @@ const ConnectionCards = () => {
   }
 
   // Debug: Log connections whenever they change (moved to fetchConnections)
+
+  // Compact mode for header
+  if (compact) {
+    return (
+      <div className="flex items-center space-x-2">
+        {platforms.map((platform) => {
+          const Icon = platform.icon
+          const status = getConnectionStatus(platform.id)
+          const isConnecting = connecting === platform.id
+          const isConnected = status === 'active'
+          const hasError = status === 'error'
+
+          return (
+            <button
+              key={platform.id}
+              onClick={() => {
+                if (isConnected) {
+                  const connectionInfo = getConnectionInfo(platform.id)
+                  handleDisconnect(connectionInfo.id)
+                } else if (!isConnecting) {
+                  handleConnect(platform.id)
+                }
+              }}
+              disabled={isConnecting}
+              className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                isConnected
+                  ? platform.id === 'facebook' 
+                    ? 'bg-blue-500 shadow-md'
+                    : platform.id === 'instagram'
+                    ? 'bg-gradient-to-r from-pink-500 to-purple-600 shadow-md'
+                    : platform.id === 'linkedin'
+                    ? 'bg-blue-700 shadow-md'
+                    : platform.id === 'twitter'
+                    ? 'bg-sky-500 shadow-md'
+                    : platform.id === 'tiktok'
+                    ? 'bg-black shadow-md'
+                    : platform.id === 'youtube'
+                    ? 'bg-red-600 shadow-md'
+                    : `${platform.color} shadow-md`
+                  : hasError
+                  ? 'bg-red-100 border-2 border-red-200'
+                  : 'bg-white border-2 border-gray-200 hover:border-gray-300 shadow-sm'
+              }`}
+              title={`${platform.name} - ${isConnecting ? 'Connecting...' : isConnected ? 'Connected' : hasError ? 'Error' : 'Not Connected'}`}
+            >
+              <Icon className={`w-5 h-5 ${
+                isConnected 
+                  ? 'text-white' 
+                  : hasError 
+                  ? 'text-red-600' 
+                  : platform.id === 'facebook' 
+                    ? 'text-blue-600'
+                    : platform.id === 'instagram'
+                    ? 'text-pink-600'
+                    : platform.id === 'linkedin'
+                    ? 'text-blue-700'
+                    : platform.id === 'twitter'
+                    ? 'text-sky-500'
+                    : platform.id === 'tiktok'
+                    ? 'text-black'
+                    : platform.id === 'youtube'
+                    ? 'text-red-600'
+                    : 'text-gray-600'
+              }`} />
+              
+              {/* Status Indicator */}
+              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${
+                isConnected
+                  ? 'bg-green-500'
+                  : hasError
+                  ? 'bg-red-500'
+                  : 'bg-gray-300'
+              }`} />
+              
+              {/* Loading Spinner */}
+              {isConnecting && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <RefreshCw className="w-3 h-3 animate-spin text-blue-600" />
+                </div>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">

@@ -69,15 +69,31 @@ function Dashboard() {
         {/* Header */}
         <div className="bg-white shadow-sm border-b">
           <div className="px-6 py-4">
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-sm text-gray-500">Welcome back! Here's what's happening with your marketing.</p>
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Welcome back, {profile?.business_name || user?.user_metadata?.name || 'there'}!
+                </h1>
+                <p className="text-sm text-gray-500">
+                  {profile?.business_name 
+                    ? `Ready to take ${profile.business_name} to new heights? Let's create some amazing content!`
+                    : "Ready to supercharge your marketing? Let's create some amazing content!"
+                  }
+                </p>
+              </div>
+              
+              {/* Compact Social Media Connections */}
+              <div className="flex items-center space-x-4">
+                <div className="text-sm text-gray-500 mr-4">Connected accounts:</div>
+                <div className="flex items-center space-x-2">
+                  <ConnectionCards compact={true} />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <div className="flex-1 p-6">
-        {/* Social Media Connections */}
-        <ConnectionCards />
-
         {/* Welcome Section */}
         <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
           <div className="flex items-center mb-6">
