@@ -2,21 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status, Header
 from typing import List, Optional
 import os
 from datetime import datetime, timedelta
-import pytz
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv()
-
-# Timezone configuration - can be set via environment variable
-DEFAULT_TIMEZONE = os.getenv('DEFAULT_TIMEZONE', 'UTC')
-try:
-    TIMEZONE = pytz.timezone(DEFAULT_TIMEZONE)
-except pytz.exceptions.UnknownTimeZoneError:
-    print(f"⚠️ Unknown timezone '{DEFAULT_TIMEZONE}', falling back to UTC")
-    TIMEZONE = pytz.UTC
 
 # Get Supabase client
 supabase_url = os.getenv("SUPABASE_URL")
@@ -116,32 +107,19 @@ async def test_content_router():
 async def get_scheduled_content(
     current_user: User = Depends(get_current_user)
 ):
-    """Get scheduled content for today"""
+    """Get scheduled content for the current day"""
     try:
         print(f"📅 Fetching scheduled content for user: {current_user.id}")
         
-        # Get today's date in the configured timezone
-        now_utc = datetime.now(pytz.UTC)
-        now_local = now_utc.astimezone(TIMEZONE)
-        today = now_local.date()
+        # Get today's date
+        today = datetime.now()
+        today_start = today.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today.replace(hour=23, minute=59, second=59, microsecond=999999)
         
-        # Create start and end of day in the local timezone
-        today_start = TIMEZONE.localize(datetime.combine(today, datetime.min.time()))
-        today_end = TIMEZONE.localize(datetime.combine(today, datetime.max.time().replace(microsecond=999999)))
-        
-        # Convert to UTC for database query
-        today_start_utc = today_start.astimezone(pytz.UTC)
-        today_end_utc = today_end.astimezone(pytz.UTC)
-        
-        print(f"📅 Timezone: {TIMEZONE}")
-        print(f"📅 Local time: {now_local}")
-        print(f"📅 Today's date: {today}")
-        print(f"📅 Looking for content between {today_start} and {today_end} (local)")
-        print(f"📅 UTC range: {today_start_utc} to {today_end_utc}")
+        print(f"📅 Looking for content between {today_start} and {today_end}")
         
         # Query Supabase for scheduled content from content_posts table
-        # Use the local date for filtering since scheduled_date is stored as DATE type
-        response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).gte("scheduled_date", today.isoformat()).lte("scheduled_date", today.isoformat()).order("scheduled_date").execute()
+        response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).gte("scheduled_date", today_start.date().isoformat()).lte("scheduled_date", today_end.date().isoformat()).order("scheduled_date").execute()
         
         content_items = response.data if response.data else []
         print(f"📊 Found {len(content_items)} scheduled content items for today")
@@ -170,9 +148,8 @@ async def get_scheduled_content(
         
         return {
             "content": formatted_content,
-            "date": today.isoformat(),
-            "count": len(formatted_content),
-            "timezone": str(TIMEZONE)
+            "date": today.strftime("%Y-%m-%d"),
+            "count": len(formatted_content)
         }
         
     except Exception as e:
