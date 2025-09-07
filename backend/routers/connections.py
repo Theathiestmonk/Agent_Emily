@@ -162,7 +162,7 @@ async def get_connections(
             for conn in all_connections:
                 print(f"  - {conn.get('platform')}: {conn.get('connection_status')} (is_active: {conn.get('is_active')})")
         
-        # Remove sensitive data from response
+        # Remove sensitive data from response (but keep token for debugging)
         response_connections = []
         for conn in connections:
             conn_dict = {
@@ -177,7 +177,8 @@ async def get_connections(
                 "last_sync": conn.get("last_sync"),
                 "last_posted_at": conn.get("last_posted_at"),
                 "connected_at": conn.get("connected_at"),
-                "last_token_refresh": conn.get("last_token_refresh")
+                "last_token_refresh": conn.get("last_token_refresh"),
+                "access_token": conn.get("access_token", "NOT_FOUND")[:50] + "..." if conn.get("access_token") else "MISSING"
             }
             response_connections.append(conn_dict)
         
@@ -596,6 +597,35 @@ async def debug_facebook_connection(
         
     except Exception as e:
         print(f"❌ Debug error: {e}")
+        return {"error": str(e)}
+
+@router.get("/facebook/test")
+async def test_facebook_connection():
+    """Test Facebook connection without authentication"""
+    try:
+        print("🔍 Testing Facebook connection data")
+        
+        # Get any Facebook connection
+        response = supabase_admin.table("platform_connections").select("*").eq("platform", "facebook").eq("is_active", True).limit(1).execute()
+        
+        if not response.data:
+            return {"error": "No active Facebook connections found"}
+        
+        connection = response.data[0]
+        
+        return {
+            "connection_id": connection['id'],
+            "user_id": connection['user_id'],
+            "page_id": connection['page_id'],
+            "page_name": connection['page_name'],
+            "token_length": len(connection['access_token']),
+            "token_start": connection['access_token'][:20] + "..." if len(connection['access_token']) > 20 else connection['access_token'],
+            "is_active": connection['is_active'],
+            "connected_at": connection['connected_at']
+        }
+        
+    except Exception as e:
+        print(f"❌ Test error: {e}")
         return {"error": str(e)}
 
 @router.post("/facebook/post")
