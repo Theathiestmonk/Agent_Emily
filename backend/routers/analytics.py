@@ -172,7 +172,12 @@ async def get_analytics_insights(
                     }
                 },
                 "time_range": time_range,
-                "total_platforms": 0
+                "total_platforms": 0,
+                "debug": {
+                    "user_id": current_user.id,
+                    "connections_found": 0,
+                    "all_connections_found": len(all_connections)
+                }
             }
         
         analytics_by_platform = {}
@@ -251,7 +256,12 @@ async def get_analytics_insights(
                 "overview": overview
             },
             "time_range": time_range,
-            "total_platforms": len(analytics_by_platform)
+            "total_platforms": len(analytics_by_platform),
+            "debug": {
+                "user_id": current_user.id,
+                "connections_found": len(connections),
+                "all_connections_found": len(all_connections)
+            }
         }
         
     except Exception as e:
