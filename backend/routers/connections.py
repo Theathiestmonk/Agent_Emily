@@ -125,10 +125,22 @@ async def get_connections(
 ):
     """Get all active connections for current user"""
     try:
+        print(f"🔍 Fetching connections for user: {current_user.id}")
+        
         # Query Supabase directly
         response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("is_active", True).execute()
         
         connections = response.data if response.data else []
+        print(f"📊 Found {len(connections)} active connections")
+        
+        # Also check all connections (including inactive) for debugging
+        all_response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).execute()
+        all_connections = all_response.data if all_response.data else []
+        print(f"📊 Total connections (including inactive): {len(all_connections)}")
+        
+        if all_connections:
+            for conn in all_connections:
+                print(f"  - {conn.get('platform')}: {conn.get('connection_status')} (is_active: {conn.get('is_active')})")
         
         # Remove sensitive data from response
         response_connections = []
@@ -254,6 +266,7 @@ async def handle_oauth_callback(
             "refresh_token_encrypted": encrypt_token(tokens.get('refresh_token', '')),
             "token_expires_at": (datetime.now() + timedelta(seconds=tokens.get('expires_in', 3600))).isoformat(),
             "connection_status": 'active',
+            "is_active": True,  # Add this field for the query
             "last_sync": datetime.now().isoformat()
         }
         
