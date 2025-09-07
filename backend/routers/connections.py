@@ -408,7 +408,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
     
     client_ids = {
         'facebook': os.getenv('FACEBOOK_CLIENT_ID'),
-        'instagram': os.getenv('INSTAGRAM_CLIENT_ID') or os.getenv('FACEBOOK_CLIENT_ID'),  # Use Facebook App ID for Instagram
+        'instagram': os.getenv('FACEBOOK_CLIENT_ID'),  # Always use Facebook App ID for Instagram
         'linkedin': os.getenv('LINKEDIN_CLIENT_ID'),
         'twitter': os.getenv('TWITTER_CLIENT_ID'),
         'tiktok': os.getenv('TIKTOK_CLIENT_ID'),
@@ -529,12 +529,12 @@ def exchange_instagram_code_for_tokens(code: str) -> dict:
     import requests
     
     # Instagram uses the same credentials as Facebook
-    instagram_app_id = os.getenv('INSTAGRAM_CLIENT_ID') or os.getenv('FACEBOOK_CLIENT_ID')
-    instagram_app_secret = os.getenv('INSTAGRAM_CLIENT_SECRET') or os.getenv('FACEBOOK_CLIENT_SECRET')
+    instagram_app_id = os.getenv('FACEBOOK_CLIENT_ID')  # Always use Facebook App ID
+    instagram_app_secret = os.getenv('FACEBOOK_CLIENT_SECRET')  # Always use Facebook App Secret
     redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/instagram/callback"
     
     if not instagram_app_id or not instagram_app_secret:
-        raise ValueError("Instagram app credentials not configured")
+        raise ValueError("Instagram app credentials not configured (using Facebook credentials)")
     
     # Exchange code for access token
     token_url = "https://graph.facebook.com/v18.0/oauth/access_token"
