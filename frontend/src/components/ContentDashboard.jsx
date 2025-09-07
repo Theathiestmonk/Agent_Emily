@@ -439,10 +439,45 @@ const ContentDashboard = () => {
         <div className="bg-white shadow-sm border-b">
           <div className="px-6 py-4">
             <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Content Dashboard</h1>
-                <p className="text-sm text-gray-500">Manage your AI-generated content</p>
+              <div className="flex items-center space-x-8">
+                {/* Stats Cards in Header */}
+                <div className="flex items-center space-x-6">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                      <Calendar className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-600">Total</p>
+                      <p className="text-lg font-bold text-gray-900">{scheduledContent.length}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center">
+                      <FileText className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-600">Platforms</p>
+                      <p className="text-lg font-bold text-gray-900">
+                        {new Set(scheduledContent.map(content => content.platform)).size}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
+                      <Image className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-600">With Media</p>
+                      <p className="text-lg font-bold text-gray-900">
+                        {scheduledContent.filter(content => content.media_url).length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
+              
               <div className="flex items-center space-x-4">
                 <button
                   onClick={() => navigate('/calendar')}
@@ -530,179 +565,126 @@ const ContentDashboard = () => {
             </div>
           )}
 
-          {/* Two Column Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Column 1: Stats Cards */}
-            <div className="lg:col-span-1">
-              <div className="space-y-4">
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                  <div className="flex items-center">
-                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center mr-4">
-                      <Calendar className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total Content</p>
-                      <p className="text-2xl font-bold text-gray-900">{scheduledContent.length}</p>
-                    </div>
-                  </div>
+          {/* Content Cards - 4 Column Layout */}
+          <div className="space-y-6">
+            {filteredContent.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-24 h-24 bg-gradient-to-r from-pink-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Sparkles className="w-12 h-12 text-pink-500" />
                 </div>
-                
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                  <div className="flex items-center">
-                    <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center mr-4">
-                      <FileText className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Platforms</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {new Set(scheduledContent.map(content => content.platform)).size}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                  <div className="flex items-center">
-                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mr-4">
-                      <Image className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">With Media</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {scheduledContent.filter(content => content.media_url).length}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No content available</h3>
+                <p className="text-gray-500 mb-6">Generate content to see it displayed here</p>
+                <button
+                  onClick={handleGenerateContent}
+                  disabled={generating}
+                  className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2 mx-auto"
+                >
+                  {generating ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Generating Content...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5" />
+                      <span>Generate Content</span>
+                    </>
+                  )}
+                </button>
               </div>
-            </div>
-
-            {/* Column 2: Main Content */}
-            <div className="lg:col-span-3">
-
-
-              {/* Content Cards */}
-              <div className="space-y-6">
-                {filteredContent.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-24 h-24 bg-gradient-to-r from-pink-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <Sparkles className="w-12 h-12 text-pink-500" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No content available</h3>
-                    <p className="text-gray-500 mb-6">Generate content to see it displayed here</p>
-                    <button
-                      onClick={handleGenerateContent}
-                      disabled={generating}
-                      className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2 mx-auto"
-                    >
-                      {generating ? (
-                        <>
-                          <RefreshCw className="w-5 h-5 animate-spin" />
-                          <span>Generating Content...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-5 h-5" />
-                          <span>Generate Content</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                ) : (
-                  <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
-                    {filteredContent.map((content) => (
-                      <div key={content.id} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center space-x-3">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getPlatformColor(content.platform)}`}>
-                              {getPlatformIcon(content.platform)}
-                            </div>
-                            <div>
-                              <h4 className="font-semibold text-gray-900 capitalize">{content.platform}</h4>
-                              <p className="text-sm text-gray-500">{content.status}</p>
-                            </div>
-                          </div>
-                          <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(content.status)}`}>
-                            {content.status}
-                          </div>
+            ) : (
+              <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1'}`}>
+                {filteredContent.map((content) => (
+                  <div key={content.id} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getPlatformColor(content.platform)}`}>
+                          {getPlatformIcon(content.platform)}
                         </div>
-                        
-                        {content.title && (
-                          <h5 className="font-medium text-gray-900 mb-3">{content.title}</h5>
-                        )}
-                        
-                        <p className="text-gray-700 text-sm mb-4 line-clamp-3">{content.content}</p>
-                        
-                        {content.hashtags && content.hashtags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-4">
-                            {content.hashtags.map((tag, index) => (
-                              <span key={index} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                                #{tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        
-                        <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                          <div className="flex items-center space-x-1">
-                            <Clock className="w-4 h-4" />
-                            <span>{formatDate(content.scheduled_at)}</span>
-                          </div>
-                        </div>
-                        
-                        {content.media_url && (
-                          <div className="mb-4">
-                            <div className="w-full h-32 bg-gray-100 rounded-lg overflow-hidden">
-                              <img 
-                                src={content.media_url} 
-                                alt="Content media"
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          </div>
-                        )}
-                        
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="View">
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Edit">
-                              <Edit className="w-4 h-4" />
-                            </button>
-                          </div>
-                          
-                          {/* Post Button */}
-                          <button
-                            onClick={() => handlePostContent(content)}
-                            disabled={content.status === 'published' || postingContent.has(content.id)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
-                              content.status === 'published' 
-                                ? 'bg-green-100 text-green-700 cursor-not-allowed' 
-                                : postingContent.has(content.id)
-                                ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
-                                : `bg-gradient-to-r ${getPlatformColor(content.platform)} text-white hover:opacity-90`
-                            }`}
-                            title={content.status === 'published' ? 'Already Published' : postingContent.has(content.id) ? 'Posting...' : `Post to ${content.platform}`}
-                          >
-                            {postingContent.has(content.id) ? (
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Share2 className="w-4 h-4" />
-                            )}
-                            <span>
-                              {content.status === 'published' ? 'Published' : 
-                               postingContent.has(content.id) ? 'Posting...' : 
-                               'Post Now'}
-                            </span>
-                          </button>
+                        <div>
+                          <h4 className="font-semibold text-gray-900 capitalize">{content.platform}</h4>
+                          <p className="text-sm text-gray-500">{content.status}</p>
                         </div>
                       </div>
-                    ))}
+                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(content.status)}`}>
+                        {content.status}
+                      </div>
+                    </div>
+                    
+                    {content.title && (
+                      <h5 className="font-medium text-gray-900 mb-3">{content.title}</h5>
+                    )}
+                    
+                    <p className="text-gray-700 text-sm mb-4 line-clamp-3">{content.content}</p>
+                    
+                    {content.hashtags && content.hashtags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-4">
+                        {content.hashtags.map((tag, index) => (
+                          <span key={index} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                      <div className="flex items-center space-x-1">
+                        <Clock className="w-4 h-4" />
+                        <span>{formatDate(content.scheduled_at)}</span>
+                      </div>
+                    </div>
+                    
+                    {content.media_url && (
+                      <div className="mb-4">
+                        <div className="w-full h-32 bg-gray-100 rounded-lg overflow-hidden">
+                          <img 
+                            src={content.media_url} 
+                            alt="Content media"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="View">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Edit">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      </div>
+                      
+                      {/* Post Button */}
+                      <button
+                        onClick={() => handlePostContent(content)}
+                        disabled={content.status === 'published' || postingContent.has(content.id)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
+                          content.status === 'published' 
+                            ? 'bg-green-100 text-green-700 cursor-not-allowed' 
+                            : postingContent.has(content.id)
+                            ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                            : `bg-gradient-to-r ${getPlatformColor(content.platform)} text-white hover:opacity-90`
+                        }`}
+                        title={content.status === 'published' ? 'Already Published' : postingContent.has(content.id) ? 'Posting...' : `Post to ${content.platform}`}
+                      >
+                        {postingContent.has(content.id) ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Share2 className="w-4 h-4" />
+                        )}
+                        <span>
+                          {content.status === 'published' ? 'Published' : 
+                           postingContent.has(content.id) ? 'Posting...' : 
+                           'Post Now'}
+                        </span>
+                      </button>
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
