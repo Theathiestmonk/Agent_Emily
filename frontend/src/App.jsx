@@ -12,6 +12,7 @@ import LoadingBar from './components/LoadingBar'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { NotificationProvider, useNotifications } from './contexts/NotificationContext'
 import { ContentCacheProvider } from './contexts/ContentCacheContext'
+import { SocialMediaCacheProvider } from './contexts/SocialMediaCacheContext'
 import { onboardingAPI } from './services/onboarding'
 import NotificationWindow from './components/NotificationWindow'
 
@@ -129,7 +130,9 @@ function App() {
       <AuthProvider>
         <NotificationProvider>
           <ContentCacheProvider>
-            <AppContent />
+            <SocialMediaCacheProvider>
+              <AppContent />
+            </SocialMediaCacheProvider>
           </ContentCacheProvider>
         </NotificationProvider>
       </AuthProvider>

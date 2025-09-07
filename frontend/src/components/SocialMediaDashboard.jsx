@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
+import { useSocialMediaCache } from '../contexts/SocialMediaCacheContext'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
@@ -29,9 +30,15 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onren
 const SocialMediaDashboard = () => {
   const { user } = useAuth()
   const { showError, showSuccess } = useNotifications()
-  const [posts, setPosts] = useState({})
-  const [connections, setConnections] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { 
+    connections, 
+    posts, 
+    loading, 
+    fetchAllData, 
+    updatePostsInCache,
+    clearCache,
+    getCacheStatus 
+  } = useSocialMediaCache()
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [debugData, setDebugData] = useState(null)
@@ -40,93 +47,30 @@ const SocialMediaDashboard = () => {
     fetchData()
   }, [])
 
-  const fetchData = async () => {
+  const fetchData = async (forceRefresh = false) => {
     try {
-      setLoading(true)
-      await Promise.all([
-        fetchConnections(),
-        fetchLatestPosts()
-      ])
+      console.log('Fetching social media data...', forceRefresh ? '(force refresh)' : '(cached)')
+      const result = await fetchAllData(forceRefresh)
+      
+      console.log('Fetched data:', result)
+      console.log('Cache status:', getCacheStatus())
+      
+      if (result.fromCache) {
+        console.log('Data served from cache')
+      } else {
+        console.log('Data fetched from API')
+      }
     } catch (error) {
       console.error('Error fetching data:', error)
       showError('Failed to load social media data', error.message)
-    } finally {
-      setLoading(false)
     }
   }
 
-  const fetchConnections = async () => {
-    try {
-      const authToken = await getAuthToken()
-      console.log('🔗 Fetching connections with token:', authToken ? 'present' : 'missing')
-      
-      const response = await fetch(`${API_BASE_URL}/connections`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        }
-      })
-
-      console.log('🔗 Connections response status:', response.status)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('🔗 Connections API error:', errorText)
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log('🔗 Connections data:', data)
-      console.log('🔗 Data type:', typeof data)
-      console.log('🔗 Is array:', Array.isArray(data))
-      console.log('🔗 Data length:', data?.length)
-      
-      // The API returns an array directly, not wrapped in an object
-      const connectionsArray = Array.isArray(data) ? data : (data.connections || [])
-      console.log('🔗 Connections array:', connectionsArray)
-      setConnections(connectionsArray)
-    } catch (error) {
-      console.error('Error fetching connections:', error)
-      throw error
-    }
-  }
-
-  const fetchLatestPosts = async () => {
-    try {
-      const authToken = await getAuthToken()
-      console.log('📱 Fetching latest posts with token:', authToken ? 'present' : 'missing')
-      
-      const response = await fetch(`${API_BASE_URL}/social-media/latest-posts`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        }
-      })
-
-      console.log('📱 Posts response status:', response.status)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('📱 Posts API error:', errorText)
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log('📱 Posts data:', data)
-      setPosts(data.posts || {})
-    } catch (error) {
-      console.error('Error fetching latest posts:', error)
-      // Don't throw error here, just log it and show empty state
-      console.log('No posts available or API not implemented yet')
-    }
-  }
 
   const handleRefresh = async () => {
     try {
       setRefreshing(true)
-      await fetchLatestPosts()
+      await fetchData(true) // Force refresh from API
       setLastRefresh(new Date())
       showSuccess('Social media data refreshed successfully!')
     } catch (error) {
@@ -162,6 +106,11 @@ const SocialMediaDashboard = () => {
       console.error('Error debugging connections:', error)
       showError('Failed to debug connections', error.message)
     }
+  }
+
+  const handleClearCache = () => {
+    clearCache()
+    showSuccess('Cache cleared! Data will be fetched fresh on next load.')
   }
 
   const getAuthToken = async () => {
@@ -318,6 +267,15 @@ const SocialMediaDashboard = () => {
                   <span>Debug</span>
                 </button>
                 
+                {/* Clear Cache Button */}
+                <button
+                  onClick={handleClearCache}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg hover:from-pink-600 hover:to-red-500 transition-all duration-300"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Clear Cache</span>
+                </button>
+                
                 {/* Refresh Button */}
                 <button
                   onClick={handleRefresh}
@@ -363,6 +321,19 @@ const SocialMediaDashboard = () => {
               </div>
             </div>
           )}
+
+          {/* Cache Status Display */}
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h3 className="text-lg font-semibold text-blue-800 mb-2">Cache Status</h3>
+            <div className="text-sm text-blue-700">
+              <p><strong>Connections:</strong> {getCacheStatus().hasConnections ? 'Cached' : 'Not cached'} 
+                {getCacheStatus().connectionsValid && ' (Valid)'}</p>
+              <p><strong>Posts:</strong> {getCacheStatus().hasPosts ? 'Cached' : 'Not cached'} 
+                {getCacheStatus().postsValid && ' (Valid)'}</p>
+              <p><strong>Cache Duration:</strong> 5 minutes</p>
+              <p><strong>Last Refresh:</strong> {lastRefresh ? lastRefresh.toLocaleTimeString() : 'Never'}</p>
+            </div>
+          </div>
           {connectedPlatforms.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-24 h-24 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6">
