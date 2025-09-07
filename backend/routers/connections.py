@@ -104,16 +104,36 @@ def get_current_user(authorization: str = Header(None)):
 router = APIRouter(prefix="/connections", tags=["connections"])
 
 # Encryption key for tokens
-ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', Fernet.generate_key())
-cipher = Fernet(ENCRYPTION_KEY)
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
+if not ENCRYPTION_KEY:
+    print("⚠️  WARNING: ENCRYPTION_KEY not set! Generating a new key. This will cause existing tokens to be unreadable.")
+    ENCRYPTION_KEY = Fernet.generate_key().decode()
+    print(f"🔑 Generated encryption key: {ENCRYPTION_KEY}")
+else:
+    print(f"🔑 Using provided encryption key: {ENCRYPTION_KEY[:20]}...")
+
+try:
+    cipher = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
+except Exception as e:
+    print(f"❌ Error initializing cipher: {e}")
+    raise
 
 def encrypt_token(token: str) -> str:
     """Encrypt token before storing"""
-    return cipher.encrypt(token.encode()).decode()
+    try:
+        return cipher.encrypt(token.encode()).decode()
+    except Exception as e:
+        print(f"❌ Error encrypting token: {e}")
+        raise
 
 def decrypt_token(encrypted_token: str) -> str:
     """Decrypt token for use"""
-    return cipher.decrypt(encrypted_token.encode()).decode()
+    try:
+        return cipher.decrypt(encrypted_token.encode()).decode()
+    except Exception as e:
+        print(f"❌ Error decrypting token: {e}")
+        print(f"🔍 Token to decrypt: {encrypted_token[:50]}...")
+        raise
 
 def generate_oauth_state() -> str:
     """Generate secure OAuth state"""
@@ -567,10 +587,17 @@ async def post_to_facebook(
             print(f"🔓 Decrypted access token: {access_token[:20]}...")
         except Exception as e:
             print(f"❌ Error decrypting token: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to decrypt access token"
-            )
+            print(f"🔍 Connection data: {connection}")
+            
+            # Check if the token is already in plaintext (not encrypted)
+            if connection['access_token'].startswith('EAAB'):
+                print("🔓 Token appears to be unencrypted, using directly")
+                access_token = connection['access_token']
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to decrypt access token. Please reconnect your Facebook account."
+                )
         
         # Prepare the post message
         message = post_data.get('message', '')
