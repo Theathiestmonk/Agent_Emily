@@ -132,7 +132,9 @@ def decrypt_token(encrypted_token: str) -> str:
         return cipher.decrypt(encrypted_token.encode()).decode()
     except Exception as e:
         print(f"❌ Error decrypting token: {e}")
+        print(f"❌ Error type: {type(e).__name__}")
         print(f"🔍 Token to decrypt: {encrypted_token[:50]}...")
+        print(f"🔑 Current encryption key: {ENCRYPTION_KEY[:20]}...")
         raise
 
 def generate_oauth_state() -> str:
