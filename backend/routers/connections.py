@@ -237,13 +237,16 @@ def generate_oauth_url(platform: str, state: str) -> str:
         'youtube': os.getenv('YOUTUBE_CLIENT_ID')
     }
     
+    # Get API base URL and ensure no trailing slash
+    api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+    
     redirect_uris = {
-        'facebook': f"{os.getenv('API_BASE_URL')}/connections/auth/facebook/callback",
-        'instagram': f"{os.getenv('API_BASE_URL')}/connections/auth/instagram/callback",
-        'linkedin': f"{os.getenv('API_BASE_URL')}/connections/auth/linkedin/callback",
-        'twitter': f"{os.getenv('API_BASE_URL')}/connections/auth/twitter/callback",
-        'tiktok': f"{os.getenv('API_BASE_URL')}/connections/auth/tiktok/callback",
-        'youtube': f"{os.getenv('API_BASE_URL')}/connections/auth/youtube/callback"
+        'facebook': f"{api_base_url}/connections/auth/facebook/callback",
+        'instagram': f"{api_base_url}/connections/auth/instagram/callback",
+        'linkedin': f"{api_base_url}/connections/auth/linkedin/callback",
+        'twitter': f"{api_base_url}/connections/auth/twitter/callback",
+        'tiktok': f"{api_base_url}/connections/auth/tiktok/callback",
+        'youtube': f"{api_base_url}/connections/auth/youtube/callback"
     }
     
     base_url = base_urls.get(platform)
