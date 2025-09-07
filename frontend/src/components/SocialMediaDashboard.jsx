@@ -36,7 +36,6 @@ const SocialMediaDashboard = () => {
     loading, 
     fetchAllData, 
     updatePostsInCache,
-    clearCache,
     getCacheStatus 
   } = useSocialMediaCache()
   const [refreshing, setRefreshing] = useState(false)
@@ -49,11 +48,7 @@ const SocialMediaDashboard = () => {
 
   const fetchData = async (forceRefresh = false) => {
     try {
-      console.log('Fetching social media data...', forceRefresh ? '(force refresh)' : '(cached)')
       const result = await fetchAllData(forceRefresh)
-      
-      console.log('Fetched data:', result)
-      console.log('Cache status:', getCacheStatus())
       
       if (result.fromCache) {
         console.log('Data served from cache')
@@ -108,10 +103,6 @@ const SocialMediaDashboard = () => {
     }
   }
 
-  const handleClearCache = () => {
-    clearCache()
-    showSuccess('Cache cleared! Data will be fetched fresh on next load.')
-  }
 
   const getAuthToken = async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -211,12 +202,6 @@ const SocialMediaDashboard = () => {
 
   const connectedPlatforms = connections.filter(conn => conn.is_active)
   const hasPosts = Object.keys(posts).length > 0
-  
-  console.log('🔍 Debug state:')
-  console.log('  - connections:', connections)
-  console.log('  - connectedPlatforms:', connectedPlatforms)
-  console.log('  - posts:', posts)
-  console.log('  - hasPosts:', hasPosts)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -267,15 +252,6 @@ const SocialMediaDashboard = () => {
                   <span>Debug</span>
                 </button>
                 
-                {/* Clear Cache Button */}
-                <button
-                  onClick={handleClearCache}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg hover:from-pink-600 hover:to-red-500 transition-all duration-300"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Clear Cache</span>
-                </button>
-                
                 {/* Refresh Button */}
                 <button
                   onClick={handleRefresh}
@@ -322,18 +298,6 @@ const SocialMediaDashboard = () => {
             </div>
           )}
 
-          {/* Cache Status Display */}
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <h3 className="text-lg font-semibold text-blue-800 mb-2">Cache Status</h3>
-            <div className="text-sm text-blue-700">
-              <p><strong>Connections:</strong> {getCacheStatus().hasConnections ? 'Cached' : 'Not cached'} 
-                {getCacheStatus().connectionsValid && ' (Valid)'}</p>
-              <p><strong>Posts:</strong> {getCacheStatus().hasPosts ? 'Cached' : 'Not cached'} 
-                {getCacheStatus().postsValid && ' (Valid)'}</p>
-              <p><strong>Cache Duration:</strong> 5 minutes</p>
-              <p><strong>Last Refresh:</strong> {lastRefresh ? lastRefresh.toLocaleTimeString() : 'Never'}</p>
-            </div>
-          </div>
           {connectedPlatforms.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-24 h-24 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6">
