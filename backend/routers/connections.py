@@ -399,7 +399,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
     """Generate OAuth URL for platform"""
     base_urls = {
         'facebook': 'https://www.facebook.com/v18.0/dialog/oauth',
-        'instagram': 'https://api.instagram.com/oauth/authorize',
+        'instagram': 'https://www.facebook.com/v18.0/dialog/oauth',  # Use Facebook OAuth for Instagram
         'linkedin': 'https://www.linkedin.com/oauth/v2/authorization',
         'twitter': 'https://twitter.com/i/oauth2/authorize',
         'tiktok': 'https://www.tiktok.com/auth/authorize',
@@ -408,7 +408,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
     
     client_ids = {
         'facebook': os.getenv('FACEBOOK_CLIENT_ID'),
-        'instagram': os.getenv('INSTAGRAM_CLIENT_ID'),
+        'instagram': os.getenv('INSTAGRAM_CLIENT_ID') or os.getenv('FACEBOOK_CLIENT_ID'),  # Use Facebook App ID for Instagram
         'linkedin': os.getenv('LINKEDIN_CLIENT_ID'),
         'twitter': os.getenv('TWITTER_CLIENT_ID'),
         'tiktok': os.getenv('TIKTOK_CLIENT_ID'),
@@ -457,7 +457,8 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # 4. Reply to comments (pages_messaging, pages_manage_engagement)
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,pages_manage_metadata,pages_messaging,pages_manage_engagement,pages_read_user_content"
     elif platform == 'instagram':
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=user_profile,user_media"
+        # Instagram uses Facebook OAuth with Instagram-specific scopes
+        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish"
     elif platform == 'linkedin':
         return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=w_member_social"
     elif platform == 'twitter':
