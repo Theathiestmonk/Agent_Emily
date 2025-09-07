@@ -279,6 +279,9 @@ async def handle_oauth_callback(
         account_info = get_account_info(platform, tokens['access_token'])
         
         # Store connection in Supabase (upsert - update if exists, insert if not)
+        # Use page access token for posting, not user access token
+        page_access_token = account_info.get('page_access_token', tokens['access_token'])
+        
         connection_data = {
             "user_id": current_user.id,
             "platform": platform,
@@ -286,7 +289,7 @@ async def handle_oauth_callback(
             "page_name": account_info.get('page_name'),
             "page_username": account_info.get('username'),
             "follower_count": account_info.get('follower_count', 0),
-            "access_token_encrypted": encrypt_token(tokens['access_token']),
+            "access_token_encrypted": encrypt_token(page_access_token),  # Store page token, not user token
             "refresh_token_encrypted": encrypt_token(tokens.get('refresh_token', '')),
             "token_expires_at": (datetime.now() + timedelta(seconds=tokens.get('expires_in', 3600))).isoformat(),
             "connection_status": 'active',
