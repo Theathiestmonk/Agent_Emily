@@ -178,7 +178,7 @@ async def get_connections(
                 "last_posted_at": conn.get("last_posted_at"),
                 "connected_at": conn.get("connected_at"),
                 "last_token_refresh": conn.get("last_token_refresh"),
-                "access_token": conn.get("access_token", "NOT_FOUND")[:50] + "..." if conn.get("access_token") else "MISSING"
+                "access_token": conn.get("access_token_encrypted", "NOT_FOUND")[:50] + "..." if conn.get("access_token_encrypted") else "MISSING"
             }
             response_connections.append(conn_dict)
         
@@ -650,18 +650,18 @@ async def post_to_facebook(
         connection = response.data[0]
         print(f"🔗 Found Facebook connection: {connection['id']}")
         
-        # Decrypt the access token
+        # Decrypt the access token (using correct field name)
         try:
-            access_token = decrypt_token(connection['access_token'])
+            access_token = decrypt_token(connection['access_token_encrypted'])
             print(f"🔓 Decrypted access token: {access_token[:20]}...")
         except Exception as e:
             print(f"❌ Error decrypting token: {e}")
             print(f"🔍 Connection data: {connection}")
             
             # Check if the token is already in plaintext (not encrypted)
-            if connection['access_token'].startswith('EAAB'):
+            if connection.get('access_token_encrypted', '').startswith('EAAB'):
                 print("🔓 Token appears to be unencrypted, using directly")
-                access_token = connection['access_token']
+                access_token = connection['access_token_encrypted']
             else:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
