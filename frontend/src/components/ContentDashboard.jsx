@@ -720,13 +720,6 @@ const ContentDashboard = () => {
                       </div>
                     )}
                     
-                    <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                      <div className="flex items-center space-x-1">
-                        <Clock className="w-4 h-4" />
-                        <span>{formatDate(content.scheduled_at)}</span>
-                      </div>
-                    </div>
-                    
                     {content.media_url && (
                       <div className="mb-4">
                         <div className="w-full h-32 bg-gray-100 rounded-lg overflow-hidden">
@@ -739,40 +732,62 @@ const ContentDashboard = () => {
                       </div>
                     )}
                     
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <button className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`} title="View">
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`} title="Edit">
-                          <Edit className="w-4 h-4" />
-                        </button>
+                    {/* Inline Icons Row */}
+                    <div className="flex items-center justify-between mb-4">
+                      {/* Calendar Date Display */}
+                      <div className="flex items-center space-x-3">
+                        <div 
+                          className={`w-10 h-10 ${theme.accent} rounded-lg flex flex-col items-center justify-center ${theme.text} cursor-help`}
+                          title={`Scheduled for ${formatDate(content.scheduled_at)}`}
+                        >
+                          <Calendar className="w-4 h-4" />
+                          <span className="text-xs font-bold leading-none">
+                            {new Date(content.scheduled_at).getDate()}
+                          </span>
+                        </div>
+                        <div className="text-sm">
+                          <div className={`font-medium ${theme.text}`}>
+                            {new Date(content.scheduled_at).toLocaleDateString('en-US', { month: 'short' })}
+                          </div>
+                          <div className="text-gray-500 text-xs">
+                            {new Date(content.scheduled_at).toLocaleDateString('en-US', { year: 'numeric' })}
+                          </div>
+                        </div>
                       </div>
                       
-                      {/* Post Button */}
-                      <button
-                        onClick={() => handlePostContent(content)}
-                        disabled={content.status === 'published' || postingContent.has(content.id)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
-                          content.status === 'published' 
-                            ? 'bg-green-100 text-green-700 cursor-not-allowed' 
-                            : postingContent.has(content.id)
-                            ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
-                            : `${theme.iconBg} text-white hover:opacity-90 shadow-sm`
-                        }`}
-                        title={content.status === 'published' ? 'Already Published' : postingContent.has(content.id) ? 'Posting...' : `Post to ${content.platform}`}
-                      >
-                        {postingContent.has(content.id) ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Share2 className="w-4 h-4" />
-                        )}
-                        <span>
-                          {content.status === 'published' ? 'Published' : 
-                           postingContent.has(content.id) ? 'Posting...' : 
-                           'Post Now'}
-                        </span>
-                      </button>
+                      {/* Action Icons */}
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`} 
+                          title="View Content"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button 
+                          className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`} 
+                          title="Edit Content"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handlePostContent(content)}
+                          disabled={content.status === 'published' || postingContent.has(content.id)}
+                          className={`p-2 rounded-lg transition-all duration-200 ${
+                            content.status === 'published' 
+                              ? 'bg-green-100 text-green-700 cursor-not-allowed' 
+                              : postingContent.has(content.id)
+                              ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                              : `${theme.iconBg} text-white hover:opacity-90`
+                          }`}
+                          title={content.status === 'published' ? 'Already Published' : postingContent.has(content.id) ? 'Posting...' : `Post to ${content.platform}`}
+                        >
+                          {postingContent.has(content.id) ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Share2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                   )
