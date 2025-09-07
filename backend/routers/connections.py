@@ -361,8 +361,8 @@ def generate_oauth_url(platform: str, state: str) -> str:
     }
     
     client_ids = {
-        'facebook': os.getenv('FACEBOOK_APP_ID'),
-        'instagram': os.getenv('INSTAGRAM_APP_ID'),
+        'facebook': os.getenv('FACEBOOK_CLIENT_ID'),
+        'instagram': os.getenv('INSTAGRAM_CLIENT_ID'),
         'linkedin': os.getenv('LINKEDIN_CLIENT_ID'),
         'twitter': os.getenv('TWITTER_CLIENT_ID'),
         'tiktok': os.getenv('TIKTOK_CLIENT_ID'),
@@ -434,8 +434,8 @@ def exchange_facebook_code_for_tokens(code: str) -> dict:
     """Exchange Facebook OAuth code for access tokens"""
     import requests
     
-    facebook_app_id = os.getenv('FACEBOOK_APP_ID')
-    facebook_app_secret = os.getenv('FACEBOOK_APP_SECRET')
+    facebook_app_id = os.getenv('FACEBOOK_CLIENT_ID')
+    facebook_app_secret = os.getenv('FACEBOOK_CLIENT_SECRET')
     redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/facebook/callback"
     
     if not facebook_app_id or not facebook_app_secret:
