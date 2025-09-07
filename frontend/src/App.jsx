@@ -5,6 +5,7 @@ import Login from './components/Login'
 import Dashboard from './components/Dashboard'
 import ContentDashboard from './components/ContentDashboard'
 import ContentCalendar from './components/ContentCalendar'
+import SocialMediaDashboard from './components/SocialMediaDashboard'
 import Onboarding from './components/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingBar from './components/LoadingBar'
@@ -90,6 +91,14 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <ContentCalendar />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/social" 
+          element={
+            <ProtectedRoute>
+              <SocialMediaDashboard />
             </ProtectedRoute>
           } 
         />

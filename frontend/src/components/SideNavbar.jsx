@@ -13,7 +13,8 @@ import {
   Sparkles,
   BarChart3,
   Target,
-  Users
+  Users,
+  Share2
 } from 'lucide-react'
 
 const SideNavbar = () => {
@@ -40,6 +41,12 @@ const SideNavbar = () => {
       href: '/calendar',
       icon: Calendar,
       description: 'Content calendar view'
+    },
+    {
+      name: 'Social Media',
+      href: '/social',
+      icon: Share2,
+      description: 'Latest posts from your channels'
     },
     {
       name: 'Analytics',
