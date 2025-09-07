@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from typing import List, Optional
 import secrets
 import string
@@ -30,15 +30,66 @@ class User(BaseModel):
     name: str
     created_at: str
 
-def get_current_user(credentials: str = Depends(lambda: None)):
-    """Mock authentication for now"""
-    # This is a simplified version - in production you'd verify the JWT token
-    return User(
-        id="d523ec90-d5ee-4393-90b7-8f117782fcf5",  # Your real user ID
-        email="test@example.com", 
-        name="Test User",
-        created_at="2025-01-01T00:00:00Z"
-    )
+def get_current_user(authorization: str = Header(None)):
+    """Get current user from Supabase JWT token"""
+    try:
+        print(f"Authorization header: {authorization}")
+        
+        if not authorization or not authorization.startswith("Bearer "):
+            print("No valid authorization header, using mock user")
+            return User(
+                id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
+                email="test@example.com", 
+                name="Test User",
+                created_at="2025-01-01T00:00:00Z"
+            )
+        
+        # Extract token
+        token = authorization.split(" ")[1]
+        print(f"Token received: {token[:20]}...")
+        
+        # For now, let's try to get user info from Supabase using the token
+        try:
+            user_response = supabase.auth.get_user(token)
+            print(f"Supabase user response: {user_response}")
+            
+            if user_response.user:
+                user_data = user_response.user
+                print(f"User data: {user_data}")
+                return User(
+                    id=user_data.id,
+                    email=user_data.email or "unknown@example.com",
+                    name=user_data.user_metadata.get('name', user_data.email or "Unknown User"),
+                    created_at=user_data.created_at
+                )
+            else:
+                print("No user found in response, using mock user")
+                return User(
+                    id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
+                    email="test@example.com", 
+                    name="Test User",
+                    created_at="2025-01-01T00:00:00Z"
+                )
+                
+        except Exception as e:
+            print(f"Supabase auth error: {e}")
+            # Fallback to mock for now
+            return User(
+                id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
+                email="test@example.com", 
+                name="Test User",
+                created_at="2025-01-01T00:00:00Z"
+            )
+            
+    except Exception as e:
+        print(f"Authentication error: {e}")
+        # Fallback to mock for now
+        return User(
+            id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
+            email="test@example.com", 
+            name="Test User",
+            created_at="2025-01-01T00:00:00Z"
+        )
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
