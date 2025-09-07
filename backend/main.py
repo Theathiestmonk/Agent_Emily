@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from scheduler.content_scheduler import ContentScheduler
 from scheduler.background_scheduler import start_background_scheduler, stop_background_scheduler
+from routers.connections import router as connections_router
 
 # Load environment variables
 load_dotenv()
@@ -44,6 +45,9 @@ app = FastAPI(
     description="Digital Marketing Agent API",
     version="1.0.0"
 )
+
+# Include routers
+app.include_router(connections_router)
 
 # CORS configuration
 environment = os.getenv("ENVIRONMENT", "development")

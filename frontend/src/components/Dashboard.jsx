@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useNotifications } from '../contexts/NotificationContext'
 import { onboardingAPI } from '../services/onboarding'
-import { Sparkles, TrendingUp, Users, Target, BarChart3, LogOut, User, FileText, Calendar, Settings } from 'lucide-react'
+import SideNavbar from './SideNavbar'
+import ConnectionCards from './ConnectionCards'
+import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar } from 'lucide-react'
 
 function Dashboard() {
   const { user, logout } = useAuth()
+  const { showContentGeneration, showSuccess, showError, showInfo } = useNotifications()
   const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -55,45 +59,24 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center">
-              <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mr-3">
-                <span className="text-white font-bold text-lg">E</span>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Emily Dashboard</h1>
-                <p className="text-sm text-gray-500">Your AI Marketing Assistant</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => navigate('/content')}
-                className="flex items-center space-x-2 text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                <FileText className="h-5 w-5" />
-                <span className="text-sm">Content</span>
-              </button>
-              <div className="flex items-center space-x-2">
-                <User className="h-5 w-5 text-gray-400" />
-                <span className="text-sm text-gray-700">{user?.user_metadata?.name || user?.email}</span>
-              </div>
-              <button
-                onClick={logout}
-                className="flex items-center space-x-2 text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                <LogOut className="h-5 w-5" />
-                <span className="text-sm">Logout</span>
-              </button>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex">
+      {/* Side Navbar */}
+      <SideNavbar />
+      
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="bg-white shadow-sm border-b">
+          <div className="px-6 py-4">
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-sm text-gray-500">Welcome back! Here's what's happening with your marketing.</p>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex-1 p-6">
+        {/* Social Media Connections */}
+        <ConnectionCards />
+
         {/* Welcome Section */}
         <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
           <div className="flex items-center mb-6">
@@ -223,6 +206,7 @@ function Dashboard() {
             <span className="bg-white/20 px-3 py-1 rounded-full">Advanced Analytics</span>
             <span className="bg-white/20 px-3 py-1 rounded-full">Email Marketing</span>
           </div>
+        </div>
         </div>
       </div>
     </div>

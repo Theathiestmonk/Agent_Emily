@@ -8,7 +8,9 @@ import ContentCalendar from './components/ContentCalendar'
 import Onboarding from './components/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { NotificationProvider, useNotifications } from './contexts/NotificationContext'
 import { onboardingAPI } from './services/onboarding'
+import NotificationWindow from './components/NotificationWindow'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, user, loading } = useAuth()
@@ -65,48 +67,65 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function AppContent() {
+  const { notifications, removeNotification, markAsRead } = useNotifications()
+
+  return (
+    <Router>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route 
+          path="/dashboard" 
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/content" 
+          element={
+            <ProtectedRoute>
+              <ContentDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/calendar" 
+          element={
+            <ProtectedRoute>
+              <ContentCalendar />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/onboarding" 
+          element={
+            <ProtectedRoute>
+              <Onboarding />
+            </ProtectedRoute>
+          } 
+        />
+        <Route path="/" element={<Navigate to="/login" />} />
+      </Routes>
+      
+      {/* Global Notification Window */}
+      <NotificationWindow 
+        notifications={notifications}
+        onClose={removeNotification}
+        onMarkAsRead={markAsRead}
+      />
+    </Router>
+  )
+}
+
 function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <Router>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-                     <Route 
-                       path="/dashboard" 
-                       element={
-                         <ProtectedRoute>
-                           <Dashboard />
-                         </ProtectedRoute>
-                       } 
-                     />
-                     <Route 
-                       path="/content" 
-                       element={
-                         <ProtectedRoute>
-                           <ContentDashboard />
-                         </ProtectedRoute>
-                       } 
-                     />
-                     <Route 
-                       path="/calendar" 
-                       element={
-                         <ProtectedRoute>
-                           <ContentCalendar />
-                         </ProtectedRoute>
-                       } 
-                     />
-                     <Route 
-                       path="/onboarding" 
-                       element={
-                         <ProtectedRoute>
-                           <Onboarding />
-                         </ProtectedRoute>
-                       } 
-                     />
-            <Route path="/" element={<Navigate to="/login" />} />
-          </Routes>
-        </Router>
+        <NotificationProvider>
+          <AppContent />
+        </NotificationProvider>
       </AuthProvider>
     </ErrorBoundary>
   )

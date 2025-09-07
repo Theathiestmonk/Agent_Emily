@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { contentAPI } from '../services/content'
+import SideNavbar from './SideNavbar'
 import { 
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -214,37 +215,42 @@ const ContentCalendar = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <CalendarIcon className="w-8 h-8 text-pink-500" />
-              <h1 className="text-2xl font-bold text-gray-900">Content Calendar</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => navigateMonth('prev')}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5 text-gray-600" />
-              </button>
-              <h2 className="text-xl font-semibold text-gray-900 min-w-[200px] text-center">
-                {getMonthName(currentDate)}
-              </h2>
-              <button
-                onClick={() => navigateMonth('next')}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <ChevronRight className="w-5 h-5 text-gray-600" />
-              </button>
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Side Navbar */}
+      <SideNavbar />
+      
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="bg-white shadow-sm border-b">
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <CalendarIcon className="w-8 h-8 text-pink-500" />
+                <h1 className="text-2xl font-bold text-gray-900">Content Calendar</h1>
+              </div>
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => navigateMonth('prev')}
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5 text-gray-600" />
+                </button>
+                <h2 className="text-xl font-semibold text-gray-900 min-w-[200px] text-center">
+                  {getMonthName(currentDate)}
+                </h2>
+                <button
+                  onClick={() => navigateMonth('next')}
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex-1 p-6">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Calendar */}
           <div className="lg:col-span-3">
@@ -401,6 +407,7 @@ const ContentCalendar = () => {
               )}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
