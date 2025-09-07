@@ -559,6 +559,45 @@ def refresh_platform_token(platform: str, refresh_token: str) -> dict:
         "expires_in": 3600
     }
 
+@router.get("/facebook/debug")
+async def debug_facebook_connection(
+    current_user: User = Depends(get_current_user)
+):
+    """Debug Facebook connection data"""
+    try:
+        print(f"🔍 Debug Facebook connection for user: {current_user.id}")
+        
+        # Get user's Facebook connection
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "facebook").eq("is_active", True).execute()
+        
+        if not response.data:
+            return {"error": "No active Facebook connection found"}
+        
+        connection = response.data[0]
+        
+        # Try to decrypt the token
+        try:
+            access_token = decrypt_token(connection['access_token'])
+            token_status = "encrypted"
+        except:
+            access_token = connection['access_token']
+            token_status = "unencrypted"
+        
+        return {
+            "connection_id": connection['id'],
+            "page_id": connection['page_id'],
+            "page_name": connection['page_name'],
+            "token_length": len(access_token),
+            "token_start": access_token[:20] + "..." if len(access_token) > 20 else access_token,
+            "token_status": token_status,
+            "is_active": connection['is_active'],
+            "connected_at": connection['connected_at']
+        }
+        
+    except Exception as e:
+        print(f"❌ Debug error: {e}")
+        return {"error": str(e)}
+
 @router.post("/facebook/post")
 async def post_to_facebook(
     post_data: dict,
@@ -639,20 +678,31 @@ async def post_to_facebook(
         except Exception as e:
             print(f"⚠️  Token validation error (continuing anyway): {e}")
         
-        # Post to Facebook
+        # Post to Facebook using the correct API format
         facebook_url = f"https://graph.facebook.com/v18.0/{connection['page_id']}/feed"
         
+        # Use form data with access_token as a parameter
         payload = {
             "message": full_message,
             "access_token": access_token
         }
+        
+        # Also try with access_token as URL parameter
+        facebook_url_with_token = f"https://graph.facebook.com/v18.0/{connection['page_id']}/feed?access_token={access_token}"
         
         print(f"🌐 Posting to Facebook URL: {facebook_url}")
         print(f"📄 Payload: {payload}")
         print(f"🔑 Access token length: {len(access_token)}")
         print(f"📱 Page ID: {connection['page_id']}")
         
-        response = requests.post(facebook_url, data=payload)
+        # Try posting with access_token in URL first (recommended method)
+        print(f"🌐 Trying URL method: {facebook_url_with_token}")
+        response = requests.post(facebook_url_with_token, data={"message": full_message})
+        
+        if response.status_code != 200:
+            print(f"❌ URL method failed, trying form data method")
+            # Fallback to form data method
+            response = requests.post(facebook_url, data=payload)
         
         print(f"📊 Facebook API response status: {response.status_code}")
         print(f"📄 Facebook API response headers: {dict(response.headers)}")
