@@ -36,6 +36,7 @@ class ConnectionsAPI {
       
       // Handle both array response and object with connections property
       const connections = Array.isArray(data) ? data : (data.connections || [])
+      console.log('Processed connections:', connections)
       return { data: connections, error: null }
     } catch (error) {
       console.error('Error fetching connections:', error)

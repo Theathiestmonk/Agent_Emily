@@ -76,12 +76,14 @@ const ConnectionCards = () => {
   const fetchConnections = async () => {
     try {
       setLoading(true)
+      console.log('Fetching connections...')
       const { data, error } = await connectionsAPI.getConnections()
       
       if (error) {
         console.error('Failed to fetch connections:', error)
         setConnections([])
       } else {
+        console.log('Setting connections:', data || [])
         setConnections(data || [])
       }
     } catch (error) {
@@ -196,10 +198,7 @@ const ConnectionCards = () => {
     fetchConnections()
   }
 
-  // Debug: Log connections whenever they change
-  useEffect(() => {
-    console.log('Connections updated:', connections)
-  }, [connections])
+  // Debug: Log connections whenever they change (moved to fetchConnections)
 
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
