@@ -112,6 +112,14 @@ const ConnectionCards = () => {
         'width=600,height=700,scrollbars=yes,resizable=yes'
       )
       
+      // Check if popup was blocked or failed to open
+      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+        console.error('Popup was blocked or failed to open')
+        setConnecting(null)
+        alert('Popup was blocked. Please allow popups for this site and try again.')
+        return
+      }
+      
       // Listen for OAuth completion
       const checkClosed = setInterval(() => {
         if (popup.closed) {
@@ -124,14 +132,16 @@ const ConnectionCards = () => {
       
       // Listen for postMessage from popup
       const handleMessage = (event) => {
-        console.log('Received message from popup:', event.data)
-        if (event.data && event.data.type === 'OAUTH_SUCCESS') {
+        // Only process messages from our OAuth popup
+        if (event.source === popup && event.data && event.data.type === 'OAUTH_SUCCESS') {
           console.log('OAuth success received, closing popup and refreshing connections')
           popup.close()
           clearInterval(checkClosed)
           setConnecting(null)
           // Refresh connections
           fetchConnections()
+          // Clean up immediately
+          window.removeEventListener('message', handleMessage)
         }
       }
       
@@ -144,11 +154,14 @@ const ConnectionCards = () => {
         clearInterval(checkClosed)
       }
       
-      popup.addEventListener('beforeunload', cleanup)
+      // Check if popup is still valid before adding event listener
+      if (popup && !popup.closed) {
+        popup.addEventListener('beforeunload', cleanup)
+      }
       
       // Also clean up after a timeout as fallback
       setTimeout(() => {
-        if (!popup.closed) {
+        if (popup && !popup.closed) {
           console.log('Popup still open after 30 seconds, cleaning up')
           cleanup()
         }
