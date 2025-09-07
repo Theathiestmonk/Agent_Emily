@@ -156,6 +156,18 @@ async def get_connections(
             detail=f"Failed to fetch connections: {str(e)}"
         )
 
+@router.get("/auth/{platform}/connect")
+async def get_connect_info(platform: str):
+    """Get connection info (for debugging)"""
+    print(f"🔍 GET request to {platform} connect endpoint")
+    return {"message": f"Use POST method for {platform} connection", "platform": platform}
+
+@router.options("/auth/{platform}/connect")
+async def options_connect(platform: str):
+    """Handle CORS preflight for connect endpoint"""
+    print(f"🔧 CORS preflight for {platform} connect")
+    return {"message": "OK"}
+
 @router.post("/auth/{platform}/connect")
 async def initiate_connection(
     platform: str,
