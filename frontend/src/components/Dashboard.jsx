@@ -5,6 +5,7 @@ import { useNotifications } from '../contexts/NotificationContext'
 import { onboardingAPI } from '../services/onboarding'
 import SideNavbar from './SideNavbar'
 import ConnectionCards from './ConnectionCards'
+import DebugPanel from './DebugPanel'
 import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar } from 'lucide-react'
 
 function Dashboard() {
@@ -209,6 +210,9 @@ function Dashboard() {
         </div>
         </div>
       </div>
+      
+      {/* Debug Panel - Remove this after debugging */}
+      <DebugPanel />
     </div>
   )
 }

@@ -49,6 +49,11 @@ app = FastAPI(
 # Include routers
 app.include_router(connections_router)
 
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "environment": environment}
+
 # CORS configuration
 environment = os.getenv("ENVIRONMENT", "development")
 
