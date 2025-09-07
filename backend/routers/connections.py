@@ -14,12 +14,20 @@ load_dotenv()
 
 # Get Supabase client
 supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
+supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-if not supabase_url or not supabase_key:
-    raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
+if not supabase_url or not supabase_anon_key:
+    raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set")
 
-supabase: Client = create_client(supabase_url, supabase_key)
+# Create client with anon key for user authentication
+supabase: Client = create_client(supabase_url, supabase_anon_key)
+
+# Create admin client for database operations
+if supabase_service_key:
+    supabase_admin: Client = create_client(supabase_url, supabase_service_key)
+else:
+    supabase_admin = supabase  # Fallback to anon client
 
 # We'll define these locally to avoid circular imports
 from pydantic import BaseModel
@@ -48,14 +56,15 @@ def get_current_user(authorization: str = Header(None)):
         token = authorization.split(" ")[1]
         print(f"Token received: {token[:20]}...")
         
-        # For now, let's try to get user info from Supabase using the token
+        # Try to get user info from Supabase using the token
         try:
+            print(f"Attempting to authenticate with Supabase...")
             user_response = supabase.auth.get_user(token)
             print(f"Supabase user response: {user_response}")
             
-            if user_response.user:
+            if user_response and hasattr(user_response, 'user') and user_response.user:
                 user_data = user_response.user
-                print(f"User data: {user_data}")
+                print(f"✅ Authenticated user: {user_data.id} - {user_data.email}")
                 return User(
                     id=user_data.id,
                     email=user_data.email or "unknown@example.com",
@@ -63,7 +72,7 @@ def get_current_user(authorization: str = Header(None)):
                     created_at=user_data.created_at
                 )
             else:
-                print("No user found in response, using mock user")
+                print("❌ No user found in response, using mock user")
                 return User(
                     id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
                     email="test@example.com", 
@@ -72,7 +81,8 @@ def get_current_user(authorization: str = Header(None)):
                 )
                 
         except Exception as e:
-            print(f"Supabase auth error: {e}")
+            print(f"❌ Supabase auth error: {e}")
+            print(f"Error type: {type(e).__name__}")
             # Fallback to mock for now
             return User(
                 id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
@@ -116,7 +126,7 @@ async def get_connections(
     """Get all active connections for current user"""
     try:
         # Query Supabase directly
-        response = supabase.table("platform_connections").select("*").eq("user_id", current_user.id).eq("is_active", True).execute()
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("is_active", True).execute()
         
         connections = response.data if response.data else []
         
@@ -164,7 +174,7 @@ async def initiate_connection(
             "expires_at": (datetime.now() + timedelta(minutes=10)).isoformat()
         }
         
-        supabase.table("oauth_states").insert(oauth_state_data).execute()
+        supabase_admin.table("oauth_states").insert(oauth_state_data).execute()
         
         # Generate OAuth URL based on platform
         oauth_url = generate_oauth_url(platform, state)
@@ -200,7 +210,7 @@ async def handle_oauth_callback(
             )
         
         # Verify state
-        state_response = supabase.table("oauth_states").select("*").eq("state", state).eq("user_id", current_user.id).eq("platform", platform).execute()
+        state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("user_id", current_user.id).eq("platform", platform).execute()
         
         if not state_response.data:
             raise HTTPException(
@@ -231,23 +241,23 @@ async def handle_oauth_callback(
         
         # Try to insert, if it fails due to duplicate key, update instead
         try:
-            connection_response = supabase.table("platform_connections").insert(connection_data).execute()
+            connection_response = supabase_admin.table("platform_connections").insert(connection_data).execute()
         except Exception as e:
             if "duplicate key value violates unique constraint" in str(e):
                 # Update existing connection
-                connection_response = supabase.table("platform_connections").update(connection_data).eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
+                connection_response = supabase_admin.table("platform_connections").update(connection_data).eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
             else:
                 raise e
         
         # Remove used state
-        supabase.table("oauth_states").delete().eq("state", state).execute()
+        supabase_admin.table("oauth_states").delete().eq("state", state).execute()
         
         # Get the connection ID (handle both insert and update responses)
         if connection_response.data and len(connection_response.data) > 0:
             connection_id = connection_response.data[0]["id"]
         else:
             # If update didn't return data, get the existing connection
-            existing_connection = supabase.table("platform_connections").select("id").eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
+            existing_connection = supabase_admin.table("platform_connections").select("id").eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
             connection_id = existing_connection.data[0]["id"] if existing_connection.data else "unknown"
         
         # Return HTML page that redirects back to frontend
@@ -297,7 +307,7 @@ async def disconnect_account(
     """Disconnect account and revoke tokens"""
     try:
         # Verify connection belongs to user
-        connection_response = supabase.table("platform_connections").select("*").eq("id", connection_id).eq("user_id", current_user.id).execute()
+        connection_response = supabase_admin.table("platform_connections").select("*").eq("id", connection_id).eq("user_id", current_user.id).execute()
         
         if not connection_response.data:
             raise HTTPException(
@@ -306,7 +316,7 @@ async def disconnect_account(
             )
         
         # Mark as inactive
-        supabase.table("platform_connections").update({
+        supabase_admin.table("platform_connections").update({
             "is_active": False,
             "disconnected_at": datetime.now().isoformat(),
             "connection_status": 'revoked'
