@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
+import { useContentCache } from '../contexts/ContentCacheContext'
 import { contentAPI } from '../services/content'
 import { supabase } from '../lib/supabase'
 import ContentProgress from './ContentProgress'
@@ -41,9 +42,15 @@ import {
 const ContentDashboard = () => {
   const { user } = useAuth()
   const { showContentGeneration, showSuccess, showError, showLoading } = useNotifications()
+  const { 
+    scheduledContent, 
+    contentDate, 
+    loading, 
+    fetchScheduledContent, 
+    updateContentInCache,
+    getCacheStatus 
+  } = useContentCache()
   const navigate = useNavigate()
-  const [scheduledContent, setScheduledContent] = useState([])
-  const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
   const [filterPlatform, setFilterPlatform] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
@@ -51,30 +58,26 @@ const ContentDashboard = () => {
   const [generationStatus, setGenerationStatus] = useState(null) // 'success', 'error', null
   const [generationMessage, setGenerationMessage] = useState('')
   const [showProgress, setShowProgress] = useState(false)
-  const [contentDate, setContentDate] = useState('')
   const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
 
   useEffect(() => {
     fetchData()
   }, [])
 
-  const fetchData = async () => {
+  const fetchData = async (forceRefresh = false) => {
     try {
-      setLoading(true)
-      const result = await contentAPI.getScheduledContent()
+      const result = await fetchScheduledContent(forceRefresh)
       
       console.log('Fetched content data:', result)
+      console.log('Cache status:', getCacheStatus())
       
       if (result.data) {
         console.log('Content items:', result.data)
         console.log('Platform values in content:', result.data.map(item => ({ id: item.id, platform: item.platform })))
-        setScheduledContent(result.data)
-        setContentDate(result.date)
+        console.log('Data source:', result.fromCache ? 'cache' : 'API')
       }
     } catch (error) {
       console.error('Error fetching scheduled content:', error)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -167,7 +170,7 @@ const ContentDashboard = () => {
         
         // Refresh data after a short delay
         setTimeout(async () => {
-          await fetchData()
+          await fetchData(true) // Force refresh from API
         }, 3000)
       } else {
         setGenerationStatus('error')
@@ -359,14 +362,8 @@ const ContentDashboard = () => {
       
       showSuccess(`Successfully posted to Facebook!`)
       
-      // Update the content status to published
-      setScheduledContent(prev => 
-        prev.map(item => 
-          item.id === content.id 
-            ? { ...item, status: 'published' }
-            : item
-        )
-      )
+      // Update the content status to published in cache
+      updateContentInCache(content.id, { status: 'published' })
       
     } catch (error) {
       console.error('Error posting to Facebook:', error)
@@ -402,14 +399,8 @@ const ContentDashboard = () => {
       
       showSuccess(`Successfully posted to Instagram!`)
       
-      // Update the content status to published
-      setScheduledContent(prev => 
-        prev.map(item => 
-          item.id === content.id 
-            ? { ...item, status: 'published' }
-            : item
-        )
-      )
+      // Update the content status to published in cache
+      updateContentInCache(content.id, { status: 'published' })
       
     } catch (error) {
       console.error('Error posting to Instagram:', error)

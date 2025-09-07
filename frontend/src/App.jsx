@@ -9,6 +9,7 @@ import Onboarding from './components/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { NotificationProvider, useNotifications } from './contexts/NotificationContext'
+import { ContentCacheProvider } from './contexts/ContentCacheContext'
 import { onboardingAPI } from './services/onboarding'
 import NotificationWindow from './components/NotificationWindow'
 
@@ -124,7 +125,9 @@ function App() {
     <ErrorBoundary>
       <AuthProvider>
         <NotificationProvider>
-          <AppContent />
+          <ContentCacheProvider>
+            <AppContent />
+          </ContentCacheProvider>
         </NotificationProvider>
       </AuthProvider>
     </ErrorBoundary>

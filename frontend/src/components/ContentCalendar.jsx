@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useContentCache } from '../contexts/ContentCacheContext'
 import { contentAPI } from '../services/content'
 import SideNavbar from './SideNavbar'
 import { 
@@ -36,6 +37,7 @@ import {
 
 const ContentCalendar = () => {
   const { user } = useAuth()
+  const { scheduledContent, loading: contentLoading, fetchScheduledContent } = useContentCache()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [campaigns, setCampaigns] = useState([])
   const [posts, setPosts] = useState([])
@@ -77,18 +79,16 @@ const ContentCalendar = () => {
     try {
       setLoading(true)
       
-      const [campaignsResponse, postsResponse] = await Promise.all([
-        contentAPI.getCampaigns(),
-        contentAPI.getPosts()
-      ])
-      
+      // Fetch campaigns (still using API as they're separate from content cache)
+      const campaignsResponse = await contentAPI.getCampaigns()
       if (campaignsResponse.data) {
         setCampaigns(campaignsResponse.data)
       }
       
-      if (postsResponse.data) {
-        setPosts(postsResponse.data)
-      }
+      // Use cached content instead of fetching posts separately
+      // The scheduledContent from cache will be used as posts
+      await fetchScheduledContent()
+      
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
@@ -124,7 +124,8 @@ const ContentCalendar = () => {
     
     const dateStr = date.toISOString().split('T')[0]
     
-    const filteredPosts = posts.filter(post => {
+    // Use scheduledContent from cache instead of posts
+    const filteredPosts = scheduledContent.filter(post => {
       // Check both scheduled_date and scheduled_at fields for compatibility
       const scheduledDate = post.scheduled_date || post.scheduled_at
       if (!scheduledDate) return false
@@ -205,7 +206,7 @@ const ContentCalendar = () => {
   const days = getDaysInMonth(currentDate)
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-  if (loading) {
+  if (loading || contentLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
