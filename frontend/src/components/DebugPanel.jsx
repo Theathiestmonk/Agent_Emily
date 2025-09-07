@@ -62,7 +62,7 @@ const DebugPanel = () => {
 
   const testFacebookConnection = async () => {
     try {
-      const response = await fetch(`${debugInfo.apiUrl}/connections/auth/facebook/connect`, {
+      const response = await fetch(`${debugInfo.apiUrl}/connections/auth/facebook/connect/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
