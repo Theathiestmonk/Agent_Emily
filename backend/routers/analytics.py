@@ -138,19 +138,23 @@ async def get_analytics_insights(
     try:
         print(f"📊 Fetching analytics insights for user: {current_user.id}, time_range: {time_range}")
         
-        # Get user's active connections
+        # Get user's active connections (using same logic as connections endpoint)
+        print(f"🔍 Fetching connections for user: {current_user.id}")
+        
         response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("is_active", True).execute()
         connections = response.data if response.data else []
-        
-        print(f"📊 User ID: {current_user.id}")
         print(f"📊 Found {len(connections)} active connections")
-        print(f"📊 Connection details: {connections}")
         
-        # Also check all connections for this user (not just active ones)
-        all_connections_response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).execute()
-        all_connections = all_connections_response.data if all_connections_response.data else []
-        print(f"📊 All connections for user: {len(all_connections)}")
-        print(f"📊 All connection details: {all_connections}")
+        # Also check all connections (including inactive) for debugging
+        all_response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).execute()
+        all_connections = all_response.data if all_response.data else []
+        print(f"📊 Total connections (including inactive): {len(all_connections)}")
+        
+        if all_connections:
+            for conn in all_connections:
+                print(f"  - {conn.get('platform')}: {conn.get('connection_status')} (is_active: {conn.get('is_active')})")
+        
+        print(f"📊 Connection details: {connections}")
         
         if not connections:
             print("⚠️ No active connections found - returning empty analytics")
