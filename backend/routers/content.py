@@ -107,22 +107,22 @@ async def test_content_router():
 async def get_scheduled_content(
     current_user: User = Depends(get_current_user)
 ):
-    """Get scheduled content for the next day"""
+    """Get scheduled content for today"""
     try:
         print(f"📅 Fetching scheduled content for user: {current_user.id}")
         
-        # Get tomorrow's date
-        tomorrow = datetime.now() + timedelta(days=1)
-        tomorrow_start = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
-        tomorrow_end = tomorrow.replace(hour=23, minute=59, second=59, microsecond=999999)
+        # Get today's date
+        today = datetime.now()
+        today_start = today.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today.replace(hour=23, minute=59, second=59, microsecond=999999)
         
-        print(f"📅 Looking for content between {tomorrow_start} and {tomorrow_end}")
+        print(f"📅 Looking for content between {today_start} and {today_end}")
         
         # Query Supabase for scheduled content from content_posts table
-        response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).gte("scheduled_date", tomorrow_start.date().isoformat()).lte("scheduled_date", tomorrow_end.date().isoformat()).order("scheduled_date").execute()
+        response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).gte("scheduled_date", today_start.date().isoformat()).lte("scheduled_date", today_end.date().isoformat()).order("scheduled_date").execute()
         
         content_items = response.data if response.data else []
-        print(f"📊 Found {len(content_items)} scheduled content items for tomorrow")
+        print(f"📊 Found {len(content_items)} scheduled content items for today")
         
         # Format response
         formatted_content = []
@@ -148,7 +148,7 @@ async def get_scheduled_content(
         
         return {
             "content": formatted_content,
-            "date": tomorrow.strftime("%Y-%m-%d"),
+            "date": today.strftime("%Y-%m-%d"),
             "count": len(formatted_content)
         }
         
