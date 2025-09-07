@@ -10,3 +10,4 @@ openai
 pytz
 cryptography
 PyJWT
+requests

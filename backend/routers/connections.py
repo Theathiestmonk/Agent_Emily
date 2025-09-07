@@ -343,13 +343,16 @@ def generate_oauth_url(platform: str, state: str) -> str:
     }
     
     client_ids = {
-        'facebook': os.getenv('FACEBOOK_CLIENT_ID'),
-        'instagram': os.getenv('INSTAGRAM_CLIENT_ID'),
+        'facebook': os.getenv('FACEBOOK_APP_ID'),
+        'instagram': os.getenv('INSTAGRAM_APP_ID'),
         'linkedin': os.getenv('LINKEDIN_CLIENT_ID'),
         'twitter': os.getenv('TWITTER_CLIENT_ID'),
         'tiktok': os.getenv('TIKTOK_CLIENT_ID'),
         'youtube': os.getenv('YOUTUBE_CLIENT_ID')
     }
+    
+    if not client_ids.get(platform):
+        raise ValueError(f"App ID not configured for platform: {platform}")
     
     # Get API base URL and ensure no trailing slash
     api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
@@ -396,23 +399,91 @@ def generate_oauth_url(platform: str, state: str) -> str:
 
 def exchange_code_for_tokens(platform: str, code: str) -> dict:
     """Exchange OAuth code for access tokens"""
-    # This would contain platform-specific token exchange logic
-    # For now, return mock data
+    if platform == "facebook":
+        return exchange_facebook_code_for_tokens(code)
+    else:
+        raise ValueError(f"Unsupported platform: {platform}")
+
+def exchange_facebook_code_for_tokens(code: str) -> dict:
+    """Exchange Facebook OAuth code for access tokens"""
+    import requests
+    
+    facebook_app_id = os.getenv('FACEBOOK_APP_ID')
+    facebook_app_secret = os.getenv('FACEBOOK_APP_SECRET')
+    redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/facebook/callback"
+    
+    if not facebook_app_id or not facebook_app_secret:
+        raise ValueError("Facebook app credentials not configured")
+    
+    # Exchange code for access token
+    token_url = "https://graph.facebook.com/v18.0/oauth/access_token"
+    token_params = {
+        'client_id': facebook_app_id,
+        'client_secret': facebook_app_secret,
+        'redirect_uri': redirect_uri,
+        'code': code
+    }
+    
+    response = requests.get(token_url, params=token_params)
+    response.raise_for_status()
+    
+    token_data = response.json()
+    
+    # Get long-lived access token
+    long_lived_url = "https://graph.facebook.com/v18.0/oauth/access_token"
+    long_lived_params = {
+        'grant_type': 'fb_exchange_token',
+        'client_id': facebook_app_id,
+        'client_secret': facebook_app_secret,
+        'fb_exchange_token': token_data['access_token']
+    }
+    
+    long_lived_response = requests.get(long_lived_url, params=long_lived_params)
+    long_lived_response.raise_for_status()
+    
+    long_lived_data = long_lived_response.json()
+    
     return {
-        "access_token": f"mock_access_token_{platform}_{code[:8]}",
-        "refresh_token": f"mock_refresh_token_{platform}_{code[:8]}",
-        "expires_in": 3600
+        "access_token": long_lived_data['access_token'],
+        "refresh_token": "",  # Facebook doesn't use refresh tokens
+        "expires_in": long_lived_data.get('expires_in', 3600)
     }
 
 def get_account_info(platform: str, access_token: str) -> dict:
     """Get account information from platform API"""
-    # This would contain platform-specific API calls
-    # For now, return mock data
+    if platform == "facebook":
+        return get_facebook_account_info(access_token)
+    else:
+        raise ValueError(f"Unsupported platform: {platform}")
+
+def get_facebook_account_info(access_token: str) -> dict:
+    """Get Facebook account information"""
+    import requests
+    
+    # Get user's pages
+    pages_url = "https://graph.facebook.com/v18.0/me/accounts"
+    pages_params = {
+        'access_token': access_token,
+        'fields': 'id,name,username,followers_count,access_token'
+    }
+    
+    response = requests.get(pages_url, params=pages_params)
+    response.raise_for_status()
+    
+    pages_data = response.json()
+    
+    if not pages_data.get('data'):
+        raise ValueError("No Facebook pages found for this user")
+    
+    # Use the first page (you could let user choose if multiple)
+    page = pages_data['data'][0]
+    
     return {
-        "page_id": f"mock_page_id_{platform}",
-        "page_name": f"Mock {platform.title()} Page",
-        "username": f"@mock_{platform}",
-        "follower_count": 1000
+        "page_id": page['id'],
+        "page_name": page['name'],
+        "username": page.get('username', ''),
+        "follower_count": page.get('followers_count', 0),
+        "page_access_token": page.get('access_token', '')
     }
 
 def revoke_tokens(platform: str, access_token: str) -> bool:
