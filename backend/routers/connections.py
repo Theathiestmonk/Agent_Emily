@@ -275,8 +275,21 @@ async def handle_oauth_callback(
         # Exchange code for tokens (mock for now)
         tokens = exchange_code_for_tokens(platform, code)
         
-        # Get account information (mock for now)
+        # Get account information
         account_info = get_account_info(platform, tokens['access_token'])
+        
+        # Handle case where account info is None (especially for Instagram)
+        if account_info is None:
+            if platform == "instagram":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No Instagram Business account found. Please ensure your Instagram account is connected to a Facebook Page and is a Business or Creator account."
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to retrieve {platform} account information"
+                )
         
         # Store connection in Supabase (upsert - update if exists, insert if not)
         # Use page access token for posting, not user access token
@@ -612,43 +625,78 @@ def get_facebook_account_info(access_token: str) -> dict:
 def get_instagram_account_info(access_token: str):
     """Get Instagram account information using Graph API"""
     try:
+        print(f"🔍 Getting Instagram account info with token: {access_token[:20]}...")
+        
         # Get Instagram Business Account ID
         pages_url = f"https://graph.facebook.com/v18.0/me/accounts?access_token={access_token}"
+        print(f"🌐 Fetching pages from: {pages_url}")
         pages_response = requests.get(pages_url)
         
+        print(f"📊 Pages response status: {pages_response.status_code}")
+        
         if pages_response.status_code != 200:
-            print(f"❌ Error fetching pages: {pages_response.status_code} - {pages_response.text}")
+            error_text = pages_response.text
+            print(f"❌ Error fetching pages: {pages_response.status_code} - {error_text}")
+            try:
+                error_data = pages_response.json()
+                error_message = error_data.get('error', {}).get('message', 'Unknown error')
+                print(f"❌ Facebook API error: {error_message}")
+            except:
+                print(f"❌ Raw error response: {error_text}")
             return None
         
         pages_data = pages_response.json()
         pages = pages_data.get('data', [])
         
+        print(f"📄 Found {len(pages)} pages")
+        
         if not pages:
-            print("❌ No pages found")
+            print("❌ No Facebook pages found for this user")
             return None
         
         # Find page with Instagram account
         instagram_account = None
+        instagram_page = None
+        
         for page in pages:
+            print(f"🔍 Checking page: {page.get('name', 'Unknown')} (ID: {page.get('id', 'Unknown')})")
             if page.get('instagram_business_account'):
                 instagram_account = page['instagram_business_account']
+                instagram_page = page
+                print(f"✅ Found Instagram account: {instagram_account}")
                 break
         
         if not instagram_account:
-            print("❌ No Instagram account found connected to any page")
+            print("❌ No Instagram Business account found connected to any Facebook page")
+            print("💡 User needs to:")
+            print("   1. Convert Instagram to Business account")
+            print("   2. Connect Instagram to a Facebook Page")
+            print("   3. Ensure the page has Instagram Business account linked")
             return None
         
         instagram_id = instagram_account['id']
+        print(f"📱 Instagram Business Account ID: {instagram_id}")
         
         # Get Instagram account details
         instagram_url = f"https://graph.facebook.com/v18.0/{instagram_id}?fields=id,username,account_type,media_count,followers_count&access_token={access_token}"
+        print(f"🌐 Fetching Instagram details from: {instagram_url}")
         instagram_response = requests.get(instagram_url)
         
+        print(f"📊 Instagram response status: {instagram_response.status_code}")
+        
         if instagram_response.status_code != 200:
-            print(f"❌ Error fetching Instagram account: {instagram_response.status_code} - {instagram_response.text}")
+            error_text = instagram_response.text
+            print(f"❌ Error fetching Instagram account: {instagram_response.status_code} - {error_text}")
+            try:
+                error_data = instagram_response.json()
+                error_message = error_data.get('error', {}).get('message', 'Unknown error')
+                print(f"❌ Instagram API error: {error_message}")
+            except:
+                print(f"❌ Raw error response: {error_text}")
             return None
         
         instagram_data = instagram_response.json()
+        print(f"✅ Instagram account data: {instagram_data}")
         
         return {
             'instagram_id': instagram_data['id'],
@@ -656,12 +704,16 @@ def get_instagram_account_info(access_token: str):
             'account_type': instagram_data['account_type'],
             'media_count': instagram_data.get('media_count', 0),
             'follower_count': instagram_data.get('followers_count', 0),
-            'page_id': pages[0]['id'],  # Use the first page ID
-            'page_name': pages[0]['name']
+            'page_id': instagram_page['id'],
+            'page_name': instagram_page['name'],
+            'page_access_token': instagram_page.get('access_token', access_token)
         }
         
     except Exception as e:
         print(f"❌ Error getting Instagram account info: {e}")
+        print(f"❌ Error type: {type(e).__name__}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
         return None
 
 def revoke_tokens(platform: str, access_token: str) -> bool:
