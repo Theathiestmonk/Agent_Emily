@@ -143,6 +143,26 @@ async def get_analytics_insights(
         connections = response.data if response.data else []
         
         print(f"📊 Found {len(connections)} active connections")
+        print(f"📊 Connection details: {connections}")
+        
+        if not connections:
+            print("⚠️ No active connections found - returning empty analytics")
+            return {
+                "analytics": {
+                    "overview": {
+                        'total_reach': 0,
+                        'total_engagement': 0,
+                        'total_posts': 0,
+                        'engagement_rate': 0,
+                        'reach_trend': 0,
+                        'engagement_trend': 0,
+                        'posts_trend': 0,
+                        'rate_trend': 0
+                    }
+                },
+                "time_range": time_range,
+                "total_platforms": 0
+            }
         
         analytics_by_platform = {}
         total_reach = 0
@@ -211,6 +231,8 @@ async def get_analytics_insights(
         print(f"  - Total posts: {total_posts}")
         print(f"  - Engagement rate: {engagement_rate}%")
         print(f"  - Platform analytics: {list(analytics_by_platform.keys())}")
+        print(f"  - Analytics by platform details: {analytics_by_platform}")
+        print(f"  - Overview details: {overview}")
         
         return {
             "analytics": {
