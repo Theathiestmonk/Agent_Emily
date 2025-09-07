@@ -50,7 +50,7 @@ const AnalyticsDashboard = () => {
       const authToken = await getAuthToken()
       console.log('🔍 Auth token present:', authToken ? 'yes' : 'no')
       
-      const response = await fetch(`${API_BASE_URL}/analytics/insights?time_range=${timeRange}`, {
+      const response = await fetch(`${API_BASE_URL}/analytics/summary?time_range=${timeRange}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
