@@ -68,17 +68,14 @@ if cors_origins_env:
     cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
     logger.info(f"CORS origins loaded from environment: {cors_origins}")
 else:
-    # Fallback to localhost for development only
+    # No CORS origins configured
     if environment == "production":
         # In production, CORS_ORIGINS must be set in environment variables
         raise ValueError("CORS_ORIGINS environment variable must be set in production")
     else:
-        cors_origins = [
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "http://localhost:5173"
-        ]
-        logger.info(f"CORS origins set to development defaults: {cors_origins}")
+        # In development, allow all origins for flexibility
+        cors_origins = ["*"]
+        logger.warning("CORS origins set to '*' for development - this should not be used in production")
 
 app.add_middleware(
     CORSMiddleware,

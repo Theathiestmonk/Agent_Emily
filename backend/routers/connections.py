@@ -1089,7 +1089,8 @@ async def test_instagram_pages(
         state = generate_oauth_state()
         
         # Test with more comprehensive scopes
-        test_oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri=https://agent-emily.onrender.com/connections/auth/instagram/callback&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
+        api_base_url = os.getenv('API_BASE_URL', 'https://agent-emily.onrender.com')
+        test_oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri={api_base_url}/connections/auth/instagram/callback&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
         
         return {
             "message": "Test Instagram pages access",
