@@ -335,7 +335,7 @@ class ContentCreationAgent:
             logger.info(f"Cleaning up existing content for user: {user_id}")
             
             # Get all campaigns for the user
-            campaigns_response = self.supabase.table("content_campaigns").select("id").eq("user_id", user_id).execute()
+            campaigns_response = self.supabase.table("content_campaigns").select("id, created_at").eq("user_id", user_id).execute()
             
             if campaigns_response.data:
                 campaign_ids = [campaign["id"] for campaign in campaigns_response.data]
@@ -489,17 +489,27 @@ class ContentCreationAgent:
             content_posts = []
             
             for day in range(7):
-                post = await self.generate_single_post(
-                    platform=platform,
-                    platform_config=platform_config,
-                    business_context=business_context,
-                    day_of_week=day,
-                    image_preferences=state.image_preferences
-                )
-                content_posts.append(post)
+                try:
+                    post = await self.generate_single_post(
+                        platform=platform,
+                        platform_config=platform_config,
+                        business_context=business_context,
+                        day_of_week=day,
+                        image_preferences=state.image_preferences
+                    )
+                    content_posts.append(post)
+                except Exception as e:
+                    logger.error(f"Failed to generate post for {platform} day {day}: {e}")
+                    # Skip this post instead of adding fallback content
+                    continue
             
-            state.platform_content = content_posts
-            logger.info(f"Generated {len(content_posts)} posts for {platform}")
+            if content_posts:
+                state.platform_content = content_posts
+                logger.info(f"Generated {len(content_posts)} posts for {platform}")
+            else:
+                logger.error(f"No content generated for {platform} - all posts failed")
+                state.error_message = f"Failed to generate any content for {platform}. Please check your OpenAI API key and try again."
+                state.failed_platforms.append(platform)
             
         except Exception as e:
             logger.error(f"Error generating platform content: {e}")
@@ -612,16 +622,8 @@ class ContentCreationAgent:
             logger.error(f"Error generating single post for {platform}: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
-            # Return a fallback post
-            return ContentPost(
-                platform=platform,
-                post_type=PostType.TEXT,
-                content=f"Content generation failed for {platform}. Please try again.",
-                hashtags=[],
-                scheduled_date="2025-09-01",
-                scheduled_time="09:00",
-                images=[]
-            )
+            # Don't return fallback content, let the calling function handle the error
+            raise e
     
     async def generate_platform_images(self, state: ContentState) -> ContentState:
         """Generate images for the current platform content"""
@@ -790,7 +792,12 @@ class ContentCreationAgent:
             platform = state.current_platform
             campaign_id = state.campaign.id
             
-            logger.info(f"Storing content for {platform}")
+            # Only store if we have content to store
+            if not state.platform_content:
+                logger.warning(f"No content to store for {platform}")
+                return state
+            
+            logger.info(f"Storing {len(state.platform_content)} posts for {platform}")
             
             # Store each post
             for post in state.platform_content:
