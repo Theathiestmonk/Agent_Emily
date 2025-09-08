@@ -245,7 +245,8 @@ async def handle_oauth_callback(
     platform: str,
     code: str = None,
     state: str = None,
-    error: str = None
+    error: str = None,
+    current_user: User = Depends(get_current_user)
 ):
     """Handle OAuth callback and store connection"""
     try:
@@ -262,28 +263,13 @@ async def handle_oauth_callback(
                 detail="Missing code or state parameter"
             )
         
-        # Verify state and get user from state record
-        state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", platform).execute()
+        # Verify state
+        state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("user_id", current_user.id).eq("platform", platform).execute()
         
         if not state_response.data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid or expired OAuth state"
-            )
-        
-        # Get user info from state record
-        state_record = state_response.data[0]
-        user_id = state_record['user_id']
-        
-        # Check if state has expired
-        from datetime import datetime
-        expires_at = datetime.fromisoformat(state_record['expires_at'].replace('Z', '+00:00'))
-        if datetime.now().replace(tzinfo=expires_at.tzinfo) > expires_at:
-            # Clean up expired state
-            supabase_admin.table("oauth_states").delete().eq("state", state).execute()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="OAuth state has expired"
             )
         
         # Exchange code for tokens (mock for now)
@@ -308,7 +294,7 @@ async def handle_oauth_callback(
         page_access_token = account_info.get('page_access_token', tokens['access_token'])
         
         connection_data = {
-            "user_id": user_id,
+            "user_id": current_user.id,
             "platform": platform,
             "page_id": account_info.get('page_id'),
             "page_name": account_info.get('page_name'),
@@ -339,7 +325,7 @@ async def handle_oauth_callback(
         except Exception as e:
             if "duplicate key value violates unique constraint" in str(e):
                 # Update existing connection
-                connection_response = supabase_admin.table("platform_connections").update(connection_data).eq("user_id", user_id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
+                connection_response = supabase_admin.table("platform_connections").update(connection_data).eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
             else:
                 raise e
         
@@ -351,7 +337,7 @@ async def handle_oauth_callback(
             connection_id = connection_response.data[0]["id"]
         else:
             # If update didn't return data, get the existing connection
-            existing_connection = supabase_admin.table("platform_connections").select("id").eq("user_id", user_id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
+            existing_connection = supabase_admin.table("platform_connections").select("id").eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
             connection_id = existing_connection.data[0]["id"] if existing_connection.data else "unknown"
         
         # Return HTML page that redirects back to frontend
@@ -522,7 +508,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # Added pages_manage_posts for proper Instagram Business account access
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
     elif platform == 'linkedin':
-        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=r_liteprofile%20w_member_social"
+        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social"
     elif platform == 'twitter':
         return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=tweet.read%20tweet.write%20users.read"
     elif platform == 'tiktok':
@@ -819,67 +805,75 @@ def get_instagram_account_info(access_token: str):
         return None
 
 def get_linkedin_account_info(access_token: str) -> dict:
-    """Get LinkedIn account information using standard LinkedIn API"""
+    """Get LinkedIn account information using OpenID Connect"""
     import requests
     
     try:
         print(f"🔍 Getting LinkedIn account info with token: {access_token[:20]}...")
         
-        # Use standard LinkedIn API endpoint
-        profile_url = "https://api.linkedin.com/v2/me"
+        # Use OpenID Connect endpoint
+        profile_url = "https://api.linkedin.com/v2/userinfo"
         headers = {
             'Authorization': f'Bearer {access_token}',
             'Content-Type': 'application/json'
         }
         
-        # Get basic profile
+        # Get user info using OpenID Connect
         profile_response = requests.get(profile_url, headers=headers)
-        print(f"📊 LinkedIn profile response status: {profile_response.status_code}")
+        print(f"📊 LinkedIn userinfo response status: {profile_response.status_code}")
         
         if profile_response.status_code != 200:
             error_text = profile_response.text
-            print(f"❌ Error fetching LinkedIn profile: {profile_response.status_code} - {error_text}")
-            return None
+            print(f"❌ Error fetching LinkedIn userinfo: {profile_response.status_code} - {error_text}")
+            
+            # Fallback to standard API if OpenID Connect fails
+            print("🔄 Falling back to standard LinkedIn API...")
+            fallback_url = "https://api.linkedin.com/v2/me"
+            fallback_response = requests.get(fallback_url, headers=headers)
+            
+            if fallback_response.status_code != 200:
+                print(f"❌ Fallback also failed: {fallback_response.status_code} - {fallback_response.text}")
+                return None
+            
+            profile_data = fallback_response.json()
+            print(f"✅ LinkedIn fallback profile data: {profile_data}")
+            
+            # Extract from fallback response
+            linkedin_id = profile_data.get('id', '')
+            first_name = ""
+            last_name = ""
+            if 'firstName' in profile_data:
+                first_name = profile_data['firstName'].get('localized', {}).get('en_US', '')
+            
+            if 'lastName' in profile_data:
+                last_name = profile_data['lastName'].get('localized', {}).get('en_US', '')
+            
+            headline = ""
+            if 'headline' in profile_data:
+                headline = profile_data['headline'].get('localized', {}).get('en_US', '')
+            
+            return {
+                'linkedin_id': linkedin_id,
+                'first_name': first_name,
+                'last_name': last_name,
+                'email': '',  # Not available in fallback
+                'profile_picture': '',
+                'headline': headline,
+                'follower_count': 0,
+                'page_id': linkedin_id,
+                'page_name': f"{first_name} {last_name}".strip()
+            }
         
         profile_data = profile_response.json()
-        print(f"✅ LinkedIn profile data: {profile_data}")
+        print(f"✅ LinkedIn userinfo data: {profile_data}")
         
-        # Try to get user's email address (optional - may not be available)
-        email_address = ""
-        try:
-            email_url = "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))"
-            email_response = requests.get(email_url, headers=headers)
-            
-            if email_response.status_code == 200:
-                email_data = email_response.json()
-                email_address = email_data.get('elements', [{}])[0].get('handle~', {}).get('emailAddress', '')
-            else:
-                print(f"⚠️  Email not available (status: {email_response.status_code})")
-        except Exception as e:
-            print(f"⚠️  Could not fetch email: {e}")
-            # Continue without email - it's optional
-        
-        # Extract profile information with proper error handling
-        linkedin_id = profile_data.get('id', '')
-        first_name = ""
-        last_name = ""
-        if 'firstName' in profile_data:
-            first_name = profile_data['firstName'].get('localized', {}).get('en_US', '')
-        
-        if 'lastName' in profile_data:
-            last_name = profile_data['lastName'].get('localized', {}).get('en_US', '')
-        
-        headline = ""
-        if 'headline' in profile_data:
-            headline = profile_data['headline'].get('localized', {}).get('en_US', '')
-        
-        profile_picture = ""
-        if 'profilePicture' in profile_data and 'displayImage~' in profile_data['profilePicture']:
-            elements = profile_data['profilePicture']['displayImage~'].get('elements', [])
-            if elements and 'identifiers' in elements[0]:
-                identifiers = elements[0]['identifiers']
-                if identifiers and 'identifier' in identifiers[0]:
-                    profile_picture = identifiers[0]['identifier']
+        # Extract profile information from OpenID Connect response
+        linkedin_id = profile_data.get('sub', '')  # OpenID Connect uses 'sub' for user ID
+        first_name = profile_data.get('given_name', '')
+        last_name = profile_data.get('family_name', '')
+        email_address = profile_data.get('email', '')
+        profile_picture = profile_data.get('picture', '')
+        headline = profile_data.get('headline', '')
         
         return {
             'linkedin_id': linkedin_id,
@@ -1214,7 +1208,7 @@ async def test_linkedin_connection():
         
         # Generate a test OAuth URL
         state = generate_oauth_state()
-        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=r_liteprofile%20w_member_social"
+        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=openid%20profile%20email%20w_member_social"
         
         return {
             "message": "LinkedIn configuration looks good!",
