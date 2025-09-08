@@ -156,7 +156,8 @@ const ContentDashboard = () => {
       setGenerationStatus(null)
       setGenerationMessage('')
       
-      const response = await fetch('http://localhost:8000/content/trigger-weekly', {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+      const response = await fetch(`${API_BASE_URL}/content/trigger-weekly`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
