@@ -9,7 +9,7 @@ const DebugPanel = () => {
     const checkEnvironment = async () => {
       const info = {
         // Environment variables
-        apiUrl: (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, ''),
+        apiUrl: (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, ''),
         supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
         nodeEnv: import.meta.env.MODE,
         

@@ -21,18 +21,6 @@ class PlatformConnection(Base):
     refresh_token_encrypted = Column(Text, nullable=True)
     token_expires_at = Column(DateTime, nullable=True)
     
-    # Platform-specific fields
-    # Instagram fields
-    instagram_id = Column(String(100), nullable=True)
-    account_type = Column(String(50), nullable=True)
-    media_count = Column(Integer, default=0)
-    
-    # LinkedIn fields
-    linkedin_id = Column(String(100), nullable=True)
-    headline = Column(Text, nullable=True)
-    email = Column(String(255), nullable=True)
-    profile_picture = Column(Text, nullable=True)
-    
     # Connection metadata
     is_active = Column(Boolean, default=True)
     last_sync = Column(DateTime, nullable=True)
