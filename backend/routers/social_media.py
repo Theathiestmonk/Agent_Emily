@@ -371,26 +371,87 @@ async def fetch_twitter_posts(connection: dict, limit: int) -> List[Dict[str, An
     return []
 
 async def fetch_linkedin_posts(connection: dict, limit: int) -> List[Dict[str, Any]]:
-    """Fetch latest posts from LinkedIn using available API endpoints"""
+    """Fetch latest posts from LinkedIn - supports both personal and company pages"""
     try:
         print(f"🔍 LinkedIn connection data: {connection}")
         access_token = decrypt_token(connection.get('access_token_encrypted', ''))
         linkedin_id = connection.get('linkedin_id') or connection.get('page_id')
+        organization_id = connection.get('organization_id')
+        is_organization = connection.get('is_organization', False)
+        account_type = connection.get('account_type', 'personal')
         
         print(f"📄 LinkedIn ID: {linkedin_id}")
+        print(f"🏢 Organization ID: {organization_id}")
+        print(f"👤 Account Type: {account_type}")
+        print(f"🏢 Is Organization: {is_organization}")
         print(f"🔑 LinkedIn access_token: {access_token[:20]}...")
         
         if not linkedin_id:
             print("❌ No LinkedIn ID found for LinkedIn connection")
             return []
         
-        # Try to fetch user's shares/posts using LinkedIn API
-        # Note: This requires r_member_social permission which is restricted
         headers = {
             'Authorization': f'Bearer {access_token}',
             'Content-Type': 'application/json',
             'X-Restli-Protocol-Version': '2.0.0'
         }
+        
+        # Handle company page posts
+        if is_organization and organization_id:
+            print("🏢 Fetching company page posts...")
+            try:
+                # Fetch UGC posts from organization
+                ugc_url = f"https://api.linkedin.com/v2/ugcPosts?q=authors&authors=List(urn:li:organization:{organization_id})&count={limit}"
+                
+                response = requests.get(ugc_url, headers=headers, timeout=10)
+                print(f"📊 LinkedIn UGC posts API response status: {response.status_code}")
+                
+                if response.status_code == 200:
+                    ugc_data = response.json()
+                    print(f"✅ LinkedIn UGC posts data: {ugc_data}")
+                    
+                    posts = []
+                    for ugc_post in ugc_data.get('elements', []):
+                        post_id = ugc_post.get('id', '')
+                        created_time = ugc_post.get('created', {}).get('time', '')
+                        
+                        # Extract post content
+                        specific_content = ugc_post.get('specificContent', {})
+                        if 'com.linkedin.ugc.ShareContent' in specific_content:
+                            share_content = specific_content['com.linkedin.ugc.ShareContent']
+                            share_commentary = share_content.get('shareCommentary', {})
+                            text = share_commentary.get('text', '')
+                            
+                            # Get engagement metrics
+                            social_detail = ugc_post.get('socialDetail', {})
+                            total_social_counts = social_detail.get('totalSocialCounts', {})
+                            
+                            post = {
+                                'id': post_id,
+                                'message': text,
+                                'created_time': created_time,
+                                'permalink_url': f'https://linkedin.com/feed/update/{post_id}',
+                                'media_url': None,
+                                'likes_count': total_social_counts.get('numLikes', 0),
+                                'comments_count': total_social_counts.get('numComments', 0),
+                                'shares_count': total_social_counts.get('numShares', 0)
+                            }
+                            posts.append(post)
+                    
+                    if posts:
+                        print(f"✅ Successfully fetched {len(posts)} company LinkedIn posts")
+                        return posts
+                    else:
+                        print("⚠️ No company posts found in LinkedIn UGC API response")
+                else:
+                    error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
+                    print(f"❌ LinkedIn UGC posts API error: {response.status_code} - {error_data}")
+                    
+            except Exception as ugc_error:
+                print(f"❌ LinkedIn UGC posts API error: {ugc_error}")
+        
+        # Handle personal account posts
+        print("👤 Fetching personal account posts...")
         
         # Try to fetch user's shares (posts they've shared)
         try:
@@ -433,7 +494,7 @@ async def fetch_linkedin_posts(connection: dict, limit: int) -> List[Dict[str, A
                     posts.append(post)
                 
                 if posts:
-                    print(f"✅ Successfully fetched {len(posts)} LinkedIn posts")
+                    print(f"✅ Successfully fetched {len(posts)} personal LinkedIn posts")
                     return posts
                 else:
                     print("⚠️ No shares found in LinkedIn API response")
@@ -444,58 +505,16 @@ async def fetch_linkedin_posts(connection: dict, limit: int) -> List[Dict[str, A
         except Exception as api_error:
             print(f"❌ LinkedIn API error: {api_error}")
         
-        # If API calls fail, try to fetch from user's activity (alternative approach)
-        try:
-            print("🔄 Attempting to fetch LinkedIn user activity...")
-            activity_url = f"https://api.linkedin.com/v2/people/{linkedin_id}/activities"
-            
-            response = requests.get(activity_url, headers=headers, timeout=10)
-            print(f"📊 LinkedIn activity API response status: {response.status_code}")
-            
-            if response.status_code == 200:
-                activity_data = response.json()
-                print(f"✅ LinkedIn activity data: {activity_data}")
-                
-                posts = []
-                for activity in activity_data.get('elements', []):
-                    activity_id = activity.get('id', '')
-                    created_time = activity.get('created', {}).get('time', '')
-                    
-                    # Extract activity content
-                    specific_content = activity.get('specificContent', {})
-                    if 'com.linkedin.ugc.ShareContent' in specific_content:
-                        share_content = specific_content['com.linkedin.ugc.ShareContent']
-                        share_commentary = share_content.get('shareCommentary', {})
-                        text = share_commentary.get('text', '')
-                        
-                        post = {
-                            'id': activity_id,
-                            'message': text,
-                            'created_time': created_time,
-                            'permalink_url': f'https://linkedin.com/feed/update/{activity_id}',
-                            'media_url': None,
-                            'likes_count': 0,  # Activity API doesn't provide engagement metrics
-                            'comments_count': 0,
-                            'shares_count': 0
-                        }
-                        posts.append(post)
-                
-                if posts:
-                    print(f"✅ Successfully fetched {len(posts)} LinkedIn activities")
-                    return posts
-                    
-        except Exception as activity_error:
-            print(f"❌ LinkedIn activity API error: {activity_error}")
-        
-        # If all API calls fail, return empty array instead of mock data
+        # If API calls fail, return empty array
         print("⚠️ Unable to fetch real LinkedIn posts - API permissions may be insufficient")
-        print("💡 LinkedIn requires r_member_social permission to fetch user's own posts")
-        print("💡 This permission is currently restricted by LinkedIn")
+        print("💡 LinkedIn requires appropriate permissions to fetch posts")
+        print("💡 For company pages: r_organization_social permission")
+        print("💡 For personal accounts: r_member_social permission")
         return []
         
     except Exception as e:
         print(f"❌ Error fetching LinkedIn posts: {e}")
-        return []
+    return []
 
 async def fetch_youtube_posts(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from YouTube (placeholder - requires YouTube Data API)"""
