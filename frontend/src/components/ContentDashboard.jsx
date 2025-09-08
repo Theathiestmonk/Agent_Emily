@@ -60,6 +60,7 @@ const ContentDashboard = () => {
   const [generationMessage, setGenerationMessage] = useState('')
   const [showProgress, setShowProgress] = useState(false)
   const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
+  const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
 
   useEffect(() => {
     fetchData()
@@ -114,7 +115,7 @@ const ContentDashboard = () => {
         const refreshInterval = setInterval(async () => {
           await fetchData()
           // Stop refreshing if we have new content
-          if (campaigns.length > 0) {
+          if (scheduledContent.length > 0) {
             clearInterval(refreshInterval)
           }
         }, 10000)
@@ -300,21 +301,6 @@ const ContentDashboard = () => {
         accent: 'bg-gray-200'
       },
       youtube: {
-        bg: 'bg-white/50',
-        border: 'border-red-300',
-        iconBg: 'bg-red-600',
-        text: 'text-red-800',
-        accent: 'bg-red-200'
-      },
-      // Additional variations
-      'linkedin': {
-        bg: 'bg-white/50',
-        border: 'border-blue-300',
-        iconBg: 'bg-blue-700',
-        text: 'text-blue-800',
-        accent: 'bg-blue-200'
-      },
-      'youtube': {
         bg: 'bg-white/50',
         border: 'border-red-300',
         iconBg: 'bg-red-600',

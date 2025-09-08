@@ -16,7 +16,6 @@ const LoadingBar = ({ message = "Loading your content..." }) => {
           <div className="h-full bg-gradient-to-r from-pink-500 to-purple-600 rounded-full animate-pulse">
             <div className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded-full animate-pulse" 
                  style={{
-                   animation: 'loading-bar 2s ease-in-out infinite',
                    background: 'linear-gradient(90deg, #ec4899, #8b5cf6, #6366f1)',
                    backgroundSize: '200% 100%',
                    animation: 'loading-gradient 1.5s ease-in-out infinite'

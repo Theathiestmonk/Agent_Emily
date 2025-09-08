@@ -96,6 +96,38 @@ class ContentAPI {
     }
   }
 
+  // Generate content
+  async generateContent() {
+    try {
+      const authToken = await this.getAuthToken()
+      console.log('Generating content with token:', authToken ? 'present' : 'missing')
+      
+      const response = await fetch(buildApiUrl('/content/generate'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+
+      console.log('Generate content response status:', response.status)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Generate content API error:', errorText)
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log('Generate content data:', data)
+      
+      return { data: data, error: null }
+    } catch (error) {
+      console.error('Error generating content:', error)
+      return { data: null, error: error.message }
+    }
+  }
+
   // Helper method to get auth token
   async getAuthToken() {
     const { data: { session } } = await supabase.auth.getSession()
