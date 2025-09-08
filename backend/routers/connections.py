@@ -276,20 +276,18 @@ async def handle_oauth_callback(
         tokens = exchange_code_for_tokens(platform, code)
         
         # Get account information
+        print(f"🔍 Getting account info for {platform}...")
         account_info = get_account_info(platform, tokens['access_token'])
+        print(f"📊 Account info result: {account_info}")
         
         # Handle case where account info is None (especially for Instagram)
         if account_info is None:
             if platform == "instagram":
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="No Instagram Business account found. Please ensure your Instagram account is connected to a Facebook Page and is a Business or Creator account."
-                )
+                raise Exception("No Instagram Business account found. Please ensure your Instagram account is connected to a Facebook Page and is a Business or Creator account.")
+            elif platform == "linkedin":
+                raise Exception("Failed to retrieve LinkedIn account information. Please check that your LinkedIn app has the correct permissions and scopes.")
             else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Failed to retrieve {platform} account information"
-                )
+                raise Exception(f"Failed to retrieve {platform} account information")
         
         # Store connection in Supabase (upsert - update if exists, insert if not)
         # Use page access token for posting, not user access token
@@ -376,10 +374,41 @@ async def handle_oauth_callback(
         """
         
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to complete OAuth: {str(e)}"
-        )
+        print(f"❌ OAuth callback error for {platform}: {e}")
+        print(f"❌ Error type: {type(e).__name__}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
+        
+        # Return a more detailed error page
+        frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+        error_message = str(e).replace("'", "\\'").replace('"', '\\"')
+        
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Connection Failed</title>
+        </head>
+        <body>
+            <h2>Connection Failed</h2>
+            <p>Error: {error_message}</p>
+            <script>
+                // Close the popup window or redirect
+                if (window.opener) {{
+                    window.opener.postMessage({{
+                        type: 'OAUTH_ERROR',
+                        platform: '{platform}',
+                        error: '{error_message}'
+                    }}, '*');
+                    window.close();
+                }} else {{
+                    window.location.href = '{frontend_url}';
+                }}
+            </script>
+            <p>You can close this window and try again.</p>
+        </body>
+        </html>
+        """
 
 @router.delete("/{connection_id}")
 async def disconnect_account(
@@ -479,7 +508,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # Added pages_manage_posts for proper Instagram Business account access
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
     elif platform == 'linkedin':
-        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=r_liteprofile%20r_emailaddress%20w_member_social"
+        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=r_liteprofile%20w_member_social"
     elif platform == 'twitter':
         return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=tweet.read%20tweet.write%20users.read"
     elif platform == 'tiktok':
@@ -801,14 +830,20 @@ def get_linkedin_account_info(access_token: str) -> dict:
         profile_data = profile_response.json()
         print(f"✅ LinkedIn profile data: {profile_data}")
         
-        # Get user's email address using separate endpoint
-        email_url = "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))"
-        email_response = requests.get(email_url, headers=headers)
-        
+        # Try to get user's email address (optional - may not be available)
         email_address = ""
-        if email_response.status_code == 200:
-            email_data = email_response.json()
-            email_address = email_data.get('elements', [{}])[0].get('handle~', {}).get('emailAddress', '')
+        try:
+            email_url = "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))"
+            email_response = requests.get(email_url, headers=headers)
+            
+            if email_response.status_code == 200:
+                email_data = email_response.json()
+                email_address = email_data.get('elements', [{}])[0].get('handle~', {}).get('emailAddress', '')
+            else:
+                print(f"⚠️  Email not available (status: {email_response.status_code})")
+        except Exception as e:
+            print(f"⚠️  Could not fetch email: {e}")
+            # Continue without email - it's optional
         
         # Extract profile information with proper error handling
         linkedin_id = profile_data.get('id', '')
@@ -1165,7 +1200,7 @@ async def test_linkedin_connection():
         
         # Generate a test OAuth URL
         state = generate_oauth_state()
-        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=r_liteprofile%20r_emailaddress%20w_member_social"
+        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=r_liteprofile%20w_member_social"
         
         return {
             "message": "LinkedIn configuration looks good!",
