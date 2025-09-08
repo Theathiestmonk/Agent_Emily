@@ -533,7 +533,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # Added pages_manage_posts for proper Instagram Business account access
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
     elif platform == 'linkedin':
-        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social%20r_member_social%20r_organization_social%20w_organization_social"
+        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social"
     elif platform == 'twitter':
         return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=tweet.read%20tweet.write%20users.read"
     elif platform == 'tiktok':
@@ -830,7 +830,7 @@ def get_instagram_account_info(access_token: str):
         return None
 
 def get_linkedin_account_info(access_token: str) -> dict:
-    """Get LinkedIn account information and detect company pages"""
+    """Get LinkedIn account information using basic scopes"""
     import requests
     
     try:
@@ -842,7 +842,7 @@ def get_linkedin_account_info(access_token: str) -> dict:
             'X-Restli-Protocol-Version': '2.0.0'
         }
         
-        # First, get user's personal profile
+        # Get user's personal profile
         profile_url = "https://api.linkedin.com/v2/me"
         profile_response = requests.get(profile_url, headers=headers)
         print(f"📊 LinkedIn profile response status: {profile_response.status_code}")
@@ -879,67 +879,8 @@ def get_linkedin_account_info(access_token: str) -> dict:
         except Exception as e:
             print(f"⚠️ Could not fetch email: {e}")
         
-        # Try to get user's organizations (company pages they manage)
-        organizations = []
-        try:
-            print("🔄 Checking for company page access...")
-            org_url = "https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED"
-            org_response = requests.get(org_url, headers=headers)
-            print(f"📊 LinkedIn organizations response status: {org_response.status_code}")
-            
-            if org_response.status_code == 200:
-                org_data = org_response.json()
-                print(f"✅ LinkedIn organizations data: {org_data}")
-                
-                for org in org_data.get('elements', []):
-                    org_urn = org.get('organizationalTarget', '')
-                    if org_urn.startswith('urn:li:organization:'):
-                        org_id = org_urn.split(':')[-1]
-                        organizations.append(org_id)
-                        print(f"🏢 Found organization ID: {org_id}")
-            else:
-                print(f"⚠️ Could not fetch organizations: {org_response.status_code} - {org_response.text}")
-        except Exception as e:
-            print(f"⚠️ Error fetching organizations: {e}")
-        
-        # If user has company page access, use the first organization
-        if organizations:
-            org_id = organizations[0]
-            print(f"🏢 Using organization ID: {org_id}")
-            
-            # Get organization details
-            try:
-                org_details_url = f"https://api.linkedin.com/v2/organizations/{org_id}"
-                org_details_response = requests.get(org_details_url, headers=headers)
-                
-                if org_details_response.status_code == 200:
-                    org_details = org_details_response.json()
-                    print(f"✅ Organization details: {org_details}")
-                    
-                    org_name = org_details.get('name', 'Company Page')
-                    org_logo = ""
-                    if 'logoV2' in org_details and 'original' in org_details['logoV2']:
-                        org_logo = org_details['logoV2']['original']
-                    
-                    return {
-                        'linkedin_id': linkedin_id,
-                        'organization_id': org_id,
-                        'first_name': first_name,
-                        'last_name': last_name,
-                        'email': email_address,
-                        'profile_picture': org_logo,
-                        'headline': headline,
-                        'follower_count': 0,  # Organization follower count not available in basic API
-                        'page_id': org_id,  # Use organization ID as page_id
-                        'page_name': org_name,
-                        'account_type': 'company',
-                        'is_organization': True
-                    }
-            except Exception as e:
-                print(f"⚠️ Error fetching organization details: {e}")
-        
-        # Fallback to personal account
-        print("👤 Using personal LinkedIn account")
+        # For now, we'll use personal account since organization access requires special permissions
+        print("👤 Using personal LinkedIn account (company page access requires additional permissions)")
         return {
             'linkedin_id': linkedin_id,
             'first_name': first_name,
@@ -1275,7 +1216,7 @@ async def test_linkedin_connection():
         
         # Generate a test OAuth URL
         state = generate_oauth_state()
-        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=openid%20profile%20email%20w_member_social%20r_member_social%20r_organization_social%20w_organization_social"
+        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=openid%20profile%20email%20w_member_social"
         
         return {
             "message": "LinkedIn configuration looks good!",
