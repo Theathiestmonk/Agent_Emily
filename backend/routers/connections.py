@@ -830,7 +830,7 @@ def get_instagram_account_info(access_token: str):
         return None
 
 def get_linkedin_account_info(access_token: str) -> dict:
-    """Get LinkedIn account information using basic scopes"""
+    """Get LinkedIn account information using openid, profile, email, and w_member_social scopes"""
     import requests
     
     try:
@@ -842,7 +842,43 @@ def get_linkedin_account_info(access_token: str) -> dict:
             'X-Restli-Protocol-Version': '2.0.0'
         }
         
-        # Get user's personal profile
+        # Try OpenID Connect endpoint first (for openid and profile scopes)
+        try:
+            print("🔄 Trying OpenID Connect endpoint...")
+            userinfo_url = "https://api.linkedin.com/v2/userinfo"
+            userinfo_response = requests.get(userinfo_url, headers=headers)
+            print(f"📊 LinkedIn userinfo response status: {userinfo_response.status_code}")
+            
+            if userinfo_response.status_code == 200:
+                userinfo_data = userinfo_response.json()
+                print(f"✅ LinkedIn userinfo data: {userinfo_data}")
+                
+                # Extract from OpenID Connect response
+                linkedin_id = userinfo_data.get('sub', '')
+                first_name = userinfo_data.get('given_name', '')
+                last_name = userinfo_data.get('family_name', '')
+                email_address = userinfo_data.get('email', '')
+                profile_picture = userinfo_data.get('picture', '')
+                headline = userinfo_data.get('headline', '')
+                
+                return {
+                    'linkedin_id': linkedin_id,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'email': email_address,
+                    'profile_picture': profile_picture,
+                    'headline': headline,
+                    'follower_count': 0,
+                    'page_id': linkedin_id,
+                    'page_name': f"{first_name} {last_name}".strip(),
+                    'account_type': 'personal',
+                    'is_organization': False
+                }
+        except Exception as e:
+            print(f"⚠️ OpenID Connect failed: {e}")
+        
+        # Fallback to standard LinkedIn API
+        print("🔄 Falling back to standard LinkedIn API...")
         profile_url = "https://api.linkedin.com/v2/me"
         profile_response = requests.get(profile_url, headers=headers)
         print(f"📊 LinkedIn profile response status: {profile_response.status_code}")
@@ -854,7 +890,7 @@ def get_linkedin_account_info(access_token: str) -> dict:
         profile_data = profile_response.json()
         print(f"✅ LinkedIn profile data: {profile_data}")
         
-        # Extract personal profile information
+        # Extract profile information
         linkedin_id = profile_data.get('id', '')
         first_name = ""
         last_name = ""
@@ -876,11 +912,13 @@ def get_linkedin_account_info(access_token: str) -> dict:
             if email_response.status_code == 200:
                 email_data = email_response.json()
                 email_address = email_data.get('elements', [{}])[0].get('handle~', {}).get('emailAddress', '')
+                print(f"✅ Email fetched: {email_address}")
+            else:
+                print(f"⚠️ Could not fetch email: {email_response.status_code} - {email_response.text}")
         except Exception as e:
             print(f"⚠️ Could not fetch email: {e}")
         
-        # For now, we'll use personal account since organization access requires special permissions
-        print("👤 Using personal LinkedIn account (company page access requires additional permissions)")
+        print("👤 Using personal LinkedIn account")
         return {
             'linkedin_id': linkedin_id,
             'first_name': first_name,
