@@ -490,6 +490,8 @@ def exchange_code_for_tokens(platform: str, code: str) -> dict:
         return exchange_facebook_code_for_tokens(code)
     elif platform == "instagram":
         return exchange_instagram_code_for_tokens(code)
+    elif platform == "linkedin":
+        return exchange_linkedin_code_for_tokens(code)
     else:
         raise ValueError(f"Unsupported platform: {platform}")
 
@@ -584,12 +586,46 @@ def exchange_instagram_code_for_tokens(code: str) -> dict:
         "expires_in": long_lived_data.get('expires_in', 3600)
     }
 
+def exchange_linkedin_code_for_tokens(code: str) -> dict:
+    """Exchange LinkedIn OAuth code for access tokens"""
+    import requests
+    
+    linkedin_client_id = os.getenv('LINKEDIN_CLIENT_ID')
+    linkedin_client_secret = os.getenv('LINKEDIN_CLIENT_SECRET')
+    redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/linkedin/callback"
+    
+    if not linkedin_client_id or not linkedin_client_secret:
+        raise ValueError("LinkedIn app credentials not configured")
+    
+    # Exchange code for access token
+    token_url = "https://www.linkedin.com/oauth/v2/accessToken"
+    token_data = {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'client_id': linkedin_client_id,
+        'client_secret': linkedin_client_secret,
+        'redirect_uri': redirect_uri
+    }
+    
+    response = requests.post(token_url, data=token_data)
+    response.raise_for_status()
+    
+    token_response = response.json()
+    
+    return {
+        "access_token": token_response['access_token'],
+        "refresh_token": token_response.get('refresh_token', ''),
+        "expires_in": token_response.get('expires_in', 3600)
+    }
+
 def get_account_info(platform: str, access_token: str) -> dict:
     """Get account information from platform API"""
     if platform == "facebook":
         return get_facebook_account_info(access_token)
     elif platform == "instagram":
         return get_instagram_account_info(access_token)
+    elif platform == "linkedin":
+        return get_linkedin_account_info(access_token)
     else:
         raise ValueError(f"Unsupported platform: {platform}")
 
@@ -729,6 +765,59 @@ def get_instagram_account_info(access_token: str):
         
     except Exception as e:
         print(f"❌ Error getting Instagram account info: {e}")
+        print(f"❌ Error type: {type(e).__name__}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
+        return None
+
+def get_linkedin_account_info(access_token: str) -> dict:
+    """Get LinkedIn account information"""
+    import requests
+    
+    try:
+        print(f"🔍 Getting LinkedIn account info with token: {access_token[:20]}...")
+        
+        # Get user's basic profile information
+        profile_url = "https://api.linkedin.com/v2/people/~"
+        profile_params = {
+            'oauth2_access_token': access_token
+        }
+        
+        # Get basic profile
+        profile_response = requests.get(profile_url, params=profile_params)
+        print(f"📊 LinkedIn profile response status: {profile_response.status_code}")
+        
+        if profile_response.status_code != 200:
+            error_text = profile_response.text
+            print(f"❌ Error fetching LinkedIn profile: {profile_response.status_code} - {error_text}")
+            return None
+        
+        profile_data = profile_response.json()
+        print(f"✅ LinkedIn profile data: {profile_data}")
+        
+        # Get user's email address
+        email_url = "https://api.linkedin.com/v2/emailAddress"
+        email_response = requests.get(email_url, params=profile_params)
+        
+        email_address = ""
+        if email_response.status_code == 200:
+            email_data = email_response.json()
+            email_address = email_data.get('elements', [{}])[0].get('handle~', {}).get('emailAddress', '')
+        
+        return {
+            'linkedin_id': profile_data.get('id', ''),
+            'first_name': profile_data.get('firstName', {}).get('localized', {}).get('en_US', ''),
+            'last_name': profile_data.get('lastName', {}).get('localized', {}).get('en_US', ''),
+            'email': email_address,
+            'profile_picture': profile_data.get('profilePicture', {}).get('displayImage~', {}).get('elements', [{}])[0].get('identifiers', [{}])[0].get('identifier', ''),
+            'headline': profile_data.get('headline', {}).get('localized', {}).get('en_US', ''),
+            'follower_count': 0,  # LinkedIn doesn't provide follower count in basic API
+            'page_id': profile_data.get('id', ''),  # Use profile ID as page_id for consistency
+            'page_name': f"{profile_data.get('firstName', {}).get('localized', {}).get('en_US', '')} {profile_data.get('lastName', {}).get('localized', {}).get('en_US', '')}".strip()
+        }
+        
+    except Exception as e:
+        print(f"❌ Error getting LinkedIn account info: {e}")
         print(f"❌ Error type: {type(e).__name__}")
         import traceback
         print(f"❌ Traceback: {traceback.format_exc()}")
@@ -1024,9 +1113,38 @@ async def debug_instagram_connection(
             "is_active": connection['is_active'],
             "connected_at": connection['connected_at']
         }
+
+@router.get("/linkedin/test")
+async def test_linkedin_connection():
+    """Test LinkedIn connection configuration"""
+    try:
+        linkedin_client_id = os.getenv('LINKEDIN_CLIENT_ID')
+        linkedin_client_secret = os.getenv('LINKEDIN_CLIENT_SECRET')
+        api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+        
+        if not linkedin_client_id or not linkedin_client_secret:
+            return {
+                "error": "LinkedIn credentials not configured",
+                "missing": {
+                    "client_id": not linkedin_client_id,
+                    "client_secret": not linkedin_client_secret
+                }
+            }
+        
+        # Generate a test OAuth URL
+        state = generate_oauth_state()
+        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=w_member_social"
+        
+        return {
+            "message": "LinkedIn configuration looks good!",
+            "client_id": linkedin_client_id,
+            "redirect_uri": f"{api_base_url}/connections/auth/linkedin/callback",
+            "test_oauth_url": test_oauth_url,
+            "status": "ready"
+        }
         
     except Exception as e:
-        print(f"❌ Debug error: {e}")
+        print(f"❌ LinkedIn test error: {e}")
         return {"error": str(e)}
 
 @router.get("/instagram/test-account")
