@@ -315,6 +315,11 @@ async def handle_oauth_callback(
             connection_data["instagram_id"] = account_info.get('instagram_id')
             connection_data["account_type"] = account_info.get('account_type')
             connection_data["media_count"] = account_info.get('media_count', 0)
+        elif platform == "linkedin":
+            connection_data["linkedin_id"] = account_info.get('linkedin_id')
+            connection_data["headline"] = account_info.get('headline')
+            connection_data["email"] = account_info.get('email')
+            connection_data["profile_picture"] = account_info.get('profile_picture')
         
         # Try to insert, if it fails due to duplicate key, update instead
         try:
@@ -1172,6 +1177,142 @@ async def test_linkedin_connection():
     except Exception as e:
         print(f"❌ LinkedIn test error: {e}")
         return {"error": str(e)}
+
+@router.post("/linkedin/post")
+async def post_to_linkedin(
+    post_data: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Post content to LinkedIn"""
+    try:
+        print(f"📱 LinkedIn post request from user: {current_user.id}")
+        print(f"📝 Post data: {post_data}")
+        
+        # Get user's LinkedIn connection
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "linkedin").eq("is_active", True).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active LinkedIn connection found. Please connect your LinkedIn account first."
+            )
+        
+        connection = response.data[0]
+        print(f"🔗 Found LinkedIn connection: {connection['id']}")
+        
+        # Decrypt the access token
+        try:
+            access_token = decrypt_token(connection['access_token_encrypted'])
+            print(f"🔓 Decrypted access token: {access_token[:20]}...")
+        except Exception as e:
+            print(f"❌ Error decrypting token: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to decrypt access token. Please reconnect your LinkedIn account."
+            )
+        
+        # Prepare the post message
+        message = post_data.get('message', '')
+        title = post_data.get('title', '')
+        hashtags = post_data.get('hashtags', [])
+        
+        # Combine title, message, and hashtags
+        full_message = ""
+        if title:
+            full_message += f"{title}\n\n"
+        full_message += message
+        if hashtags:
+            hashtag_string = " ".join([f"#{tag.replace('#', '')}" for tag in hashtags])
+            full_message += f"\n\n{hashtag_string}"
+        
+        # Post to LinkedIn using the Share API
+        linkedin_url = "https://api.linkedin.com/v2/shares"
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json',
+            'X-Restli-Protocol-Version': '2.0.0'
+        }
+        
+        # Get the user's LinkedIn ID from the connection
+        linkedin_id = connection.get('linkedin_id') or connection.get('page_id')
+        if not linkedin_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="LinkedIn ID not found in connection data"
+            )
+        
+        # Create the share payload
+        share_payload = {
+            "author": f"urn:li:person:{linkedin_id}",
+            "lifecycleState": "PUBLISHED",
+            "specificContent": {
+                "com.linkedin.ugc.ShareContent": {
+                    "shareCommentary": {
+                        "text": full_message
+                    },
+                    "shareMediaCategory": "NONE"
+                }
+            },
+            "visibility": {
+                "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+            }
+        }
+        
+        print(f"🌐 Posting to LinkedIn API: {linkedin_url}")
+        print(f"📋 Share payload: {share_payload}")
+        
+        response = requests.post(linkedin_url, headers=headers, json=share_payload)
+        
+        print(f"📊 LinkedIn API response status: {response.status_code}")
+        
+        if response.status_code in [200, 201]:
+            result = response.json()
+            print(f"✅ LinkedIn post successful: {result}")
+            
+            # Update last posted timestamp
+            try:
+                supabase_admin.table("platform_connections").update({
+                    "last_posted_at": datetime.now().isoformat()
+                }).eq("id", connection['id']).execute()
+            except Exception as e:
+                print(f"⚠️  Error updating last_posted_at: {e}")
+            
+            return {
+                "success": True,
+                "platform": "linkedin",
+                "post_id": result.get('id'),
+                "message": "Content posted to LinkedIn successfully!",
+                "url": f"https://linkedin.com/feed/update/{result.get('id')}" if result.get('id') else None
+            }
+        else:
+            try:
+                error_data = response.json()
+                print(f"❌ LinkedIn API error (JSON): {response.status_code} - {error_data}")
+            except:
+                error_text = response.text
+                print(f"❌ LinkedIn API error (Text): {response.status_code} - {error_text}")
+                error_data = {"error": {"message": error_text}}
+            
+            error_message = "Unknown error"
+            if isinstance(error_data, dict) and "error" in error_data:
+                if isinstance(error_data["error"], dict):
+                    error_message = error_data["error"].get("message", "Unknown error")
+                else:
+                    error_message = str(error_data["error"])
+            
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"LinkedIn API error: {error_message}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error posting to LinkedIn: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to post to LinkedIn: {str(e)}"
+        )
 
 @router.get("/instagram/test-account")
 async def test_instagram_account(

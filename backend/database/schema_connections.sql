@@ -16,6 +16,18 @@ CREATE TABLE IF NOT EXISTS platform_connections (
     refresh_token_encrypted TEXT,
     token_expires_at TIMESTAMP,
     
+    -- Platform-specific fields
+    -- Instagram fields
+    instagram_id VARCHAR(100),
+    account_type VARCHAR(50),
+    media_count INTEGER DEFAULT 0,
+    
+    -- LinkedIn fields
+    linkedin_id VARCHAR(100),
+    headline TEXT,
+    email VARCHAR(255),
+    profile_picture TEXT,
+    
     -- Connection metadata
     is_active BOOLEAN DEFAULT true,
     last_sync TIMESTAMP,
