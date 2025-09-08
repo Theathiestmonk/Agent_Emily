@@ -1113,6 +1113,10 @@ async def debug_instagram_connection(
             "is_active": connection['is_active'],
             "connected_at": connection['connected_at']
         }
+        
+    except Exception as e:
+        print(f"❌ Debug Instagram error: {e}")
+        return {"error": str(e)}
 
 @router.get("/linkedin/test")
 async def test_linkedin_connection():
