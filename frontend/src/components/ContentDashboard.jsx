@@ -114,7 +114,7 @@ const ContentDashboard = () => {
         const refreshInterval = setInterval(async () => {
           await fetchData()
           // Stop refreshing if we have new content
-          if (campaigns.length > 0) {
+          if (scheduledContent.length > 0) {
             clearInterval(refreshInterval)
           }
         }, 10000)
@@ -186,15 +186,16 @@ const ContentDashboard = () => {
     }
   }
 
-  const toggleCampaignExpansion = (campaignId) => {
-    const newExpanded = new Set(expandedCampaigns)
-    if (newExpanded.has(campaignId)) {
-      newExpanded.delete(campaignId)
-    } else {
-      newExpanded.add(campaignId)
-    }
-    setExpandedCampaigns(newExpanded)
-  }
+  // This function is not used in the current implementation
+  // const toggleCampaignExpansion = (campaignId) => {
+  //   const newExpanded = new Set(expandedCampaigns)
+  //   if (newExpanded.has(campaignId)) {
+  //     newExpanded.delete(campaignId)
+  //   } else {
+  //     newExpanded.add(campaignId)
+  //   }
+  //   setExpandedCampaigns(newExpanded)
+  // }
 
   const filteredContent = scheduledContent.filter(content => {
     const matchesPlatform = filterPlatform === 'all' || content.platform === filterPlatform
