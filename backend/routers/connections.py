@@ -276,20 +276,18 @@ async def handle_oauth_callback(
         tokens = exchange_code_for_tokens(platform, code)
         
         # Get account information
+        print(f"🔍 Getting account info for {platform}...")
         account_info = get_account_info(platform, tokens['access_token'])
+        print(f"📊 Account info result: {account_info}")
         
         # Handle case where account info is None (especially for Instagram)
         if account_info is None:
             if platform == "instagram":
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="No Instagram Business account found. Please ensure your Instagram account is connected to a Facebook Page and is a Business or Creator account."
-                )
+                raise Exception("No Instagram Business account found. Please ensure your Instagram account is connected to a Facebook Page and is a Business or Creator account.")
+            elif platform == "linkedin":
+                raise Exception("Failed to retrieve LinkedIn account information. Please check that your LinkedIn app has the correct permissions and scopes.")
             else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Failed to retrieve {platform} account information"
-                )
+                raise Exception(f"Failed to retrieve {platform} account information")
         
         # Store connection in Supabase (upsert - update if exists, insert if not)
         # Use page access token for posting, not user access token
@@ -315,6 +313,11 @@ async def handle_oauth_callback(
             connection_data["instagram_id"] = account_info.get('instagram_id')
             connection_data["account_type"] = account_info.get('account_type')
             connection_data["media_count"] = account_info.get('media_count', 0)
+        elif platform == "linkedin":
+            connection_data["linkedin_id"] = account_info.get('linkedin_id')
+            connection_data["headline"] = account_info.get('headline')
+            connection_data["email"] = account_info.get('email')
+            connection_data["profile_picture"] = account_info.get('profile_picture')
         
         # Try to insert, if it fails due to duplicate key, update instead
         try:
@@ -371,10 +374,41 @@ async def handle_oauth_callback(
         """
         
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to complete OAuth: {str(e)}"
-        )
+        print(f"❌ OAuth callback error for {platform}: {e}")
+        print(f"❌ Error type: {type(e).__name__}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
+        
+        # Return a more detailed error page
+        frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+        error_message = str(e).replace("'", "\\'").replace('"', '\\"')
+        
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Connection Failed</title>
+        </head>
+        <body>
+            <h2>Connection Failed</h2>
+            <p>Error: {error_message}</p>
+            <script>
+                // Close the popup window or redirect
+                if (window.opener) {{
+                    window.opener.postMessage({{
+                        type: 'OAUTH_ERROR',
+                        platform: '{platform}',
+                        error: '{error_message}'
+                    }}, '*');
+                    window.close();
+                }} else {{
+                    window.location.href = '{frontend_url}';
+                }}
+            </script>
+            <p>You can close this window and try again.</p>
+        </body>
+        </html>
+        """
 
 @router.delete("/{connection_id}")
 async def disconnect_account(
@@ -474,7 +508,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # Added pages_manage_posts for proper Instagram Business account access
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
     elif platform == 'linkedin':
-        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=w_member_social"
+        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=r_liteprofile%20w_member_social"
     elif platform == 'twitter':
         return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=tweet.read%20tweet.write%20users.read"
     elif platform == 'tiktok':
@@ -490,6 +524,8 @@ def exchange_code_for_tokens(platform: str, code: str) -> dict:
         return exchange_facebook_code_for_tokens(code)
     elif platform == "instagram":
         return exchange_instagram_code_for_tokens(code)
+    elif platform == "linkedin":
+        return exchange_linkedin_code_for_tokens(code)
     else:
         raise ValueError(f"Unsupported platform: {platform}")
 
@@ -584,12 +620,46 @@ def exchange_instagram_code_for_tokens(code: str) -> dict:
         "expires_in": long_lived_data.get('expires_in', 3600)
     }
 
+def exchange_linkedin_code_for_tokens(code: str) -> dict:
+    """Exchange LinkedIn OAuth code for access tokens"""
+    import requests
+    
+    linkedin_client_id = os.getenv('LINKEDIN_CLIENT_ID')
+    linkedin_client_secret = os.getenv('LINKEDIN_CLIENT_SECRET')
+    redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/linkedin/callback"
+    
+    if not linkedin_client_id or not linkedin_client_secret:
+        raise ValueError("LinkedIn app credentials not configured")
+    
+    # Exchange code for access token
+    token_url = "https://www.linkedin.com/oauth/v2/accessToken"
+    token_data = {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'client_id': linkedin_client_id,
+        'client_secret': linkedin_client_secret,
+        'redirect_uri': redirect_uri
+    }
+    
+    response = requests.post(token_url, data=token_data)
+    response.raise_for_status()
+    
+    token_response = response.json()
+    
+    return {
+        "access_token": token_response['access_token'],
+        "refresh_token": token_response.get('refresh_token', ''),
+        "expires_in": token_response.get('expires_in', 3600)
+    }
+
 def get_account_info(platform: str, access_token: str) -> dict:
     """Get account information from platform API"""
     if platform == "facebook":
         return get_facebook_account_info(access_token)
     elif platform == "instagram":
         return get_instagram_account_info(access_token)
+    elif platform == "linkedin":
+        return get_linkedin_account_info(access_token)
     else:
         raise ValueError(f"Unsupported platform: {platform}")
 
@@ -729,6 +799,88 @@ def get_instagram_account_info(access_token: str):
         
     except Exception as e:
         print(f"❌ Error getting Instagram account info: {e}")
+        print(f"❌ Error type: {type(e).__name__}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
+        return None
+
+def get_linkedin_account_info(access_token: str) -> dict:
+    """Get LinkedIn account information using standard LinkedIn API"""
+    import requests
+    
+    try:
+        print(f"🔍 Getting LinkedIn account info with token: {access_token[:20]}...")
+        
+        # Use standard LinkedIn API endpoint
+        profile_url = "https://api.linkedin.com/v2/me"
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Get basic profile
+        profile_response = requests.get(profile_url, headers=headers)
+        print(f"📊 LinkedIn profile response status: {profile_response.status_code}")
+        
+        if profile_response.status_code != 200:
+            error_text = profile_response.text
+            print(f"❌ Error fetching LinkedIn profile: {profile_response.status_code} - {error_text}")
+            return None
+        
+        profile_data = profile_response.json()
+        print(f"✅ LinkedIn profile data: {profile_data}")
+        
+        # Try to get user's email address (optional - may not be available)
+        email_address = ""
+        try:
+            email_url = "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))"
+            email_response = requests.get(email_url, headers=headers)
+            
+            if email_response.status_code == 200:
+                email_data = email_response.json()
+                email_address = email_data.get('elements', [{}])[0].get('handle~', {}).get('emailAddress', '')
+            else:
+                print(f"⚠️  Email not available (status: {email_response.status_code})")
+        except Exception as e:
+            print(f"⚠️  Could not fetch email: {e}")
+            # Continue without email - it's optional
+        
+        # Extract profile information with proper error handling
+        linkedin_id = profile_data.get('id', '')
+        first_name = ""
+        last_name = ""
+        if 'firstName' in profile_data:
+            first_name = profile_data['firstName'].get('localized', {}).get('en_US', '')
+        
+        if 'lastName' in profile_data:
+            last_name = profile_data['lastName'].get('localized', {}).get('en_US', '')
+        
+        headline = ""
+        if 'headline' in profile_data:
+            headline = profile_data['headline'].get('localized', {}).get('en_US', '')
+        
+        profile_picture = ""
+        if 'profilePicture' in profile_data and 'displayImage~' in profile_data['profilePicture']:
+            elements = profile_data['profilePicture']['displayImage~'].get('elements', [])
+            if elements and 'identifiers' in elements[0]:
+                identifiers = elements[0]['identifiers']
+                if identifiers and 'identifier' in identifiers[0]:
+                    profile_picture = identifiers[0]['identifier']
+        
+        return {
+            'linkedin_id': linkedin_id,
+            'first_name': first_name,
+            'last_name': last_name,
+            'email': email_address,
+            'profile_picture': profile_picture,
+            'headline': headline,
+            'follower_count': 0,  # LinkedIn doesn't provide follower count in basic API
+            'page_id': linkedin_id,  # Use LinkedIn ID as page_id for consistency
+            'page_name': f"{first_name} {last_name}".strip()
+        }
+        
+    except Exception as e:
+        print(f"❌ Error getting LinkedIn account info: {e}")
         print(f"❌ Error type: {type(e).__name__}")
         import traceback
         print(f"❌ Traceback: {traceback.format_exc()}")
@@ -1026,8 +1178,177 @@ async def debug_instagram_connection(
         }
         
     except Exception as e:
-        print(f"❌ Debug error: {e}")
+        print(f"❌ Debug Instagram error: {e}")
         return {"error": str(e)}
+
+@router.get("/linkedin/test")
+async def test_linkedin_connection():
+    """Test LinkedIn connection configuration"""
+    try:
+        linkedin_client_id = os.getenv('LINKEDIN_CLIENT_ID')
+        linkedin_client_secret = os.getenv('LINKEDIN_CLIENT_SECRET')
+        api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+        
+        if not linkedin_client_id or not linkedin_client_secret:
+            return {
+                "error": "LinkedIn credentials not configured",
+                "missing": {
+                    "client_id": not linkedin_client_id,
+                    "client_secret": not linkedin_client_secret
+                }
+            }
+        
+        # Generate a test OAuth URL
+        state = generate_oauth_state()
+        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=r_liteprofile%20w_member_social"
+        
+        return {
+            "message": "LinkedIn configuration looks good!",
+            "client_id": linkedin_client_id,
+            "redirect_uri": f"{api_base_url}/connections/auth/linkedin/callback",
+            "test_oauth_url": test_oauth_url,
+            "status": "ready"
+        }
+        
+    except Exception as e:
+        print(f"❌ LinkedIn test error: {e}")
+        return {"error": str(e)}
+
+@router.post("/linkedin/post")
+async def post_to_linkedin(
+    post_data: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Post content to LinkedIn"""
+    try:
+        print(f"📱 LinkedIn post request from user: {current_user.id}")
+        print(f"📝 Post data: {post_data}")
+        
+        # Get user's LinkedIn connection
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "linkedin").eq("is_active", True).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active LinkedIn connection found. Please connect your LinkedIn account first."
+            )
+        
+        connection = response.data[0]
+        print(f"🔗 Found LinkedIn connection: {connection['id']}")
+        
+        # Decrypt the access token
+        try:
+            access_token = decrypt_token(connection['access_token_encrypted'])
+            print(f"🔓 Decrypted access token: {access_token[:20]}...")
+        except Exception as e:
+            print(f"❌ Error decrypting token: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to decrypt access token. Please reconnect your LinkedIn account."
+            )
+        
+        # Prepare the post message
+        message = post_data.get('message', '')
+        title = post_data.get('title', '')
+        hashtags = post_data.get('hashtags', [])
+        
+        # Combine title, message, and hashtags
+        full_message = ""
+        if title:
+            full_message += f"{title}\n\n"
+        full_message += message
+        if hashtags:
+            hashtag_string = " ".join([f"#{tag.replace('#', '')}" for tag in hashtags])
+            full_message += f"\n\n{hashtag_string}"
+        
+        # Post to LinkedIn using the Share API
+        linkedin_url = "https://api.linkedin.com/v2/shares"
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json',
+            'X-Restli-Protocol-Version': '2.0.0'
+        }
+        
+        # Get the user's LinkedIn ID from the connection
+        linkedin_id = connection.get('linkedin_id') or connection.get('page_id')
+        if not linkedin_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="LinkedIn ID not found in connection data"
+            )
+        
+        # Create the share payload
+        share_payload = {
+            "author": f"urn:li:person:{linkedin_id}",
+            "lifecycleState": "PUBLISHED",
+            "specificContent": {
+                "com.linkedin.ugc.ShareContent": {
+                    "shareCommentary": {
+                        "text": full_message
+                    },
+                    "shareMediaCategory": "NONE"
+                }
+            },
+            "visibility": {
+                "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+            }
+        }
+        
+        print(f"🌐 Posting to LinkedIn API: {linkedin_url}")
+        print(f"📋 Share payload: {share_payload}")
+        
+        response = requests.post(linkedin_url, headers=headers, json=share_payload)
+        
+        print(f"📊 LinkedIn API response status: {response.status_code}")
+        
+        if response.status_code in [200, 201]:
+            result = response.json()
+            print(f"✅ LinkedIn post successful: {result}")
+            
+            # Update last posted timestamp
+            try:
+                supabase_admin.table("platform_connections").update({
+                    "last_posted_at": datetime.now().isoformat()
+                }).eq("id", connection['id']).execute()
+            except Exception as e:
+                print(f"⚠️  Error updating last_posted_at: {e}")
+            
+            return {
+                "success": True,
+                "platform": "linkedin",
+                "post_id": result.get('id'),
+                "message": "Content posted to LinkedIn successfully!",
+                "url": f"https://linkedin.com/feed/update/{result.get('id')}" if result.get('id') else None
+            }
+        else:
+            try:
+                error_data = response.json()
+                print(f"❌ LinkedIn API error (JSON): {response.status_code} - {error_data}")
+            except:
+                error_text = response.text
+                print(f"❌ LinkedIn API error (Text): {response.status_code} - {error_text}")
+                error_data = {"error": {"message": error_text}}
+            
+            error_message = "Unknown error"
+            if isinstance(error_data, dict) and "error" in error_data:
+                if isinstance(error_data["error"], dict):
+                    error_message = error_data["error"].get("message", "Unknown error")
+                else:
+                    error_message = str(error_data["error"])
+            
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"LinkedIn API error: {error_message}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error posting to LinkedIn: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to post to LinkedIn: {str(e)}"
+        )
 
 @router.get("/instagram/test-account")
 async def test_instagram_account(
@@ -1089,8 +1410,7 @@ async def test_instagram_pages(
         state = generate_oauth_state()
         
         # Test with more comprehensive scopes
-        api_base_url = os.getenv('API_BASE_URL', 'https://agent-emily.onrender.com')
-        test_oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri={api_base_url}/connections/auth/instagram/callback&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
+        test_oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri=https://agent-emily.onrender.com/connections/auth/instagram/callback&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
         
         return {
             "message": "Test Instagram pages access",

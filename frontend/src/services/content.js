@@ -96,7 +96,7 @@ class ContentAPI {
     }
   }
 
-  // Generate content using the backend API
+  // Generate content
   async generateContent() {
     try {
       const authToken = await this.getAuthToken()

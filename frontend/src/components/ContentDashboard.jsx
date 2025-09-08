@@ -60,6 +60,7 @@ const ContentDashboard = () => {
   const [generationMessage, setGenerationMessage] = useState('')
   const [showProgress, setShowProgress] = useState(false)
   const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
+  const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
 
   useEffect(() => {
     fetchData()
@@ -155,6 +156,7 @@ const ContentDashboard = () => {
       setGenerationStatus(null)
       setGenerationMessage('')
       
+      const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
       const response = await fetch(`${API_BASE_URL}/content/trigger-weekly`, {
         method: 'POST',
         headers: {
@@ -186,16 +188,15 @@ const ContentDashboard = () => {
     }
   }
 
-  // This function is not used in the current implementation
-  // const toggleCampaignExpansion = (campaignId) => {
-  //   const newExpanded = new Set(expandedCampaigns)
-  //   if (newExpanded.has(campaignId)) {
-  //     newExpanded.delete(campaignId)
-  //   } else {
-  //     newExpanded.add(campaignId)
-  //   }
-  //   setExpandedCampaigns(newExpanded)
-  // }
+  const toggleCampaignExpansion = (campaignId) => {
+    const newExpanded = new Set(expandedCampaigns)
+    if (newExpanded.has(campaignId)) {
+      newExpanded.delete(campaignId)
+    } else {
+      newExpanded.add(campaignId)
+    }
+    setExpandedCampaigns(newExpanded)
+  }
 
   const filteredContent = scheduledContent.filter(content => {
     const matchesPlatform = filterPlatform === 'all' || content.platform === filterPlatform
@@ -301,21 +302,6 @@ const ContentDashboard = () => {
         accent: 'bg-gray-200'
       },
       youtube: {
-        bg: 'bg-white/50',
-        border: 'border-red-300',
-        iconBg: 'bg-red-600',
-        text: 'text-red-800',
-        accent: 'bg-red-200'
-      },
-      // Additional variations
-      'linkedin': {
-        bg: 'bg-white/50',
-        border: 'border-blue-300',
-        iconBg: 'bg-blue-700',
-        text: 'text-blue-800',
-        accent: 'bg-blue-200'
-      },
-      'youtube': {
         bg: 'bg-white/50',
         border: 'border-red-300',
         iconBg: 'bg-red-600',
