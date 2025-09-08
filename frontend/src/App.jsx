@@ -6,7 +6,6 @@ import Dashboard from './components/Dashboard'
 import ContentDashboard from './components/ContentDashboard'
 import ContentCalendar from './components/ContentCalendar'
 import SocialMediaDashboard from './components/SocialMediaDashboard'
-import AnalyticsDashboard from './components/AnalyticsDashboard'
 import Onboarding from './components/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingBar from './components/LoadingBar'
@@ -101,14 +100,6 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <SocialMediaDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/analytics" 
-          element={
-            <ProtectedRoute>
-              <AnalyticsDashboard />
             </ProtectedRoute>
           } 
         />
