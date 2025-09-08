@@ -245,8 +245,7 @@ async def handle_oauth_callback(
     platform: str,
     code: str = None,
     state: str = None,
-    error: str = None,
-    current_user: User = Depends(get_current_user)
+    error: str = None
 ):
     """Handle OAuth callback and store connection"""
     try:
@@ -263,13 +262,28 @@ async def handle_oauth_callback(
                 detail="Missing code or state parameter"
             )
         
-        # Verify state
-        state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("user_id", current_user.id).eq("platform", platform).execute()
+        # Verify state and get user from state record
+        state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", platform).execute()
         
         if not state_response.data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid or expired OAuth state"
+            )
+        
+        # Get user info from state record
+        state_record = state_response.data[0]
+        user_id = state_record['user_id']
+        
+        # Check if state has expired
+        from datetime import datetime
+        expires_at = datetime.fromisoformat(state_record['expires_at'].replace('Z', '+00:00'))
+        if datetime.now().replace(tzinfo=expires_at.tzinfo) > expires_at:
+            # Clean up expired state
+            supabase_admin.table("oauth_states").delete().eq("state", state).execute()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OAuth state has expired"
             )
         
         # Exchange code for tokens (mock for now)
@@ -294,7 +308,7 @@ async def handle_oauth_callback(
         page_access_token = account_info.get('page_access_token', tokens['access_token'])
         
         connection_data = {
-            "user_id": current_user.id,
+            "user_id": user_id,
             "platform": platform,
             "page_id": account_info.get('page_id'),
             "page_name": account_info.get('page_name'),
@@ -325,7 +339,7 @@ async def handle_oauth_callback(
         except Exception as e:
             if "duplicate key value violates unique constraint" in str(e):
                 # Update existing connection
-                connection_response = supabase_admin.table("platform_connections").update(connection_data).eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
+                connection_response = supabase_admin.table("platform_connections").update(connection_data).eq("user_id", user_id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
             else:
                 raise e
         
@@ -337,7 +351,7 @@ async def handle_oauth_callback(
             connection_id = connection_response.data[0]["id"]
         else:
             # If update didn't return data, get the existing connection
-            existing_connection = supabase_admin.table("platform_connections").select("id").eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
+            existing_connection = supabase_admin.table("platform_connections").select("id").eq("user_id", user_id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
             connection_id = existing_connection.data[0]["id"] if existing_connection.data else "unknown"
         
         # Return HTML page that redirects back to frontend
