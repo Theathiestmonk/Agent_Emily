@@ -479,7 +479,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # Added pages_manage_posts for proper Instagram Business account access
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
     elif platform == 'linkedin':
-        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=r_liteprofile%20r_emailaddress%20w_member_social"
+        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=profile%20email%20w_member_social"
     elif platform == 'twitter':
         return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=tweet.read%20tweet.write%20users.read"
     elif platform == 'tiktok':
@@ -776,20 +776,20 @@ def get_instagram_account_info(access_token: str):
         return None
 
 def get_linkedin_account_info(access_token: str) -> dict:
-    """Get LinkedIn account information"""
+    """Get LinkedIn account information using OpenID Connect"""
     import requests
     
     try:
         print(f"🔍 Getting LinkedIn account info with token: {access_token[:20]}...")
         
-        # Get user's basic profile information using the correct endpoint
-        profile_url = "https://api.linkedin.com/v2/me"
+        # Use OpenID Connect userinfo endpoint
+        profile_url = "https://api.linkedin.com/v2/userinfo"
         headers = {
             'Authorization': f'Bearer {access_token}',
             'Content-Type': 'application/json'
         }
         
-        # Get basic profile
+        # Get user profile using OpenID Connect
         profile_response = requests.get(profile_url, headers=headers)
         print(f"📊 LinkedIn profile response status: {profile_response.status_code}")
         
@@ -801,46 +801,30 @@ def get_linkedin_account_info(access_token: str) -> dict:
         profile_data = profile_response.json()
         print(f"✅ LinkedIn profile data: {profile_data}")
         
-        # Get user's email address
-        email_url = "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))"
-        email_response = requests.get(email_url, headers=headers)
+        # Extract profile information from OpenID Connect response
+        linkedin_id = profile_data.get('sub', '')  # OpenID Connect uses 'sub' for user ID
+        first_name = profile_data.get('given_name', '')
+        last_name = profile_data.get('family_name', '')
+        email_address = profile_data.get('email', '')
+        profile_picture = profile_data.get('picture', '')
+        name = profile_data.get('name', '')
         
-        email_address = ""
-        if email_response.status_code == 200:
-            email_data = email_response.json()
-            email_address = email_data.get('elements', [{}])[0].get('handle~', {}).get('emailAddress', '')
-        
-        # Extract profile information with proper error handling
-        first_name = ""
-        last_name = ""
-        if 'firstName' in profile_data:
-            first_name = profile_data['firstName'].get('localized', {}).get('en_US', '')
-        
-        if 'lastName' in profile_data:
-            last_name = profile_data['lastName'].get('localized', {}).get('en_US', '')
-        
-        headline = ""
-        if 'headline' in profile_data:
-            headline = profile_data['headline'].get('localized', {}).get('en_US', '')
-        
-        profile_picture = ""
-        if 'profilePicture' in profile_data and 'displayImage~' in profile_data['profilePicture']:
-            elements = profile_data['profilePicture']['displayImage~'].get('elements', [])
-            if elements and 'identifiers' in elements[0]:
-                identifiers = elements[0]['identifiers']
-                if identifiers and 'identifier' in identifiers[0]:
-                    profile_picture = identifiers[0]['identifier']
+        # If we don't have first/last name separately, try to split the full name
+        if not first_name and not last_name and name:
+            name_parts = name.split(' ', 1)
+            first_name = name_parts[0] if len(name_parts) > 0 else ''
+            last_name = name_parts[1] if len(name_parts) > 1 else ''
         
         return {
-            'linkedin_id': profile_data.get('id', ''),
+            'linkedin_id': linkedin_id,
             'first_name': first_name,
             'last_name': last_name,
             'email': email_address,
             'profile_picture': profile_picture,
-            'headline': headline,
-            'follower_count': 0,  # LinkedIn doesn't provide follower count in basic API
-            'page_id': profile_data.get('id', ''),  # Use profile ID as page_id for consistency
-            'page_name': f"{first_name} {last_name}".strip()
+            'headline': '',  # Not available in basic OpenID Connect
+            'follower_count': 0,  # Not available in basic OpenID Connect
+            'page_id': linkedin_id,  # Use LinkedIn ID as page_id for consistency
+            'page_name': name or f"{first_name} {last_name}".strip()
         }
         
     except Exception as e:
@@ -1164,7 +1148,7 @@ async def test_linkedin_connection():
         
         # Generate a test OAuth URL
         state = generate_oauth_state()
-        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=r_liteprofile%20r_emailaddress%20w_member_social"
+        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=profile%20email%20w_member_social"
         
         return {
             "message": "LinkedIn configuration looks good!",
