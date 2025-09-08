@@ -264,11 +264,6 @@ const SocialMediaDashboard = () => {
               </div>
             </div>
             
-            {lastRefresh && (
-              <div className="mt-2 text-sm text-gray-500">
-                Last updated: {lastRefresh.toLocaleTimeString()}
-              </div>
-            )}
           </div>
         </div>
 
@@ -440,6 +435,13 @@ const SocialMediaDashboard = () => {
                   )
                 })}
               </div>
+            </div>
+          )}
+          
+          {/* Last Updated Timestamp - Bottom Right */}
+          {lastRefresh && (
+            <div className="fixed bottom-4 right-4 text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border">
+              Last updated: {lastRefresh.toLocaleTimeString()}
             </div>
           )}
         </div>
