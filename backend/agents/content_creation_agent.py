@@ -640,7 +640,8 @@ class ContentCreationAgent:
                         post=post,
                         platform=platform,
                         platform_config=platform_config,
-                        image_preferences=image_preferences
+                        image_preferences=image_preferences,
+                        business_context=state.business_context
                     )
                     if image:
                         post.images.append(image)
@@ -655,7 +656,8 @@ class ContentCreationAgent:
         return state
     
     async def generate_single_image(self, post: ContentPost, platform: str, 
-                                  platform_config: dict, image_preferences: UserImagePreferences) -> Optional[ContentImage]:
+                                  platform_config: dict, image_preferences: UserImagePreferences, 
+                                  business_context: dict) -> Optional[ContentImage]:
         """Generate a single image for a post"""
         try:
             # Get image template for platform
@@ -672,8 +674,8 @@ class ContentCreationAgent:
             # Format image prompt
             image_prompt = image_prompt_template.format(
                 content=post.content[:100],  # First 100 chars
-                business_name=state.business_context["business_name"],
-                industry=", ".join(state.business_context["industry"]),
+                business_name=business_context["business_name"],
+                industry=", ".join(business_context["industry"]),
                 brand_colors=", ".join(image_preferences.brand_colors) if image_preferences.brand_colors else "professional colors"
             )
             
@@ -868,10 +870,13 @@ class ContentCreationAgent:
             total_posts = len(state.all_content)
             platforms_used = list(set([post.platform for post in state.all_content]))
             
+            # Handle case where campaign is None
+            campaign_name = state.campaign.campaign_name if state.campaign else "No Campaign"
+            
             summary = f"""
             Weekly Content Generation Complete!
             
-            Campaign: {state.campaign.campaign_name}
+            Campaign: {campaign_name}
             Total Posts Generated: {total_posts}
             Platforms: {', '.join(platforms_used)}
             Completed Platforms: {', '.join(state.completed_platforms)}
@@ -883,10 +888,11 @@ class ContentCreationAgent:
             state.weekly_summary = summary
             state.success = True
             
-            # Update campaign status
-            self.supabase.table("content_campaigns").update({
-                "status": "completed"
-            }).eq("id", state.campaign.id).execute()
+            # Update campaign status only if campaign exists
+            if state.campaign and state.campaign.id:
+                self.supabase.table("content_campaigns").update({
+                    "status": "completed"
+                }).eq("id", state.campaign.id).execute()
             
             logger.info("Generated weekly summary")
             
