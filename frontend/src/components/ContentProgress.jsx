@@ -18,7 +18,8 @@ const ContentProgress = ({ isVisible, onComplete }) => {
         if (!session?.session?.access_token) return
 
         // Create Server-Sent Events connection with token as query parameter
-        eventSource = new EventSource(`http://localhost:8000/content/progress-stream?token=${session.session.access_token}`)
+        const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
+        eventSource = new EventSource(`${API_BASE_URL}/content/progress-stream?token=${session.session.access_token}`)
 
         eventSource.onmessage = (event) => {
           try {
