@@ -530,7 +530,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # Added pages_manage_posts for proper Instagram Business account access
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
     elif platform == 'linkedin':
-        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social"
+        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social%20r_member_social"
     elif platform == 'twitter':
         return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=tweet.read%20tweet.write%20users.read"
     elif platform == 'tiktok':
@@ -1230,7 +1230,7 @@ async def test_linkedin_connection():
         
         # Generate a test OAuth URL
         state = generate_oauth_state()
-        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=openid%20profile%20email%20w_member_social"
+        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=openid%20profile%20email%20w_member_social%20r_member_social"
         
         return {
             "message": "LinkedIn configuration looks good!",

@@ -371,7 +371,7 @@ async def fetch_twitter_posts(connection: dict, limit: int) -> List[Dict[str, An
     return []
 
 async def fetch_linkedin_posts(connection: dict, limit: int) -> List[Dict[str, Any]]:
-    """Fetch latest posts from LinkedIn using Share API"""
+    """Fetch latest posts from LinkedIn using available API endpoints"""
     try:
         print(f"🔍 LinkedIn connection data: {connection}")
         access_token = decrypt_token(connection.get('access_token_encrypted', ''))
@@ -384,29 +384,114 @@ async def fetch_linkedin_posts(connection: dict, limit: int) -> List[Dict[str, A
             print("❌ No LinkedIn ID found for LinkedIn connection")
             return []
         
-        # LinkedIn doesn't have a direct "get user's posts" API in the basic version
-        # We'll need to use the Share API to get shares, but this requires different permissions
-        # For now, let's return mock data that represents what LinkedIn posts would look like
-        print("⚠️ LinkedIn Share API doesn't support fetching user's own posts with current permissions")
-        print("🔄 Returning mock LinkedIn posts for demonstration")
+        # Try to fetch user's shares/posts using LinkedIn API
+        # Note: This requires r_member_social permission which is restricted
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json',
+            'X-Restli-Protocol-Version': '2.0.0'
+        }
         
-        # Mock LinkedIn posts data
-        mock_posts = [
-            {
-                'id': f'linkedin_mock_{i+1}',
-                'message': f'This is a sample LinkedIn post #{i+1}. Professional networking and industry insights. #linkedin #professional #networking',
-                'created_time': f'2025-01-{7-i:02d}T{10+i}:00:00+0000',
-                'permalink_url': f'https://linkedin.com/feed/update/linkedin_mock_{i+1}',
-                'media_url': None,
-                'likes_count': 15 + (i * 5),
-                'comments_count': 3 + i,
-                'shares_count': 2 + i
-            }
-            for i in range(min(limit, 3))  # Generate up to 3 mock posts
-        ]
+        # Try to fetch user's shares (posts they've shared)
+        try:
+            print("🔄 Attempting to fetch LinkedIn shares...")
+            shares_url = f"https://api.linkedin.com/v2/shares?q=owners&owners={linkedin_id}&count={limit}"
+            
+            response = requests.get(shares_url, headers=headers, timeout=10)
+            print(f"📊 LinkedIn shares API response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                shares_data = response.json()
+                print(f"✅ LinkedIn shares data: {shares_data}")
+                
+                posts = []
+                for share in shares_data.get('elements', []):
+                    # Extract share information
+                    share_id = share.get('id', '')
+                    created_time = share.get('created', {}).get('time', '')
+                    
+                    # Get share content
+                    specific_content = share.get('specificContent', {})
+                    share_content = specific_content.get('com.linkedin.ugc.ShareContent', {})
+                    share_commentary = share_content.get('shareCommentary', {})
+                    text = share_commentary.get('text', '')
+                    
+                    # Get engagement metrics
+                    social_detail = share.get('socialDetail', {})
+                    total_social_counts = social_detail.get('totalSocialCounts', {})
+                    
+                    post = {
+                        'id': share_id,
+                        'message': text,
+                        'created_time': created_time,
+                        'permalink_url': f'https://linkedin.com/feed/update/{share_id}',
+                        'media_url': None,
+                        'likes_count': total_social_counts.get('numLikes', 0),
+                        'comments_count': total_social_counts.get('numComments', 0),
+                        'shares_count': total_social_counts.get('numShares', 0)
+                    }
+                    posts.append(post)
+                
+                if posts:
+                    print(f"✅ Successfully fetched {len(posts)} LinkedIn posts")
+                    return posts
+                else:
+                    print("⚠️ No shares found in LinkedIn API response")
+            else:
+                error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
+                print(f"❌ LinkedIn shares API error: {response.status_code} - {error_data}")
+                
+        except Exception as api_error:
+            print(f"❌ LinkedIn API error: {api_error}")
         
-        print(f"✅ Generated {len(mock_posts)} mock LinkedIn posts")
-        return mock_posts
+        # If API calls fail, try to fetch from user's activity (alternative approach)
+        try:
+            print("🔄 Attempting to fetch LinkedIn user activity...")
+            activity_url = f"https://api.linkedin.com/v2/people/{linkedin_id}/activities"
+            
+            response = requests.get(activity_url, headers=headers, timeout=10)
+            print(f"📊 LinkedIn activity API response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                activity_data = response.json()
+                print(f"✅ LinkedIn activity data: {activity_data}")
+                
+                posts = []
+                for activity in activity_data.get('elements', []):
+                    activity_id = activity.get('id', '')
+                    created_time = activity.get('created', {}).get('time', '')
+                    
+                    # Extract activity content
+                    specific_content = activity.get('specificContent', {})
+                    if 'com.linkedin.ugc.ShareContent' in specific_content:
+                        share_content = specific_content['com.linkedin.ugc.ShareContent']
+                        share_commentary = share_content.get('shareCommentary', {})
+                        text = share_commentary.get('text', '')
+                        
+                        post = {
+                            'id': activity_id,
+                            'message': text,
+                            'created_time': created_time,
+                            'permalink_url': f'https://linkedin.com/feed/update/{activity_id}',
+                            'media_url': None,
+                            'likes_count': 0,  # Activity API doesn't provide engagement metrics
+                            'comments_count': 0,
+                            'shares_count': 0
+                        }
+                        posts.append(post)
+                
+                if posts:
+                    print(f"✅ Successfully fetched {len(posts)} LinkedIn activities")
+                    return posts
+                    
+        except Exception as activity_error:
+            print(f"❌ LinkedIn activity API error: {activity_error}")
+        
+        # If all API calls fail, return empty array instead of mock data
+        print("⚠️ Unable to fetch real LinkedIn posts - API permissions may be insufficient")
+        print("💡 LinkedIn requires r_member_social permission to fetch user's own posts")
+        print("💡 This permission is currently restricted by LinkedIn")
+        return []
         
     except Exception as e:
         print(f"❌ Error fetching LinkedIn posts: {e}")
