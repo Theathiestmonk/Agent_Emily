@@ -245,31 +245,53 @@ async def handle_oauth_callback(
     platform: str,
     code: str = None,
     state: str = None,
-    error: str = None,
-    current_user: User = Depends(get_current_user)
+    error: str = None
 ):
     """Handle OAuth callback and store connection"""
     try:
+        print(f"🔗 OAuth callback for {platform} - code: {code[:10] if code else 'None'}..., state: {state[:10] if state else 'None'}...")
+        
         # Check for OAuth error
         if error:
+            print(f"❌ OAuth error: {error}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"OAuth error: {error}"
             )
         
         if not code or not state:
+            print(f"❌ Missing parameters - code: {bool(code)}, state: {bool(state)}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Missing code or state parameter"
             )
         
-        # Verify state
-        state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("user_id", current_user.id).eq("platform", platform).execute()
+        # Verify state - find the state first to get the user_id
+        print(f"🔍 Looking for OAuth state: {state[:10]}...")
+        state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", platform).execute()
+        
+        print(f"📊 State query result: {state_response.data}")
         
         if not state_response.data:
+            print(f"❌ No OAuth state found for state: {state[:10]}...")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid or expired OAuth state"
+            )
+        
+        # Get the user_id from the state record
+        state_record = state_response.data[0]
+        user_id = state_record['user_id']
+        expires_at = datetime.fromisoformat(state_record['expires_at'].replace('Z', '+00:00'))
+        
+        print(f"✅ Found OAuth state for user: {user_id}, expires at: {expires_at}")
+        
+        # Check if state has expired
+        if datetime.now(expires_at.tzinfo) > expires_at:
+            print(f"❌ OAuth state expired at {expires_at}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OAuth state has expired"
             )
         
         # Exchange code for tokens (mock for now)
@@ -294,7 +316,7 @@ async def handle_oauth_callback(
         page_access_token = account_info.get('page_access_token', tokens['access_token'])
         
         connection_data = {
-            "user_id": current_user.id,
+            "user_id": user_id,
             "platform": platform,
             "page_id": account_info.get('page_id'),
             "page_name": account_info.get('page_name'),
@@ -325,7 +347,7 @@ async def handle_oauth_callback(
         except Exception as e:
             if "duplicate key value violates unique constraint" in str(e):
                 # Update existing connection
-                connection_response = supabase_admin.table("platform_connections").update(connection_data).eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
+                connection_response = supabase_admin.table("platform_connections").update(connection_data).eq("user_id", user_id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
             else:
                 raise e
         
@@ -337,7 +359,7 @@ async def handle_oauth_callback(
             connection_id = connection_response.data[0]["id"]
         else:
             # If update didn't return data, get the existing connection
-            existing_connection = supabase_admin.table("platform_connections").select("id").eq("user_id", current_user.id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
+            existing_connection = supabase_admin.table("platform_connections").select("id").eq("user_id", user_id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
             connection_id = existing_connection.data[0]["id"] if existing_connection.data else "unknown"
         
         # Return HTML page that redirects back to frontend
