@@ -45,28 +45,54 @@ class ChatbotState(TypedDict):
 
 # Tools for the chatbot
 @tool
-def get_scheduled_posts(user_id: str, platform: str = None) -> Dict[str, Any]:
+def get_scheduled_posts(user_id: str, platform: str = "") -> Dict[str, Any]:
     """Get scheduled posts for a user, optionally filtered by platform"""
     try:
-        query = supabase.table("content_posts").select("*").eq("user_id", user_id).eq("status", "scheduled").order("scheduled_at", desc=False)
+        # First get user's campaigns
+        campaigns_response = supabase.table("content_campaigns").select("id").eq("user_id", user_id).execute()
+        campaign_ids = [campaign["id"] for campaign in campaigns_response.data] if campaigns_response.data else []
         
-        if platform:
-            query = query.eq("platform", platform)
+        if not campaign_ids:
+            return {
+                "success": True,
+                "scheduled_posts": [],
+                "published_posts": [],
+                "scheduled_count": 0,
+                "published_count": 0,
+                "message": "No campaigns found for user"
+            }
         
-        response = query.execute()
-        posts = response.data if response.data else []
+        # Get scheduled posts from user's campaigns (including drafts as they are scheduled content)
+        scheduled_query = supabase.table("content_posts").select("*").in_("campaign_id", campaign_ids).in_("status", ["scheduled", "draft"])
+        if platform and platform.strip():
+            scheduled_query = scheduled_query.eq("platform", platform)
+        
+        scheduled_response = scheduled_query.order("scheduled_date", desc=False).order("scheduled_time", desc=False).execute()
+        scheduled_posts = scheduled_response.data if scheduled_response.data else []
+        
+        # Get published posts for context
+        published_query = supabase.table("content_posts").select("*").in_("campaign_id", campaign_ids).eq("status", "published")
+        if platform and platform.strip():
+            published_query = published_query.eq("platform", platform)
+        
+        published_response = published_query.order("created_at", desc=True).limit(5).execute()
+        published_posts = published_response.data if published_response.data else []
         
         return {
             "success": True,
-            "posts": posts,
-            "count": len(posts)
+            "scheduled_posts": scheduled_posts,
+            "published_posts": published_posts,
+            "scheduled_count": len(scheduled_posts),
+            "published_count": len(published_posts)
         }
     except Exception as e:
         return {
             "success": False,
             "error": str(e),
-            "posts": [],
-            "count": 0
+            "scheduled_posts": [],
+            "published_posts": [],
+            "scheduled_count": 0,
+            "published_count": 0
         }
 
 @tool
@@ -278,7 +304,11 @@ class BusinessChatbot:
         query = state["current_query"].lower()
         
         # Intent classification logic
-        if any(keyword in query for keyword in ['scheduled', 'next post', 'upcoming', 'when is', 'what is scheduled']):
+        if any(keyword in query for keyword in [
+            'scheduled', 'next post', 'upcoming', 'when is', 'what is scheduled',
+            'latest post', 'recent post', 'last post', 'post timing', 'when will',
+            'what time', 'schedule', 'calendar', 'content calendar', 'post schedule'
+        ]):
             state["intent"] = "scheduled_posts"
         elif any(keyword in query for keyword in ['insights', 'performance', 'analytics', 'engagement', 'metrics', 'how did']):
             state["intent"] = "insights"
@@ -292,24 +322,52 @@ class BusinessChatbot:
     def handle_scheduled_posts(self, state: ChatbotState) -> ChatbotState:
         """Handle scheduled posts queries"""
         try:
-            # Get scheduled posts
-            result = get_scheduled_posts.invoke({"user_id": state["user_id"]})
+            # Extract platform from query if mentioned
+            platform = None
+            query = state["current_query"].lower()
+            if 'facebook' in query:
+                platform = 'Facebook'
+            elif 'instagram' in query:
+                platform = 'Instagram'
+            elif 'linkedin' in query:
+                platform = 'LinkedIn'
+            elif 'twitter' in query:
+                platform = 'Twitter'
+            elif 'youtube' in query:
+                platform = 'YouTube'
             
-            if result["success"] and result["posts"]:
-                # Find next scheduled post
-                next_post = result["posts"][0]  # Already ordered by scheduled_at asc
+            # Get scheduled posts
+            result = get_scheduled_posts.invoke({"user_id": state["user_id"], "platform": platform or ""})
+            
+            if result["success"]:
+                scheduled_posts = result["scheduled_posts"]
+                published_posts = result["published_posts"]
                 
-                state["context"]["scheduled_posts"] = {
-                    "next_post": next_post,
-                    "total_scheduled": result["count"],
-                    "platform": next_post.get("platform"),
-                    "scheduled_at": next_post.get("scheduled_at"),
-                    "content_preview": next_post.get("content", "")[:200] + "..." if len(next_post.get("content", "")) > 200 else next_post.get("content", "")
-                }
+                if scheduled_posts:
+                    # Find next scheduled post
+                    next_post = scheduled_posts[0]  # Already ordered by scheduled_at asc
+                    
+                    state["context"]["scheduled_posts"] = {
+                        "next_post": next_post,
+                        "all_scheduled": scheduled_posts,
+                        "recent_published": published_posts,
+                        "total_scheduled": result["scheduled_count"],
+                        "total_published": result["published_count"],
+                        "platform": platform or "all platforms",
+                        "scheduled_at": next_post.get("scheduled_at"),
+                        "content_preview": next_post.get("content", "")[:200] + "..." if len(next_post.get("content", "")) > 200 else next_post.get("content", "")
+                    }
+                else:
+                    state["context"]["scheduled_posts"] = {
+                        "message": f"No scheduled posts found for {platform or 'any platform'}",
+                        "recent_published": published_posts,
+                        "total_scheduled": 0,
+                        "total_published": result["published_count"],
+                        "platform": platform or "all platforms"
+                    }
             else:
                 state["context"]["scheduled_posts"] = {
-                    "message": "No scheduled posts found",
-                    "total_scheduled": 0
+                    "error": f"Error fetching scheduled posts: {result.get('error', 'Unknown error')}"
                 }
         except Exception as e:
             state["context"]["scheduled_posts"] = {
@@ -459,7 +517,10 @@ class BusinessChatbot:
         """
         
         if "scheduled_posts" in context:
-            prompt += "\n\nYou have access to scheduled posts data. Help the user understand their upcoming content schedule."
+            if "error" in context["scheduled_posts"]:
+                prompt += f"\n\nIMPORTANT: The scheduled posts context shows an error: {context['scheduled_posts']['error']}. Help the user resolve this issue."
+            else:
+                prompt += "\n\nYou have access to scheduled posts data. Help the user understand their upcoming content schedule, including next scheduled posts, timing, and recent published content."
         
         if "insights" in context:
             prompt += "\n\nYou have access to performance insights data. Help the user understand their social media performance."
