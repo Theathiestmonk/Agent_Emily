@@ -61,6 +61,9 @@ const ContentDashboard = () => {
   const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]) // Current date in YYYY-MM-DD format
   const [dateContent, setDateContent] = useState([]) // Content for selected date
+  const [editingContent, setEditingContent] = useState(null) // Content being edited
+  const [editForm, setEditForm] = useState({}) // Edit form data
+  const [saving, setSaving] = useState(false) // Saving state
 
   useEffect(() => {
     fetchData()
@@ -516,6 +519,92 @@ const ContentDashboard = () => {
     return session?.access_token
   }
 
+  const handleEditContent = (content) => {
+    setEditingContent(content)
+    setEditForm({
+      title: content.title || '',
+      content: content.content || '',
+      hashtags: content.hashtags ? content.hashtags.join(', ') : '',
+      scheduled_date: content.scheduled_at ? content.scheduled_at.split('T')[0] : '',
+      scheduled_time: content.scheduled_at ? content.scheduled_at.split('T')[1] : '12:00',
+      status: content.status || 'draft'
+    })
+  }
+
+  const handleSaveEdit = async () => {
+    try {
+      setSaving(true)
+      const authToken = await getAuthToken()
+      
+      // Convert hashtags string back to array
+      const hashtagsArray = editForm.hashtags 
+        ? editForm.hashtags.split(',').map(tag => tag.trim()).filter(tag => tag)
+        : []
+      
+      // Prepare update data
+      const updateData = {
+        title: editForm.title,
+        content: editForm.content,
+        hashtags: hashtagsArray,
+        scheduled_date: editForm.scheduled_date,
+        scheduled_time: editForm.scheduled_time,
+        status: editForm.status
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/content/update/${editingContent.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(updateData)
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}: ${errorText}`)
+      }
+
+      const result = await response.json()
+      console.log('Content update result:', result)
+      
+      showSuccess('Content updated successfully!')
+      
+      // Update the content in the local state
+      const updatedContent = {
+        ...editingContent,
+        ...updateData,
+        scheduled_at: `${editForm.scheduled_date}T${editForm.scheduled_time}`
+      }
+      
+      // Update in dateContent if it exists there
+      if (dateContent.some(item => item.id === editingContent.id)) {
+        setDateContent(prev => prev.map(item => 
+          item.id === editingContent.id ? updatedContent : item
+        ))
+      }
+      
+      // Update in scheduledContent if it exists there
+      if (scheduledContent.some(item => item.id === editingContent.id)) {
+        updateContentInCache(editingContent.id, updateData)
+      }
+      
+      setEditingContent(null)
+      setEditForm({})
+      
+    } catch (error) {
+      console.error('Error updating content:', error)
+      showError('Failed to update content', error.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingContent(null)
+    setEditForm({})
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
       {/* Progress Bar */}
@@ -797,6 +886,7 @@ const ContentDashboard = () => {
                           <Eye className="w-4 h-4" />
                         </button>
                         <button 
+                          onClick={() => handleEditContent(content)}
                           className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`} 
                           title="Edit Content"
                         >
@@ -830,6 +920,140 @@ const ContentDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {editingContent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">Edit Content</h3>
+                <button
+                  onClick={handleCancelEdit}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Title
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.title}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    placeholder="Enter content title"
+                  />
+                </div>
+
+                {/* Content */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Content
+                  </label>
+                  <textarea
+                    value={editForm.content}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, content: e.target.value }))}
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    placeholder="Enter content text"
+                  />
+                </div>
+
+                {/* Hashtags */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Hashtags (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.hashtags}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, hashtags: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    placeholder="Enter hashtags separated by commas"
+                  />
+                </div>
+
+                {/* Date and Time */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Scheduled Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editForm.scheduled_date}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, scheduled_date: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Scheduled Time
+                    </label>
+                    <input
+                      type="time"
+                      value={editForm.scheduled_time}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, scheduled_time: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Status
+                  </label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="published">Published</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end space-x-3 mt-6 pt-6 border-t border-gray-200">
+                <button
+                  onClick={handleCancelEdit}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={saving}
+                  className="px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                >
+                  {saving ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Edit className="w-4 h-4" />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -33,6 +33,15 @@ class User(BaseModel):
     name: str
     created_at: str
 
+# Content update model
+class ContentUpdate(BaseModel):
+    title: str
+    content: str
+    hashtags: List[str]
+    scheduled_date: str
+    scheduled_time: str
+    status: str
+
 def get_current_user(authorization: str = Header(None)):
     """Get current user from Supabase JWT token"""
     try:
@@ -269,4 +278,69 @@ async def get_content_by_date(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch content for date {date}: {str(e)}"
+        )
+
+@router.put("/update/{content_id}")
+async def update_content(
+    content_id: str,
+    update_data: ContentUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    """Update content by ID"""
+    try:
+        print(f"📝 Updating content {content_id} for user: {current_user.id}")
+        
+        # Convert Pydantic model to dict
+        update_dict = update_data.dict()
+        
+        # First verify the content belongs to the user
+        content_response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", content_id).eq("content_campaigns.user_id", current_user.id).execute()
+        
+        if not content_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Content not found or access denied"
+            )
+        
+        # Update the content
+        update_response = supabase_admin.table("content_posts").update({
+            "title": update_dict["title"],
+            "content": update_dict["content"],
+            "hashtags": update_dict["hashtags"],
+            "scheduled_date": update_dict["scheduled_date"],
+            "scheduled_time": update_dict["scheduled_time"],
+            "status": update_dict["status"]
+        }).eq("id", content_id).execute()
+        
+        if not update_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update content"
+            )
+        
+        updated_content = update_response.data[0]
+        print(f"✅ Successfully updated content {content_id}")
+        
+        return {
+            "success": True,
+            "message": "Content updated successfully",
+            "content": {
+                "id": updated_content["id"],
+                "title": updated_content["title"],
+                "content": updated_content["content"],
+                "platform": updated_content["platform"],
+                "scheduled_at": f"{updated_content['scheduled_date']}T{updated_content['scheduled_time']}",
+                "status": updated_content["status"],
+                "hashtags": updated_content["hashtags"],
+                "updated_at": updated_content["updated_at"]
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error updating content: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update content: {str(e)}"
         )
