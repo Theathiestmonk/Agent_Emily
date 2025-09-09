@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { onboardingAPI } from '../services/onboarding'
+import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
 import ConnectionCards from './ConnectionCards'
@@ -48,16 +49,26 @@ function Dashboard() {
     }
   }, [user])
 
+  const getAuthToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token
+  }
+
   const handleSaveTokens = async (e) => {
     e.preventDefault()
     setSaving(true)
     
     try {
-        const response = await fetch(`${(import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')}/connections/update-tokens`, {
+      const authToken = await getAuthToken()
+      if (!authToken) {
+        throw new Error('No valid session found')
+      }
+
+      const response = await fetch(`${(import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')}/connections/update-tokens`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await user?.access_token}`
+          'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify({
           tokens: accessTokens
