@@ -24,7 +24,6 @@ import {
   Share2,
   Download,
   Filter,
-  Search,
   Grid,
   List,
   ChevronDown,
@@ -54,17 +53,24 @@ const ContentDashboard = () => {
   const navigate = useNavigate()
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
   const [filterPlatform, setFilterPlatform] = useState('all')
-  const [searchTerm, setSearchTerm] = useState('')
   const [generating, setGenerating] = useState(false)
   const [generationStatus, setGenerationStatus] = useState(null) // 'success', 'error', null
   const [generationMessage, setGenerationMessage] = useState('')
   const [showProgress, setShowProgress] = useState(false)
   const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
   const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]) // Current date in YYYY-MM-DD format
+  const [dateContent, setDateContent] = useState([]) // Content for selected date
+  const [loadingDateContent, setLoadingDateContent] = useState(false)
 
   useEffect(() => {
     fetchData()
+    fetchContentByDate(selectedDate)
   }, [])
+
+  useEffect(() => {
+    fetchContentByDate(selectedDate)
+  }, [selectedDate])
 
   const fetchData = async (forceRefresh = false) => {
     try {
@@ -80,6 +86,27 @@ const ContentDashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching scheduled content:', error)
+    }
+  }
+
+  const fetchContentByDate = async (date) => {
+    try {
+      setLoadingDateContent(true)
+      const result = await contentAPI.getContentByDate(date)
+      
+      console.log('Fetched content for date:', date, result)
+      
+      if (result.data) {
+        setDateContent(result.data)
+        console.log('Date content items:', result.data)
+      } else {
+        setDateContent([])
+      }
+    } catch (error) {
+      console.error('Error fetching content by date:', error)
+      setDateContent([])
+    } finally {
+      setLoadingDateContent(false)
     }
   }
 
@@ -198,12 +225,12 @@ const ContentDashboard = () => {
     setExpandedCampaigns(newExpanded)
   }
 
-  const filteredContent = scheduledContent.filter(content => {
+  // Use date-specific content if available, otherwise fall back to scheduled content
+  const contentToDisplay = dateContent.length > 0 ? dateContent : scheduledContent
+  
+  const filteredContent = contentToDisplay.filter(content => {
     const matchesPlatform = filterPlatform === 'all' || content.platform === filterPlatform
-    const matchesSearch = searchTerm === '' || 
-      content.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      content.title?.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesPlatform && matchesSearch
+    return matchesPlatform
   })
 
   const getPlatformIcon = (platform) => {
@@ -515,8 +542,10 @@ const ContentDashboard = () => {
                       <Calendar className="w-4 h-4 text-white" />
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-600">Today's Content</p>
-                      <p className="text-lg font-bold text-gray-900">{scheduledContent.length}</p>
+                      <p className="text-xs font-medium text-gray-600">
+                        {selectedDate === new Date().toISOString().split('T')[0] ? "Today's Content" : "Selected Date Content"}
+                      </p>
+                      <p className="text-lg font-bold text-gray-900">{contentToDisplay.length}</p>
                     </div>
                   </div>
                   
@@ -527,7 +556,7 @@ const ContentDashboard = () => {
                     <div>
                       <p className="text-xs font-medium text-gray-600">Platforms</p>
                       <p className="text-lg font-bold text-gray-900">
-                        {new Set(scheduledContent.map(content => content.platform)).size}
+                        {new Set(contentToDisplay.map(content => content.platform)).size}
                       </p>
                     </div>
                   </div>
@@ -539,7 +568,7 @@ const ContentDashboard = () => {
                     <div>
                       <p className="text-xs font-medium text-gray-600">With Media</p>
                       <p className="text-lg font-bold text-gray-900">
-                        {scheduledContent.filter(content => content.media_url).length}
+                        {contentToDisplay.filter(content => content.media_url).length}
                       </p>
                     </div>
                   </div>
@@ -569,15 +598,23 @@ const ContentDashboard = () => {
                 
                 {/* Filter and View Controls */}
                 <div className="flex items-center space-x-4">
-                  <div className="relative">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search content..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
-                    />
+                  {/* Date Selector */}
+                  <div className="flex items-center space-x-3">
+                    <Calendar className="w-5 h-5 text-gray-600" />
+                    <div>
+                      <label htmlFor="date-slider" className="text-sm font-medium text-gray-700">
+                        Select Date:
+                      </label>
+                      <input
+                        id="date-slider"
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="ml-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                        min="2025-01-01"
+                        max="2025-12-31"
+                      />
+                    </div>
                   </div>
                   
                   <select
@@ -616,6 +653,16 @@ const ContentDashboard = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 p-6 pt-24">
+          {/* Date Loading Indicator */}
+          {loadingDateContent && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center">
+                <RefreshCw className="w-5 h-5 mr-2 animate-spin text-blue-600" />
+                <span className="text-blue-800 font-medium">Loading content for {selectedDate}...</span>
+              </div>
+            </div>
+          )}
+
           {/* Status Message */}
           {generationStatus && (
             <div className={`mb-6 p-4 rounded-lg ${
@@ -641,8 +688,23 @@ const ContentDashboard = () => {
                 <div className="w-24 h-24 bg-gradient-to-r from-pink-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
                   <Sparkles className="w-12 h-12 text-pink-500" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No content for today</h3>
-                <p className="text-gray-500 mb-6">Generate content to see it displayed here</p>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  {selectedDate === new Date().toISOString().split('T')[0] 
+                    ? "No content for today" 
+                    : `No content for ${new Date(selectedDate).toLocaleDateString('en-US', { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })}`
+                  }
+                </h3>
+                <p className="text-gray-500 mb-6">
+                  {selectedDate === new Date().toISOString().split('T')[0] 
+                    ? "Generate content to see it displayed here" 
+                    : "Try selecting a different date or generate content for this date"
+                  }
+                </p>
                 <button
                   onClick={handleGenerateContent}
                   disabled={generating}

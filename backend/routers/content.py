@@ -207,3 +207,66 @@ async def get_all_content(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch content: {str(e)}"
         )
+
+@router.get("/by-date")
+async def get_content_by_date(
+    date: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get content for a specific date"""
+    try:
+        print(f"📅 Fetching content for date: {date} for user: {current_user.id}")
+        
+        # Parse the date
+        try:
+            target_date = datetime.fromisoformat(date).date()
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid date format. Use YYYY-MM-DD format."
+            )
+        
+        print(f"📅 Looking for content on {target_date}")
+        
+        # Query Supabase for content on the specific date
+        response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).eq("scheduled_date", target_date.isoformat()).order("scheduled_time").execute()
+        
+        content_items = response.data if response.data else []
+        print(f"📊 Found {len(content_items)} content items for {target_date}")
+        
+        # Format response
+        formatted_content = []
+        for item in content_items:
+            platform_value = item.get("platform", "unknown")
+            print(f"📱 Content item {item['id']} platform: '{platform_value}' (type: {type(platform_value)})")
+            
+            formatted_item = {
+                "id": item["id"],
+                "title": item.get("title", "Untitled"),
+                "content": item.get("content", ""),
+                "platform": platform_value,
+                "scheduled_at": f"{item.get('scheduled_date')}T{item.get('scheduled_time', '12:00:00')}",
+                "status": item.get("status", "draft"),
+                "created_at": item.get("created_at"),
+                "media_url": None,  # Will be populated from content_images if needed
+                "hashtags": item.get("hashtags", []),
+                "post_type": item.get("post_type", "text"),
+                "campaign_id": item.get("campaign_id"),
+                "metadata": item.get("metadata", {})
+            }
+            formatted_content.append(formatted_item)
+        
+        return {
+            "content": formatted_content,
+            "date": target_date.isoformat(),
+            "count": len(formatted_content)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error fetching content by date: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch content for date {date}: {str(e)}"
+        )

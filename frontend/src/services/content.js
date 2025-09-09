@@ -96,6 +96,38 @@ class ContentAPI {
     }
   }
 
+  // Get content by specific date
+  async getContentByDate(date) {
+    try {
+      const authToken = await this.getAuthToken()
+      console.log('Fetching content for date:', date, 'with token:', authToken ? 'present' : 'missing')
+      
+      const response = await fetch(buildApiUrl(`/content/by-date?date=${date}`), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+
+      console.log('Content by date response status:', response.status)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Content by date API error:', errorText)
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log('Content by date data:', data)
+      
+      return { data: data.content || [], date: data.date, count: data.count, error: null }
+    } catch (error) {
+      console.error('Error fetching content by date:', error)
+      return { data: null, error: error.message }
+    }
+  }
+
   // Generate content
   async generateContent() {
     try {
