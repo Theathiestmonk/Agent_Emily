@@ -1655,3 +1655,129 @@ async def post_to_instagram(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to post to Instagram: {str(e)}"
         )
+
+
+@router.post("/update-tokens")
+async def update_access_tokens(
+    tokens_data: dict,
+    authorization: str = Header(None)
+):
+    """
+    Update access tokens for connected platforms manually.
+    This allows users to provide their own access tokens with enhanced permissions.
+    """
+    try:
+        # Extract user ID from authorization header
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authorization header"
+            )
+        
+        token = authorization.split(" ")[1]
+        
+        # Verify the token and get user info
+        try:
+            user_response = supabase.auth.get_user(token)
+            user = user_response.user
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token"
+                )
+            user_id = user.id
+        except Exception as e:
+            print(f"Error verifying token: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token"
+            )
+        
+        tokens = tokens_data.get("tokens", {})
+        updated_platforms = []
+        
+        # Platform mapping
+        platform_mapping = {
+            "facebook": "Facebook",
+            "instagram": "Instagram", 
+            "linkedin": "LinkedIn",
+            "twitter": "Twitter",
+            "youtube": "YouTube"
+        }
+        
+        for platform_key, platform_name in platform_mapping.items():
+            token_value = tokens.get(platform_key, "").strip()
+            
+            if token_value:
+                try:
+                    # Encrypt the token
+                    key = os.getenv("ENCRYPTION_KEY")
+                    if not key:
+                        raise HTTPException(
+                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail="Encryption key not configured"
+                        )
+                    
+                    fernet = Fernet(key.encode())
+                    encrypted_token = fernet.encrypt(token_value.encode()).decode()
+                    
+                    # Check if connection exists for this platform
+                    existing_connection = supabase_admin.table("platform_connections").select("*").eq("user_id", user_id).eq("platform", platform_name).eq("is_active", True).execute()
+                    
+                    if existing_connection.data:
+                        # Update existing connection
+                        update_response = supabase_admin.table("platform_connections").update({
+                            "access_token_encrypted": encrypted_token,
+                            "updated_at": datetime.now().isoformat(),
+                            "token_source": "manual"  # Mark as manually provided
+                        }).eq("user_id", user_id).eq("platform", platform_name).eq("is_active", True).execute()
+                        
+                        if update_response.data:
+                            updated_platforms.append(platform_name)
+                            print(f"✅ Updated {platform_name} token for user {user_id}")
+                    else:
+                        # Create new connection with manual token
+                        new_connection = {
+                            "user_id": user_id,
+                            "platform": platform_name,
+                            "access_token_encrypted": encrypted_token,
+                            "is_active": True,
+                            "connected_at": datetime.now().isoformat(),
+                            "updated_at": datetime.now().isoformat(),
+                            "token_source": "manual",
+                            "platform_user_id": "manual_token",  # Placeholder
+                            "platform_username": "Manual Token User"  # Placeholder
+                        }
+                        
+                        insert_response = supabase_admin.table("platform_connections").insert(new_connection).execute()
+                        
+                        if insert_response.data:
+                            updated_platforms.append(platform_name)
+                            print(f"✅ Created new {platform_name} connection with manual token for user {user_id}")
+                    
+                except Exception as e:
+                    print(f"❌ Error updating {platform_name} token: {e}")
+                    # Continue with other platforms even if one fails
+                    continue
+        
+        if not updated_platforms:
+            return {
+                "success": False,
+                "message": "No valid tokens provided or updated",
+                "updated_platforms": []
+            }
+        
+        return {
+            "success": True,
+            "message": f"Successfully updated tokens for: {', '.join(updated_platforms)}",
+            "updated_platforms": updated_platforms
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error updating access tokens: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update access tokens: {str(e)}"
+        )
