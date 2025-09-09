@@ -1735,7 +1735,10 @@ async def update_access_tokens(
                             "access_token_encrypted": encrypted_token,
                             "updated_at": datetime.now().isoformat(),
                             "token_source": "manual",
-                            "is_active": True  # Reactivate the connection
+                            "is_active": True,  # Reactivate the connection
+                            "connection_status": "active",
+                            "account_type": "personal",
+                            "is_organization": False
                         }).eq("user_id", user_id).eq("platform", platform_name).execute()
                         
                         print(f"📝 Update response for {platform_name}: {update_response.data}")
@@ -1754,9 +1757,13 @@ async def update_access_tokens(
                             "connected_at": datetime.now().isoformat(),
                             "updated_at": datetime.now().isoformat(),
                             "token_source": "manual",
-                            "page_id": "manual_token",  # Placeholder
-                            "page_name": "Manual Token User",  # Placeholder
-                            "page_username": "Manual Token User"  # Placeholder
+                            "page_id": f"manual_{platform_name.lower()}_id",
+                            "page_name": f"Manual {platform_name} Connection",
+                            "page_username": f"manual_{platform_name.lower()}_user",
+                            "follower_count": 0,
+                            "connection_status": "active",
+                            "account_type": "personal",
+                            "is_organization": False
                         }
                         
                         print(f"🔄 Creating new connection for {platform_name}: {new_connection}")
