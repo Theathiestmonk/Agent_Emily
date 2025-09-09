@@ -1696,6 +1696,8 @@ async def update_access_tokens(
         tokens = tokens_data.get("tokens", {})
         updated_platforms = []
         
+        print(f"🔍 Received tokens for user {user_id}: {list(tokens.keys())}")
+        
         # Platform mapping
         platform_mapping = {
             "facebook": "Facebook",
@@ -1709,6 +1711,7 @@ async def update_access_tokens(
             token_value = tokens.get(platform_key, "").strip()
             
             if token_value:
+                print(f"🔍 Processing {platform_name} token...")
                 try:
                     # Encrypt the token
                     key = os.getenv("ENCRYPTION_KEY")
@@ -1720,21 +1723,27 @@ async def update_access_tokens(
                     
                     fernet = Fernet(key.encode())
                     encrypted_token = fernet.encrypt(token_value.encode()).decode()
+                    print(f"🔐 Encrypted token for {platform_name}")
                     
-                    # Check if connection exists for this platform
-                    existing_connection = supabase_admin.table("platform_connections").select("*").eq("user_id", user_id).eq("platform", platform_name).eq("is_active", True).execute()
+                    # Check if connection exists for this platform (any status)
+                    existing_connection = supabase_admin.table("platform_connections").select("*").eq("user_id", user_id).eq("platform", platform_name).execute()
+                    print(f"🔍 Existing connections for {platform_name}: {len(existing_connection.data) if existing_connection.data else 0}")
                     
                     if existing_connection.data:
-                        # Update existing connection
+                        # Update existing connection (regardless of active status)
                         update_response = supabase_admin.table("platform_connections").update({
                             "access_token_encrypted": encrypted_token,
                             "updated_at": datetime.now().isoformat(),
-                            "token_source": "manual"  # Mark as manually provided
-                        }).eq("user_id", user_id).eq("platform", platform_name).eq("is_active", True).execute()
+                            "token_source": "manual",
+                            "is_active": True  # Reactivate the connection
+                        }).eq("user_id", user_id).eq("platform", platform_name).execute()
                         
+                        print(f"📝 Update response for {platform_name}: {update_response.data}")
                         if update_response.data:
                             updated_platforms.append(platform_name)
                             print(f"✅ Updated {platform_name} token for user {user_id}")
+                        else:
+                            print(f"❌ Update failed for {platform_name}")
                     else:
                         # Create new connection with manual token
                         new_connection = {
@@ -1749,11 +1758,15 @@ async def update_access_tokens(
                             "platform_username": "Manual Token User"  # Placeholder
                         }
                         
+                        print(f"🔄 Creating new connection for {platform_name}: {new_connection}")
                         insert_response = supabase_admin.table("platform_connections").insert(new_connection).execute()
+                        print(f"📝 Insert response for {platform_name}: {insert_response.data}")
                         
                         if insert_response.data:
                             updated_platforms.append(platform_name)
                             print(f"✅ Created new {platform_name} connection with manual token for user {user_id}")
+                        else:
+                            print(f"❌ Insert failed for {platform_name}")
                     
                 except Exception as e:
                     print(f"❌ Error updating {platform_name} token: {e}")
