@@ -977,47 +977,70 @@ async def fetch_facebook_ads(connection: Dict[str, Any], token: str) -> List[Dic
     try:
         import httpx
         
-        page_id = connection.get('page_id')
-        if not page_id:
-            return []
-        
-        # Facebook Marketing API endpoint for ads
-        url = f"https://graph.facebook.com/v18.0/{page_id}/ads"
+        # First, get the ad accounts associated with the user
+        url = "https://graph.facebook.com/v18.0/me/adaccounts"
         params = {
             'access_token': token,
-            'fields': 'id,name,status,objective,created_time,updated_time,insights{impressions,clicks,spend,reach,ctr,cpc,cpm}',
+            'fields': 'id,name,account_status,currency,timezone_name',
             'limit': 50
         }
         
         async with httpx.AsyncClient() as client:
+            # Get ad accounts
             response = await client.get(url, params=params)
             response.raise_for_status()
-            data = response.json()
+            accounts_data = response.json()
             
             ads = []
-            for ad_data in data.get('data', []):
-                insights = ad_data.get('insights', {}).get('data', [{}])[0] if ad_data.get('insights', {}).get('data') else {}
+            
+            # For each ad account, get the ads
+            for account in accounts_data.get('data', []):
+                account_id = account.get('id')
+                if not account_id:
+                    continue
                 
-                ad = {
-                    'id': ad_data.get('id'),
-                    'name': ad_data.get('name', 'Unnamed Ad'),
-                    'type': 'Facebook Ad',
-                    'status': ad_data.get('status', 'unknown'),
-                    'objective': ad_data.get('objective', 'Unknown'),
-                    'budget': 0,  # Facebook doesn't provide budget in this endpoint
-                    'spent': float(insights.get('spend', 0)),
-                    'impressions': int(insights.get('impressions', 0)),
-                    'clicks': int(insights.get('clicks', 0)),
-                    'reach': int(insights.get('reach', 0)),
-                    'ctr': float(insights.get('ctr', 0)),
-                    'cpc': float(insights.get('cpc', 0)),
-                    'cpm': float(insights.get('cpm', 0)),
-                    'startDate': ad_data.get('created_time', '').split('T')[0] if ad_data.get('created_time') else '',
-                    'endDate': '',  # Facebook doesn't provide end date in this endpoint
-                    'platform': 'facebook',
-                    'pageName': connection.get('page_name', 'Facebook Page')
+                # Get ads for this account
+                ads_url = f"https://graph.facebook.com/v18.0/{account_id}/ads"
+                ads_params = {
+                    'access_token': token,
+                    'fields': 'id,name,status,objective,created_time,updated_time,insights{impressions,clicks,spend,reach,ctr,cpc,cpm}',
+                    'limit': 50
                 }
-                ads.append(ad)
+                
+                try:
+                    ads_response = await client.get(ads_url, params=ads_params)
+                    if ads_response.status_code == 200:
+                        ads_data = ads_response.json()
+                        
+                        for ad_data in ads_data.get('data', []):
+                            insights = ad_data.get('insights', {}).get('data', [{}])[0] if ad_data.get('insights', {}).get('data') else {}
+                            
+                            ad = {
+                                'id': ad_data.get('id'),
+                                'name': ad_data.get('name', 'Unnamed Ad'),
+                                'type': 'Facebook Ad',
+                                'status': ad_data.get('status', 'unknown'),
+                                'objective': ad_data.get('objective', 'Unknown'),
+                                'budget': 0,  # Facebook doesn't provide budget in this endpoint
+                                'spent': float(insights.get('spend', 0)),
+                                'impressions': int(insights.get('impressions', 0)),
+                                'clicks': int(insights.get('clicks', 0)),
+                                'reach': int(insights.get('reach', 0)),
+                                'ctr': float(insights.get('ctr', 0)),
+                                'cpc': float(insights.get('cpc', 0)),
+                                'cpm': float(insights.get('cpm', 0)),
+                                'startDate': ad_data.get('created_time', '').split('T')[0] if ad_data.get('created_time') else '',
+                                'endDate': '',  # Facebook doesn't provide end date in this endpoint
+                                'platform': 'facebook',
+                                'pageName': connection.get('page_name', 'Facebook Page')
+                            }
+                            ads.append(ad)
+                    else:
+                        print(f"Error fetching ads for account {account_id}: {ads_response.status_code} - {ads_response.text}")
+                        
+                except Exception as e:
+                    print(f"Error fetching ads for account {account_id}: {e}")
+                    continue
             
             return ads
             

@@ -527,11 +527,13 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # 2. Get post insights (pages_read_engagement, pages_show_list)
         # 3. Get page insights (pages_read_engagement, pages_show_list)
         # 4. Reply to comments (pages_messaging, pages_manage_engagement)
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,pages_manage_metadata,pages_messaging,pages_manage_engagement,pages_read_user_content"
+        # 5. Read ads data (ads_read, ads_management, business_management)
+        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,pages_manage_metadata,pages_messaging,pages_manage_engagement,pages_read_user_content,ads_read,ads_management,business_management"
     elif platform == 'instagram':
         # Instagram uses Facebook OAuth with Instagram-specific scopes
         # Added pages_manage_posts for proper Instagram Business account access
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
+        # Added ads permissions for Instagram ads data
+        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
     elif platform == 'linkedin':
         return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social"
     elif platform == 'twitter':
