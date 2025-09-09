@@ -53,7 +53,7 @@ function Dashboard() {
     setSaving(true)
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'}/connections/update-tokens`, {
+        const response = await fetch(`${(import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')}/connections/update-tokens`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
