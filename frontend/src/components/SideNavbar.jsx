@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { 
   Home, 
   FileText, 
-  Calendar, 
   Settings, 
   LogOut, 
   User, 
@@ -36,12 +35,6 @@ const SideNavbar = () => {
       href: '/content',
       icon: FileText,
       description: 'Manage your content'
-    },
-    {
-      name: 'Calendar',
-      href: '/calendar',
-      icon: Calendar,
-      description: 'Content calendar view'
     },
     {
       name: 'Social Media',

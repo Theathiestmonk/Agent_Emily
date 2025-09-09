@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useContentCache } from '../contexts/ContentCacheContext'
 import { contentAPI } from '../services/content'
@@ -8,6 +9,7 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
+  ArrowLeft,
   Facebook,
   Instagram,
   Linkedin,
@@ -37,6 +39,7 @@ import {
 } from 'lucide-react'
 
 const ContentCalendar = () => {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const { allContent, loading: contentLoading, fetchAllContent } = useContentCache()
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -221,6 +224,14 @@ const ContentCalendar = () => {
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => navigate('/content')}
+                  className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span className="text-sm font-medium">Back to Content</span>
+                </button>
+                <div className="h-6 w-px bg-gray-300"></div>
                 <CalendarIcon className="w-8 h-8 text-pink-500" />
                 <h1 className="text-2xl font-bold text-gray-900">Content Calendar</h1>
               </div>
