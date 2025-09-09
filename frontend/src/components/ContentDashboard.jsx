@@ -226,7 +226,10 @@ const ContentDashboard = () => {
   }
 
   // Use date-specific content if available, otherwise fall back to scheduled content
-  const contentToDisplay = dateContent.length > 0 ? dateContent : scheduledContent
+  // Only fall back to scheduled content if we're viewing today's date
+  const contentToDisplay = selectedDate === new Date().toISOString().split('T')[0] 
+    ? (dateContent.length > 0 ? dateContent : scheduledContent)
+    : dateContent
   
   const filteredContent = contentToDisplay.filter(content => {
     const matchesPlatform = filterPlatform === 'all' || content.platform === filterPlatform
@@ -655,10 +658,17 @@ const ContentDashboard = () => {
         <div className="flex-1 p-6 pt-24">
           {/* Date Loading Indicator */}
           {loadingDateContent && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center">
-                <RefreshCw className="w-5 h-5 mr-2 animate-spin text-blue-600" />
-                <span className="text-blue-800 font-medium">Loading content for {selectedDate}...</span>
+            <div className="flex items-center justify-center min-h-[60vh]">
+              <div className="w-full max-w-md">
+                <div className="bg-transparent border border-purple-200 rounded-lg p-6">
+                  <div className="flex items-center justify-center space-x-3 mb-4">
+                    <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-purple-700 font-medium">Loading content for {selectedDate}...</span>
+                  </div>
+                  <div className="w-full bg-purple-100 rounded-full h-3">
+                    <div className="bg-gradient-to-r from-pink-500 to-purple-600 h-3 rounded-full animate-pulse" style={{width: '60%'}}></div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -691,7 +701,7 @@ const ContentDashboard = () => {
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   {selectedDate === new Date().toISOString().split('T')[0] 
                     ? "No content for today" 
-                    : `No content for ${new Date(selectedDate).toLocaleDateString('en-US', { 
+                    : `NO content planned for ${new Date(selectedDate).toLocaleDateString('en-US', { 
                         weekday: 'long', 
                         year: 'numeric', 
                         month: 'long', 
