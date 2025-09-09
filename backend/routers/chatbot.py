@@ -3,17 +3,19 @@ Chatbot API endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Generator
 from datetime import datetime
 import os
+import json
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
 # Import the chatbot agent
-from agents.chatbot_agent import get_chatbot_response
+from agents.chatbot_agent import get_chatbot_response, get_chatbot_response_stream
 
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 
@@ -88,6 +90,45 @@ async def chat_with_bot(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing chat request: {str(e)}"
+        )
+
+@router.post("/chat/stream")
+async def chat_with_bot_stream(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Stream chat response from the business assistant bot"""
+    try:
+        # Use the user_id from the request or fall back to current user
+        user_id = request.user_id or current_user.id
+        
+        def generate_stream() -> Generator[str, None, None]:
+            try:
+                for chunk in get_chatbot_response_stream(user_id, request.message):
+                    # Format as Server-Sent Events
+                    yield f"data: {json.dumps({'content': chunk, 'done': False})}\n\n"
+                
+                # Send final done message
+                yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
+                
+            except Exception as e:
+                error_msg = f"Error: {str(e)}"
+                yield f"data: {json.dumps({'content': error_msg, 'done': True, 'error': True})}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream",
+            }
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing streaming chat request: {str(e)}"
         )
 
 @router.get("/health")

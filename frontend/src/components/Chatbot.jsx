@@ -36,9 +36,20 @@ const Chatbot = () => {
     setInputMessage('')
     setIsLoading(true)
 
+    // Create a placeholder bot message for streaming
+    const botMessageId = Date.now() + 1
+    const botMessage = {
+      id: botMessageId,
+      type: 'bot',
+      content: '',
+      timestamp: new Date().toISOString()
+    }
+
+    setMessages(prev => [...prev, botMessage])
+
     try {
       const authToken = await getAuthToken()
-      const response = await fetch(`${API_BASE_URL}/chatbot/chat`, {
+      const response = await fetch(`${API_BASE_URL}/chatbot/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -54,27 +65,66 @@ const Chatbot = () => {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      const data = await response.json()
-      
-      const botMessage = {
-        id: Date.now() + 1,
-        type: 'bot',
-        content: data.response,
-        timestamp: data.timestamp
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No response body reader available')
       }
 
-      setMessages(prev => [...prev, botMessage])
+      let buffer = ''
+      let isDone = false
+
+      while (!isDone) {
+        const { done, value } = await reader.read()
+        
+        if (done) {
+          isDone = true
+          break
+        }
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              
+              if (data.done) {
+                isDone = true
+                break
+              }
+              
+              if (data.content) {
+                setMessages(prev => 
+                  prev.map(msg => 
+                    msg.id === botMessageId 
+                      ? { ...msg, content: msg.content + data.content }
+                      : msg
+                  )
+                )
+              }
+            } catch (e) {
+              console.error('Error parsing SSE data:', e)
+            }
+          }
+        }
+      }
+
     } catch (error) {
       console.error('Error sending message:', error)
       showError('Failed to send message', error.message)
       
-      const errorMessage = {
-        id: Date.now() + 1,
-        type: 'bot',
-        content: 'Sorry, I encountered an error. Please try again.',
-        timestamp: new Date().toISOString()
-      }
-      setMessages(prev => [...prev, errorMessage])
+      // Update the bot message with error
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === botMessageId 
+            ? { ...msg, content: 'Sorry, I encountered an error. Please try again.' }
+            : msg
+        )
+      )
     } finally {
       setIsLoading(false)
     }

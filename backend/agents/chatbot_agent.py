@@ -5,7 +5,7 @@ Handles queries about scheduled posts, insights, and industry trends
 
 import os
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Generator
 from datetime import datetime, timedelta
 import requests
 from supabase import create_client, Client
@@ -117,38 +117,68 @@ def get_latest_insights(user_id: str, platform: str = None) -> Dict[str, Any]:
 def get_industry_trends(industry: str) -> Dict[str, Any]:
     """Get latest trends for a specific industry using web search"""
     try:
-        # This would typically use a web search API or news API
-        # For now, we'll return a structured response that the LLM can work with
-        trends = {
-            "industry": industry,
+        # Use OpenAI to generate industry-specific trends
+        prompt = f"""
+        Generate 4-5 current marketing and social media trends for the {industry} industry in 2024.
+        Focus on trends that are relevant to social media marketing and content creation.
+        
+        For each trend, provide:
+        - A clear, concise title
+        - A detailed description (2-3 sentences)
+        - Impact level (High/Medium/Low)
+        - Relevance to social media marketing
+        
+        Format as JSON with this structure:
+        {{
             "trends": [
-                {
-                    "trend": "AI-powered content creation",
-                    "description": "Businesses are increasingly using AI tools to generate content, automate social media posts, and create personalized marketing materials.",
-                    "impact": "High",
-                    "relevance": "Very relevant to social media management"
-                },
-                {
-                    "trend": "Video content dominance",
-                    "description": "Short-form video content continues to dominate social media platforms, with TikTok, Instagram Reels, and YouTube Shorts leading engagement.",
-                    "impact": "High",
-                    "relevance": "Critical for social media strategy"
-                },
-                {
-                    "trend": "Authentic storytelling",
-                    "description": "Consumers are gravitating towards authentic, behind-the-scenes content over polished corporate messaging.",
-                    "impact": "Medium",
-                    "relevance": "Important for brand building"
-                },
-                {
-                    "trend": "Social commerce integration",
-                    "description": "Social media platforms are becoming shopping destinations with integrated e-commerce features.",
-                    "impact": "High",
-                    "relevance": "Direct revenue impact"
-                }
-            ],
-            "last_updated": datetime.now().isoformat()
-        }
+                {{
+                    "trend": "Trend Title",
+                    "description": "Detailed description of the trend",
+                    "impact": "High/Medium/Low",
+                    "relevance": "Relevance to social media marketing"
+                }}
+            ]
+        }}
+        """
+        
+        # Use OpenAI to generate trends
+        response = llm.invoke([HumanMessage(content=prompt)])
+        
+        # Try to parse the JSON response
+        import json
+        try:
+            trends_data = json.loads(response.content)
+            trends = {
+                "industry": industry,
+                "trends": trends_data.get("trends", []),
+                "last_updated": datetime.now().isoformat()
+            }
+        except json.JSONDecodeError:
+            # Fallback if JSON parsing fails
+            trends = {
+                "industry": industry,
+                "trends": [
+                    {
+                        "trend": f"AI-Powered Marketing in {industry}",
+                        "description": f"Artificial intelligence is revolutionizing marketing strategies in the {industry} industry, enabling personalized content creation and automated customer engagement.",
+                        "impact": "High",
+                        "relevance": "Critical for modern social media strategy"
+                    },
+                    {
+                        "trend": f"Video-First Content Strategy",
+                        "description": f"Short-form video content is dominating social media engagement in {industry}, with platforms prioritizing video content in their algorithms.",
+                        "impact": "High", 
+                        "relevance": "Essential for social media success"
+                    },
+                    {
+                        "trend": f"Authentic Storytelling in {industry}",
+                        "description": f"Consumers in {industry} are seeking authentic, behind-the-scenes content that shows the human side of businesses.",
+                        "impact": "Medium",
+                        "relevance": "Important for brand building and trust"
+                    }
+                ],
+                "last_updated": datetime.now().isoformat()
+            }
         
         return {
             "success": True,
@@ -169,6 +199,18 @@ def get_user_profile(user_id: str) -> Dict[str, Any]:
         profile = response.data[0] if response.data else None
         
         if profile:
+            # Handle industry field - it might be a list or string
+            industry = profile.get("industry")
+            if isinstance(industry, list) and len(industry) > 0:
+                industry = industry[0].lower()  # Take first industry and convert to lowercase
+            elif isinstance(industry, str):
+                industry = industry.lower()
+            else:
+                industry = "technology"  # Default fallback
+            
+            # Update the profile with processed industry
+            profile["industry"] = industry
+            
             return {
                 "success": True,
                 "profile": profile
@@ -315,27 +357,61 @@ class BusinessChatbot:
     def handle_trends(self, state: ChatbotState) -> ChatbotState:
         """Handle industry trends queries"""
         try:
-            # Get user profile to determine industry
-            profile_result = get_user_profile.invoke({"user_id": state["user_id"]})
+            # First, try to extract industry from the query itself
+            query = state["current_query"].lower()
+            industry_from_query = None
             
-            if profile_result["success"] and profile_result["profile"]:
-                industry = profile_result["profile"].get("industry", "technology")
+            # Look for industry mentions in the query
+            industry_keywords = {
+                'technology': ['tech', 'technology', 'software', 'it', 'digital'],
+                'healthcare': ['healthcare', 'health', 'medical', 'pharma', 'hospital'],
+                'retail': ['retail', 'ecommerce', 'shopping', 'fashion', 'consumer'],
+                'finance': ['finance', 'banking', 'fintech', 'financial', 'investment'],
+                'education': ['education', 'edtech', 'learning', 'school', 'university'],
+                'real estate': ['real estate', 'property', 'housing', 'construction'],
+                'manufacturing': ['manufacturing', 'production', 'industrial', 'factory']
+            }
+            
+            for industry, keywords in industry_keywords.items():
+                if any(keyword in query for keyword in keywords):
+                    industry_from_query = industry
+                    break
+            
+            # If no industry found in query, try to get from user profile
+            if not industry_from_query:
+                profile_result = get_user_profile.invoke({"user_id": state["user_id"]})
+                
+                if profile_result["success"] and profile_result["profile"]:
+                    industry_from_query = profile_result["profile"].get("industry", "technology")
+                    business_name = profile_result["profile"].get("business_name", "Your Business")
+                else:
+                    # If no profile found, ask user for their industry
+                    state["context"]["trends"] = {
+                        "error": "No user profile found",
+                        "message": "I need to know your industry to provide relevant trends. Please either:",
+                        "suggestions": [
+                            "Complete your profile setup in the onboarding section",
+                            "Ask me: 'What are the latest trends in [your industry]?' (e.g., 'What are the latest trends in healthcare?')"
+                        ]
+                    }
+                    return state
             else:
-                industry = "technology"  # Default industry
+                business_name = "Your Business"
             
-            # Get trends
-            trends_result = get_industry_trends.invoke({"industry": industry})
+            # Now get trends for the identified industry
+            trends_result = get_industry_trends.invoke({"industry": industry_from_query})
             
             if trends_result["success"] and trends_result["trends"]:
                 state["context"]["trends"] = {
-                    "industry": industry,
+                    "industry": industry_from_query,
+                    "business_name": business_name,
                     "trends": trends_result["trends"]["trends"],
                     "last_updated": trends_result["trends"]["last_updated"]
                 }
             else:
                 state["context"]["trends"] = {
-                    "message": "Unable to fetch industry trends",
-                    "industry": industry
+                    "error": f"Unable to fetch trends for {industry_from_query} industry",
+                    "industry": industry_from_query
                 }
         except Exception as e:
             state["context"]["trends"] = {
@@ -379,8 +455,7 @@ class BusinessChatbot:
         Always be helpful, concise, and provide actionable insights when possible.
         Use the context data provided to give specific, relevant answers.
         
-        If you have data available, present it in a clear, easy-to-understand format.
-        If there's no data available, explain what might be needed to get that information.
+        IMPORTANT: If the context shows an error about missing user profile or industry information, guide the user to complete their profile setup or ask them to specify their industry in their question.
         """
         
         if "scheduled_posts" in context:
@@ -390,7 +465,10 @@ class BusinessChatbot:
             prompt += "\n\nYou have access to performance insights data. Help the user understand their social media performance."
         
         if "trends" in context:
-            prompt += "\n\nYou have access to industry trends data. Help the user understand relevant industry trends."
+            if "error" in context["trends"]:
+                prompt += f"\n\nIMPORTANT: The trends context shows an error: {context['trends']['error']}. Guide the user to resolve this issue."
+            else:
+                prompt += "\n\nYou have access to industry trends data. Help the user understand relevant industry trends."
         
         return prompt
     
@@ -410,6 +488,43 @@ class BusinessChatbot:
         result = self.graph.invoke(state)
         
         return result["response"]
+    
+    def chat_stream(self, user_id: str, query: str) -> Generator[str, None, None]:
+        """Streaming chat interface"""
+        # Create initial state
+        state = {
+            "user_id": user_id,
+            "current_query": query,
+            "messages": [],
+            "intent": None,
+            "context": {},
+            "response": None
+        }
+        
+        # Run the graph to get context
+        result = self.graph.invoke(state)
+        
+        # Now stream the response using OpenAI streaming
+        try:
+            # Create system prompt based on context
+            system_prompt = self.create_system_prompt(result["context"])
+            
+            # Create user message
+            user_message = f"User query: {query}\n\nContext: {json.dumps(result['context'], indent=2)}"
+            
+            # Generate streaming response
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_message)
+            ]
+            
+            # Stream the response
+            for chunk in self.llm.stream(messages):
+                if hasattr(chunk, 'content') and chunk.content:
+                    yield chunk.content
+                    
+        except Exception as e:
+            yield f"I apologize, but I encountered an error while processing your request: {str(e)}"
 
 # Initialize the chatbot
 chatbot = BusinessChatbot()
@@ -417,3 +532,7 @@ chatbot = BusinessChatbot()
 def get_chatbot_response(user_id: str, query: str) -> str:
     """Get response from the business chatbot"""
     return chatbot.chat(user_id, query)
+
+def get_chatbot_response_stream(user_id: str, query: str) -> Generator[str, None, None]:
+    """Get streaming response from the business chatbot"""
+    return chatbot.chat_stream(user_id, query)
