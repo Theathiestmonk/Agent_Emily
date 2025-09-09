@@ -305,9 +305,10 @@ class BusinessChatbot:
         
         # Intent classification logic
         if any(keyword in query for keyword in [
-            'scheduled', 'next post', 'upcoming', 'when is', 'what is scheduled',
+            'next post', 'upcoming post', 'when is', 'what is next',
             'latest post', 'recent post', 'last post', 'post timing', 'when will',
-            'what time', 'schedule', 'calendar', 'content calendar', 'post schedule'
+            'what time', 'schedule', 'calendar', 'content calendar', 'post schedule',
+            'scheduled', 'what is scheduled', 'my posts', 'show posts'
         ]):
             state["intent"] = "scheduled_posts"
         elif any(keyword in query for keyword in ['insights', 'performance', 'analytics', 'engagement', 'metrics', 'how did']):
@@ -359,7 +360,7 @@ class BusinessChatbot:
                     }
                 else:
                     state["context"]["scheduled_posts"] = {
-                        "message": f"No scheduled posts found for {platform or 'any platform'}",
+                        "message": f"No posts found for {platform or 'any platform'}",
                         "recent_published": published_posts,
                         "total_scheduled": 0,
                         "total_published": result["published_count"],
@@ -367,11 +368,11 @@ class BusinessChatbot:
                     }
             else:
                 state["context"]["scheduled_posts"] = {
-                    "error": f"Error fetching scheduled posts: {result.get('error', 'Unknown error')}"
+                    "error": f"Error fetching posts: {result.get('error', 'Unknown error')}"
                 }
         except Exception as e:
             state["context"]["scheduled_posts"] = {
-                "error": f"Error fetching scheduled posts: {str(e)}"
+                "error": f"Error fetching posts: {str(e)}"
             }
         
         return state
@@ -518,9 +519,9 @@ class BusinessChatbot:
         
         if "scheduled_posts" in context:
             if "error" in context["scheduled_posts"]:
-                prompt += f"\n\nIMPORTANT: The scheduled posts context shows an error: {context['scheduled_posts']['error']}. Help the user resolve this issue."
+                prompt += f"\n\nIMPORTANT: The posts context shows an error: {context['scheduled_posts']['error']}. Help the user resolve this issue."
             else:
-                prompt += "\n\nYou have access to scheduled posts data. Help the user understand their upcoming content schedule, including next scheduled posts, timing, and recent published content."
+                prompt += "\n\nYou have access to posts data. Help the user understand their upcoming content, including next posts, timing, and recent published content."
         
         if "insights" in context:
             prompt += "\n\nYou have access to performance insights data. Help the user understand their social media performance."
