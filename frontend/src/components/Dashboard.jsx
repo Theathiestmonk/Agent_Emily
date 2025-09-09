@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { onboardingAPI } from '../services/onboarding'
-import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
 import ConnectionCards from './ConnectionCards'
@@ -54,17 +53,11 @@ function Dashboard() {
     setSaving(true)
     
     try {
-      // Get the session token from Supabase
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        throw new Error('No valid session found')
-      }
-
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'}/connections/update-tokens`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'authorization': `Bearer ${session.access_token}`
+          'Authorization': `Bearer ${await user?.access_token}`
         },
         body: JSON.stringify({
           tokens: accessTokens
@@ -77,9 +70,6 @@ function Dashboard() {
 
       showSuccess('Access tokens updated successfully!')
       setShowSettings(false)
-      
-      // Trigger a custom event to refresh connections
-      window.dispatchEvent(new CustomEvent('refreshConnections'))
     } catch (error) {
       console.error('Error updating tokens:', error)
       showError('Failed to update access tokens', error.message)
