@@ -12,7 +12,6 @@ import {
   Sparkles,
   BarChart3,
   Target,
-  Users,
   Share2,
   Megaphone
 } from 'lucide-react'
@@ -59,12 +58,6 @@ const SideNavbar = () => {
       href: '/ads',
       icon: Megaphone,
       description: 'Active advertising campaigns'
-    },
-    {
-      name: 'Audience',
-      href: '/audience',
-      icon: Users,
-      description: 'Audience insights'
     }
   ]
 

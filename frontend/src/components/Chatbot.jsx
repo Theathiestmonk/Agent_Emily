@@ -3,6 +3,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
 import { Send, Bot, User, Loader2, Calendar, BarChart3, TrendingUp, Lightbulb, Mic, Sparkles } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 
@@ -249,7 +251,38 @@ const Chatbot = () => {
                   : 'bg-gradient-to-r from-pink-50 to-purple-50 text-gray-900 border border-pink-200'
               }`}>
                 {message.content ? (
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                  <div className="text-sm leading-relaxed prose prose-sm max-w-none">
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                        h1: ({ children }) => <h1 className="text-lg font-bold mb-2 text-gray-900">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-gray-900">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-sm font-semibold mb-1 text-gray-900">{children}</h3>,
+                        ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                        li: ({ children }) => <li className="text-gray-700">{children}</li>,
+                        code: ({ children, className }) => {
+                          const isInline = !className?.includes('language-')
+                          return isInline ? (
+                            <code className="bg-gray-100 px-1 py-0.5 rounded text-xs font-mono text-purple-600">{children}</code>
+                          ) : (
+                            <code className="block bg-gray-100 p-2 rounded text-xs font-mono text-gray-800 overflow-x-auto">{children}</code>
+                          )
+                        },
+                        pre: ({ children }) => <pre className="bg-gray-100 p-2 rounded text-xs font-mono text-gray-800 overflow-x-auto mb-2">{children}</pre>,
+                        blockquote: ({ children }) => <blockquote className="border-l-4 border-purple-200 pl-3 italic text-gray-600 mb-2">{children}</blockquote>,
+                        strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                        em: ({ children }) => <em className="italic text-gray-700">{children}</em>,
+                        a: ({ children, href }) => <a href={href} className="text-purple-600 hover:text-purple-800 underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+                        table: ({ children }) => <div className="overflow-x-auto mb-2"><table className="min-w-full border border-gray-200 rounded">{children}</table></div>,
+                        th: ({ children }) => <th className="border border-gray-200 px-2 py-1 bg-gray-50 text-left text-xs font-semibold text-gray-700">{children}</th>,
+                        td: ({ children }) => <td className="border border-gray-200 px-2 py-1 text-xs text-gray-600">{children}</td>,
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
                 ) : message.isStreaming ? (
                   <div className="flex items-center space-x-1">
                     <div className="flex space-x-1">
@@ -259,7 +292,38 @@ const Chatbot = () => {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                  <div className="text-sm leading-relaxed prose prose-sm max-w-none">
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                        h1: ({ children }) => <h1 className="text-lg font-bold mb-2 text-gray-900">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-gray-900">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-sm font-semibold mb-1 text-gray-900">{children}</h3>,
+                        ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                        li: ({ children }) => <li className="text-gray-700">{children}</li>,
+                        code: ({ children, className }) => {
+                          const isInline = !className?.includes('language-')
+                          return isInline ? (
+                            <code className="bg-gray-100 px-1 py-0.5 rounded text-xs font-mono text-purple-600">{children}</code>
+                          ) : (
+                            <code className="block bg-gray-100 p-2 rounded text-xs font-mono text-gray-800 overflow-x-auto">{children}</code>
+                          )
+                        },
+                        pre: ({ children }) => <pre className="bg-gray-100 p-2 rounded text-xs font-mono text-gray-800 overflow-x-auto mb-2">{children}</pre>,
+                        blockquote: ({ children }) => <blockquote className="border-l-4 border-purple-200 pl-3 italic text-gray-600 mb-2">{children}</blockquote>,
+                        strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                        em: ({ children }) => <em className="italic text-gray-700">{children}</em>,
+                        a: ({ children, href }) => <a href={href} className="text-purple-600 hover:text-purple-800 underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+                        table: ({ children }) => <div className="overflow-x-auto mb-2"><table className="min-w-full border border-gray-200 rounded">{children}</table></div>,
+                        th: ({ children }) => <th className="border border-gray-200 px-2 py-1 bg-gray-50 text-left text-xs font-semibold text-gray-700">{children}</th>,
+                        td: ({ children }) => <td className="border border-gray-200 px-2 py-1 text-xs text-gray-600">{children}</td>,
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
                 )}
               </div>
             </div>
