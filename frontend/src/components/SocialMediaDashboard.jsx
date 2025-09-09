@@ -22,7 +22,10 @@ import {
   Users,
   BarChart3,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Activity,
+  Target,
+  Zap
 } from 'lucide-react'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
@@ -41,6 +44,7 @@ const SocialMediaDashboard = () => {
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [debugData, setDebugData] = useState(null)
+  const [insightsData, setInsightsData] = useState({})
 
   useEffect(() => {
     fetchData()
@@ -195,6 +199,86 @@ const SocialMediaDashboard = () => {
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`
     return count?.toString() || '0'
   }
+
+  const calculatePlatformInsights = (platform, posts) => {
+    if (!posts || posts.length === 0) return null
+
+    const last10Posts = posts.slice(0, 10)
+    
+    // Calculate platform-specific metrics
+    let metrics = []
+    
+    switch (platform.toLowerCase()) {
+      case 'facebook':
+        metrics = [
+          { name: 'Likes', data: last10Posts.map(post => post.likes_count || 0) },
+          { name: 'Comments', data: last10Posts.map(post => post.comments_count || 0) },
+          { name: 'Shares', data: last10Posts.map(post => post.shares_count || 0) }
+        ]
+        break
+      case 'instagram':
+        metrics = [
+          { name: 'Likes', data: last10Posts.map(post => post.likes_count || 0) },
+          { name: 'Comments', data: last10Posts.map(post => post.comments_count || 0) },
+          { name: 'Saves', data: last10Posts.map(post => post.saves_count || 0) }
+        ]
+        break
+      case 'linkedin':
+        metrics = [
+          { name: 'Likes', data: last10Posts.map(post => post.likes_count || 0) },
+          { name: 'Comments', data: last10Posts.map(post => post.comments_count || 0) },
+          { name: 'Shares', data: last10Posts.map(post => post.shares_count || 0) }
+        ]
+        break
+      case 'twitter':
+        metrics = [
+          { name: 'Likes', data: last10Posts.map(post => post.likes_count || 0) },
+          { name: 'Retweets', data: last10Posts.map(post => post.retweets_count || 0) },
+          { name: 'Replies', data: last10Posts.map(post => post.replies_count || 0) }
+        ]
+        break
+      case 'youtube':
+        metrics = [
+          { name: 'Views', data: last10Posts.map(post => post.views_count || 0) },
+          { name: 'Likes', data: last10Posts.map(post => post.likes_count || 0) },
+          { name: 'Comments', data: last10Posts.map(post => post.comments_count || 0) }
+        ]
+        break
+      default:
+        metrics = [
+          { name: 'Engagement', data: last10Posts.map(post => (post.likes_count || 0) + (post.comments_count || 0)) },
+          { name: 'Reach', data: last10Posts.map(post => post.reach_count || 0) },
+          { name: 'Impressions', data: last10Posts.map(post => post.impressions_count || 0) }
+        ]
+    }
+
+    return {
+      platform,
+      posts: last10Posts,
+      metrics,
+      postTitles: last10Posts.map(post => 
+        (post.message || post.text || 'Untitled').substring(0, 30) + '...'
+      )
+    }
+  }
+
+  const processInsightsData = () => {
+    const insights = {}
+    connectedPlatforms.forEach(connection => {
+      const platformPosts = posts[connection.platform] || []
+      const platformInsights = calculatePlatformInsights(connection.platform, platformPosts)
+      if (platformInsights) {
+        insights[connection.platform] = platformInsights
+      }
+    })
+    setInsightsData(insights)
+  }
+
+  useEffect(() => {
+    if (Object.keys(posts).length > 0) {
+      processInsightsData()
+    }
+  }, [posts, connectedPlatforms])
 
   if (loading) {
     return <LoadingBar message="Loading social media dashboard..." />
@@ -435,6 +519,112 @@ const SocialMediaDashboard = () => {
                   )
                 })}
               </div>
+
+              {/* Social Media Insights Cards */}
+              {Object.keys(insightsData).length > 0 && (
+                <div className="mt-8">
+                  <h2 className="text-xl font-bold text-gray-900 mb-6">Performance Insights</h2>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {Object.entries(insightsData).map(([platform, data]) => {
+                      const theme = getPlatformCardTheme(platform)
+                      const maxValue = Math.max(...data.metrics.flatMap(metric => metric.data))
+                      
+                      return (
+                        <div key={platform} className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm hover:shadow-lg transition-all duration-300`}>
+                          {/* Card Header */}
+                          <div className="p-4 border-b border-gray-200">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <div className={`w-10 h-10 ${theme.iconBg} rounded-lg flex items-center justify-center`}>
+                                  <div className="text-white">
+                                    {getPlatformIcon(platform)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <h3 className={`font-semibold capitalize ${theme.text}`}>
+                                    {platform} Insights
+                                  </h3>
+                                  <p className="text-sm text-gray-500">Last 10 posts performance</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <BarChart3 className="w-4 h-4 text-gray-500" />
+                                <span className="text-xs text-gray-600">Analytics</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Bar Chart */}
+                          <div className="p-4">
+                            <div className="space-y-4">
+                              {data.metrics.map((metric, metricIndex) => {
+                                const maxMetricValue = Math.max(...metric.data)
+                                const colors = [
+                                  'bg-blue-500',
+                                  'bg-green-500', 
+                                  'bg-purple-500'
+                                ]
+                                
+                                return (
+                                  <div key={metricIndex} className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm font-medium text-gray-700">{metric.name}</span>
+                                      <span className="text-xs text-gray-500">
+                                        {formatEngagement(metric.data.reduce((a, b) => a + b, 0))} total
+                                      </span>
+                                    </div>
+                                    
+                                    {/* Bar Chart */}
+                                    <div className="flex items-end space-x-1 h-8">
+                                      {metric.data.map((value, index) => {
+                                        const height = maxMetricValue > 0 ? (value / maxMetricValue) * 100 : 0
+                                        return (
+                                          <div
+                                            key={index}
+                                            className={`${colors[metricIndex]} rounded-t-sm flex-1 min-h-[2px] transition-all duration-300 hover:opacity-80`}
+                                            style={{ height: `${Math.max(height, 2)}%` }}
+                                            title={`Post ${index + 1}: ${formatEngagement(value)}`}
+                                          />
+                                        )
+                                      })}
+                                    </div>
+                                    
+                                    {/* Post Labels */}
+                                    <div className="flex justify-between text-xs text-gray-400">
+                                      <span>Post 1</span>
+                                      <span>Post 5</span>
+                                      <span>Post 10</span>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+
+                            {/* Summary Stats */}
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                              <div className="grid grid-cols-3 gap-4 text-center">
+                                {data.metrics.map((metric, index) => {
+                                  const total = metric.data.reduce((a, b) => a + b, 0)
+                                  const avg = total / metric.data.length
+                                  return (
+                                    <div key={index} className="space-y-1">
+                                      <div className="text-xs text-gray-500">{metric.name}</div>
+                                      <div className={`text-sm font-semibold ${theme.text}`}>
+                                        {formatEngagement(Math.round(avg))}
+                                      </div>
+                                      <div className="text-xs text-gray-400">avg</div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           
