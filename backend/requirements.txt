@@ -6,6 +6,9 @@ python-dotenv
 pydantic
 pydantic-settings
 langgraph
+langchain
+langchain-openai
+langchain-core
 openai
 pytz
 cryptography

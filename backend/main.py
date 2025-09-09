@@ -16,6 +16,7 @@ from scheduler.background_scheduler import start_background_scheduler, stop_back
 from routers.connections import router as connections_router
 from routers.content import router as content_router
 from routers.social_media import router as social_media_router
+from routers.chatbot import router as chatbot_router
 
 # Load environment variables
 load_dotenv()
@@ -52,6 +53,7 @@ app = FastAPI(
 app.include_router(connections_router)
 app.include_router(content_router)
 app.include_router(social_media_router)
+app.include_router(chatbot_router)
 
 # Health check endpoint
 @app.get("/health")
