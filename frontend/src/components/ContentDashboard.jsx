@@ -64,6 +64,7 @@ const ContentDashboard = () => {
   const [editingContent, setEditingContent] = useState(null) // Content being edited
   const [editForm, setEditForm] = useState({}) // Edit form data
   const [saving, setSaving] = useState(false) // Saving state
+  const [expandedContent, setExpandedContent] = useState(null) // Content being viewed/expanded
 
   useEffect(() => {
     fetchData()
@@ -605,6 +606,10 @@ const ContentDashboard = () => {
     setEditForm({})
   }
 
+  const handleViewContent = (content) => {
+    setExpandedContent(expandedContent?.id === content.id ? null : content)
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
       {/* Progress Bar */}
@@ -830,7 +835,52 @@ const ContentDashboard = () => {
                       <h5 className="font-medium text-gray-900 mb-3">{content.title}</h5>
                     )}
                     
-                    <p className="text-gray-700 text-sm mb-4 line-clamp-3">{content.content}</p>
+                    {expandedContent?.id === content.id ? (
+                      <div className="mb-4">
+                        <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">{content.content}</p>
+                        
+                        {/* Expanded Details */}
+                        <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                          <div className="grid grid-cols-2 gap-3 text-xs">
+                            <div>
+                              <span className="font-medium text-gray-600">Scheduled:</span>
+                              <p className="text-gray-800">{formatDate(content.scheduled_at)} at {formatTime(content.scheduled_at.split('T')[1])}</p>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-600">Status:</span>
+                              <p className="text-gray-800 capitalize">{content.status}</p>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-600">Platform:</span>
+                              <p className="text-gray-800">{content.platform}</p>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-600">Post Type:</span>
+                              <p className="text-gray-800 capitalize">{content.post_type || 'text'}</p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <button
+                          onClick={() => setExpandedContent(null)}
+                          className="text-xs text-purple-600 hover:text-purple-800 font-medium"
+                        >
+                          Show less
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-gray-700 text-sm mb-4 line-clamp-3">{content.content}</p>
+                        {content.content.length > 150 && (
+                          <button
+                            onClick={() => handleViewContent(content)}
+                            className="text-xs text-purple-600 hover:text-purple-800 font-medium"
+                          >
+                            Read more
+                          </button>
+                        )}
+                      </div>
+                    )}
                     
                     {content.hashtags && content.hashtags.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-4">
@@ -880,6 +930,7 @@ const ContentDashboard = () => {
                       {/* Action Icons */}
                       <div className="flex items-center space-x-2">
                         <button 
+                          onClick={() => handleViewContent(content)}
                           className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`} 
                           title="View Content"
                         >
