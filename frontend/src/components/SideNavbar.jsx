@@ -14,8 +14,7 @@ import {
   BarChart3,
   Target,
   Users,
-  Share2,
-  Bot
+  Share2
 } from 'lucide-react'
 
 const SideNavbar = () => {
@@ -48,12 +47,6 @@ const SideNavbar = () => {
       href: '/social',
       icon: Share2,
       description: 'Latest posts from your channels'
-    },
-    {
-      name: 'Assistant',
-      href: '/chatbot',
-      icon: Bot,
-      description: 'AI-powered business assistant'
     },
     {
       name: 'Analytics',
