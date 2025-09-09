@@ -138,47 +138,47 @@ const SocialMediaDashboard = () => {
   const getPlatformCardTheme = (platform) => {
     const themes = {
       facebook: {
-        bg: 'bg-blue-50',
-        border: 'border-blue-200',
+        bg: 'bg-white/20 backdrop-blur-sm',
+        border: 'border-blue-200/50',
         iconBg: 'bg-blue-600',
         text: 'text-blue-800',
-        accent: 'bg-blue-100'
+        accent: 'bg-blue-100/50'
       },
       instagram: {
-        bg: 'bg-gradient-to-br from-pink-50 to-purple-50',
-        border: 'border-pink-200',
+        bg: 'bg-white/20 backdrop-blur-sm',
+        border: 'border-pink-200/50',
         iconBg: 'bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500',
         text: 'text-pink-800',
-        accent: 'bg-pink-100'
+        accent: 'bg-pink-100/50'
       },
       linkedin: {
-        bg: 'bg-blue-50',
-        border: 'border-blue-200',
+        bg: 'bg-white/20 backdrop-blur-sm',
+        border: 'border-blue-200/50',
         iconBg: 'bg-blue-700',
         text: 'text-blue-800',
-        accent: 'bg-blue-100'
+        accent: 'bg-blue-100/50'
       },
       twitter: {
-        bg: 'bg-sky-50',
-        border: 'border-sky-200',
+        bg: 'bg-white/20 backdrop-blur-sm',
+        border: 'border-sky-200/50',
         iconBg: 'bg-sky-500',
         text: 'text-sky-800',
-        accent: 'bg-sky-100'
+        accent: 'bg-sky-100/50'
       },
       youtube: {
-        bg: 'bg-red-50',
-        border: 'border-red-200',
+        bg: 'bg-white/20 backdrop-blur-sm',
+        border: 'border-red-200/50',
         iconBg: 'bg-red-600',
         text: 'text-red-800',
-        accent: 'bg-red-100'
+        accent: 'bg-red-100/50'
       }
     }
     return themes[platform?.toLowerCase()] || {
-      bg: 'bg-gray-50',
-      border: 'border-gray-200',
+      bg: 'bg-white/20 backdrop-blur-sm',
+      border: 'border-gray-200/50',
       iconBg: 'bg-gray-500',
       text: 'text-gray-800',
-      accent: 'bg-gray-100'
+      accent: 'bg-gray-100/50'
     }
   }
 
@@ -203,7 +203,12 @@ const SocialMediaDashboard = () => {
   const calculatePlatformInsights = (platform, posts) => {
     if (!posts || posts.length === 0) return null
 
-    const last10Posts = posts.slice(0, 10)
+    const last5Posts = posts.slice(-5)
+    
+    // Debug: Log the structure of posts to see what date fields are available
+    if (last5Posts.length > 0) {
+      console.log(`Posts structure for ${platform}:`, last5Posts[0])
+    }
     
     // Calculate platform-specific metrics
     let metrics = []
@@ -211,52 +216,52 @@ const SocialMediaDashboard = () => {
     switch (platform.toLowerCase()) {
       case 'facebook':
         metrics = [
-          { name: 'Likes', data: last10Posts.map(post => post.likes_count || 0) },
-          { name: 'Comments', data: last10Posts.map(post => post.comments_count || 0) },
-          { name: 'Shares', data: last10Posts.map(post => post.shares_count || 0) }
+          { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
+          { name: 'Comments', data: last5Posts.map(post => post.comments_count || 0) },
+          { name: 'Shares', data: last5Posts.map(post => post.shares_count || 0) }
         ]
         break
       case 'instagram':
         metrics = [
-          { name: 'Likes', data: last10Posts.map(post => post.likes_count || 0) },
-          { name: 'Comments', data: last10Posts.map(post => post.comments_count || 0) },
-          { name: 'Saves', data: last10Posts.map(post => post.saves_count || 0) }
+          { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
+          { name: 'Comments', data: last5Posts.map(post => post.comments_count || 0) },
+          { name: 'Saves', data: last5Posts.map(post => post.saves_count || 0) }
         ]
         break
       case 'linkedin':
         metrics = [
-          { name: 'Likes', data: last10Posts.map(post => post.likes_count || 0) },
-          { name: 'Comments', data: last10Posts.map(post => post.comments_count || 0) },
-          { name: 'Shares', data: last10Posts.map(post => post.shares_count || 0) }
+          { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
+          { name: 'Comments', data: last5Posts.map(post => post.comments_count || 0) },
+          { name: 'Shares', data: last5Posts.map(post => post.shares_count || 0) }
         ]
         break
       case 'twitter':
         metrics = [
-          { name: 'Likes', data: last10Posts.map(post => post.likes_count || 0) },
-          { name: 'Retweets', data: last10Posts.map(post => post.retweets_count || 0) },
-          { name: 'Replies', data: last10Posts.map(post => post.replies_count || 0) }
+          { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
+          { name: 'Retweets', data: last5Posts.map(post => post.retweets_count || 0) },
+          { name: 'Replies', data: last5Posts.map(post => post.replies_count || 0) }
         ]
         break
       case 'youtube':
         metrics = [
-          { name: 'Views', data: last10Posts.map(post => post.views_count || 0) },
-          { name: 'Likes', data: last10Posts.map(post => post.likes_count || 0) },
-          { name: 'Comments', data: last10Posts.map(post => post.comments_count || 0) }
+          { name: 'Views', data: last5Posts.map(post => post.views_count || 0) },
+          { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
+          { name: 'Comments', data: last5Posts.map(post => post.comments_count || 0) }
         ]
         break
       default:
         metrics = [
-          { name: 'Engagement', data: last10Posts.map(post => (post.likes_count || 0) + (post.comments_count || 0)) },
-          { name: 'Reach', data: last10Posts.map(post => post.reach_count || 0) },
-          { name: 'Impressions', data: last10Posts.map(post => post.impressions_count || 0) }
+          { name: 'Engagement', data: last5Posts.map(post => (post.likes_count || 0) + (post.comments_count || 0)) },
+          { name: 'Reach', data: last5Posts.map(post => post.reach_count || 0) },
+          { name: 'Impressions', data: last5Posts.map(post => post.impressions_count || 0) }
         ]
     }
 
     return {
       platform,
-      posts: last10Posts,
+      posts: last5Posts,
       metrics,
-      postTitles: last10Posts.map(post => 
+      postTitles: last5Posts.map(post => 
         (post.message || post.text || 'Untitled').substring(0, 30) + '...'
       )
     }
@@ -264,6 +269,7 @@ const SocialMediaDashboard = () => {
 
   const processInsightsData = () => {
     const insights = {}
+    const connectedPlatforms = connections.filter(conn => conn.is_active)
     connectedPlatforms.forEach(connection => {
       const platformPosts = posts[connection.platform] || []
       const platformInsights = calculatePlatformInsights(connection.platform, platformPosts)
@@ -275,16 +281,16 @@ const SocialMediaDashboard = () => {
   }
 
   useEffect(() => {
-    if (Object.keys(posts).length > 0) {
+    if (Object.keys(posts).length > 0 && connections.length > 0) {
       processInsightsData()
     }
-  }, [posts, connectedPlatforms])
+  }, [posts, connections])
 
   if (loading) {
     return <LoadingBar message="Loading social media dashboard..." />
   }
 
-  const connectedPlatforms = connections.filter(conn => conn.is_active)
+  const connectedPlatforms = connections ? connections.filter(conn => conn.is_active) : []
   const hasPosts = Object.keys(posts).length > 0
 
   return (
@@ -521,7 +527,7 @@ const SocialMediaDashboard = () => {
               </div>
 
               {/* Social Media Insights Cards */}
-              {Object.keys(insightsData).length > 0 && (
+              {insightsData && Object.keys(insightsData).length > 0 && (
                 <div className="mt-8">
                   <h2 className="text-xl font-bold text-gray-900 mb-6">Performance Insights</h2>
                   <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -544,7 +550,7 @@ const SocialMediaDashboard = () => {
                                   <h3 className={`font-semibold capitalize ${theme.text}`}>
                                     {platform} Insights
                                   </h3>
-                                  <p className="text-sm text-gray-500">Last 10 posts performance</p>
+                                  <p className="text-sm text-gray-500">Last 5 posts performance</p>
                                 </div>
                               </div>
                               <div className="flex items-center space-x-1">
@@ -556,48 +562,77 @@ const SocialMediaDashboard = () => {
 
                           {/* Bar Chart */}
                           <div className="p-4">
+                            {/* Grouped Bar Chart */}
                             <div className="space-y-4">
-                              {data.metrics.map((metric, metricIndex) => {
-                                const maxMetricValue = Math.max(...metric.data)
-                                const colors = [
-                                  'bg-blue-500',
-                                  'bg-green-500', 
-                                  'bg-purple-500'
-                                ]
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Performance Metrics</span>
+                                <span className="text-xs text-gray-500">Last 5 posts</span>
+                              </div>
+                              
+                              {/* Grouped Bar Chart */}
+                              <div className="space-y-2">
+                                {/* Chart Container */}
+                                <div className="flex items-end space-x-2 h-32">
+                                  {data.posts.map((post, postIndex) => {
+                                    const maxValue = Math.max(...data.metrics.map(metric => Math.max(...metric.data)))
+                                    const colors = ['bg-gradient-to-br from-purple-300 to-purple-400', 'bg-violet-500', 'bg-blue-500']
+                                    
+                                    return (
+                                      <div key={postIndex} className="flex-1 flex flex-col items-center space-y-1">
+                                        {/* Bars for each metric */}
+                                        <div className="flex items-end space-x-1 h-24 w-full">
+                                          {data.metrics.map((metric, metricIndex) => {
+                                            const value = metric.data[postIndex] || 0
+                                            const height = maxValue > 0 ? (value / maxValue) * 100 : 0
+                                            
+                                            return (
+                                              <div
+                                                key={metricIndex}
+                                                className={`${colors[metricIndex]} rounded-t-sm flex-1 min-h-[2px] transition-all duration-300 hover:opacity-80`}
+                                                style={{ height: `${Math.max(height, 2)}%` }}
+                                                title={`${metric.name}: ${formatEngagement(value)}`}
+                                              />
+                                            )
+                                          })}
+                                        </div>
+                                        
+                                        {/* Post Date Label */}
+                                        <div className="text-xs text-gray-400 text-center">
+                                          {(() => {
+                                            const postDate = post.created_at || post.published_at || post.scheduled_date || post.date || post.timestamp
+                                            
+                                            if (postDate) {
+                                              try {
+                                                return new Date(postDate).toLocaleDateString('en-US', { 
+                                                  month: 'short', 
+                                                  day: 'numeric' 
+                                                })
+                                              } catch (error) {
+                                                console.log('Date parsing error:', error, 'for post:', post)
+                                              }
+                                            }
+                                            
+                                            return `Post ${postIndex + 1}`
+                                          })()}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
                                 
-                                return (
-                                  <div key={metricIndex} className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-sm font-medium text-gray-700">{metric.name}</span>
-                                      <span className="text-xs text-gray-500">
-                                        {formatEngagement(metric.data.reduce((a, b) => a + b, 0))} total
-                                      </span>
-                                    </div>
-                                    
-                                    {/* Bar Chart */}
-                                    <div className="flex items-end space-x-1 h-8">
-                                      {metric.data.map((value, index) => {
-                                        const height = maxMetricValue > 0 ? (value / maxMetricValue) * 100 : 0
-                                        return (
-                                          <div
-                                            key={index}
-                                            className={`${colors[metricIndex]} rounded-t-sm flex-1 min-h-[2px] transition-all duration-300 hover:opacity-80`}
-                                            style={{ height: `${Math.max(height, 2)}%` }}
-                                            title={`Post ${index + 1}: ${formatEngagement(value)}`}
-                                          />
-                                        )
-                                      })}
-                                    </div>
-                                    
-                                    {/* Post Labels */}
-                                    <div className="flex justify-between text-xs text-gray-400">
-                                      <span>Post 1</span>
-                                      <span>Post 5</span>
-                                      <span>Post 10</span>
-                                    </div>
-                                  </div>
-                                )
-                              })}
+                                {/* Legend */}
+                                <div className="flex justify-center space-x-4 mt-2">
+                                  {data.metrics.map((metric, index) => {
+                                    const colors = ['bg-gradient-to-br from-purple-300 to-purple-400', 'bg-violet-500', 'bg-blue-500']
+                                    return (
+                                      <div key={index} className="flex items-center space-x-1">
+                                        <div className={`w-3 h-3 ${colors[index]} rounded-sm`}></div>
+                                        <span className="text-xs text-gray-600">{metric.name}</span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
                             </div>
 
                             {/* Summary Stats */}
