@@ -243,7 +243,7 @@ const Chatbot = () => {
                   ? 'bg-gray-800 text-white' 
                   : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white'
               }`}>
-                {message.type === 'user' ? <User className="w-4 h-4" /> : <span className="text-white font-bold text-sm">E</span>}
+                {message.type === 'user' ? <User className="w-4 h-4" /> : <span className="text-white font-bold text-sm select-none">E</span>}
               </div>
               <div className={`rounded-lg px-4 py-3 ${
                 message.type === 'user'
