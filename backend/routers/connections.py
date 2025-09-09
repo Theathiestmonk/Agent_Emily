@@ -36,8 +36,9 @@ from pydantic import BaseModel
 class User(BaseModel):
     id: str
     email: str
-    name: str
-    created_at: str
+
+class TokenUpdateRequest(BaseModel):
+    tokens: dict
 
 def get_current_user(authorization: str = Header(None)):
     """Get current user from Supabase JWT token"""
@@ -164,6 +165,12 @@ async def get_connections(
         if all_connections:
             for conn in all_connections:
                 print(f"  - {conn.get('platform')}: {conn.get('connection_status')} (is_active: {conn.get('is_active')})")
+        
+        # Debug: Check for manual connections specifically
+        manual_connections = [conn for conn in all_connections if conn.get('page_username') == 'manual_token_user']
+        print(f"🔧 Manual connections found: {len(manual_connections)}")
+        for conn in manual_connections:
+            print(f"  - Manual {conn.get('platform')}: is_active={conn.get('is_active')}, status={conn.get('connection_status')}")
         
         # Remove sensitive data from response (but keep token for debugging)
         response_connections = []
@@ -1657,9 +1664,204 @@ async def post_to_instagram(
         )
 
 
+async def validate_and_fetch_account_info(platform_name: str, token: str) -> dict:
+    """Validate token and fetch account information from platform API"""
+    try:
+        if platform_name == "Facebook":
+            return await validate_facebook_token(token)
+        elif platform_name == "Instagram":
+            return await validate_instagram_token(token)
+        elif platform_name == "LinkedIn":
+            return await validate_linkedin_token(token)
+        elif platform_name == "Twitter":
+            return await validate_twitter_token(token)
+        elif platform_name == "YouTube":
+            return await validate_youtube_token(token)
+        else:
+            print(f"❌ Unsupported platform: {platform_name}")
+            return None
+    except Exception as e:
+        print(f"❌ Error validating {platform_name} token: {e}")
+        return None
+
+async def validate_facebook_token(token: str) -> dict:
+    """Validate Facebook token and fetch account info"""
+    try:
+        import httpx
+        
+        # Get user info
+        user_response = await httpx.get(
+            f"https://graph.facebook.com/v18.0/me",
+            params={"access_token": token, "fields": "id,name,email"}
+        )
+        
+        if user_response.status_code != 200:
+            print(f"❌ Facebook token validation failed: {user_response.status_code}")
+            return None
+        
+        user_data = user_response.json()
+        
+        # Get pages
+        pages_response = await httpx.get(
+            f"https://graph.facebook.com/v18.0/me/accounts",
+            params={"access_token": token}
+        )
+        
+        pages_data = pages_response.json() if pages_response.status_code == 200 else {"data": []}
+        
+        # Use the first page or user account
+        if pages_data.get("data"):
+            page = pages_data["data"][0]
+            return {
+                "page_id": page.get("id"),
+                "page_name": page.get("name"),
+                "page_username": page.get("name"),
+                "follower_count": page.get("fan_count", 0),
+                "account_type": "page"
+            }
+        else:
+            return {
+                "page_id": user_data.get("id"),
+                "page_name": user_data.get("name"),
+                "page_username": user_data.get("name"),
+                "follower_count": 0,
+                "account_type": "personal"
+            }
+    except Exception as e:
+        print(f"❌ Error validating Facebook token: {e}")
+        return None
+
+async def validate_instagram_token(token: str) -> dict:
+    """Validate Instagram token and fetch account info"""
+    try:
+        import httpx
+        
+        # Get user info
+        user_response = await httpx.get(
+            f"https://graph.facebook.com/v18.0/me",
+            params={"access_token": token, "fields": "id,username,account_type,media_count,followers_count"}
+        )
+        
+        if user_response.status_code != 200:
+            print(f"❌ Instagram token validation failed: {user_response.status_code}")
+            return None
+        
+        user_data = user_response.json()
+        
+        return {
+            "page_id": user_data.get("id"),
+            "page_name": user_data.get("username"),
+            "page_username": user_data.get("username"),
+            "follower_count": user_data.get("followers_count", 0),
+            "instagram_id": user_data.get("id"),
+            "account_type": user_data.get("account_type", "personal"),
+            "media_count": user_data.get("media_count", 0)
+        }
+    except Exception as e:
+        print(f"❌ Error validating Instagram token: {e}")
+        return None
+
+async def validate_linkedin_token(token: str) -> dict:
+    """Validate LinkedIn token and fetch account info"""
+    try:
+        import httpx
+        
+        # Get user info
+        user_response = await httpx.get(
+            "https://api.linkedin.com/v2/people/~",
+            params={"projection": "(id,firstName,lastName,profilePicture(displayImage~:playableStreams))"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        
+        if user_response.status_code != 200:
+            print(f"❌ LinkedIn token validation failed: {user_response.status_code}")
+            return None
+        
+        user_data = user_response.json()
+        
+        return {
+            "page_id": user_data.get("id"),
+            "page_name": f"{user_data.get('firstName', {}).get('localized', {}).get('en_US', '')} {user_data.get('lastName', {}).get('localized', {}).get('en_US', '')}".strip(),
+            "page_username": user_data.get("id"),
+            "follower_count": 0,
+            "linkedin_id": user_data.get("id"),
+            "profile_picture": user_data.get("profilePicture", {}).get("displayImage~", {}).get("elements", [{}])[0].get("identifiers", [{}])[0].get("identifier", "")
+        }
+    except Exception as e:
+        print(f"❌ Error validating LinkedIn token: {e}")
+        return None
+
+async def validate_twitter_token(token: str) -> dict:
+    """Validate Twitter token and fetch account info"""
+    try:
+        import httpx
+        
+        # Get user info
+        user_response = await httpx.get(
+            "https://api.twitter.com/2/users/me",
+            params={"user.fields": "id,username,name,public_metrics"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        
+        if user_response.status_code != 200:
+            print(f"❌ Twitter token validation failed: {user_response.status_code}")
+            return None
+        
+        user_data = user_response.json()
+        user = user_data.get("data", {})
+        
+        return {
+            "page_id": user.get("id"),
+            "page_name": user.get("name"),
+            "page_username": user.get("username"),
+            "follower_count": user.get("public_metrics", {}).get("followers_count", 0)
+        }
+    except Exception as e:
+        print(f"❌ Error validating Twitter token: {e}")
+        return None
+
+async def validate_youtube_token(token: str) -> dict:
+    """Validate YouTube token and fetch account info"""
+    try:
+        import httpx
+        
+        # Get channel info
+        channel_response = await httpx.get(
+            "https://www.googleapis.com/youtube/v3/channels",
+            params={
+                "part": "snippet,statistics",
+                "mine": "true",
+                "access_token": token
+            }
+        )
+        
+        if channel_response.status_code != 200:
+            print(f"❌ YouTube token validation failed: {channel_response.status_code}")
+            return None
+        
+        channel_data = channel_response.json()
+        items = channel_data.get("items", [])
+        
+        if not items:
+            return None
+        
+        channel = items[0]
+        snippet = channel.get("snippet", {})
+        statistics = channel.get("statistics", {})
+        
+        return {
+            "page_id": channel.get("id"),
+            "page_name": snippet.get("title"),
+            "page_username": snippet.get("title"),
+            "follower_count": int(statistics.get("subscriberCount", 0))
+        }
+    except Exception as e:
+        print(f"❌ Error validating YouTube token: {e}")
+        return None
+
 @router.post("/update-tokens")
 async def update_access_tokens(
-    tokens_data: dict,
+    tokens_data: TokenUpdateRequest,
     authorization: str = Header(None)
 ):
     """
@@ -1693,7 +1895,8 @@ async def update_access_tokens(
                 detail="Invalid token"
             )
         
-        tokens = tokens_data.get("tokens", {})
+        tokens = tokens_data.tokens
+        print(f"🔍 Received tokens: {tokens}")
         updated_platforms = []
         
         # Platform mapping
@@ -1710,33 +1913,79 @@ async def update_access_tokens(
             
             if token_value:
                 try:
-                    # Encrypt the token
-                    key = os.getenv("ENCRYPTION_KEY")
-                    if not key:
-                        raise HTTPException(
-                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail="Encryption key not configured"
-                        )
+                    print(f"🔍 Processing {platform_name} token...")
                     
-                    fernet = Fernet(key.encode())
-                    encrypted_token = fernet.encrypt(token_value.encode()).decode()
+                    # First, validate the token and fetch account information
+                    try:
+                        account_info = await validate_and_fetch_account_info(platform_name, token_value)
+                        print(f"🔍 Validation result for {platform_name}: {account_info is not None}")
+                    except Exception as e:
+                        print(f"❌ Error during validation for {platform_name}: {e}")
+                        account_info = None
                     
-                    # Check if connection exists for this platform
-                    existing_connection = supabase_admin.table("platform_connections").select("*").eq("user_id", user_id).eq("platform", platform_name).eq("is_active", True).execute()
+                    if not account_info:
+                        print(f"⚠️  Failed to validate {platform_name} token, storing with placeholder data")
+                        # Use placeholder data if validation fails
+                        account_info = {
+                            "page_id": f"manual_{platform_name.lower()}_id",
+                            "page_name": f"Manual {platform_name} Connection",
+                            "page_username": f"manual_{platform_name.lower()}_user",
+                            "follower_count": 0
+                        }
+                        print(f"📝 Using placeholder data for {platform_name}: {account_info}")
+                    
+                    # Encrypt the token using the global cipher
+                    encrypted_token = encrypt_token(token_value)
+                    print(f"🔐 Encrypted token for {platform_name}: {encrypted_token[:50]}...")
+                    
+                    # Check if connection exists for this platform (regardless of active status)
+                    existing_connection = supabase_admin.table("platform_connections").select("*").eq("user_id", user_id).eq("platform", platform_name).execute()
+                    print(f"🔍 Existing connections for {platform_name}: {len(existing_connection.data) if existing_connection.data else 0}")
                     
                     if existing_connection.data:
-                        # Update existing connection
-                        update_response = supabase_admin.table("platform_connections").update({
+                        # Update existing connection with real account data
+                        update_data = {
                             "access_token_encrypted": encrypted_token,
                             "updated_at": datetime.now().isoformat(),
-                            "token_source": "manual"  # Mark as manually provided
-                        }).eq("user_id", user_id).eq("platform", platform_name).eq("is_active", True).execute()
+                            "is_active": True,
+                            "connection_status": "active",
+                            "page_id": account_info.get('page_id'),
+                            "page_name": account_info.get('page_name'),
+                            "page_username": account_info.get('page_username'),
+                            "follower_count": account_info.get('follower_count', 0)
+                        }
+                        
+                        # Add platform-specific fields
+                        if platform_name == "Facebook":
+                            update_data.update({
+                                "instagram_id": account_info.get('instagram_id'),
+                                "account_type": account_info.get('account_type', 'personal')
+                            })
+                        elif platform_name == "Instagram":
+                            update_data.update({
+                                "instagram_id": account_info.get('instagram_id'),
+                                "account_type": account_info.get('account_type', 'personal'),
+                                "media_count": account_info.get('media_count', 0)
+                            })
+                        elif platform_name == "LinkedIn":
+                            update_data.update({
+                                "linkedin_id": account_info.get('linkedin_id'),
+                                "headline": account_info.get('headline'),
+                                "email": account_info.get('email'),
+                                "profile_picture": account_info.get('profile_picture')
+                            })
+                        
+                        print(f"🔄 Updating {platform_name} connection with data: {update_data}")
+                        update_response = supabase_admin.table("platform_connections").update(update_data).eq("user_id", user_id).eq("platform", platform_name).execute()
+                        print(f"📝 Update response: {update_response}")
                         
                         if update_response.data:
                             updated_platforms.append(platform_name)
-                            print(f"✅ Updated {platform_name} token for user {user_id}")
+                            print(f"✅ Updated {platform_name} connection with real account data for user {user_id}")
+                        else:
+                            print(f"❌ Update failed for {platform_name}")
                     else:
-                        # Create new connection with manual token
+                        # Create new connection with real account data
                         new_connection = {
                             "user_id": user_id,
                             "platform": platform_name,
@@ -1744,16 +1993,42 @@ async def update_access_tokens(
                             "is_active": True,
                             "connected_at": datetime.now().isoformat(),
                             "updated_at": datetime.now().isoformat(),
-                            "token_source": "manual",
-                            "platform_user_id": "manual_token",  # Placeholder
-                            "platform_username": "Manual Token User"  # Placeholder
+                            "page_id": account_info.get('page_id'),
+                            "page_name": account_info.get('page_name'),
+                            "page_username": account_info.get('page_username'),
+                            "follower_count": account_info.get('follower_count', 0),
+                            "connection_status": "active"
                         }
                         
+                        # Add platform-specific fields
+                        if platform_name == "Facebook":
+                            new_connection.update({
+                                "instagram_id": account_info.get('instagram_id'),
+                                "account_type": account_info.get('account_type', 'personal')
+                            })
+                        elif platform_name == "Instagram":
+                            new_connection.update({
+                                "instagram_id": account_info.get('instagram_id'),
+                                "account_type": account_info.get('account_type', 'personal'),
+                                "media_count": account_info.get('media_count', 0)
+                            })
+                        elif platform_name == "LinkedIn":
+                            new_connection.update({
+                                "linkedin_id": account_info.get('linkedin_id'),
+                                "headline": account_info.get('headline'),
+                                "email": account_info.get('email'),
+                                "profile_picture": account_info.get('profile_picture')
+                            })
+                        
+                        print(f"🔄 Inserting new {platform_name} connection with data: {new_connection}")
                         insert_response = supabase_admin.table("platform_connections").insert(new_connection).execute()
+                        print(f"📝 Insert response: {insert_response}")
                         
                         if insert_response.data:
                             updated_platforms.append(platform_name)
-                            print(f"✅ Created new {platform_name} connection with manual token for user {user_id}")
+                            print(f"✅ Created new {platform_name} connection with real account data for user {user_id}")
+                        else:
+                            print(f"❌ Insert failed for {platform_name}")
                     
                 except Exception as e:
                     print(f"❌ Error updating {platform_name} token: {e}")

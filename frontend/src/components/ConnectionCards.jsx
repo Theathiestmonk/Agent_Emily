@@ -71,6 +71,18 @@ const ConnectionCards = ({ compact = false }) => {
 
   useEffect(() => {
     fetchConnections()
+    
+    // Listen for refresh events from other components
+    const handleRefresh = () => {
+      console.log('Received refresh event, fetching connections...')
+      fetchConnections()
+    }
+    
+    window.addEventListener('refreshConnections', handleRefresh)
+    
+    return () => {
+      window.removeEventListener('refreshConnections', handleRefresh)
+    }
   }, [])
 
   const fetchConnections = async () => {
