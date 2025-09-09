@@ -1754,8 +1754,9 @@ async def update_access_tokens(
                             "connected_at": datetime.now().isoformat(),
                             "updated_at": datetime.now().isoformat(),
                             "token_source": "manual",
-                            "platform_user_id": "manual_token",  # Placeholder
-                            "platform_username": "Manual Token User"  # Placeholder
+                            "page_id": "manual_token",  # Placeholder
+                            "page_name": "Manual Token User",  # Placeholder
+                            "page_username": "Manual Token User"  # Placeholder
                         }
                         
                         print(f"🔄 Creating new connection for {platform_name}: {new_connection}")
