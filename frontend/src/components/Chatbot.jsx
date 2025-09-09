@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
-import { Send, Bot, User, Loader2, Calendar, BarChart3, TrendingUp, Lightbulb, Mic, Sparkles } from 'lucide-react'
+import { Send, User, Loader2, Calendar, BarChart3, TrendingUp, Lightbulb, Mic, Sparkles } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -241,9 +241,9 @@ const Chatbot = () => {
               <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                 message.type === 'user' 
                   ? 'bg-gray-800 text-white' 
-                  : 'bg-gray-100 text-gray-600'
+                  : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white'
               }`}>
-                {message.type === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                {message.type === 'user' ? <User className="w-4 h-4" /> : <span className="text-white font-bold text-sm">E</span>}
               </div>
               <div className={`rounded-lg px-4 py-3 ${
                 message.type === 'user'
