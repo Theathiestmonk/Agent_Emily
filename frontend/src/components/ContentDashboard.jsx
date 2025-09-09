@@ -61,7 +61,6 @@ const ContentDashboard = () => {
   const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]) // Current date in YYYY-MM-DD format
   const [dateContent, setDateContent] = useState([]) // Content for selected date
-  const [loadingDateContent, setLoadingDateContent] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -91,7 +90,6 @@ const ContentDashboard = () => {
 
   const fetchContentByDate = async (date) => {
     try {
-      setLoadingDateContent(true)
       const result = await contentAPI.getContentByDate(date)
       
       console.log('Fetched content for date:', date, result)
@@ -105,8 +103,6 @@ const ContentDashboard = () => {
     } catch (error) {
       console.error('Error fetching content by date:', error)
       setDateContent([])
-    } finally {
-      setLoadingDateContent(false)
     }
   }
 
@@ -656,22 +652,6 @@ const ContentDashboard = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 p-6 pt-24">
-          {/* Date Loading Indicator */}
-          {loadingDateContent && (
-            <div className="flex items-center justify-center min-h-[60vh]">
-              <div className="w-full max-w-md">
-                <div className="bg-transparent border border-purple-200 rounded-lg p-6">
-                  <div className="flex items-center justify-center space-x-3 mb-4">
-                    <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-purple-700 font-medium">Loading content for {selectedDate}...</span>
-                  </div>
-                  <div className="w-full bg-purple-100 rounded-full h-3">
-                    <div className="bg-gradient-to-r from-pink-500 to-purple-600 h-3 rounded-full animate-pulse" style={{width: '60%'}}></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Status Message */}
           {generationStatus && (
