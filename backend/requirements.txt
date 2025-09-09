@@ -14,3 +14,4 @@ pytz
 cryptography
 PyJWT
 requests
+httpx

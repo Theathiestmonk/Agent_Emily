@@ -907,6 +907,216 @@ async def generate_content_for_all_users(background_tasks: BackgroundTasks):
             detail=f"Failed to start content generation: {str(e)}"
         )
 
+# Ads endpoints
+@app.get("/ads/{platform}")
+async def get_platform_ads(
+    platform: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get active ads for a specific platform"""
+    try:
+        # Get user's connections for the platform
+        connections_response = supabase.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", platform).eq("is_active", True).execute()
+        
+        if not connections_response.data:
+            return {"ads": []}
+        
+        ads = []
+        
+        # For each connection, fetch ads from the platform
+        for connection in connections_response.data:
+            try:
+                platform_ads = await fetch_ads_from_platform(platform, connection)
+                ads.extend(platform_ads)
+            except Exception as e:
+                print(f"Error fetching ads for {platform} connection {connection['id']}: {e}")
+                continue
+        
+        return {"ads": ads}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch {platform} ads: {str(e)}"
+        )
+
+async def fetch_ads_from_platform(platform: str, connection: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Fetch ads from a specific platform using the connection data"""
+    try:
+        import httpx
+        
+        # Get the access token from the connection
+        access_token = connection.get('access_token_encrypted')
+        if not access_token:
+            print(f"No access token found for {platform} connection")
+            return []
+        
+        # Decrypt the access token (in production, you'd use proper encryption)
+        # For now, assuming the token is stored as plain text for testing
+        token = access_token
+        
+        if platform.lower() == 'facebook':
+            return await fetch_facebook_ads(connection, token)
+        elif platform.lower() == 'instagram':
+            return await fetch_instagram_ads(connection, token)
+        elif platform.lower() == 'linkedin':
+            return await fetch_linkedin_ads(connection, token)
+        elif platform.lower() == 'twitter':
+            return await fetch_twitter_ads(connection, token)
+        elif platform.lower() == 'youtube':
+            return await fetch_youtube_ads(connection, token)
+        else:
+            return []
+            
+    except Exception as e:
+        print(f"Error fetching ads from {platform}: {e}")
+        return []
+
+async def fetch_facebook_ads(connection: Dict[str, Any], token: str) -> List[Dict[str, Any]]:
+    """Fetch Facebook ads using Marketing API"""
+    try:
+        import httpx
+        
+        page_id = connection.get('page_id')
+        if not page_id:
+            return []
+        
+        # Facebook Marketing API endpoint for ads
+        url = f"https://graph.facebook.com/v18.0/{page_id}/ads"
+        params = {
+            'access_token': token,
+            'fields': 'id,name,status,objective,created_time,updated_time,insights{impressions,clicks,spend,reach,ctr,cpc,cpm}',
+            'limit': 50
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            ads = []
+            for ad_data in data.get('data', []):
+                insights = ad_data.get('insights', {}).get('data', [{}])[0] if ad_data.get('insights', {}).get('data') else {}
+                
+                ad = {
+                    'id': ad_data.get('id'),
+                    'name': ad_data.get('name', 'Unnamed Ad'),
+                    'type': 'Facebook Ad',
+                    'status': ad_data.get('status', 'unknown'),
+                    'objective': ad_data.get('objective', 'Unknown'),
+                    'budget': 0,  # Facebook doesn't provide budget in this endpoint
+                    'spent': float(insights.get('spend', 0)),
+                    'impressions': int(insights.get('impressions', 0)),
+                    'clicks': int(insights.get('clicks', 0)),
+                    'reach': int(insights.get('reach', 0)),
+                    'ctr': float(insights.get('ctr', 0)),
+                    'cpc': float(insights.get('cpc', 0)),
+                    'cpm': float(insights.get('cpm', 0)),
+                    'startDate': ad_data.get('created_time', '').split('T')[0] if ad_data.get('created_time') else '',
+                    'endDate': '',  # Facebook doesn't provide end date in this endpoint
+                    'platform': 'facebook',
+                    'pageName': connection.get('page_name', 'Facebook Page')
+                }
+                ads.append(ad)
+            
+            return ads
+            
+    except Exception as e:
+        print(f"Error fetching Facebook ads: {e}")
+        return []
+
+async def fetch_instagram_ads(connection: Dict[str, Any], token: str) -> List[Dict[str, Any]]:
+    """Fetch Instagram ads using Business API"""
+    try:
+        import httpx
+        
+        # Instagram Business API endpoint for ads
+        url = "https://graph.facebook.com/v18.0/me/adaccounts"
+        params = {
+            'access_token': token,
+            'fields': 'id,name'
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            ads = []
+            for account in data.get('data', []):
+                account_id = account.get('id')
+                if account_id:
+                    # Get ads for this account
+                    ads_url = f"https://graph.facebook.com/v18.0/{account_id}/ads"
+                    ads_params = {
+                        'access_token': token,
+                        'fields': 'id,name,status,objective,created_time,updated_time,insights{impressions,clicks,spend,reach,ctr,cpc,cpm}',
+                        'limit': 50
+                    }
+                    
+                    ads_response = await client.get(ads_url, params=ads_params)
+                    if ads_response.status_code == 200:
+                        ads_data = ads_response.json()
+                        for ad_data in ads_data.get('data', []):
+                            insights = ad_data.get('insights', {}).get('data', [{}])[0] if ad_data.get('insights', {}).get('data') else {}
+                            
+                            ad = {
+                                'id': ad_data.get('id'),
+                                'name': ad_data.get('name', 'Unnamed Ad'),
+                                'type': 'Instagram Ad',
+                                'status': ad_data.get('status', 'unknown'),
+                                'objective': ad_data.get('objective', 'Unknown'),
+                                'budget': 0,
+                                'spent': float(insights.get('spend', 0)),
+                                'impressions': int(insights.get('impressions', 0)),
+                                'clicks': int(insights.get('clicks', 0)),
+                                'reach': int(insights.get('reach', 0)),
+                                'ctr': float(insights.get('ctr', 0)),
+                                'cpc': float(insights.get('cpc', 0)),
+                                'cpm': float(insights.get('cpm', 0)),
+                                'startDate': ad_data.get('created_time', '').split('T')[0] if ad_data.get('created_time') else '',
+                                'endDate': '',
+                                'platform': 'instagram',
+                                'pageName': connection.get('page_name', 'Instagram Account')
+                            }
+                            ads.append(ad)
+            
+            return ads
+            
+    except Exception as e:
+        print(f"Error fetching Instagram ads: {e}")
+        return []
+
+async def fetch_linkedin_ads(connection: Dict[str, Any], token: str) -> List[Dict[str, Any]]:
+    """Fetch LinkedIn ads using Marketing API"""
+    try:
+        # LinkedIn Marketing API implementation would go here
+        # For now, return empty array as LinkedIn API requires different authentication
+        return []
+    except Exception as e:
+        print(f"Error fetching LinkedIn ads: {e}")
+        return []
+
+async def fetch_twitter_ads(connection: Dict[str, Any], token: str) -> List[Dict[str, Any]]:
+    """Fetch Twitter ads using Ads API"""
+    try:
+        # Twitter Ads API implementation would go here
+        # For now, return empty array as Twitter API requires different authentication
+        return []
+    except Exception as e:
+        print(f"Error fetching Twitter ads: {e}")
+        return []
+
+async def fetch_youtube_ads(connection: Dict[str, Any], token: str) -> List[Dict[str, Any]]:
+    """Fetch YouTube ads using Google Ads API"""
+    try:
+        # YouTube/Google Ads API implementation would go here
+        # For now, return empty array as Google Ads API requires different authentication
+        return []
+    except Exception as e:
+        print(f"Error fetching YouTube ads: {e}")
+        return []
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -14,7 +14,8 @@ import {
   BarChart3,
   Target,
   Users,
-  Share2
+  Share2,
+  Megaphone
 } from 'lucide-react'
 
 const SideNavbar = () => {
@@ -59,6 +60,12 @@ const SideNavbar = () => {
       href: '/campaigns',
       icon: Target,
       description: 'Marketing campaigns'
+    },
+    {
+      name: 'Ads',
+      href: '/ads',
+      icon: Megaphone,
+      description: 'Active advertising campaigns'
     },
     {
       name: 'Audience',

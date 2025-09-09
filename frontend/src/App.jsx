@@ -8,6 +8,7 @@ import ContentCalendar from './components/ContentCalendar'
 import SocialMediaDashboard from './components/SocialMediaDashboard'
 import AnalyticsDashboard from './components/AnalyticsDashboard'
 import CampaignsDashboard from './components/CampaignsDashboard'
+import AdsDashboard from './components/AdsDashboard'
 import Chatbot from './components/Chatbot'
 import Onboarding from './components/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -119,6 +120,14 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <CampaignsDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/ads" 
+          element={
+            <ProtectedRoute>
+              <AdsDashboard />
             </ProtectedRoute>
           } 
         />
