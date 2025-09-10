@@ -523,6 +523,13 @@ const ContentDashboard = () => {
     try {
       const authToken = await getAuthToken()
       
+      // Get the image URL if available
+      let imageUrl = ''
+      if (generatedImages[content.id] && generatedImages[content.id].image_url) {
+        imageUrl = generatedImages[content.id].image_url
+        console.log('📸 Including image in Facebook post:', imageUrl)
+      }
+      
       const response = await fetch(`${API_BASE_URL}/connections/facebook/post`, {
         method: 'POST',
         headers: {
@@ -533,7 +540,8 @@ const ContentDashboard = () => {
           message: content.content,
           title: content.title,
           hashtags: content.hashtags || [],
-          content_id: content.id
+          content_id: content.id,
+          image_url: imageUrl
         })
       })
 
@@ -560,6 +568,13 @@ const ContentDashboard = () => {
     try {
       const authToken = await getAuthToken()
       
+      // Get the image URL if available
+      let imageUrl = ''
+      if (generatedImages[content.id] && generatedImages[content.id].image_url) {
+        imageUrl = generatedImages[content.id].image_url
+        console.log('📸 Including image in Instagram post:', imageUrl)
+      }
+      
       const response = await fetch(`${API_BASE_URL}/connections/instagram/post`, {
         method: 'POST',
         headers: {
@@ -570,7 +585,8 @@ const ContentDashboard = () => {
           message: content.content,
           title: content.title,
           hashtags: content.hashtags || [],
-          content_id: content.id
+          content_id: content.id,
+          image_url: imageUrl
         })
       })
 
@@ -691,20 +707,31 @@ const ContentDashboard = () => {
 
   const fetchPostImages = async (postId) => {
     try {
+      console.log('🔄 Fetching images for post:', postId)
       const result = await mediaService.getPostImages(postId)
+      console.log('🔄 API result:', result)
+      
       if (result.images && result.images.length > 0) {
         // Store the latest image for this post
         const latestImage = result.images[0] // Assuming we want the latest one
-        setGeneratedImages(prev => ({
-          ...prev,
-          [postId]: {
-            image_url: latestImage.image_url,
-            cost: latestImage.generation_cost,
-            generation_time: latestImage.generation_time,
-            generated_at: latestImage.created_at,
-            is_approved: latestImage.is_approved
+        console.log('🖼️ Latest image data:', latestImage)
+        
+        setGeneratedImages(prev => {
+          const newImages = {
+            ...prev,
+            [postId]: {
+              image_url: latestImage.image_url,
+              cost: latestImage.generation_cost,
+              generation_time: latestImage.generation_time,
+              generated_at: latestImage.created_at,
+              is_approved: latestImage.is_approved
+            }
           }
-        }))
+          console.log('🖼️ Updated generated images:', newImages)
+          return newImages
+        })
+      } else {
+        console.log('⚠️ No images found for post:', postId)
       }
     } catch (error) {
       console.error('Error fetching post images:', error)
@@ -719,8 +746,14 @@ const ContentDashboard = () => {
       const result = await mediaService.generateMedia(content.id)
       
       if (result.success) {
+        console.log('🎨 Generation successful, fetching images for content:', content.id)
+        console.log('🎨 Generation result:', result)
+        
         // Fetch the generated image from Supabase
         await fetchPostImages(content.id)
+        
+        // Check what was fetched
+        console.log('🖼️ Generated images after fetch:', generatedImages)
         
         showSuccess('Media generated successfully!', `Image created in ${result.generation_time}s`)
       } else {
@@ -908,29 +941,33 @@ const ContentDashboard = () => {
   const getThumbnailUrl = (imageUrl) => {
     if (!imageUrl) return null
     
-    // If it's a Supabase storage URL, add resize transformation for thumbnail
-    if (imageUrl.includes('supabase.co/storage/v1/object/public/')) {
+    // If it's a Supabase storage URL from the generated folder, add resize transformation for thumbnail
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/')) {
+      // Check if URL already has query parameters
+      const separator = imageUrl.includes('?') ? '&' : '?'
       // Add resize transformation to create a smaller, faster-loading thumbnail
       // Using 100x100 with 70% quality for maximum speed
-      return `${imageUrl}?width=100&height=100&resize=cover&quality=70&format=webp`
+      return `${imageUrl}${separator}width=100&height=100&resize=cover&quality=70&format=webp`
     }
     
-    // For external URLs, return as is (could add external thumbnail service later)
-    return imageUrl
+    // For non-generated folder URLs, return null to trigger image generation
+    return null
   }
 
   // Get extra small thumbnail for collapsed cards (ultra fast loading)
   const getSmallThumbnailUrl = (imageUrl) => {
     if (!imageUrl) return null
     
-    // If it's a Supabase storage URL, add resize transformation for very small thumbnail
-    if (imageUrl.includes('supabase.co/storage/v1/object/public/')) {
+    // If it's a Supabase storage URL from the generated folder, add resize transformation for very small thumbnail
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/')) {
+      // Check if URL already has query parameters
+      const separator = imageUrl.includes('?') ? '&' : '?'
       // Using 50x50 with 50% quality for ultra fast loading in collapsed cards
-      return `${imageUrl}?width=50&height=50&resize=cover&quality=50&format=webp`
+      return `${imageUrl}${separator}width=50&height=50&resize=cover&quality=50&format=webp`
     }
     
-    // For external URLs, return as is
-    return imageUrl
+    // For non-generated folder URLs, return null to trigger image generation
+    return null
   }
 
   // Handle image load events
@@ -1318,19 +1355,57 @@ const ContentDashboard = () => {
                                     <div className="w-8 h-8 bg-gray-300 rounded animate-pulse"></div>
                                   </div>
                                 )}
-                                <img 
-                                  src={getSmallThumbnailUrl(generatedImages[content.id].image_url)} 
-                                  alt="Generated content thumbnail" 
-                                  className="w-full h-full object-cover rounded"
-                                  loading="eager"
-                                  onLoad={() => handleImageLoad(content.id)}
-                                  onError={() => handleImageError(content.id)}
-                                  onLoadStart={() => startImageLoading(content.id)}
-                                  style={{
-                                    opacity: imageLoading.has(content.id) ? 0 : 1,
-                                    transition: 'opacity 0.2s ease-in-out'
-                                  }}
-                                />
+                                {generatedImages[content.id].image_url ? (
+                                  (() => {
+                                    const thumbnailUrl = getSmallThumbnailUrl(generatedImages[content.id].image_url)
+                                    
+                                    
+                                    // If thumbnail URL is null (non-generated folder URL), show generate button
+                                    if (!thumbnailUrl) {
+                                      return (
+                                        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleGenerateMedia(content.id)
+                                            }}
+                                            className="px-3 py-2 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 transition-colors"
+                                          >
+                                            Generate Image
+                                          </button>
+                                        </div>
+                                      )
+                                    }
+                                    
+                                    // Show image if we have a valid Supabase thumbnail URL
+                                    return (
+                                      <img 
+                                        src={thumbnailUrl} 
+                                        alt="Content image" 
+                                        className="w-full h-full object-cover rounded"
+                                        loading="eager"
+                                        onLoad={() => {
+                                          console.log('✅ Image loaded for content:', content.id)
+                                          handleImageLoad(content.id)
+                                        }}
+                                        onError={(e) => {
+                                          console.error('❌ Image failed to load for content:', content.id)
+                                          console.error('❌ Failed URL:', thumbnailUrl)
+                                          handleImageError(content.id)
+                                        }}
+                                        onLoadStart={() => startImageLoading(content.id)}
+                                        style={{
+                                          opacity: imageLoading.has(content.id) ? 0 : 1,
+                                          transition: 'opacity 0.2s ease-in-out'
+                                        }}
+                                      />
+                                    )
+                                  })()
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-500 text-xs">
+                                    No image URL
+                                  </div>
+                                )}
                               </>
                             ) : (
                               /* Generate Image Button */

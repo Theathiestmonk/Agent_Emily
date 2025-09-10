@@ -485,17 +485,22 @@ class MediaAgent:
             file_path = f"generated/{filename}"
             
             # Upload to Supabase storage
+            logger.info(f"Uploading to storage: {file_path}")
             storage_response = self.supabase.storage.from_("ai-generated-images").upload(
                 file_path,
                 image_data,
                 file_options={"content-type": f"image/{file_extension}"}
             )
             
-            if storage_response.get('error'):
-                raise Exception(f"Failed to upload to storage: {storage_response['error']}")
+            logger.info(f"Storage response: {storage_response}")
+            
+            # Check if upload was successful (UploadResponse object doesn't have .get() method)
+            if hasattr(storage_response, 'error') and storage_response.error:
+                raise Exception(f"Failed to upload to storage: {storage_response.error}")
             
             # Get public URL
             public_url = self.supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+            logger.info(f"Generated public URL: {public_url}")
             
             logger.info(f"Successfully uploaded image to storage: {public_url}")
             return public_url

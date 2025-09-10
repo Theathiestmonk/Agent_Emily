@@ -1068,6 +1068,7 @@ async def post_to_facebook(
         message = post_data.get('message', '')
         title = post_data.get('title', '')
         hashtags = post_data.get('hashtags', [])
+        image_url = post_data.get('image_url', '')
         
         # Combine title, message, and hashtags
         full_message = ""
@@ -1079,6 +1080,7 @@ async def post_to_facebook(
             full_message += f"\n\n{hashtag_string}"
         
         print(f"📄 Full message to post: {full_message}")
+        print(f"🖼️ Image URL: {image_url}")
         
         # First, validate the access token by getting page info
         try:
@@ -1107,14 +1109,26 @@ async def post_to_facebook(
         # Post to Facebook using the correct API format
         facebook_url = f"https://graph.facebook.com/v18.0/{connection['page_id']}/feed"
         
-        # Use form data with access_token as a parameter
-        payload = {
-            "message": full_message,
-            "access_token": access_token
-        }
+        # Prepare payload based on whether we have an image
+        if image_url:
+            # For posts with images, we need to use photos endpoint
+            facebook_url = f"https://graph.facebook.com/v18.0/{connection['page_id']}/photos"
+            payload = {
+                "message": full_message,
+                "url": image_url,  # Facebook will fetch the image from this URL
+                "access_token": access_token
+            }
+            print(f"🖼️ Posting with image to photos endpoint")
+        else:
+            # For text-only posts, use feed endpoint
+            payload = {
+                "message": full_message,
+                "access_token": access_token
+            }
+            print(f"📝 Posting text-only to feed endpoint")
         
         # Also try with access_token as URL parameter
-        facebook_url_with_token = f"https://graph.facebook.com/v18.0/{connection['page_id']}/feed?access_token={access_token}"
+        facebook_url_with_token = f"{facebook_url}?access_token={access_token}"
         
         print(f"🌐 Posting to Facebook URL: {facebook_url}")
         print(f"📄 Payload: {payload}")
@@ -1123,7 +1137,14 @@ async def post_to_facebook(
         
         # Try posting with access_token in URL first (recommended method)
         print(f"🌐 Trying URL method: {facebook_url_with_token}")
-        response = requests.post(facebook_url_with_token, data={"message": full_message})
+        if image_url:
+            # For photos, send URL parameter separately
+            response = requests.post(facebook_url_with_token, data={
+                "message": full_message,
+                "url": image_url
+            })
+        else:
+            response = requests.post(facebook_url_with_token, data={"message": full_message})
         
         if response.status_code != 200:
             print(f"❌ URL method failed, trying form data method")
@@ -1533,6 +1554,7 @@ async def post_to_instagram(
         message = post_data.get('message', '')
         title = post_data.get('title', '')
         hashtags = post_data.get('hashtags', [])
+        image_url = post_data.get('image_url', '')
         
         # Combine title, message, and hashtags
         full_message = ""
@@ -1544,6 +1566,7 @@ async def post_to_instagram(
             full_message += f"\n\n{hashtag_string}"
         
         print(f"📄 Full message to post: {full_message}")
+        print(f"🖼️ Image URL: {image_url}")
         
         # Get Instagram Business Account ID
         instagram_id = connection.get('instagram_id')
@@ -1556,11 +1579,22 @@ async def post_to_instagram(
         # Create media container first
         create_media_url = f"https://graph.facebook.com/v18.0/{instagram_id}/media"
         
-        # For text-only posts, we need to create a media container with a caption
-        media_data = {
-            "caption": full_message,
-            "access_token": access_token
-        }
+        # Prepare media data based on whether we have an image
+        if image_url:
+            # For posts with images
+            media_data = {
+                "image_url": image_url,
+                "caption": full_message,
+                "access_token": access_token
+            }
+            print(f"🖼️ Creating Instagram post with image")
+        else:
+            # For text-only posts, we need to create a media container with a caption
+            media_data = {
+                "caption": full_message,
+                "access_token": access_token
+            }
+            print(f"📝 Creating Instagram text-only post")
         
         print(f"🌐 Creating Instagram media container: {create_media_url}")
         print(f"📄 Media data: {media_data}")
