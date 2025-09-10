@@ -910,11 +910,26 @@ const ContentDashboard = () => {
     
     // If it's a Supabase storage URL, add resize transformation for thumbnail
     if (imageUrl.includes('supabase.co/storage/v1/object/public/')) {
-      // Add resize transformation to create a 200x200 thumbnail
-      return `${imageUrl}?width=200&height=200&resize=cover&quality=80`
+      // Add resize transformation to create a smaller, faster-loading thumbnail
+      // Using 100x100 with 70% quality for maximum speed
+      return `${imageUrl}?width=100&height=100&resize=cover&quality=70&format=webp`
     }
     
     // For external URLs, return as is (could add external thumbnail service later)
+    return imageUrl
+  }
+
+  // Get extra small thumbnail for collapsed cards (ultra fast loading)
+  const getSmallThumbnailUrl = (imageUrl) => {
+    if (!imageUrl) return null
+    
+    // If it's a Supabase storage URL, add resize transformation for very small thumbnail
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/')) {
+      // Using 50x50 with 50% quality for ultra fast loading in collapsed cards
+      return `${imageUrl}?width=50&height=50&resize=cover&quality=50&format=webp`
+    }
+    
+    // For external URLs, return as is
     return imageUrl
   }
 
@@ -1296,22 +1311,23 @@ const ContentDashboard = () => {
                               </div>
                             </div>
                             <div className="relative w-full aspect-square bg-gray-200 rounded overflow-hidden">
+                              {/* Show placeholder while loading */}
                               {imageLoading.has(content.id) && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                                  <div className="w-8 h-8 bg-gray-300 rounded animate-pulse"></div>
                                 </div>
                               )}
                               <img 
-                                src={getThumbnailUrl(generatedImages[content.id].image_url)} 
+                                src={getSmallThumbnailUrl(generatedImages[content.id].image_url)} 
                                 alt="Generated content thumbnail" 
                                 className="w-full h-full object-cover rounded"
-                                loading="lazy"
+                                loading="eager"
                                 onLoad={() => handleImageLoad(content.id)}
                                 onError={() => handleImageError(content.id)}
                                 onLoadStart={() => startImageLoading(content.id)}
                                 style={{
                                   opacity: imageLoading.has(content.id) ? 0 : 1,
-                                  transition: 'opacity 0.3s ease-in-out'
+                                  transition: 'opacity 0.2s ease-in-out'
                                 }}
                               />
                             </div>
