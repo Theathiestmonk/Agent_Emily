@@ -956,7 +956,7 @@ const ContentDashboard = () => {
                                 )}
                               </div>
                               <span className="text-xs text-purple-600">
-                                ${generatedImages[content.id].cost} • {generatedImages[content.id].generation_time}s
+                                {generatedImages[content.id].generation_time}s
                               </span>
                             </div>
                             <img 
@@ -1021,7 +1021,7 @@ const ContentDashboard = () => {
                                 )}
                               </div>
                               <span className="text-xs text-purple-600">
-                                ${generatedImages[content.id].cost}
+                                {generatedImages[content.id].generation_time}s
                               </span>
                             </div>
                             <img 
