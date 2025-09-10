@@ -36,3 +36,30 @@ CREATE TRIGGER update_users_updated_at
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
+-- Create storage bucket for content images
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('content-images', 'content-images', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Create policy for content images bucket
+CREATE POLICY "Content images are publicly accessible" ON storage.objects
+    FOR SELECT USING (bucket_id = 'content-images');
+
+CREATE POLICY "Authenticated users can upload content images" ON storage.objects
+    FOR INSERT WITH CHECK (
+        bucket_id = 'content-images' 
+        AND auth.role() = 'authenticated'
+    );
+
+CREATE POLICY "Users can update their own content images" ON storage.objects
+    FOR UPDATE USING (
+        bucket_id = 'content-images' 
+        AND auth.role() = 'authenticated'
+    );
+
+CREATE POLICY "Users can delete their own content images" ON storage.objects
+    FOR DELETE USING (
+        bucket_id = 'content-images' 
+        AND auth.role() = 'authenticated'
+    );
+

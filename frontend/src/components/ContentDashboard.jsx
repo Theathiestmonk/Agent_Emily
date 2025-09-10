@@ -39,7 +39,9 @@ import {
   Twitter,
   Youtube,
   Wand2,
-  Loader2
+  Loader2,
+  Upload,
+  X
 } from 'lucide-react'
 
 const ContentDashboard = () => {
@@ -70,6 +72,8 @@ const ContentDashboard = () => {
   const [expandedContent, setExpandedContent] = useState(null) // Content being viewed/expanded
   const [generatingMedia, setGeneratingMedia] = useState(new Set()) // Track which content is generating media
   const [generatedImages, setGeneratedImages] = useState({}) // Store generated images by content ID
+  const [uploadingImage, setUploadingImage] = useState(new Set()) // Track which content is uploading image
+  const [selectedFile, setSelectedFile] = useState(null) // Selected file for upload
 
   useEffect(() => {
     fetchData()
@@ -621,6 +625,7 @@ const ContentDashboard = () => {
   const handleCancelEdit = () => {
     setEditingContent(null)
     setEditForm({})
+    setSelectedFile(null)
   }
 
   const handleViewContent = (content) => {
@@ -713,6 +718,129 @@ const ContentDashboard = () => {
       showError('Failed to approve image', error.message)
     }
   }
+
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0]
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        showError('Invalid file type', 'Please select an image file')
+        return
+      }
+      
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        showError('File too large', 'Please select an image smaller than 10MB')
+        return
+      }
+      
+      setSelectedFile(file)
+    }
+  }
+
+  const handleUploadImage = async (postId) => {
+    if (!selectedFile) {
+      showError('No file selected', 'Please select an image to upload')
+      return
+    }
+
+    try {
+      setUploadingImage(prev => new Set(prev).add(postId))
+      
+      // Upload file to Supabase storage
+      const fileExt = selectedFile.name.split('.').pop()
+      const fileName = `${postId}-${Date.now()}.${fileExt}`
+      const filePath = `content-images/${fileName}`
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('content-images')
+        .upload(filePath, selectedFile)
+      
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`)
+      }
+      
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('content-images')
+        .getPublicUrl(filePath)
+      
+      const imageUrl = urlData.publicUrl
+      
+      // Update the image in the database
+      const { data: existingImages } = await supabase
+        .from('content_images')
+        .select('id')
+        .eq('post_id', postId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      
+      if (existingImages && existingImages.length > 0) {
+        // Update existing image
+        const { error: updateError } = await supabase
+          .from('content_images')
+          .update({
+            image_url: imageUrl,
+            is_approved: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingImages[0].id)
+        
+        if (updateError) {
+          throw new Error(`Update failed: ${updateError.message}`)
+        }
+      } else {
+        // Create new image record
+        const { error: insertError } = await supabase
+          .from('content_images')
+          .insert({
+            post_id: postId,
+            image_url: imageUrl,
+            image_prompt: 'User uploaded image',
+            image_style: 'user_upload',
+            image_size: 'custom',
+            image_quality: 'custom',
+            generation_model: 'user_upload',
+            generation_cost: 0,
+            generation_time: 0,
+            is_approved: true
+          })
+        
+        if (insertError) {
+          throw new Error(`Insert failed: ${insertError.message}`)
+        }
+      }
+      
+      // Update local state
+      setGeneratedImages(prev => ({
+        ...prev,
+        [postId]: {
+          image_url: imageUrl,
+          cost: 0,
+          generation_time: 0,
+          generated_at: new Date().toISOString(),
+          is_approved: true
+        }
+      }))
+      
+      // Close modal and reset
+      setShowUploadModal(null)
+      setSelectedFile(null)
+      
+      showSuccess('Image uploaded successfully!', 'Your custom image has been added to the post')
+      
+    } catch (error) {
+      console.error('Error uploading image:', error)
+      showError('Failed to upload image', error.message)
+    } finally {
+      setUploadingImage(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(postId)
+        return newSet
+      })
+    }
+  }
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
@@ -1235,20 +1363,102 @@ const ContentDashboard = () => {
                   </div>
                 </div>
 
-                {/* Status */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Status
-                  </label>
-                  <select
-                    value={editForm.status}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="scheduled">Scheduled</option>
-                    <option value="published">Published</option>
-                  </select>
+                {/* Image Upload and Status - Two Column Layout */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Image Upload Section */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Replace Image
+                    </label>
+                    
+                    {/* Current Image Display */}
+                    {generatedImages[editForm.id] && (
+                      <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">Current Image:</span>
+                          <span className="text-xs text-gray-500">
+                            {generatedImages[editForm.id].is_approved ? 'Approved' : 'Pending'}
+                          </span>
+                        </div>
+                        <img 
+                          src={generatedImages[editForm.id].image_url} 
+                          alt="Current content" 
+                          className="w-full h-32 object-cover rounded-lg"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* File Upload */}
+                    <div className="space-y-3">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileSelect}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <p className="text-xs text-gray-500">
+                        Supported formats: JPG, PNG, GIF. Max size: 10MB
+                      </p>
+                      
+                      {/* Selected File Preview */}
+                      {selectedFile && (
+                        <div className="border border-gray-200 rounded-lg p-3">
+                          <div className="flex items-center space-x-3">
+                            <Image className="w-6 h-6 text-blue-500" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
+                              <p className="text-xs text-gray-500">
+                                {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setSelectedFile(null)}
+                              className="text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Upload Button */}
+                      {selectedFile && (
+                        <button
+                          onClick={() => handleUploadImage(editForm.id)}
+                          disabled={uploadingImage.has(editForm.id)}
+                          className="w-full px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-cyan-500 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2"
+                        >
+                          {uploadingImage.has(editForm.id) ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Uploading...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4" />
+                              <span>Upload New Image</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Status
+                    </label>
+                    <select
+                      value={editForm.status}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="scheduled">Scheduled</option>
+                      <option value="published">Published</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -1282,6 +1492,7 @@ const ContentDashboard = () => {
           </div>
         </div>
       )}
+
     </div>
   )
 }
