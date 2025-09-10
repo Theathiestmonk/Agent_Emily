@@ -20,7 +20,6 @@ import {
   TrendingUp, 
   Plus,
   RefreshCw,
-  Eye,
   Edit,
   Share2,
   Download,
@@ -1045,7 +1044,11 @@ const ContentDashboard = () => {
                   const theme = getPlatformCardTheme(content.platform)
                   console.log('Content platform:', content.platform, 'Theme:', theme)
                   return (
-                    <div key={content.id} className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm p-6 hover:shadow-lg transition-all duration-300 hover:scale-[1.02]`}>
+                    <div 
+                      key={content.id} 
+                      onClick={() => handleViewContent(content)}
+                      className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm p-6 hover:shadow-lg transition-all duration-300 hover:scale-[1.02] cursor-pointer`}
+                    >
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center space-x-3">
                           <div className={`w-12 h-12 ${theme.iconBg} rounded-xl flex items-center justify-center shadow-sm`}>
@@ -1232,21 +1235,20 @@ const ContentDashboard = () => {
                       {/* Action Icons */}
                       <div className="flex items-center space-x-2">
                         <button 
-                          onClick={() => handleViewContent(content)}
-                          className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`} 
-                          title="View Content"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleEditContent(content)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditContent(content)
+                          }}
                           className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`} 
                           title="Edit Content"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button 
-                          onClick={() => handleGenerateMedia(content)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleGenerateMedia(content)
+                          }}
                           disabled={generatingMedia.has(content.id)}
                           className={`p-2 rounded-lg transition-all duration-200 ${
                             generatingMedia.has(content.id)
@@ -1262,7 +1264,10 @@ const ContentDashboard = () => {
                           )}
                         </button>
                         <button
-                          onClick={() => handlePostContent(content)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handlePostContent(content)
+                          }}
                           disabled={content.status === 'published' || postingContent.has(content.id)}
                           className={`p-2 rounded-lg transition-all duration-200 ${
                             content.status === 'published' 
