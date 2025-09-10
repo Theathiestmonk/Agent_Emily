@@ -58,10 +58,16 @@ async def generate_image_for_post(
 ):
     """Generate an image for a specific post"""
     try:
+        logger.info(f"Media router: Generating image for post {request.post_id}, user {current_user.id}")
+        
         # Verify post belongs to user
         post_response = supabase.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", request.post_id).execute()
         
+        logger.info(f"Media router query response: {post_response}")
+        logger.info(f"Media router response data: {post_response.data}")
+        
         if not post_response.data:
+            logger.error(f"Media router: No post found with ID {request.post_id}")
             raise HTTPException(status_code=404, detail="Post not found")
         
         post_data = post_response.data[0]

@@ -95,11 +95,15 @@ class MediaAgent:
                 return state
             
             # Fetch post data with campaign info
+            logger.info(f"Media agent querying post {post_id}")
             response = self.supabase.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", post_id).execute()
             
-            logger.info(f"Media agent querying post {post_id}, response: {response.data}")
+            logger.info(f"Media agent query response: {response}")
+            logger.info(f"Response data: {response.data}")
+            logger.info(f"Response count: {response.count}")
             
             if not response.data:
+                logger.error(f"No data found for post {post_id}")
                 state["error_message"] = f"Post with ID {post_id} not found"
                 state["status"] = "failed"
                 return state
