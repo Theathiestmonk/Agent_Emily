@@ -1183,9 +1183,7 @@ const ContentDashboard = () => {
                     
                     {expandedContent?.id === content.id ? (
                       <div className="mb-4">
-                        <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">{content.content}</p>
-                        
-                        {/* Media Display */}
+                        {/* Media Display - Above Content (Social Media Style) */}
                         {generatedImages[content.id] && (
                           <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
                             <div className="flex items-center justify-between mb-2">
@@ -1248,6 +1246,8 @@ const ContentDashboard = () => {
                           </div>
                         )}
                         
+                        <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">{content.content}</p>
+                        
                         {/* Expanded Details */}
                         <div className="bg-gray-50 rounded-lg p-3 mb-3">
                           <div className="grid grid-cols-2 gap-3 text-xs">
@@ -1295,44 +1295,72 @@ const ContentDashboard = () => {
                       </div>
                     ) : (
                       <div>
-                        <p className="text-gray-700 text-sm mb-4 line-clamp-3">{content.content}</p>
-                        
-                        {/* Media Preview */}
-                        {generatedImages[content.id] && (
-                          <div className="mb-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center space-x-1">
-                                <span className="text-xs font-medium text-purple-800">Media</span>
-                                {generatedImages[content.id].is_approved ? (
+                        {/* Media Placeholder - Always Show (Above Content) */}
+                        <div className="mb-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center space-x-1">
+                              <span className="text-xs font-medium text-purple-800">Media</span>
+                              {generatedImages[content.id] && (
+                                generatedImages[content.id].is_approved ? (
                                   <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">✓</span>
                                 ) : (
                                   <span className="text-xs bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded">Pending</span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="relative w-full aspect-square bg-gray-200 rounded overflow-hidden">
-                              {/* Show placeholder while loading */}
-                              {imageLoading.has(content.id) && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                                  <div className="w-8 h-8 bg-gray-300 rounded animate-pulse"></div>
-                                </div>
+                                )
                               )}
-                              <img 
-                                src={getSmallThumbnailUrl(generatedImages[content.id].image_url)} 
-                                alt="Generated content thumbnail" 
-                                className="w-full h-full object-cover rounded"
-                                loading="eager"
-                                onLoad={() => handleImageLoad(content.id)}
-                                onError={() => handleImageError(content.id)}
-                                onLoadStart={() => startImageLoading(content.id)}
-                                style={{
-                                  opacity: imageLoading.has(content.id) ? 0 : 1,
-                                  transition: 'opacity 0.2s ease-in-out'
-                                }}
-                              />
                             </div>
                           </div>
-                        )}
+                          <div className="relative w-full aspect-square bg-gray-200 rounded overflow-hidden">
+                            {generatedImages[content.id] ? (
+                              <>
+                                {/* Show placeholder while loading */}
+                                {imageLoading.has(content.id) && (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                                    <div className="w-8 h-8 bg-gray-300 rounded animate-pulse"></div>
+                                  </div>
+                                )}
+                                <img 
+                                  src={getSmallThumbnailUrl(generatedImages[content.id].image_url)} 
+                                  alt="Generated content thumbnail" 
+                                  className="w-full h-full object-cover rounded"
+                                  loading="eager"
+                                  onLoad={() => handleImageLoad(content.id)}
+                                  onError={() => handleImageError(content.id)}
+                                  onLoadStart={() => startImageLoading(content.id)}
+                                  style={{
+                                    opacity: imageLoading.has(content.id) ? 0 : 1,
+                                    transition: 'opacity 0.2s ease-in-out'
+                                  }}
+                                />
+                              </>
+                            ) : (
+                              /* Generate Image Button */
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleGenerateMedia(content)
+                                  }}
+                                  disabled={generatingMedia.has(content.id)}
+                                  className="flex flex-col items-center space-y-2 p-4 text-gray-600 hover:text-purple-600 transition-colors disabled:opacity-50"
+                                >
+                                  {generatingMedia.has(content.id) ? (
+                                    <>
+                                      <Loader2 className="w-8 h-8 animate-spin" />
+                                      <span className="text-xs font-medium">Generating...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Wand2 className="w-8 h-8" />
+                                      <span className="text-xs font-medium">Generate Image</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <p className="text-gray-700 text-sm mb-4 line-clamp-3">{content.content}</p>
                         
                         {content.content.length > 150 && (
                           <button
