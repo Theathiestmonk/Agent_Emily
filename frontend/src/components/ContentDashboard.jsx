@@ -836,6 +836,9 @@ const ContentDashboard = () => {
   }
 
   const handleUploadImage = async (postId) => {
+    console.log('🔍 Upload function called with postId:', postId)
+    console.log('🔍 editForm:', editForm)
+    
     if (!selectedFile) {
       showError('No file selected', 'Please select an image to upload')
       return
@@ -854,16 +857,10 @@ const ContentDashboard = () => {
       formData.append('file', selectedFile)
       formData.append('post_id', postId)
       
+      console.log('🔍 Uploading via backend API...')
+      
       const authToken = await getAuthToken()
-      const apiUrl = `${import.meta.env.VITE_API_URL}/media/upload-image`
-      
-      console.log('🔍 Upload Debug Info:')
-      console.log('API URL:', apiUrl)
-      console.log('Auth Token:', authToken ? 'Present' : 'Missing')
-      console.log('File:', selectedFile.name, selectedFile.size)
-      console.log('Post ID:', postId)
-      
-      const response = await fetch(apiUrl, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/media/upload-image`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`
@@ -871,10 +868,8 @@ const ContentDashboard = () => {
         body: formData
       })
       
-      console.log('Response status:', response.status)
-      console.log('Response URL:', response.url)
-      
       const result = await response.json()
+      console.log('🔍 Backend upload result:', result)
       
       if (!response.ok) {
         throw new Error(result.detail || 'Upload failed')
@@ -1694,7 +1689,10 @@ const ContentDashboard = () => {
                       {/* Upload Button */}
                       {selectedFile && (
                         <button
-                          onClick={() => handleUploadImage(editForm.id)}
+                          onClick={() => {
+                            console.log('🔍 Upload button clicked, editForm.id:', editForm.id)
+                            handleUploadImage(editForm.id)
+                          }}
                           disabled={uploadingImage.has(editForm.id)}
                           className="w-full px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-cyan-500 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2"
                         >

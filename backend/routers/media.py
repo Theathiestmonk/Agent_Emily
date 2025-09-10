@@ -351,14 +351,18 @@ async def upload_image(
 ):
     """Upload an image file to Supabase storage using service role key"""
     try:
+        logger.info(f"Upload request received - post_id: {post_id}, filename: {file.filename}")
+        
         # Read file content
         file_content = await file.read()
+        logger.info(f"File content read - size: {len(file_content)} bytes")
         
         # Generate filename
         import uuid
         file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
         filename = f"{post_id}-{uuid.uuid4().hex[:8]}.{file_ext}"
         file_path = f"user-uploads/{filename}"
+        logger.info(f"Generated file path: {file_path}")
         
         # Upload using admin client (bypasses RLS)
         storage_response = supabase_admin.storage.from_("ai-generated-images").upload(
