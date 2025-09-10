@@ -72,6 +72,7 @@ const ContentDashboard = () => {
   const [generatingMedia, setGeneratingMedia] = useState(new Set()) // Track which content is generating media
   const [generatedImages, setGeneratedImages] = useState({}) // Store generated images by content ID
   const [uploadingImage, setUploadingImage] = useState(new Set()) // Track which content is uploading image
+  const [showUploadModal, setShowUploadModal] = useState(null) // Track which content is showing upload modal
   const [selectedFile, setSelectedFile] = useState(null) // Selected file for upload
   const [imageLoading, setImageLoading] = useState(new Set()) // Track which images are loading
   const [refreshingImages, setRefreshingImages] = useState(false) // Track if refreshing all images
@@ -617,6 +618,7 @@ const ContentDashboard = () => {
   const handleEditContent = (content) => {
     setEditingContent(content)
     setEditForm({
+      id: content.id, // Add the ID to the edit form
       title: content.title || '',
       content: content.content || '',
       hashtags: content.hashtags ? content.hashtags.join(', ') : '',
@@ -828,84 +830,54 @@ const ContentDashboard = () => {
     }
   }
 
+  const handleOpenUploadModal = (contentId) => {
+    setShowUploadModal(contentId)
+    setSelectedFile(null)
+  }
+
   const handleUploadImage = async (postId) => {
     if (!selectedFile) {
       showError('No file selected', 'Please select an image to upload')
       return
     }
 
+    if (!postId) {
+      showError('No post ID', 'Cannot upload image without post ID')
+      return
+    }
+
     try {
       setUploadingImage(prev => new Set(prev).add(postId))
       
-      // Upload file to Supabase storage
-      const fileExt = selectedFile.name.split('.').pop()
-      const fileName = `${postId}-${Date.now()}.${fileExt}`
-      const filePath = `user-uploads/${fileName}`
+      // Use backend API for upload (bypasses RLS issues)
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('post_id', postId)
       
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('ai-generated-images')
-        .upload(filePath, selectedFile)
+      const authToken = await getAuthToken()
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/media/upload-image`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: formData
+      })
       
-      if (uploadError) {
-        throw new Error(`Upload failed: ${uploadError.message}`)
+      const result = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(result.detail || 'Upload failed')
       }
       
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('ai-generated-images')
-        .getPublicUrl(filePath)
-      
-      const imageUrl = urlData.publicUrl
-      
-      // Update the image in the database
-      const { data: existingImages } = await supabase
-        .from('content_images')
-        .select('id')
-        .eq('post_id', postId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-      
-      if (existingImages && existingImages.length > 0) {
-        // Update existing image
-        const { error: updateError } = await supabase
-          .from('content_images')
-          .update({
-            image_url: imageUrl,
-            is_approved: true,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingImages[0].id)
-        
-        if (updateError) {
-          throw new Error(`Update failed: ${updateError.message}`)
-        }
-      } else {
-        // Create new image record
-        const { error: insertError } = await supabase
-          .from('content_images')
-          .insert({
-            post_id: postId,
-            image_url: imageUrl,
-            image_prompt: 'User uploaded image',
-            image_style: 'user_upload',
-            image_size: 'custom',
-            image_quality: 'custom',
-            generation_model: 'user_upload',
-            generation_cost: 0,
-            generation_time: 0,
-            is_approved: true
-          })
-        
-        if (insertError) {
-          throw new Error(`Insert failed: ${insertError.message}`)
-        }
+      if (!result.success) {
+        throw new Error(result.message || 'Upload failed')
       }
       
       // Update local state
       setGeneratedImages(prev => ({
         ...prev,
         [postId]: {
-          image_url: imageUrl,
+          image_url: result.image_url,
           cost: 0,
           generation_time: 0,
           generated_at: new Date().toISOString(),
@@ -941,8 +913,9 @@ const ContentDashboard = () => {
   const getThumbnailUrl = (imageUrl) => {
     if (!imageUrl) return null
     
-    // If it's a Supabase storage URL from the generated folder, add resize transformation for thumbnail
-    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/')) {
+    // If it's a Supabase storage URL from the generated or user-uploads folder, add resize transformation for thumbnail
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
       // Check if URL already has query parameters
       const separator = imageUrl.includes('?') ? '&' : '?'
       // Add resize transformation to create a smaller, faster-loading thumbnail
@@ -958,8 +931,9 @@ const ContentDashboard = () => {
   const getSmallThumbnailUrl = (imageUrl) => {
     if (!imageUrl) return null
     
-    // If it's a Supabase storage URL from the generated folder, add resize transformation for very small thumbnail
-    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/')) {
+    // If it's a Supabase storage URL from the generated or user-uploads folder, add resize transformation for very small thumbnail
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
       // Check if URL already has query parameters
       const separator = imageUrl.includes('?') ? '&' : '?'
       // Using 50x50 with 50% quality for ultra fast loading in collapsed cards

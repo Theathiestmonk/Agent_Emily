@@ -6,7 +6,7 @@ Handles image generation for content posts
 import os
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
 
@@ -342,3 +342,70 @@ async def get_media_stats(current_user: User = Depends(get_current_user)):
     except Exception as e:
         logger.error(f"Error fetching media stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching stats: {str(e)}")
+
+@router.post("/upload-image")
+async def upload_image(
+    file: UploadFile = File(...),
+    post_id: str = Form(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload an image file to Supabase storage using service role key"""
+    try:
+        # Read file content
+        file_content = await file.read()
+        
+        # Generate filename
+        import uuid
+        file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
+        filename = f"{post_id}-{uuid.uuid4().hex[:8]}.{file_ext}"
+        file_path = f"user-uploads/{filename}"
+        
+        # Upload using admin client (bypasses RLS)
+        storage_response = supabase_admin.storage.from_("ai-generated-images").upload(
+            file_path,
+            file_content,
+            file_options={"content-type": f"image/{file_ext}"}
+        )
+        
+        if hasattr(storage_response, 'error') and storage_response.error:
+            raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_response.error}")
+        
+        # Get public URL
+        public_url = supabase_admin.storage.from_("ai-generated-images").get_public_url(file_path)
+        
+        # Update database using admin client
+        image_data = {
+            "post_id": post_id,
+            "image_url": public_url,
+            "image_prompt": "User uploaded image",
+            "image_style": "user_upload",
+            "image_size": "custom",
+            "image_quality": "custom",
+            "generation_model": "user_upload",
+            "generation_cost": 0,
+            "generation_time": 0,
+            "is_approved": True
+        }
+        
+        # Check if image already exists
+        existing_images = supabase_admin.table("content_images").select("id").eq("post_id", post_id).order("created_at", desc=True).limit(1).execute()
+        
+        if existing_images.data and len(existing_images.data) > 0:
+            # Update existing image
+            supabase_admin.table("content_images").update({
+                "image_url": public_url,
+                "is_approved": True
+            }).eq("id", existing_images.data[0]["id"]).execute()
+        else:
+            # Create new image record
+            supabase_admin.table("content_images").insert(image_data).execute()
+        
+        return {
+            "success": True,
+            "image_url": public_url,
+            "message": "Image uploaded successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error uploading image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading image: {str(e)}")
