@@ -13,7 +13,7 @@ from typing import Dict, List, Any, Optional, TypedDict
 from dataclasses import dataclass
 from enum import Enum
 
-import openai
+from openai import OpenAI
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
@@ -58,7 +58,7 @@ class MediaAgent:
         self.supabase: Client = create_client(supabase_url, supabase_key)
         if not openai_api_key:
             raise ValueError("OpenAI API key is required")
-        openai.api_key = openai_api_key
+        self.openai_client = OpenAI(api_key=openai_api_key)
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
@@ -197,7 +197,7 @@ class MediaAgent:
             Keep it under 400 characters for API limits.
             """
             
-            response = openai.ChatCompletion.create(
+            response = self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are an expert at creating detailed image prompts for AI image generation. Create specific, visual prompts that will generate high-quality images for social media content."},
@@ -223,9 +223,9 @@ class MediaAgent:
     async def generate_image(self, state: MediaAgentState) -> MediaAgentState:
         """Generate image using DALL-E 3"""
         try:
-            # Check if OpenAI API key is available
-            if not openai.api_key:
-                raise Exception("OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.")
+            # Check if OpenAI client is available
+            if not self.openai_client:
+                raise Exception("OpenAI client not configured. Please set OPENAI_API_KEY environment variable.")
             
             image_prompt = state["image_prompt"]
             image_size = state["image_size"]
@@ -235,10 +235,10 @@ class MediaAgent:
             # Generate image using DALL-E 3
             logger.info(f"Generating image with prompt: {image_prompt}")
             logger.info(f"Image size: {image_size.value if image_size else '1024x1024'}")
-            logger.info(f"OpenAI API key available: {bool(openai.api_key)}")
+            logger.info(f"OpenAI client available: {bool(self.openai_client)}")
             
             try:
-                response = openai.Image.create(
+                response = self.openai_client.images.generate(
                     model="dall-e-3",
                     prompt=image_prompt,
                     size=image_size.value if image_size else "1024x1024",
