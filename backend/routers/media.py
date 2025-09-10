@@ -21,11 +21,25 @@ router = APIRouter(prefix="/media", tags=["media"])
 
 # Initialize Supabase client
 supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_ANON_KEY")
-supabase: Client = create_client(supabase_url, supabase_key)
+supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
+supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+if not supabase_url or not supabase_anon_key:
+    raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set")
+
+# Create client with anon key for user authentication
+supabase: Client = create_client(supabase_url, supabase_anon_key)
+
+# Create admin client for database operations
+if supabase_service_key:
+    supabase_admin: Client = create_client(supabase_url, supabase_service_key)
+else:
+    supabase_admin = supabase  # Fallback to anon client
 
 # Initialize OpenAI
 openai_api_key = os.getenv("OPENAI_API_KEY")
+if not openai_api_key:
+    logger.warning("OpenAI API key not found in environment variables")
 
 class ImageGenerationRequest(BaseModel):
     post_id: str = Field(..., description="ID of the post to generate image for")
@@ -61,7 +75,7 @@ async def generate_image_for_post(
         logger.info(f"Media router: Generating image for post {request.post_id}, user {current_user.id}")
         
         # Verify post belongs to user
-        post_response = supabase.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", request.post_id).execute()
+        post_response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", request.post_id).execute()
         
         logger.info(f"Media router query response: {post_response}")
         logger.info(f"Media router response data: {post_response.data}")
@@ -75,7 +89,10 @@ async def generate_image_for_post(
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Create media agent
-        media_agent = create_media_agent(supabase_url, supabase_key, openai_api_key)
+        if not openai_api_key:
+            raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+        
+        media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, openai_api_key)
         
         # Generate image
         result = await media_agent.generate_media_for_post(request.post_id)
@@ -95,7 +112,7 @@ async def generate_images_for_posts(
     """Generate images for multiple posts in batch"""
     try:
         # Verify all posts belong to user
-        posts_response = supabase.table("content_posts").select("id, content_campaigns!inner(*)").in_("id", request.post_ids).execute()
+        posts_response = supabase_admin.table("content_posts").select("id, content_campaigns!inner(*)").in_("id", request.post_ids).execute()
         
         if not posts_response.data:
             raise HTTPException(status_code=404, detail="No posts found")
@@ -106,7 +123,10 @@ async def generate_images_for_posts(
             raise HTTPException(status_code=403, detail="Some posts don't belong to you")
         
         # Create media agent
-        media_agent = create_media_agent(supabase_url, supabase_key, openai_api_key)
+        if not openai_api_key:
+            raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+        
+        media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, openai_api_key)
         
         # Generate images for each post
         results = []
@@ -151,7 +171,7 @@ async def get_post_images(
     """Get all generated images for a specific post"""
     try:
         # Verify post belongs to user
-        post_response = supabase.table("content_posts").select("id, content_campaigns!inner(*)").eq("id", post_id).execute()
+        post_response = supabase_admin.table("content_posts").select("id, content_campaigns!inner(*)").eq("id", post_id).execute()
         
         if not post_response.data:
             raise HTTPException(status_code=404, detail="Post not found")
@@ -160,7 +180,7 @@ async def get_post_images(
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Get images for the post
-        images_response = supabase.table("content_images").select("*").eq("post_id", post_id).execute()
+        images_response = supabase_admin.table("content_images").select("*").eq("post_id", post_id).execute()
         
         return {
             "post_id": post_id,
@@ -181,7 +201,7 @@ async def get_user_images(
     """Get all generated images for the current user"""
     try:
         # Get user's posts first
-        posts_response = supabase.table("content_posts").select("id, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).execute()
+        posts_response = supabase_admin.table("content_posts").select("id, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).execute()
         
         if not posts_response.data:
             return {
@@ -194,7 +214,7 @@ async def get_user_images(
         post_ids = [post["id"] for post in posts_response.data]
         
         # Get images for user's posts
-        images_response = supabase.table("content_images").select("""
+        images_response = supabase_admin.table("content_images").select("""
             *,
             content_posts!inner(
                 id,
@@ -225,7 +245,7 @@ async def approve_image(
     """Approve a generated image"""
     try:
         # Verify image belongs to user
-        image_response = supabase.table("content_images").select("*, content_posts!inner(content_campaigns!inner(*))").eq("id", image_id).execute()
+        image_response = supabase_admin.table("content_images").select("*, content_posts!inner(content_campaigns!inner(*))").eq("id", image_id).execute()
         
         if not image_response.data:
             raise HTTPException(status_code=404, detail="Image not found")
@@ -234,7 +254,7 @@ async def approve_image(
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Update approval status
-        update_response = supabase.table("content_images").update({
+        update_response = supabase_admin.table("content_images").update({
             "is_approved": True
         }).eq("id", image_id).execute()
         
@@ -255,7 +275,7 @@ async def delete_image(
     """Delete a generated image"""
     try:
         # Verify image belongs to user
-        image_response = supabase.table("content_images").select("*, content_posts!inner(content_campaigns!inner(*))").eq("id", image_id).execute()
+        image_response = supabase_admin.table("content_images").select("*, content_posts!inner(content_campaigns!inner(*))").eq("id", image_id).execute()
         
         if not image_response.data:
             raise HTTPException(status_code=404, detail="Image not found")
@@ -264,7 +284,7 @@ async def delete_image(
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Delete image
-        delete_response = supabase.table("content_images").delete().eq("id", image_id).execute()
+        delete_response = supabase_admin.table("content_images").delete().eq("id", image_id).execute()
         
         if delete_response.data:
             return {"success": True, "message": "Image deleted successfully"}
@@ -288,7 +308,7 @@ async def get_media_stats(current_user: User = Depends(get_current_user)):
     """Get media generation statistics for the user"""
     try:
         # Get user's posts
-        posts_response = supabase.table("content_posts").select("id, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).execute()
+        posts_response = supabase_admin.table("content_posts").select("id, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).execute()
         
         if not posts_response.data:
             return {
@@ -302,7 +322,7 @@ async def get_media_stats(current_user: User = Depends(get_current_user)):
         post_ids = [post["id"] for post in posts_response.data]
         
         # Get image statistics
-        images_response = supabase.table("content_images").select("""
+        images_response = supabase_admin.table("content_images").select("""
             generation_cost,
             generation_time
         """).in_("post_id", post_ids).execute()

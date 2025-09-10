@@ -56,6 +56,8 @@ class MediaAgentState(TypedDict):
 class MediaAgent:
     def __init__(self, supabase_url: str, supabase_key: str, openai_api_key: str):
         self.supabase: Client = create_client(supabase_url, supabase_key)
+        if not openai_api_key:
+            raise ValueError("OpenAI API key is required")
         openai.api_key = openai_api_key
         self.graph = self._build_graph()
     
@@ -158,6 +160,7 @@ class MediaAgent:
             state["status"] = "prompt_generation"
             
             logger.info(f"Analyzed content for post {post_data['id']}, style: {image_style}, size: {image_size}")
+            logger.info(f"Style type: {type(image_style)}, Size type: {type(image_size)}")
             return state
             
         except Exception as e:
@@ -220,24 +223,50 @@ class MediaAgent:
     async def generate_image(self, state: MediaAgentState) -> MediaAgentState:
         """Generate image using DALL-E 3"""
         try:
+            # Check if OpenAI API key is available
+            if not openai.api_key:
+                raise Exception("OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.")
+            
             image_prompt = state["image_prompt"]
             image_size = state["image_size"]
             
             start_time = datetime.now()
             
             # Generate image using DALL-E 3
-            response = openai.Image.create(
-                model="dall-e-3",
-                prompt=image_prompt,
-                size=image_size.value,
-                quality="standard",
-                n=1
-            )
+            logger.info(f"Generating image with prompt: {image_prompt}")
+            logger.info(f"Image size: {image_size.value if image_size else '1024x1024'}")
+            logger.info(f"OpenAI API key available: {bool(openai.api_key)}")
+            
+            try:
+                response = openai.Image.create(
+                    model="dall-e-3",
+                    prompt=image_prompt,
+                    size=image_size.value if image_size else "1024x1024",
+                    quality="standard",
+                    n=1
+                )
+                
+                logger.info(f"DALL-E response received: {bool(response)}")
+                logger.info(f"Response data length: {len(response.data) if response.data else 0}")
+                
+            except Exception as api_error:
+                logger.error(f"DALL-E API error: {str(api_error)}")
+                if "insufficient_quota" in str(api_error).lower():
+                    raise Exception("OpenAI API quota exceeded. Please check your billing.")
+                elif "invalid_api_key" in str(api_error).lower():
+                    raise Exception("Invalid OpenAI API key. Please check your configuration.")
+                else:
+                    raise Exception(f"DALL-E API error: {str(api_error)}")
             
             end_time = datetime.now()
             generation_time = int((end_time - start_time).total_seconds())
             
+            if not response.data or len(response.data) == 0:
+                raise Exception("No image data returned from DALL-E")
+            
             image_url = response.data[0].url
+            if not image_url:
+                raise Exception("No image URL returned from DALL-E")
             
             # Calculate cost (approximate)
             cost = self._calculate_generation_cost(image_size, "standard")
@@ -247,7 +276,7 @@ class MediaAgent:
             state["generation_time"] = generation_time
             state["status"] = "saving"
             
-            logger.info(f"Generated image in {generation_time}s, cost: ${cost}")
+            logger.info(f"Generated image in {generation_time}s, cost: ${cost}, URL: {image_url}")
             return state
             
         except Exception as e:
@@ -261,19 +290,28 @@ class MediaAgent:
         try:
             post_data = state["post_data"]
             
+            # Validate required data before saving
+            if not state.get("generated_image_url"):
+                raise Exception("No image URL to save")
+            
+            if not state.get("image_prompt"):
+                raise Exception("No image prompt to save")
+            
             # Save to content_images table
             image_data = {
                 "post_id": post_data["id"],
                 "image_url": state["generated_image_url"],
                 "image_prompt": state["image_prompt"],
-                "image_style": state["image_style"].value,
-                "image_size": state["image_size"].value,
+                "image_style": state["image_style"].value if state["image_style"] else "realistic",
+                "image_size": state["image_size"].value if state["image_size"] else "1024x1024",
                 "image_quality": "standard",
                 "generation_model": "dall-e-3",
                 "generation_cost": state["generation_cost"],
                 "generation_time": state["generation_time"],
                 "is_approved": False
             }
+            
+            logger.info(f"Saving image data: {image_data}")
             
             response = self.supabase.table("content_images").insert(image_data).execute()
             
@@ -401,6 +439,10 @@ class MediaAgent:
             ImageSize.LANDSCAPE_1792: 0.080,
             ImageSize.PORTRAIT_1024: 0.080
         }
+        
+        # Handle None image_size
+        if image_size is None:
+            image_size = ImageSize.SQUARE_1024
         
         base_cost = costs.get(image_size, 0.040)
         

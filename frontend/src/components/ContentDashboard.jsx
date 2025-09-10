@@ -667,7 +667,18 @@ const ContentDashboard = () => {
       
     } catch (error) {
       console.error('Error generating media:', error)
-      showError('Failed to generate media', error.message)
+      
+      // Provide more helpful error messages
+      let errorMessage = error.message
+      if (error.message.includes('OpenAI API key not configured')) {
+        errorMessage = 'OpenAI API key not configured. Please contact support to set up image generation.'
+      } else if (error.message.includes('quota exceeded')) {
+        errorMessage = 'OpenAI API quota exceeded. Please check billing settings.'
+      } else if (error.message.includes('Invalid OpenAI API key')) {
+        errorMessage = 'Invalid OpenAI API key. Please contact support.'
+      }
+      
+      showError('Failed to generate media', errorMessage)
     } finally {
       // Remove from generating set
       setGeneratingMedia(prev => {
