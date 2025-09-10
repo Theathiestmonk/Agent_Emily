@@ -855,13 +855,24 @@ const ContentDashboard = () => {
       formData.append('post_id', postId)
       
       const authToken = await getAuthToken()
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/media/upload-image`, {
+      const apiUrl = `${import.meta.env.VITE_API_URL}/media/upload-image`
+      
+      console.log('🔍 Upload Debug Info:')
+      console.log('API URL:', apiUrl)
+      console.log('Auth Token:', authToken ? 'Present' : 'Missing')
+      console.log('File:', selectedFile.name, selectedFile.size)
+      console.log('Post ID:', postId)
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`
         },
         body: formData
       })
+      
+      console.log('Response status:', response.status)
+      console.log('Response URL:', response.url)
       
       const result = await response.json()
       
