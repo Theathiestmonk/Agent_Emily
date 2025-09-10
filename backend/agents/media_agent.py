@@ -297,9 +297,10 @@ class MediaAgent:
             if not state.get("image_prompt"):
                 raise Exception("No image prompt to save")
             
-            # Save to content_images table
+            # Check if image already exists for this post
+            existing_images = self.supabase.table("content_images").select("id").eq("post_id", post_data["id"]).order("created_at", desc=True).limit(1).execute()
+            
             image_data = {
-                "post_id": post_data["id"],
                 "image_url": state["generated_image_url"],
                 "image_prompt": state["image_prompt"],
                 "image_style": state["image_style"].value if state["image_style"] else "realistic",
@@ -313,7 +314,16 @@ class MediaAgent:
             
             logger.info(f"Saving image data: {image_data}")
             
-            response = self.supabase.table("content_images").insert(image_data).execute()
+            if existing_images.data and len(existing_images.data) > 0:
+                # Update existing image
+                image_id = existing_images.data[0]["id"]
+                logger.info(f"Updating existing image with ID: {image_id}")
+                response = self.supabase.table("content_images").update(image_data).eq("id", image_id).execute()
+            else:
+                # Create new image record
+                image_data["post_id"] = post_data["id"]
+                logger.info("Creating new image record")
+                response = self.supabase.table("content_images").insert(image_data).execute()
             
             if response.data:
                 state["status"] = "completed"
