@@ -135,13 +135,7 @@ const ContentDashboard = () => {
     fetchContentByDate(selectedDate)
   }, [])
 
-  // Refresh image data when content changes
-  useEffect(() => {
-    const allContent = [...scheduledContent, ...dateContent]
-    if (allContent.length > 0) {
-      refreshAllImages(allContent)
-    }
-  }, [scheduledContent, dateContent])
+  // Images are now loaded immediately when content is fetched, so this useEffect is no longer needed
 
   useEffect(() => {
     fetchContentByDate(selectedDate)
@@ -158,6 +152,11 @@ const ContentDashboard = () => {
         console.log('Content items:', result.data)
         console.log('Platform values in content:', result.data.map(item => ({ id: item.id, platform: item.platform })))
         console.log('Data source:', result.fromCache ? 'cache' : 'API')
+        
+        // Load images immediately for all scheduled content
+        for (const content of result.data) {
+          await fetchPostImages(content.id)
+        }
       }
     } catch (error) {
       console.error('Error fetching scheduled content:', error)
@@ -173,6 +172,11 @@ const ContentDashboard = () => {
       if (result.data) {
         setDateContent(result.data)
         console.log('Date content items:', result.data)
+        
+        // Load images immediately for all date content
+        for (const content of result.data) {
+          await fetchPostImages(content.id)
+        }
       } else {
         setDateContent([])
       }
@@ -303,17 +307,7 @@ const ContentDashboard = () => {
     ? (dateContent.length > 0 ? dateContent : scheduledContent)
     : dateContent
   
-  // Fetch images for all posts when content changes
-  useEffect(() => {
-    const fetchAllImages = async () => {
-      if (contentToDisplay && contentToDisplay.length > 0) {
-        for (const content of contentToDisplay) {
-          await fetchPostImages(content.id)
-        }
-      }
-    }
-    fetchAllImages()
-  }, [contentToDisplay?.map(c => c.id).join(',')]) // Only re-run when content IDs change
+  // Images are now loaded immediately when content is fetched, so this useEffect is no longer needed
   
   const filteredContent = contentToDisplay.filter(content => {
     const matchesPlatform = filterPlatform === 'all' || content.platform === filterPlatform
