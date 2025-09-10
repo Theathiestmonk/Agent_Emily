@@ -1,108 +1,102 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, JSON
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-from database import Base
-import uuid
+# This file contains Pydantic models for the connections system
+# The actual data is stored in Supabase, not SQLAlchemy
+
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
 from datetime import datetime
 
-class PlatformConnection(Base):
-    __tablename__ = "platform_connections"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    platform = Column(String(50), nullable=False)
-    page_id = Column(String(100), nullable=True)
-    page_name = Column(String(255), nullable=True)
-    page_username = Column(String(100), nullable=True)
-    follower_count = Column(Integer, default=0)
+class PlatformConnection(BaseModel):
+    id: Optional[str] = None
+    user_id: str
+    platform: str
+    page_id: Optional[str] = None
+    page_name: Optional[str] = None
+    page_username: Optional[str] = None
+    follower_count: int = 0
     
     # Encrypted token storage
-    access_token_encrypted = Column(Text, nullable=True)
-    refresh_token_encrypted = Column(Text, nullable=True)
-    token_expires_at = Column(DateTime, nullable=True)
+    access_token_encrypted: Optional[str] = None
+    refresh_token_encrypted: Optional[str] = None
+    token_expires_at: Optional[datetime] = None
     
     # Platform-specific fields
     # Instagram fields
-    instagram_id = Column(String(100), nullable=True)
-    account_type = Column(String(50), nullable=True)
-    media_count = Column(Integer, default=0)
+    instagram_id: Optional[str] = None
+    account_type: Optional[str] = None
+    media_count: int = 0
     
     # LinkedIn fields
-    linkedin_id = Column(String(100), nullable=True)
-    headline = Column(Text, nullable=True)
-    email = Column(String(255), nullable=True)
-    profile_picture = Column(Text, nullable=True)
+    linkedin_id: Optional[str] = None
+    headline: Optional[str] = None
+    email: Optional[str] = None
+    profile_picture: Optional[str] = None
     
     # Connection metadata
-    is_active = Column(Boolean, default=True)
-    last_sync = Column(DateTime, nullable=True)
-    last_posted_at = Column(DateTime, nullable=True)
-    connection_status = Column(String(20), default='active')  # active, expired, revoked, error
+    is_active: bool = True
+    last_sync: Optional[datetime] = None
+    last_posted_at: Optional[datetime] = None
+    connection_status: str = 'active'  # active, expired, revoked, error
     
     # Timestamps
-    connected_at = Column(DateTime, default=datetime.utcnow)
-    last_token_refresh = Column(DateTime, nullable=True)
-    disconnected_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    connected_at: Optional[datetime] = None
+    last_token_refresh: Optional[datetime] = None
+    disconnected_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-    # Relationships
-    settings = relationship("PlatformSettings", back_populates="connection", uselist=False, cascade="all, delete-orphan")
-    activities = relationship("ConnectionActivity", back_populates="connection", cascade="all, delete-orphan")
+class PlatformSettings(BaseModel):
+    id: Optional[str] = None
+    connection_id: str
+    auto_posting: bool = True
+    default_posting_time: Optional[str] = None  # Format: "HH:MM"
+    timezone: str = "UTC"
+    post_frequency: int = 1  # Posts per day
+    content_preferences: Optional[Dict[str, Any]] = None  # hashtags, emojis, etc.
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-class PlatformSettings(Base):
-    __tablename__ = "platform_settings"
+class TokenRefreshQueue(BaseModel):
+    id: Optional[str] = None
+    connection_id: str
+    platform: str
+    refresh_attempts: int = 0
+    max_attempts: int = 3
+    next_attempt_at: Optional[datetime] = None
+    status: str = 'pending'  # pending, processing, completed, failed
+    error_message: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    connection_id = Column(UUID(as_uuid=True), ForeignKey("platform_connections.id"), nullable=False)
-    auto_posting = Column(Boolean, default=True)
-    default_posting_time = Column(String(10), nullable=True)  # Format: "HH:MM"
-    timezone = Column(String(50), default="UTC")
-    post_frequency = Column(Integer, default=1)  # Posts per day
-    content_preferences = Column(JSON, nullable=True)  # hashtags, emojis, etc.
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+class ConnectionActivity(BaseModel):
+    id: Optional[str] = None
+    connection_id: str
+    activity_type: str  # connect, refresh, post, error, disconnect
+    status: str  # success, error, warning
+    message: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: Optional[datetime] = None
 
-    # Relationships
-    connection = relationship("PlatformConnection", back_populates="settings")
+class OAuthState(BaseModel):
+    id: Optional[str] = None
+    user_id: str
+    platform: str
+    state: str
+    expires_at: datetime
+    created_at: Optional[datetime] = None
 
-class TokenRefreshQueue(Base):
-    __tablename__ = "token_refresh_queue"
+# User model for authentication
+class User(BaseModel):
+    id: str
+    email: str
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    onboarding_completed: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    connection_id = Column(UUID(as_uuid=True), ForeignKey("platform_connections.id"), nullable=False)
-    platform = Column(String(50), nullable=False)
-    refresh_attempts = Column(Integer, default=0)
-    max_attempts = Column(Integer, default=3)
-    next_attempt_at = Column(DateTime, nullable=True)
-    status = Column(String(20), default='pending')  # pending, processing, completed, failed
-    error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Relationships
-    connection = relationship("PlatformConnection")
-
-class ConnectionActivity(Base):
-    __tablename__ = "connection_activity"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    connection_id = Column(UUID(as_uuid=True), ForeignKey("platform_connections.id"), nullable=False)
-    activity_type = Column(String(50), nullable=False)  # connect, refresh, post, error, disconnect
-    status = Column(String(20), nullable=False)  # success, error, warning
-    message = Column(Text, nullable=True)
-    metadata = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    # Relationships
-    connection = relationship("PlatformConnection", back_populates="activities")
-
-class OAuthState(Base):
-    __tablename__ = "oauth_states"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    platform = Column(String(50), nullable=False)
-    state = Column(String(255), unique=True, nullable=False, index=True)
-    expires_at = Column(DateTime, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+# Authentication functions
+def get_current_user():
+    """Placeholder for authentication - should be implemented with Supabase auth"""
+    # This would typically extract user from JWT token
+    # For now, return a mock user for development
+    pass

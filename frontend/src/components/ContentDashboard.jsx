@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useContentCache } from '../contexts/ContentCacheContext'
 import { contentAPI } from '../services/content'
+import mediaService from '../services/media'
 import { supabase } from '../lib/supabase'
 import ContentProgress from './ContentProgress'
 import LoadingBar from './LoadingBar'
@@ -36,7 +37,9 @@ import {
   Instagram,
   Linkedin,
   Twitter,
-  Youtube
+  Youtube,
+  Wand2,
+  Loader2
 } from 'lucide-react'
 
 const ContentDashboard = () => {
@@ -65,6 +68,8 @@ const ContentDashboard = () => {
   const [editForm, setEditForm] = useState({}) // Edit form data
   const [saving, setSaving] = useState(false) // Saving state
   const [expandedContent, setExpandedContent] = useState(null) // Content being viewed/expanded
+  const [generatingMedia, setGeneratingMedia] = useState(new Set()) // Track which content is generating media
+  const [generatedImages, setGeneratedImages] = useState({}) // Store generated images by content ID
 
   useEffect(() => {
     fetchData()
@@ -230,6 +235,18 @@ const ContentDashboard = () => {
   const contentToDisplay = selectedDate === new Date().toISOString().split('T')[0] 
     ? (dateContent.length > 0 ? dateContent : scheduledContent)
     : dateContent
+  
+  // Fetch images for all posts when content changes
+  useEffect(() => {
+    const fetchAllImages = async () => {
+      if (contentToDisplay && contentToDisplay.length > 0) {
+        for (const content of contentToDisplay) {
+          await fetchPostImages(content.id)
+        }
+      }
+    }
+    fetchAllImages()
+  }, [contentToDisplay?.map(c => c.id).join(',')]) // Only re-run when content IDs change
   
   const filteredContent = contentToDisplay.filter(content => {
     const matchesPlatform = filterPlatform === 'all' || content.platform === filterPlatform
@@ -610,6 +627,82 @@ const ContentDashboard = () => {
     setExpandedContent(expandedContent?.id === content.id ? null : content)
   }
 
+  const fetchPostImages = async (postId) => {
+    try {
+      const result = await mediaService.getPostImages(postId)
+      if (result.images && result.images.length > 0) {
+        // Store the latest image for this post
+        const latestImage = result.images[0] // Assuming we want the latest one
+        setGeneratedImages(prev => ({
+          ...prev,
+          [postId]: {
+            image_url: latestImage.image_url,
+            cost: latestImage.generation_cost,
+            generation_time: latestImage.generation_time,
+            generated_at: latestImage.created_at,
+            is_approved: latestImage.is_approved
+          }
+        }))
+      }
+    } catch (error) {
+      console.error('Error fetching post images:', error)
+    }
+  }
+
+  const handleGenerateMedia = async (content) => {
+    try {
+      // Add to generating set
+      setGeneratingMedia(prev => new Set(prev).add(content.id))
+      
+      const result = await mediaService.generateMedia(content.id)
+      
+      if (result.success) {
+        // Fetch the generated image from Supabase
+        await fetchPostImages(content.id)
+        
+        showSuccess('Media generated successfully!', `Image created in ${result.generation_time}s`)
+      } else {
+        throw new Error(result.error || 'Failed to generate media')
+      }
+      
+    } catch (error) {
+      console.error('Error generating media:', error)
+      showError('Failed to generate media', error.message)
+    } finally {
+      // Remove from generating set
+      setGeneratingMedia(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(content.id)
+        return newSet
+      })
+    }
+  }
+
+  const handleApproveImage = async (postId) => {
+    try {
+      // Find the image ID for this post
+      const result = await mediaService.getPostImages(postId)
+      if (result.images && result.images.length > 0) {
+        const imageId = result.images[0].id
+        await mediaService.approveImage(imageId)
+        
+        // Update local state
+        setGeneratedImages(prev => ({
+          ...prev,
+          [postId]: {
+            ...prev[postId],
+            is_approved: true
+          }
+        }))
+        
+        showSuccess('Image approved successfully!')
+      }
+    } catch (error) {
+      console.error('Error approving image:', error)
+      showError('Failed to approve image', error.message)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
       {/* Progress Bar */}
@@ -839,6 +932,38 @@ const ContentDashboard = () => {
                       <div className="mb-4">
                         <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">{content.content}</p>
                         
+                        {/* Generated Media Display */}
+                        {generatedImages[content.id] && (
+                          <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center space-x-2">
+                                <h6 className="text-sm font-medium text-purple-800">Generated Media</h6>
+                                {generatedImages[content.id].is_approved ? (
+                                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Approved</span>
+                                ) : (
+                                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">Pending</span>
+                                )}
+                              </div>
+                              <span className="text-xs text-purple-600">
+                                ${generatedImages[content.id].cost} • {generatedImages[content.id].generation_time}s
+                              </span>
+                            </div>
+                            <img 
+                              src={generatedImages[content.id].image_url} 
+                              alt="Generated content" 
+                              className="w-full h-48 object-cover rounded-lg mb-2"
+                            />
+                            {!generatedImages[content.id].is_approved && (
+                              <button
+                                onClick={() => handleApproveImage(content.id)}
+                                className="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition-colors"
+                              >
+                                Approve Image
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        
                         {/* Expanded Details */}
                         <div className="bg-gray-50 rounded-lg p-3 mb-3">
                           <div className="grid grid-cols-2 gap-3 text-xs">
@@ -871,6 +996,31 @@ const ContentDashboard = () => {
                     ) : (
                       <div>
                         <p className="text-gray-700 text-sm mb-4 line-clamp-3">{content.content}</p>
+                        
+                        {/* Generated Media Preview */}
+                        {generatedImages[content.id] && (
+                          <div className="mb-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center space-x-1">
+                                <span className="text-xs font-medium text-purple-800">Generated Media</span>
+                                {generatedImages[content.id].is_approved ? (
+                                  <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">✓</span>
+                                ) : (
+                                  <span className="text-xs bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded">⏳</span>
+                                )}
+                              </div>
+                              <span className="text-xs text-purple-600">
+                                ${generatedImages[content.id].cost}
+                              </span>
+                            </div>
+                            <img 
+                              src={generatedImages[content.id].image_url} 
+                              alt="Generated content" 
+                              className="w-full h-24 object-cover rounded"
+                            />
+                          </div>
+                        )}
+                        
                         {content.content.length > 150 && (
                           <button
                             onClick={() => handleViewContent(content)}
@@ -942,6 +1092,22 @@ const ContentDashboard = () => {
                           title="Edit Content"
                         >
                           <Edit className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleGenerateMedia(content)}
+                          disabled={generatingMedia.has(content.id)}
+                          className={`p-2 rounded-lg transition-all duration-200 ${
+                            generatingMedia.has(content.id)
+                              ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                              : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90'
+                          }`}
+                          title={generatingMedia.has(content.id) ? 'Generating Media...' : 'Generate Media'}
+                        >
+                          {generatingMedia.has(content.id) ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Wand2 className="w-4 h-4" />
+                          )}
                         </button>
                         <button
                           onClick={() => handlePostContent(content)}
