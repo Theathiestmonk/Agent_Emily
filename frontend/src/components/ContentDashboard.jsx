@@ -73,11 +73,75 @@ const ContentDashboard = () => {
   const [generatedImages, setGeneratedImages] = useState({}) // Store generated images by content ID
   const [uploadingImage, setUploadingImage] = useState(new Set()) // Track which content is uploading image
   const [selectedFile, setSelectedFile] = useState(null) // Selected file for upload
+  const [imageLoading, setImageLoading] = useState(new Set()) // Track which images are loading
+  const [refreshingImages, setRefreshingImages] = useState(false) // Track if refreshing all images
+
+  // Define refreshAllImages function early to avoid hoisting issues
+  const refreshAllImages = async (contentList = null) => {
+    const contentToRefresh = contentList || contentToDisplay
+    if (!contentToRefresh || contentToRefresh.length === 0) return
+    
+    setRefreshingImages(true)
+    try {
+      // Fetch images for all content posts in parallel
+      const imagePromises = contentToRefresh.map(async (post) => {
+        try {
+          const result = await mediaService.getPostImages(post.id)
+          if (result.images && result.images.length > 0) {
+            const latestImage = result.images[0]
+            return {
+              postId: post.id,
+              imageData: {
+                image_url: latestImage.image_url,
+                cost: latestImage.generation_cost,
+                generation_time: latestImage.generation_time,
+                generated_at: latestImage.created_at,
+                is_approved: latestImage.is_approved
+              }
+            }
+          }
+          return null
+        } catch (error) {
+          console.error(`Error fetching images for post ${post.id}:`, error)
+          return null
+        }
+      })
+
+      const results = await Promise.all(imagePromises)
+      
+      // Update state with all fetched images
+      const newImages = {}
+      results.forEach(result => {
+        if (result) {
+          newImages[result.postId] = result.imageData
+        }
+      })
+      
+      setGeneratedImages(prev => ({
+        ...prev,
+        ...newImages
+      }))
+      
+      console.log('Refreshed images for', Object.keys(newImages).length, 'posts')
+    } catch (error) {
+      console.error('Error refreshing images:', error)
+    } finally {
+      setRefreshingImages(false)
+    }
+  }
 
   useEffect(() => {
     fetchData()
     fetchContentByDate(selectedDate)
   }, [])
+
+  // Refresh image data when content changes
+  useEffect(() => {
+    const allContent = [...scheduledContent, ...dateContent]
+    if (allContent.length > 0) {
+      refreshAllImages(allContent)
+    }
+  }, [scheduledContent, dateContent])
 
   useEffect(() => {
     fetchContentByDate(selectedDate)
@@ -749,10 +813,10 @@ const ContentDashboard = () => {
       // Upload file to Supabase storage
       const fileExt = selectedFile.name.split('.').pop()
       const fileName = `${postId}-${Date.now()}.${fileExt}`
-      const filePath = `content-images/${fileName}`
+      const filePath = `user-uploads/${fileName}`
       
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('content-images')
+        .from('ai-generated-images')
         .upload(filePath, selectedFile)
       
       if (uploadError) {
@@ -761,7 +825,7 @@ const ContentDashboard = () => {
       
       // Get public URL
       const { data: urlData } = supabase.storage
-        .from('content-images')
+        .from('ai-generated-images')
         .getPublicUrl(filePath)
       
       const imageUrl = urlData.publicUrl
@@ -840,6 +904,47 @@ const ContentDashboard = () => {
     }
   }
 
+  // Images are now stored in Supabase storage for faster loading
+  const getImageUrl = (imageUrl) => {
+    if (!imageUrl) return null
+    return imageUrl
+  }
+
+  // Get thumbnail URL for faster loading
+  const getThumbnailUrl = (imageUrl) => {
+    if (!imageUrl) return null
+    
+    // If it's a Supabase storage URL, add resize transformation for thumbnail
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/')) {
+      // Add resize transformation to create a 200x200 thumbnail
+      return `${imageUrl}?width=200&height=200&resize=cover&quality=80`
+    }
+    
+    // For external URLs, return as is (could add external thumbnail service later)
+    return imageUrl
+  }
+
+  // Handle image load events
+  const handleImageLoad = (contentId) => {
+    setImageLoading(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(contentId)
+      return newSet
+    })
+  }
+
+  const handleImageError = (contentId) => {
+    setImageLoading(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(contentId)
+      return newSet
+    })
+  }
+
+  // Start loading when image is first displayed
+  const startImageLoading = (contentId) => {
+    setImageLoading(prev => new Set(prev).add(contentId))
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
@@ -920,6 +1025,16 @@ const ContentDashboard = () => {
                   <span>{generating ? 'Generating...' : 'Generate Content'}</span>
                 </button>
                 
+                <button
+                  onClick={refreshAllImages}
+                  disabled={refreshingImages}
+                  className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-cyan-600 text-white px-4 py-2 rounded-lg hover:from-cyan-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50"
+                  title="Refresh all images to load latest versions"
+                >
+                  <RefreshCw className={`w-4 h-4 ${refreshingImages ? 'animate-spin' : ''}`} />
+                  <span>{refreshingImages ? 'Refreshing...' : 'Refresh Images'}</span>
+                </button>
+                
                 {/* Filter and View Controls */}
                 <div className="flex items-center space-x-4">
                   {/* Date Selector */}
@@ -929,7 +1044,7 @@ const ContentDashboard = () => {
                       <label htmlFor="date-slider" className="text-sm font-medium text-gray-700">
                         Select Date:
                       </label>
-                      <input
+                    <input
                         id="date-slider"
                         type="date"
                         value={selectedDate}
@@ -941,19 +1056,6 @@ const ContentDashboard = () => {
                     </div>
                   </div>
                   
-                  <select
-                    value={filterPlatform}
-                    onChange={(e) => setFilterPlatform(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
-                  >
-                    <option value="all">All Platforms</option>
-                    <option value="facebook">Facebook</option>
-                    <option value="instagram">Instagram</option>
-                    <option value="linkedin">LinkedIn</option>
-                    <option value="twitter">Twitter</option>
-                    <option value="tiktok">TikTok</option>
-                    <option value="youtube">YouTube</option>
-                  </select>
                   
                   <div className="flex items-center space-x-1">
                     <button
@@ -1039,7 +1141,7 @@ const ContentDashboard = () => {
                 </button>
               </div>
             ) : (
-              <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1'}`}>
+              <div className={`grid gap-6 items-start ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1'}`}>
                 {filteredContent.map((content) => {
                   const theme = getPlatformCardTheme(content.platform)
                   console.log('Content platform:', content.platform, 'Theme:', theme)
@@ -1047,7 +1149,7 @@ const ContentDashboard = () => {
                     <div 
                       key={content.id} 
                       onClick={() => handleViewContent(content)}
-                      className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm p-6 hover:shadow-lg transition-all duration-300 hover:scale-[1.02] cursor-pointer`}
+                      className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm p-6 hover:shadow-lg transition-all duration-300 hover:scale-[1.02] cursor-pointer self-start`}
                     >
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center space-x-3">
@@ -1087,11 +1189,26 @@ const ContentDashboard = () => {
                                 )}
                               </div>
                             </div>
-                            <img 
-                              src={generatedImages[content.id].image_url} 
-                              alt="Generated content" 
-                              className="w-full h-48 object-cover rounded-lg mb-2"
-                            />
+                            <div className="relative w-full h-48 bg-gray-200 rounded-lg overflow-hidden mb-2">
+                              {imageLoading.has(content.id) && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                                  <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                                </div>
+                              )}
+                              <img 
+                                src={getThumbnailUrl(generatedImages[content.id].image_url)} 
+                                alt="Generated content thumbnail" 
+                                className="w-full h-48 object-cover rounded-lg"
+                                loading="lazy"
+                                onLoad={() => handleImageLoad(content.id)}
+                                onError={() => handleImageError(content.id)}
+                                onLoadStart={() => startImageLoading(content.id)}
+                                style={{
+                                  opacity: imageLoading.has(content.id) ? 0 : 1,
+                                  transition: 'opacity 0.3s ease-in-out'
+                                }}
+                              />
+                            </div>
                             <div className="flex items-center space-x-2">
                               {!generatedImages[content.id].is_approved && (
                                 <button
@@ -1144,6 +1261,22 @@ const ContentDashboard = () => {
                           </div>
                         </div>
                         
+                        {/* Hashtags - Only in expanded view */}
+                    {content.hashtags && content.hashtags.length > 0 && (
+                          <div className="mb-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium text-gray-600">Hashtags</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                        {content.hashtags.map((tag, index) => (
+                          <span key={index} className={`text-xs ${theme.accent} ${theme.text} px-2 py-1 rounded-lg`}>
+                            #{tag}
+                          </span>
+                        ))}
+                            </div>
+                      </div>
+                    )}
+                        
                         <button
                           onClick={() => setExpandedContent(null)}
                           className="text-xs text-purple-600 hover:text-purple-800 font-medium"
@@ -1168,11 +1301,26 @@ const ContentDashboard = () => {
                                 )}
                               </div>
                             </div>
-                            <img 
-                              src={generatedImages[content.id].image_url} 
-                              alt="Generated content" 
-                              className="w-full h-24 object-cover rounded"
-                            />
+                            <div className="relative w-full aspect-square bg-gray-200 rounded overflow-hidden">
+                              {imageLoading.has(content.id) && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                                </div>
+                              )}
+                              <img 
+                                src={getThumbnailUrl(generatedImages[content.id].image_url)} 
+                                alt="Generated content thumbnail" 
+                                className="w-full h-full object-cover rounded"
+                                loading="lazy"
+                                onLoad={() => handleImageLoad(content.id)}
+                                onError={() => handleImageError(content.id)}
+                                onLoadStart={() => startImageLoading(content.id)}
+                                style={{
+                                  opacity: imageLoading.has(content.id) ? 0 : 1,
+                                  transition: 'opacity 0.3s ease-in-out'
+                                }}
+                              />
+                            </div>
                           </div>
                         )}
                         
@@ -1187,15 +1335,6 @@ const ContentDashboard = () => {
                       </div>
                     )}
                     
-                    {content.hashtags && content.hashtags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-4">
-                        {content.hashtags.map((tag, index) => (
-                          <span key={index} className={`text-xs ${theme.accent} ${theme.text} px-2 py-1 rounded-lg`}>
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                     
                     {content.media_url && (
                       <div className="mb-4">
@@ -1398,11 +1537,26 @@ const ContentDashboard = () => {
                             {generatedImages[editForm.id].is_approved ? 'Approved' : 'Pending'}
                           </span>
                         </div>
-                        <img 
-                          src={generatedImages[editForm.id].image_url} 
-                          alt="Current content" 
-                          className="w-full h-32 object-cover rounded-lg"
-                        />
+                        <div className="relative w-full h-32 bg-gray-200 rounded-lg overflow-hidden">
+                          {imageLoading.has(editForm.id) && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                            </div>
+                          )}
+                          <img 
+                            src={getThumbnailUrl(generatedImages[editForm.id].image_url)} 
+                            alt="Current content thumbnail" 
+                            className="w-full h-32 object-cover rounded-lg"
+                            loading="lazy"
+                            onLoad={() => handleImageLoad(editForm.id)}
+                            onError={() => handleImageError(editForm.id)}
+                            onLoadStart={() => startImageLoading(editForm.id)}
+                            style={{
+                              opacity: imageLoading.has(editForm.id) ? 0 : 1,
+                              transition: 'opacity 0.3s ease-in-out'
+                            }}
+                          />
+                        </div>
                       </div>
                     )}
                     

@@ -8,6 +8,8 @@ import asyncio
 import logging
 import base64
 import io
+import os
+import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, TypedDict
 from dataclasses import dataclass
@@ -271,12 +273,16 @@ class MediaAgent:
             # Calculate cost (approximate)
             cost = self._calculate_generation_cost(image_size, "standard")
             
-            state["generated_image_url"] = image_url
+            # Download and upload image to Supabase storage for faster loading
+            logger.info(f"Downloading and uploading image to Supabase storage...")
+            storage_url = await self._download_and_upload_image(image_url, state["post_id"])
+            
+            state["generated_image_url"] = storage_url
             state["generation_cost"] = cost
             state["generation_time"] = generation_time
             state["status"] = "saving"
             
-            logger.info(f"Generated image in {generation_time}s, cost: ${cost}, URL: {image_url}")
+            logger.info(f"Generated image in {generation_time}s, cost: ${cost}, stored at: {storage_url}")
             return state
             
         except Exception as e:
@@ -460,6 +466,45 @@ class MediaAgent:
             base_cost *= 2
         
         return round(base_cost, 4)
+
+    async def _download_and_upload_image(self, image_url: str, post_id: str) -> str:
+        """Download image from URL and upload to Supabase storage"""
+        try:
+            # Download image from URL
+            async with httpx.AsyncClient() as client:
+                response = await client.get(image_url)
+                response.raise_for_status()
+                image_data = response.content
+            
+            # Generate unique filename
+            file_extension = image_url.split('.')[-1].split('?')[0]  # Get extension from URL
+            if file_extension not in ['jpg', 'jpeg', 'png', 'webp']:
+                file_extension = 'png'  # Default to PNG
+            
+            filename = f"{post_id}_{uuid.uuid4().hex[:8]}.{file_extension}"
+            file_path = f"generated/{filename}"
+            
+            # Upload to Supabase storage
+            storage_response = self.supabase.storage.from_("ai-generated-images").upload(
+                file_path,
+                image_data,
+                file_options={"content-type": f"image/{file_extension}"}
+            )
+            
+            if storage_response.get('error'):
+                raise Exception(f"Failed to upload to storage: {storage_response['error']}")
+            
+            # Get public URL
+            public_url = self.supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+            
+            logger.info(f"Successfully uploaded image to storage: {public_url}")
+            return public_url
+            
+        except Exception as e:
+            logger.error(f"Error downloading and uploading image: {str(e)}")
+            # Fallback to original URL if storage upload fails
+            logger.warning(f"Falling back to original URL: {image_url}")
+            return image_url
     
     async def generate_media_for_post(self, post_id: str) -> Dict[str, Any]:
         """Main entry point for generating media for a post"""
