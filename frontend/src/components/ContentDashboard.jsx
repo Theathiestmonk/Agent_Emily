@@ -1071,35 +1071,51 @@ const ContentDashboard = () => {
                       <div className="mb-4">
                         <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">{content.content}</p>
                         
-                        {/* Generated Media Display */}
+                        {/* Media Display */}
                         {generatedImages[content.id] && (
                           <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center space-x-2">
-                                <h6 className="text-sm font-medium text-purple-800">Generated Media</h6>
+                                <h6 className="text-sm font-medium text-purple-800">Media</h6>
                                 {generatedImages[content.id].is_approved ? (
                                   <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Approved</span>
                                 ) : (
                                   <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">Pending</span>
                                 )}
                               </div>
-                              <span className="text-xs text-purple-600">
-                                {generatedImages[content.id].generation_time}s
-                              </span>
                             </div>
                             <img 
                               src={generatedImages[content.id].image_url} 
                               alt="Generated content" 
                               className="w-full h-48 object-cover rounded-lg mb-2"
                             />
-                            {!generatedImages[content.id].is_approved && (
+                            <div className="flex items-center space-x-2">
+                              {!generatedImages[content.id].is_approved && (
+                                <button
+                                  onClick={() => handleApproveImage(content.id)}
+                                  className="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition-colors"
+                                >
+                                  Approve Image
+                                </button>
+                              )}
                               <button
-                                onClick={() => handleApproveImage(content.id)}
-                                className="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition-colors"
+                                onClick={() => handleGenerateMedia(content)}
+                                disabled={generatingMedia.has(content.id)}
+                                className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1 rounded hover:opacity-90 transition-colors disabled:opacity-50 flex items-center space-x-1"
                               >
-                                Approve Image
+                                {generatingMedia.has(content.id) ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    <span>Regenerating...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Wand2 className="w-3 h-3" />
+                                    <span>Regenerate</span>
+                                  </>
+                                )}
                               </button>
-                            )}
+                            </div>
                           </div>
                         )}
                         
@@ -1136,21 +1152,18 @@ const ContentDashboard = () => {
                       <div>
                         <p className="text-gray-700 text-sm mb-4 line-clamp-3">{content.content}</p>
                         
-                        {/* Generated Media Preview */}
+                        {/* Media Preview */}
                         {generatedImages[content.id] && (
                           <div className="mb-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
                             <div className="flex items-center justify-between mb-1">
                               <div className="flex items-center space-x-1">
-                                <span className="text-xs font-medium text-purple-800">Generated Media</span>
+                                <span className="text-xs font-medium text-purple-800">Media</span>
                                 {generatedImages[content.id].is_approved ? (
                                   <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">✓</span>
                                 ) : (
-                                  <span className="text-xs bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded">⏳</span>
+                                  <span className="text-xs bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded">Pending</span>
                                 )}
                               </div>
-                              <span className="text-xs text-purple-600">
-                                {generatedImages[content.id].generation_time}s
-                              </span>
                             </div>
                             <img 
                               src={generatedImages[content.id].image_url} 
