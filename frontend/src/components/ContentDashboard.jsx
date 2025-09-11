@@ -10,7 +10,20 @@ import ContentProgress from './ContentProgress'
 import LoadingBar from './LoadingBar'
 import SideNavbar from './SideNavbar'
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
+const API_BASE_URL = (() => {
+  // Check for environment variable first
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/+$/, '') // Remove all trailing slashes
+  }
+  
+  // Fallback to production URL
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return 'https://agent-emily.onrender.com'
+  }
+  
+  // Local development fallback
+  return 'http://localhost:8000'
+})()
 import { 
   Calendar, 
   Image, 
@@ -260,7 +273,20 @@ const ContentDashboard = () => {
       setGenerationStatus(null)
       setGenerationMessage('')
       
-      const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
+      const API_BASE_URL = (() => {
+  // Check for environment variable first
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/+$/, '') // Remove all trailing slashes
+  }
+  
+  // Fallback to production URL
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return 'https://agent-emily.onrender.com'
+  }
+  
+  // Local development fallback
+  return 'http://localhost:8000'
+})()
       const response = await fetch(`${API_BASE_URL}/content/trigger-weekly`, {
         method: 'POST',
         headers: {
@@ -838,6 +864,8 @@ const ContentDashboard = () => {
   const handleUploadImage = async (postId) => {
     console.log('🔍 Upload function called with postId:', postId)
     console.log('🔍 editForm:', editForm)
+    console.log('🔍 API_BASE_URL:', API_BASE_URL)
+    console.log('🔍 Selected file:', selectedFile)
     
     if (!selectedFile) {
       showError('No file selected', 'Please select an image to upload')
@@ -857,10 +885,20 @@ const ContentDashboard = () => {
       formData.append('file', selectedFile)
       formData.append('post_id', postId)
       
-      console.log('🔍 Uploading via backend API...')
+      console.log('🔍 Uploading via backend API to:', `${API_BASE_URL}/media/upload-image`)
+      
+      // Test API connectivity first
+      try {
+        const healthCheck = await fetch(`${API_BASE_URL}/health`, { method: 'GET' })
+        console.log('🔍 API health check status:', healthCheck.status)
+      } catch (healthError) {
+        console.warn('🔍 API health check failed:', healthError.message)
+      }
       
       const authToken = await getAuthToken()
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/media/upload-image`, {
+      console.log('🔍 Auth token available:', !!authToken)
+      
+      const response = await fetch(`${API_BASE_URL}/media/upload-image`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`
@@ -868,11 +906,22 @@ const ContentDashboard = () => {
         body: formData
       })
       
-      const result = await response.json()
-      console.log('🔍 Backend upload result:', result)
+      console.log('🔍 Response status:', response.status)
+      console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()))
+      
+      let result
+      try {
+        result = await response.json()
+        console.log('🔍 Backend upload result:', result)
+      } catch (jsonError) {
+        console.error('🔍 Failed to parse JSON response:', jsonError)
+        const textResponse = await response.text()
+        console.error('🔍 Raw response:', textResponse)
+        throw new Error(`Server returned invalid JSON: ${textResponse}`)
+      }
       
       if (!response.ok) {
-        throw new Error(result.detail || 'Upload failed')
+        throw new Error(result.detail || result.message || `HTTP ${response.status}: Upload failed`)
       }
       
       if (!result.success) {
@@ -899,7 +948,20 @@ const ContentDashboard = () => {
       
     } catch (error) {
       console.error('Error uploading image:', error)
-      showError('Failed to upload image', error.message)
+      
+      // Provide more specific error messages
+      let errorMessage = error.message
+      if (error.message.includes('Failed to fetch')) {
+        errorMessage = 'Network error: Unable to connect to server. Please check your internet connection and try again.'
+      } else if (error.message.includes('404')) {
+        errorMessage = 'API endpoint not found. Please contact support.'
+      } else if (error.message.includes('500')) {
+        errorMessage = 'Server error. Please try again later or contact support.'
+      } else if (error.message.includes('401') || error.message.includes('403')) {
+        errorMessage = 'Authentication error. Please refresh the page and try again.'
+      }
+      
+      showError('Failed to upload image', errorMessage)
     } finally {
       setUploadingImage(prev => {
         const newSet = new Set(prev)
@@ -1688,26 +1750,35 @@ const ContentDashboard = () => {
                       
                       {/* Upload Button */}
                       {selectedFile && (
-                        <button
-                          onClick={() => {
-                            console.log('🔍 Upload button clicked, editForm.id:', editForm.id)
-                            handleUploadImage(editForm.id)
-                          }}
-                          disabled={uploadingImage.has(editForm.id)}
-                          className="w-full px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-cyan-500 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2"
-                        >
-                          {uploadingImage.has(editForm.id) ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              <span>Uploading...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="w-4 h-4" />
-                              <span>Upload New Image</span>
-                            </>
-                          )}
-                        </button>
+                        <div className="space-y-2">
+                          <button
+                            onClick={() => {
+                              console.log('🔍 Upload button clicked, editForm.id:', editForm.id)
+                              handleUploadImage(editForm.id)
+                            }}
+                            disabled={uploadingImage.has(editForm.id)}
+                            className="w-full px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-cyan-500 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2"
+                          >
+                            {uploadingImage.has(editForm.id) ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>Uploading...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-4 h-4" />
+                                <span>Upload New Image</span>
+                              </>
+                            )}
+                          </button>
+                          
+                          {/* Debug info */}
+                          <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                            <div>API URL: {API_BASE_URL}</div>
+                            <div>Post ID: {editForm.id}</div>
+                            <div>File: {selectedFile?.name} ({(selectedFile?.size / 1024).toFixed(1)}KB)</div>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

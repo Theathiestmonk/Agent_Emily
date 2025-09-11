@@ -24,7 +24,8 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'facebook',
       name: 'Facebook',
       icon: Facebook,
-      color: 'from-blue-500 to-blue-600',
+      color: 'from-blue-600 to-blue-700',
+      iconColor: 'text-blue-600',
       bgColor: 'bg-blue-50',
       borderColor: 'border-blue-200'
     },
@@ -32,7 +33,8 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'instagram',
       name: 'Instagram',
       icon: Instagram,
-      color: 'from-pink-500 to-purple-600',
+      color: 'from-pink-500 via-red-500 to-yellow-500',
+      iconColor: 'text-pink-500',
       bgColor: 'bg-pink-50',
       borderColor: 'border-pink-200'
     },
@@ -40,7 +42,8 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'linkedin',
       name: 'LinkedIn',
       icon: Linkedin,
-      color: 'from-blue-600 to-blue-700',
+      color: 'from-blue-700 to-blue-800',
+      iconColor: 'text-blue-700',
       bgColor: 'bg-blue-50',
       borderColor: 'border-blue-200'
     },
@@ -48,7 +51,8 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'twitter',
       name: 'Twitter',
       icon: Twitter,
-      color: 'from-sky-400 to-sky-500',
+      color: 'from-sky-500 to-sky-600',
+      iconColor: 'text-sky-500',
       bgColor: 'bg-sky-50',
       borderColor: 'border-sky-200'
     },
@@ -56,7 +60,8 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'youtube',
       name: 'YouTube',
       icon: Youtube,
-      color: 'from-red-500 to-red-600',
+      color: 'from-red-600 to-red-700',
+      iconColor: 'text-red-600',
       bgColor: 'bg-red-50',
       borderColor: 'border-red-200'
     },
@@ -64,7 +69,8 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'google',
       name: 'Google',
       icon: Mail,
-      color: 'from-red-500 to-blue-500',
+      color: 'from-red-500 via-yellow-500 via-green-500 to-blue-500',
+      iconColor: 'text-red-500',
       bgColor: 'bg-gradient-to-r from-red-50 to-blue-50',
       borderColor: 'border-red-200'
     }
@@ -177,13 +183,13 @@ const ConnectionCards = ({ compact = false }) => {
 
   return (
     <div className="flex flex-wrap gap-2">
-      {platforms.map((platform) => {
+        {platforms.map((platform) => {
         const { connected, status } = getConnectionStatus(platform.id)
         const IconComponent = platform.icon
 
-        return (
-          <div
-            key={platform.id}
+          return (
+            <div
+              key={platform.id}
             className="relative group"
           >
             <button
@@ -191,27 +197,27 @@ const ConnectionCards = ({ compact = false }) => {
               disabled={connecting === platform.id}
               className={`
                 w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200
-                ${platform.color} ${platform.bgColor}
+                ${connected ? `bg-gradient-to-r ${platform.color}` : 'bg-white border-2 border-gray-200'}
                 hover:shadow-md hover:scale-105
                 disabled:opacity-50 disabled:cursor-not-allowed
                 ${connected ? 'ring-2 ring-green-400' : ''}
               `}
               title={`${connected ? 'Disconnect from' : 'Connect to'} ${platform.name}`}
             >
-              <IconComponent className="w-6 h-6 text-white" />
+              <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
               
               {/* Status indicator dot */}
               <div className="absolute -top-1 -right-1">
                 {getStatusIcon(status)}
-              </div>
+                      </div>
             </button>
 
             {/* Loading spinner for connecting state */}
             {connecting === platform.id && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <RefreshCw className="w-4 h-4 animate-spin text-white" />
-              </div>
-            )}
+                  </div>
+                )}
 
             {/* Google-specific dashboard button when connected */}
             {connected && platform.id === 'google' && (
@@ -222,11 +228,11 @@ const ConnectionCards = ({ compact = false }) => {
                 >
                   Open Dashboard
                 </button>
-              </div>
-            )}
-          </div>
-        )
-      })}
+                    </div>
+                  )}
+            </div>
+          )
+        })}
     </div>
   )
 }
