@@ -11,6 +11,8 @@ import CampaignsDashboard from './components/CampaignsDashboard'
 import AdsDashboard from './components/AdsDashboard'
 import Chatbot from './components/Chatbot'
 import Onboarding from './components/Onboarding'
+import Profile from './components/Profile'
+import GoogleDashboard from './components/GoogleDashboard'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingBar from './components/LoadingBar'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -29,42 +31,31 @@ function ProtectedRoute({ children }) {
     const checkOnboardingStatus = async () => {
       if (isAuthenticated && user) {
         try {
-          const response = await onboardingAPI.getOnboardingStatus()
-          setOnboardingStatus(response.data.onboarding_completed)
+          const response = await onboardingAPI.getProfile()
+          setOnboardingStatus(response.data ? 'completed' : 'incomplete')
         } catch (error) {
           console.error('Error checking onboarding status:', error)
-          // If profile doesn't exist, user needs onboarding
-          setOnboardingStatus(false)
-        } finally {
-          setCheckingOnboarding(false)
+          setOnboardingStatus('incomplete')
         }
-      } else {
-        setCheckingOnboarding(false)
       }
+      setCheckingOnboarding(false)
     }
 
     checkOnboardingStatus()
   }, [isAuthenticated, user])
 
   if (loading || checkingOnboarding) {
-    return <LoadingBar message="Loading..." />
+    return <LoadingBar />
   }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" />
   }
 
-  // If user is authenticated but hasn't completed onboarding
-  if (onboardingStatus === false) {
-    return <Onboarding />
+  if (onboardingStatus === 'incomplete') {
+    return <Navigate to="/onboarding" />
   }
 
-  // If user is authenticated and has completed onboarding, show dashboard
-  if (onboardingStatus === true) {
-    return children
-  }
-
-  // If user is authenticated and onboarding status is unknown, show dashboard
   return children
 }
 
@@ -147,6 +138,22 @@ function AppContent() {
             </ProtectedRoute>
           } 
         />
+        <Route 
+          path="/profile" 
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/google-dashboard" 
+          element={
+            <ProtectedRoute>
+              <GoogleDashboard />
+            </ProtectedRoute>
+          } 
+        />
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
       
@@ -177,4 +184,3 @@ function App() {
 }
 
 export default App
-

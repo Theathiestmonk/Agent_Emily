@@ -133,17 +133,20 @@ const SideNavbar = () => {
       <div className="p-4 border-t border-gray-200">
         {!isCollapsed ? (
           <div className="space-y-3">
-            <div className="flex items-center p-3 bg-gray-50 rounded-lg">
+            <button
+              onClick={() => navigate('/profile')}
+              className="w-full flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
+            >
               <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mr-3">
                 <User className="w-4 h-4 text-white" />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 text-left">
                 <p className="text-sm font-medium text-gray-900 truncate">
                   {user?.user_metadata?.name || user?.email}
                 </p>
-                <p className="text-xs text-gray-500">Online</p>
+                <p className="text-xs text-gray-500">Click to view profile</p>
               </div>
-            </div>
+            </button>
             
             <button
               onClick={handleLogout}
@@ -155,12 +158,19 @@ const SideNavbar = () => {
           </div>
         ) : (
           <div className="space-y-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mx-auto">
-              <User className="w-4 h-4 text-white" />
-            </div>
+            <button
+              onClick={() => navigate('/profile')}
+              className="w-full flex items-center justify-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              title="Profile"
+            >
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                <User className="w-4 h-4 text-white" />
+              </div>
+            </button>
             <button
               onClick={handleLogout}
               className="w-full flex items-center justify-center p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+              title="Logout"
             >
               <LogOut className="w-5 h-5" />
             </button>
