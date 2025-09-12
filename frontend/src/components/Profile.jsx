@@ -48,6 +48,14 @@ const Profile = () => {
         target_audience: data?.target_audience || [],
         unique_value_proposition: data?.unique_value_proposition || '',
         
+        // Detailed Target Audience
+        target_audience_age_groups: data?.target_audience_age_groups || [],
+        target_audience_life_stages: data?.target_audience_life_stages || [],
+        target_audience_professional_types: data?.target_audience_professional_types || [],
+        target_audience_lifestyle_interests: data?.target_audience_lifestyle_interests || [],
+        target_audience_buyer_behavior: data?.target_audience_buyer_behavior || [],
+        target_audience_other: data?.target_audience_other || '',
+        
         // Brand & Contact
         brand_voice: data?.brand_voice || '',
         brand_tone: data?.brand_tone || '',
@@ -94,6 +102,13 @@ const Profile = () => {
         focus_areas: data?.focus_areas || [],
         platform_details: data?.platform_details || {},
         
+        // Platform Tone Settings
+        platform_tone_instagram: data?.platform_tone_instagram || [],
+        platform_tone_facebook: data?.platform_tone_facebook || [],
+        platform_tone_linkedin: data?.platform_tone_linkedin || [],
+        platform_tone_youtube: data?.platform_tone_youtube || [],
+        platform_tone_x: data?.platform_tone_x || [],
+        
         // Platform Links
         facebook_page_name: data?.facebook_page_name || '',
         instagram_profile_link: data?.instagram_profile_link || '',
@@ -104,7 +119,19 @@ const Profile = () => {
         google_ads_account: data?.google_ads_account || '',
         whatsapp_business: data?.whatsapp_business || '',
         email_marketing_platform: data?.email_marketing_platform || '',
-        meta_ads_accounts: data?.meta_ads_accounts || ''
+        meta_ads_accounts: data?.meta_ads_accounts || '',
+        
+        // "Other" Input Fields
+        business_type_other: data?.business_type_other || '',
+        industry_other: data?.industry_other || '',
+        social_platform_other: data?.social_platform_other || '',
+        goal_other: data?.goal_other || '',
+        metric_other: data?.metric_other || '',
+        content_type_other: data?.content_type_other || '',
+        content_theme_other: data?.content_theme_other || '',
+        posting_time_other: data?.posting_time_other || '',
+        current_presence_other: data?.current_presence_other || '',
+        top_performing_content_type_other: data?.top_performing_content_type_other || ''
       })
     } catch (err) {
       console.error('Error fetching profile:', err)
@@ -118,6 +145,7 @@ const Profile = () => {
     setEditing(true)
   }
 
+
   const handleCancel = () => {
     setEditing(false)
     setEditForm({
@@ -129,6 +157,14 @@ const Profile = () => {
       business_description: profile?.business_description || '',
       target_audience: profile?.target_audience || [],
       unique_value_proposition: profile?.unique_value_proposition || '',
+      
+      // Detailed Target Audience
+      target_audience_age_groups: profile?.target_audience_age_groups || [],
+      target_audience_life_stages: profile?.target_audience_life_stages || [],
+      target_audience_professional_types: profile?.target_audience_professional_types || [],
+      target_audience_lifestyle_interests: profile?.target_audience_lifestyle_interests || [],
+      target_audience_buyer_behavior: profile?.target_audience_buyer_behavior || [],
+      target_audience_other: profile?.target_audience_other || '',
       
       // Brand & Contact
       brand_voice: profile?.brand_voice || '',
@@ -176,6 +212,13 @@ const Profile = () => {
       focus_areas: profile?.focus_areas || [],
       platform_details: profile?.platform_details || {},
       
+      // Platform Tone Settings
+      platform_tone_instagram: profile?.platform_tone_instagram || [],
+      platform_tone_facebook: profile?.platform_tone_facebook || [],
+      platform_tone_linkedin: profile?.platform_tone_linkedin || [],
+      platform_tone_youtube: profile?.platform_tone_youtube || [],
+      platform_tone_x: profile?.platform_tone_x || [],
+      
       // Platform Links
       facebook_page_name: profile?.facebook_page_name || '',
       instagram_profile_link: profile?.instagram_profile_link || '',
@@ -186,13 +229,27 @@ const Profile = () => {
       google_ads_account: profile?.google_ads_account || '',
       whatsapp_business: profile?.whatsapp_business || '',
       email_marketing_platform: profile?.email_marketing_platform || '',
-      meta_ads_accounts: profile?.meta_ads_accounts || ''
+      meta_ads_accounts: profile?.meta_ads_accounts || '',
+      
+      // "Other" Input Fields
+      business_type_other: profile?.business_type_other || '',
+      industry_other: profile?.industry_other || '',
+      social_platform_other: profile?.social_platform_other || '',
+      goal_other: profile?.goal_other || '',
+      metric_other: profile?.metric_other || '',
+      content_type_other: profile?.content_type_other || '',
+      content_theme_other: profile?.content_theme_other || '',
+      posting_time_other: profile?.posting_time_other || '',
+      current_presence_other: profile?.current_presence_other || '',
+      top_performing_content_type_other: profile?.top_performing_content_type_other || ''
     })
   }
 
   const handleSave = async () => {
     try {
       setSaving(true)
+      setError(null) // Clear any previous errors
+      
       const { data: { user } } = await supabase.auth.getUser()
       
       if (!user) {
@@ -200,25 +257,62 @@ const Profile = () => {
         return
       }
 
-      const { error } = await supabase
+      console.log('Saving profile data:', editForm) // Debug log
+      console.log('User ID:', user.id) // Debug log
+
+      // Check if profile exists first
+      const { data: existingProfile, error: fetchError } = await supabase
         .from('profiles')
-        .upsert({
-          id: user.id,
+        .select('id')
+        .eq('id', user.id)
+        .single()
+
+      console.log('Existing profile check:', { existingProfile, fetchError })
+
+      // First, let's try to update the existing record
+      const { data: updateData, error: updateError } = await supabase
+        .from('profiles')
+        .update({
           ...editForm,
           updated_at: new Date().toISOString()
         })
+        .eq('id', user.id)
+        .select()
 
-      if (error) {
-        console.error('Error updating profile:', error)
-        setError('Failed to update profile')
-        return
+      if (updateError) {
+        console.error('Update error:', updateError)
+        
+        // If update fails, try upsert as fallback
+        console.log('Update failed, trying upsert...')
+        const { data: upsertData, error: upsertError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            ...editForm,
+            updated_at: new Date().toISOString()
+          })
+          .select()
+
+        if (upsertError) {
+          console.error('Upsert error:', upsertError)
+          setError(`Failed to update profile: ${upsertError.message}`)
+          return
+        }
+        
+        console.log('Profile upserted successfully:', upsertData)
+      } else {
+        console.log('Profile updated successfully:', updateData)
       }
 
-      setProfile({ ...profile, ...editForm })
+      // Refresh the profile data from database
+      await fetchProfile()
       setEditing(false)
+      
+      // Show success message
+      alert('Profile updated successfully!')
     } catch (err) {
       console.error('Error updating profile:', err)
-      setError('Failed to update profile')
+      setError(`Failed to update profile: ${err.message}`)
     } finally {
       setSaving(false)
     }
@@ -402,6 +496,25 @@ const Profile = () => {
 
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">Error</h3>
+                  <div className="mt-2 text-sm text-red-700">
+                    <p>{error}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           <div className="space-y-8">
             {/* Basic Business Information */}
             <div className="bg-white rounded-xl shadow-sm border p-6">

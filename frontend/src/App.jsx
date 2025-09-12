@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 // Emily Digital Marketing Agent - Main App Component
 import Login from './components/Login'
+import SignUp from './components/SignUp'
 import Dashboard from './components/Dashboard'
 import ContentDashboard from './components/ContentDashboard'
 import ContentCalendar from './components/ContentCalendar'
@@ -31,8 +32,8 @@ function ProtectedRoute({ children }) {
     const checkOnboardingStatus = async () => {
       if (isAuthenticated && user) {
         try {
-          const response = await onboardingAPI.getProfile()
-          setOnboardingStatus(response.data ? 'completed' : 'incomplete')
+          const response = await onboardingAPI.getOnboardingStatus()
+          setOnboardingStatus(response.data.onboarding_completed ? 'completed' : 'incomplete')
         } catch (error) {
           console.error('Error checking onboarding status:', error)
           setOnboardingStatus('incomplete')
@@ -66,6 +67,7 @@ function AppContent() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<SignUp />} />
         <Route 
           path="/dashboard" 
           element={
@@ -132,11 +134,7 @@ function AppContent() {
         />
         <Route 
           path="/onboarding" 
-          element={
-            <ProtectedRoute>
-              <Onboarding />
-            </ProtectedRoute>
-          } 
+          element={<Onboarding />} 
         />
         <Route 
           path="/profile" 

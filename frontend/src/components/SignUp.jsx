@@ -3,17 +3,20 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
 
-function Login() {
+function SignUp() {
   const [formData, setFormData] = useState({
+    name: '',
     email: '',
-    password: ''
+    password: '',
+    confirmPassword: ''
   })
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   
-  const { login } = useAuth()
+  const { register } = useAuth()
   const navigate = useNavigate()
 
   const handleChange = (e) => {
@@ -31,15 +34,30 @@ function Login() {
     setError('')
     setSuccessMessage('')
 
+    // Validate password confirmation
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match')
+      setLoading(false)
+      return
+    }
+
+    // Validate password length
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long')
+      setLoading(false)
+      return
+    }
+
     try {
-      const result = await login(formData.email, formData.password)
+      const result = await register(formData.email, formData.password, formData.name)
 
       if (result.success) {
         if (result.message) {
           // Email confirmation required
           setSuccessMessage(result.message)
         } else {
-          // Direct login successful
+          // Registration successful - let auth flow handle redirect
+          // The ProtectedRoute will check onboarding status and redirect appropriately
           navigate('/dashboard')
         }
       } else {
@@ -52,7 +70,6 @@ function Login() {
     }
   }
 
-
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
       <div className="max-w-md w-full">
@@ -62,16 +79,33 @@ function Login() {
             <span className="text-2xl font-bold text-white">E</span>
           </div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Hi, I am Emily
+            Join Emily
           </h1>
           <p className="text-gray-600">
-            Your digital marketing companion
+            Create your account to get started
           </p>
         </div>
 
-        {/* Login Form Card */}
+        {/* Sign Up Form Card */}
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Name Field */}
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                Full Name
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required
+                value={formData.name}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors bg-blue-50"
+                placeholder="Enter your full name"
+              />
+            </div>
+
             {/* Email Field */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -91,17 +125,9 @@ function Login() {
 
             {/* Password Field */}
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                  Password
-                </label>
-                <button
-                  type="button"
-                  className="text-sm text-pink-600 hover:text-pink-700 transition-colors"
-                >
-                  Forgot password?
-                </button>
-              </div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                Password
+              </label>
               <div className="relative">
                 <input
                   id="password"
@@ -110,8 +136,8 @@ function Login() {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors"
-                  placeholder="Enter your password"
+                  className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors bg-blue-50"
+                  placeholder="Create a password"
                 />
                 <button
                   type="button"
@@ -119,6 +145,32 @@ function Login() {
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm Password Field */}
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors bg-blue-50"
+                  placeholder="Confirm your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
             </div>
@@ -137,13 +189,13 @@ function Login() {
               </div>
             )}
 
-            {/* Sign In Button */}
+            {/* Sign Up Button */}
             <button
               type="submit"
               disabled={loading}
               className="w-full bg-gradient-to-r from-pink-500 to-pink-600 text-white py-3 px-4 rounded-lg font-semibold hover:from-pink-600 hover:to-pink-700 focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Creating Account...' : 'Create Account'}
             </button>
 
             {/* Separator */}
@@ -156,14 +208,14 @@ function Login() {
               </div>
             </div>
 
-            {/* Sign Up Link */}
+            {/* Sign In Link */}
             <div className="text-center">
-              <span className="text-gray-500">New to Emily? </span>
+              <span className="text-gray-500">Already have an account? </span>
               <Link
-                to="/signup"
+                to="/login"
                 className="text-pink-600 hover:text-pink-700 font-medium transition-colors"
               >
-                Create account
+                Sign in
               </Link>
             </div>
           </form>
@@ -180,4 +232,4 @@ function Login() {
   )
 }
 
-export default Login
+export default SignUp
