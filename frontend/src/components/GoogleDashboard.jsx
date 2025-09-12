@@ -23,29 +23,31 @@ const GoogleDashboard = () => {
       setLoading(true)
       setError(null)
 
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+
       // Fetch Gmail messages
-      const gmailResponse = await fetch('/api/connections/google/gmail/messages?limit=5')
+      const gmailResponse = await fetch(`${API_BASE_URL}/connections/google/gmail/messages?limit=5`)
       const gmailData = await gmailResponse.json()
       if (gmailData.messages) {
         setGmailMessages(gmailData.messages)
       }
 
       // Fetch Drive files
-      const driveResponse = await fetch('/api/connections/google/drive/files?limit=5')
+      const driveResponse = await fetch(`${API_BASE_URL}/connections/google/drive/files?limit=5`)
       const driveData = await driveResponse.json()
       if (driveData.files) {
         setDriveFiles(driveData.files)
       }
 
       // Fetch Sheets
-      const sheetsResponse = await fetch('/api/connections/google/sheets/spreadsheets?limit=5')
+      const sheetsResponse = await fetch(`${API_BASE_URL}/connections/google/sheets/spreadsheets?limit=5`)
       const sheetsData = await sheetsResponse.json()
       if (sheetsData.spreadsheets) {
         setSheets(sheetsData.spreadsheets)
       }
 
       // Fetch Docs
-      const docsResponse = await fetch('/api/connections/google/docs/documents?limit=5')
+      const docsResponse = await fetch(`${API_BASE_URL}/connections/google/docs/documents?limit=5`)
       const docsData = await docsResponse.json()
       if (docsData.documents) {
         setDocs(docsData.documents)
@@ -64,7 +66,9 @@ const GoogleDashboard = () => {
     try {
       setLoading(true)
       
-      const response = await fetch('/api/connections/google/gmail/send', {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+      
+      const response = await fetch(`${API_BASE_URL}/connections/google/gmail/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

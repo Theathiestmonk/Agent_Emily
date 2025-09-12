@@ -98,13 +98,21 @@ const ConnectionCards = ({ compact = false }) => {
       
       if (platformId === 'google') {
         // Handle Google OAuth
-        const response = await fetch('/api/connections/google/auth')
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+        const response = await fetch(`${API_BASE_URL}/connections/google/auth`)
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('Google auth error:', response.status, errorText)
+          throw new Error(`Failed to get Google auth URL: ${response.status}`)
+        }
+        
         const data = await response.json()
         
         if (data.auth_url) {
           window.location.href = data.auth_url
         } else {
-          throw new Error('Failed to get Google auth URL')
+          throw new Error('Failed to get Google auth URL from response')
         }
       } else {
         // Handle other platforms
@@ -128,7 +136,8 @@ const ConnectionCards = ({ compact = false }) => {
     try {
       if (platformId === 'google') {
         // Handle Google disconnect
-        const response = await fetch('/api/connections/google/disconnect', {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+        const response = await fetch(`${API_BASE_URL}/connections/google/disconnect`, {
           method: 'GET'
         })
         const data = await response.json()

@@ -18,8 +18,12 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Error getting session:', error)
+        // Clear any invalid tokens
+        supabase.auth.signOut()
+      } else if (session) { 
         setUser(session.user)
         setIsAuthenticated(true)
       }
@@ -29,7 +33,9 @@ export function AuthProvider({ children }) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state change:', event, session?.user?.id)
+      
       if (session) {
         setUser(session.user)
         setIsAuthenticated(true)

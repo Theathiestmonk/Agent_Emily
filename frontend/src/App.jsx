@@ -13,6 +13,7 @@ import Chatbot from './components/Chatbot'
 import Onboarding from './components/Onboarding'
 import Profile from './components/Profile'
 import GoogleDashboard from './components/GoogleDashboard'
+import GoogleCallback from './components/GoogleCallback'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingBar from './components/LoadingBar'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -153,6 +154,10 @@ function AppContent() {
               <GoogleDashboard />
             </ProtectedRoute>
           } 
+        />
+        <Route 
+          path="/google-callback" 
+          element={<GoogleCallback />} 
         />
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
