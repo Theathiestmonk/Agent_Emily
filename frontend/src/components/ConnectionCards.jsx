@@ -120,7 +120,7 @@ const ConnectionCards = ({ compact = false }) => {
           )
           
           // Listen for popup messages
-          const messageHandler = (event) => {
+          const messageHandler = async (event) => {
             if (event.origin !== window.location.origin) return
             
             if (event.data.type === 'GOOGLE_OAUTH_SUCCESS') {
