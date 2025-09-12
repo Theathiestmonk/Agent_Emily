@@ -256,8 +256,11 @@ async def handle_oauth_callback(
     error: str = None
 ):
     """Handle OAuth callback and store connection"""
+    print(f"🔗 Main connections router callback - platform: {platform}, code: {code[:10] if code else 'None'}..., state: {state[:10] if state else 'None'}...")
+    
     # Skip Google platform as it has its own router
     if platform == "google":
+        print(f"❌ Redirecting Google callback to Google router")
         raise HTTPException(status_code=404, detail="Not Found")
     
     try:

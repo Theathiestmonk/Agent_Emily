@@ -97,7 +97,7 @@ const ConnectionCards = ({ compact = false }) => {
       setConnecting(platformId)
       
       if (platformId === 'google') {
-        // Handle Google OAuth
+        // Handle Google OAuth in popup window
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
         // Ensure no double slashes in URL
         const cleanUrl = API_BASE_URL.replace(/\/+$/, '') + '/connections/google/auth/initiate'
@@ -112,7 +112,39 @@ const ConnectionCards = ({ compact = false }) => {
         const data = await response.json()
         
         if (data.auth_url) {
-          window.location.href = data.auth_url
+          // Open Google OAuth in popup window
+          const popup = window.open(
+            data.auth_url,
+            'google-oauth',
+            'width=500,height=600,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+          )
+          
+          // Listen for popup messages
+          const messageHandler = (event) => {
+            if (event.origin !== window.location.origin) return
+            
+            if (event.data.type === 'GOOGLE_OAUTH_SUCCESS') {
+              console.log('Google OAuth successful:', event.data)
+              popup.close()
+              window.removeEventListener('message', messageHandler)
+              await fetchConnections() // Refresh connections
+            } else if (event.data.type === 'GOOGLE_OAUTH_ERROR') {
+              console.error('Google OAuth error:', event.data.error)
+              popup.close()
+              window.removeEventListener('message', messageHandler)
+              alert(`Google OAuth failed: ${event.data.error}`)
+            }
+          }
+          
+          window.addEventListener('message', messageHandler)
+          
+          // Check if popup was closed manually
+          const checkClosed = setInterval(() => {
+            if (popup.closed) {
+              clearInterval(checkClosed)
+              window.removeEventListener('message', messageHandler)
+            }
+          }, 1000)
         } else {
           throw new Error('Failed to get Google auth URL from response')
         }

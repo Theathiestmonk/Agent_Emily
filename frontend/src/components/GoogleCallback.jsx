@@ -29,12 +29,28 @@ const GoogleCallback = () => {
         } else {
           setMessage(`OAuth error: ${error}`)
         }
+        
+        // Send error message to parent window if in popup
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'GOOGLE_OAUTH_ERROR',
+            error: error
+          }, window.location.origin)
+        }
         return
       }
 
       if (!code || !state) {
         setStatus('error')
         setMessage('Missing required OAuth parameters')
+        
+        // Send error message to parent window if in popup
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'GOOGLE_OAUTH_ERROR',
+            error: 'Missing required OAuth parameters'
+          }, window.location.origin)
+        }
         return
       }
 
@@ -49,6 +65,14 @@ const GoogleCallback = () => {
         console.error('Google callback error:', response.status, errorText)
         setStatus('error')
         setMessage(`Failed to complete Google OAuth: ${response.status}`)
+        
+        // Send error message to parent window if in popup
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'GOOGLE_OAUTH_ERROR',
+            error: `Failed to complete Google OAuth: ${response.status}`
+          }, window.location.origin)
+        }
         return
       }
 
@@ -58,18 +82,42 @@ const GoogleCallback = () => {
         setStatus('success')
         setMessage('Google account connected successfully!')
         
-        // Redirect to dashboard after a short delay
-        setTimeout(() => {
-          navigate('/dashboard')
-        }, 2000)
+        // Send success message to parent window if in popup
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'GOOGLE_OAUTH_SUCCESS',
+            message: 'Google account connected successfully!'
+          }, window.location.origin)
+        } else {
+          // If not in popup, redirect to dashboard
+          setTimeout(() => {
+            navigate('/dashboard')
+          }, 2000)
+        }
       } else {
         setStatus('error')
         setMessage(data.message || 'Failed to connect Google account')
+        
+        // Send error message to parent window if in popup
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'GOOGLE_OAUTH_ERROR',
+            error: data.message || 'Failed to connect Google account'
+          }, window.location.origin)
+        }
       }
     } catch (error) {
       console.error('Error handling Google callback:', error)
       setStatus('error')
       setMessage('An unexpected error occurred')
+      
+      // Send error message to parent window if in popup
+      if (window.opener) {
+        window.opener.postMessage({
+          type: 'GOOGLE_OAUTH_ERROR',
+          error: error.message || 'An unexpected error occurred'
+        }, window.location.origin)
+      }
     }
   }
 

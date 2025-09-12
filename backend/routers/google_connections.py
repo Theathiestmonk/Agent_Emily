@@ -218,6 +218,7 @@ async def google_callback(code: str = None, state: str = None, error: str = None
 @router.get("/auth/google/callback")
 async def google_auth_callback(code: str = None, state: str = None, error: str = None):
     """Handle Google OAuth callback from /auth/google/callback path"""
+    print(f"🔗 Google OAuth callback received - code: {code[:10] if code else 'None'}..., state: {state[:10] if state else 'None'}..., error: {error}")
     return await handle_google_callback(code, state, error)
 
 async def handle_google_callback(code: str = None, state: str = None, error: str = None):
@@ -625,6 +626,20 @@ async def google_router_health():
         "status": "healthy",
         "router": "google_connections",
         "message": "Google connections router is working"
+    }
+
+@router.get("/test")
+async def google_router_test():
+    """Test endpoint to verify Google router is accessible"""
+    return {
+        "message": "Google router is working!",
+        "endpoints": [
+            "/connections/google/health",
+            "/connections/google/debug/config",
+            "/connections/google/auth/initiate",
+            "/connections/google/callback",
+            "/connections/google/auth/google/callback"
+        ]
     }
 
 @router.get("/debug/config")
