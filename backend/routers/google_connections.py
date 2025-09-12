@@ -609,6 +609,15 @@ async def send_gmail_message(
             detail=f"Failed to send email: {str(e)}"
         )
 
+@router.get("/health")
+async def google_router_health():
+    """Health check for Google router"""
+    return {
+        "status": "healthy",
+        "router": "google_connections",
+        "message": "Google connections router is working"
+    }
+
 @router.get("/debug/config")
 async def debug_google_config():
     """Debug endpoint to check Google OAuth configuration"""
