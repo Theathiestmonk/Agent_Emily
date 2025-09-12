@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
 
-function Login() {
+function SignIn() {
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -11,7 +11,6 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
   
   const { login } = useAuth()
   const navigate = useNavigate()
@@ -22,26 +21,18 @@ function Login() {
       [e.target.name]: e.target.value
     })
     setError('')
-    setSuccessMessage('')
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError('')
-    setSuccessMessage('')
 
     try {
       const result = await login(formData.email, formData.password)
 
       if (result.success) {
-        if (result.message) {
-          // Email confirmation required
-          setSuccessMessage(result.message)
-        } else {
-          // Direct login successful
-          navigate('/dashboard')
-        }
+        navigate('/dashboard')
       } else {
         setError(result.error)
       }
@@ -52,7 +43,6 @@ function Login() {
     }
   }
 
-
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
       <div className="max-w-md w-full">
@@ -62,14 +52,14 @@ function Login() {
             <span className="text-2xl font-bold text-white">E</span>
           </div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Hi, I am Emily
+            Welcome back
           </h1>
           <p className="text-gray-600">
-            Your digital marketing companion
+            Sign in to your Emily account
           </p>
         </div>
 
-        {/* Login Form Card */}
+        {/* Sign In Form Card */}
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email Field */}
@@ -130,13 +120,6 @@ function Login() {
               </div>
             )}
 
-            {/* Success Message */}
-            {successMessage && (
-              <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm">
-                {successMessage}
-              </div>
-            )}
-
             {/* Sign In Button */}
             <button
               type="submit"
@@ -156,9 +139,9 @@ function Login() {
               </div>
             </div>
 
-            {/* Sign Up Link */}
+            {/* Create Account Link */}
             <div className="text-center">
-              <span className="text-gray-500">New to Emily? </span>
+              <span className="text-gray-500">Don't have an account? </span>
               <Link
                 to="/signup"
                 className="text-pink-600 hover:text-pink-700 font-medium transition-colors"
@@ -180,4 +163,5 @@ function Login() {
   )
 }
 
-export default Login
+export default SignIn
+
