@@ -193,6 +193,11 @@ async def google_auth(current_user: User = Depends(get_current_user)):
             prompt='consent'  # Force consent screen to get refresh token
         )
         
+        print(f"Google OAuth initiated for user {current_user.id}")
+        print(f"Generated state: {state}")
+        print(f"Redirect URI: {redirect_uri}")
+        print(f"Auth URL: {auth_url}")
+        
         return {
             "auth_url": auth_url,
             "state": state,
@@ -206,9 +211,49 @@ async def google_auth(current_user: User = Depends(get_current_user)):
         )
 
 @router.get("/callback")
-async def google_callback(code: str, state: str):
+async def google_callback(code: str = None, state: str = None, error: str = None):
     """Handle Google OAuth callback"""
     try:
+        # Check for OAuth error
+        if error:
+            frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+            return f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Google Connection Failed</title>
+            </head>
+            <body>
+                <script>
+                    window.location.href = '{frontend_url}/google-callback?error={error}';
+                </script>
+                <p>Google OAuth error: {error}</p>
+            </body>
+            </html>
+            """
+        
+        # Check for missing parameters
+        if not code or not state:
+            frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+            print(f"Google OAuth callback - Missing parameters: code={code}, state={state}")
+            return f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Connection Failed</title>
+            </head>
+            <body>
+                <h2>Connection Failed</h2>
+                <p>Error: Missing code or state parameter</p>
+                <p>Debug: code={code}, state={state}</p>
+                <script>
+                    window.location.href = '{frontend_url}/google-callback?error=Missing code or state parameter';
+                </script>
+                <p>You can close this window and try again.</p>
+            </body>
+            </html>
+            """
+        
         # Validate OAuth state
         state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", "google").execute()
         
