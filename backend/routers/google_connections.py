@@ -213,6 +213,15 @@ async def google_auth(current_user: User = Depends(get_current_user)):
 @router.get("/callback")
 async def google_callback(code: str = None, state: str = None, error: str = None):
     """Handle Google OAuth callback"""
+    return await handle_google_callback(code, state, error)
+
+@router.get("/auth/google/callback")
+async def google_auth_callback(code: str = None, state: str = None, error: str = None):
+    """Handle Google OAuth callback from /auth/google/callback path"""
+    return await handle_google_callback(code, state, error)
+
+async def handle_google_callback(code: str = None, state: str = None, error: str = None):
+    """Handle Google OAuth callback"""
     try:
         # Check for OAuth error
         if error:
