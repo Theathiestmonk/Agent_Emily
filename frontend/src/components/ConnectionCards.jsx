@@ -99,7 +99,7 @@ const ConnectionCards = ({ compact = false }) => {
       if (platformId === 'google') {
         // Handle Google OAuth
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
-        const response = await fetch(`${API_BASE_URL}/connections/google/auth`)
+        const response = await fetch(`${API_BASE_URL}/connections/google/auth/initiate`)
         
         if (!response.ok) {
           const errorText = await response.text()

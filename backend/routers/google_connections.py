@@ -143,7 +143,7 @@ def get_google_credentials_from_token(access_token: str, refresh_token: str = No
     )
     return creds
 
-@router.get("/auth")
+@router.get("/auth/initiate")
 async def google_auth(current_user: User = Depends(get_current_user)):
     """Initiate Google OAuth flow"""
     try:
