@@ -4,6 +4,7 @@ import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
+import MainContentLoader from './MainContentLoader'
 import { 
   Target,
   Calendar,
@@ -114,9 +115,7 @@ const CampaignsDashboard = () => {
     return Math.round((generated / total) * 100)
   }
 
-  if (loading) {
-    return <LoadingBar message="Loading campaigns..." />
-  }
+  // Remove the early return for loading - we'll handle it in the main content area
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -156,6 +155,10 @@ const CampaignsDashboard = () => {
 
         {/* Content */}
         <div className="flex-1 pt-24 p-6">
+          {loading ? (
+            <MainContentLoader message="Loading campaigns..." />
+          ) : (
+            <>
           {campaigns.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-96">
               <Target className="w-16 h-16 text-gray-300 mb-4" />
@@ -302,6 +305,8 @@ const CampaignsDashboard = () => {
             <div className="fixed bottom-4 right-4 text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border">
               Last updated: {lastRefresh.toLocaleTimeString()}
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

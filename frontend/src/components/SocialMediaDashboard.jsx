@@ -5,6 +5,7 @@ import { useSocialMediaCache } from '../contexts/SocialMediaCacheContext'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
+import MainContentLoader from './MainContentLoader'
 import { 
   Facebook, 
   Instagram, 
@@ -286,9 +287,7 @@ const SocialMediaDashboard = () => {
     }
   }, [posts, connections])
 
-  if (loading) {
-    return <LoadingBar message="Loading social media dashboard..." />
-  }
+  // Remove the early return for loading - we'll handle it in the main content area
 
   const connectedPlatforms = connections ? connections.filter(conn => conn.is_active) : []
   const hasPosts = Object.keys(posts).length > 0
@@ -359,6 +358,10 @@ const SocialMediaDashboard = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 p-6 pt-24">
+          {loading ? (
+            <MainContentLoader message="Loading social media dashboard..." />
+          ) : (
+            <>
           {/* Debug Data Display */}
           {debugData && (
             <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -668,6 +671,8 @@ const SocialMediaDashboard = () => {
             <div className="fixed bottom-4 right-4 text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border">
               Last updated: {lastRefresh.toLocaleTimeString()}
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

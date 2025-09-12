@@ -609,6 +609,20 @@ async def send_gmail_message(
             detail=f"Failed to send email: {str(e)}"
         )
 
+@router.get("/debug/config")
+async def debug_google_config():
+    """Debug endpoint to check Google OAuth configuration"""
+    return {
+        "client_id": "SET" if os.getenv('GOOGLE_CLIENT_ID') else "MISSING",
+        "client_secret": "SET" if os.getenv('GOOGLE_CLIENT_SECRET') else "MISSING",
+        "redirect_uri": os.getenv('GOOGLE_REDIRECT_URI'),
+        "frontend_url": os.getenv('FRONTEND_URL'),
+        "encryption_key": "SET" if os.getenv('ENCRYPTION_KEY') else "MISSING",
+        "supabase_url": "SET" if os.getenv('SUPABASE_URL') else "MISSING",
+        "supabase_service_key": "SET" if os.getenv('SUPABASE_SERVICE_ROLE_KEY') else "MISSING",
+        "environment": os.getenv('ENVIRONMENT', 'unknown')
+    }
+
 @router.get("/disconnect")
 async def disconnect_google(current_user: User = Depends(get_current_user)):
     """Disconnect Google account"""
