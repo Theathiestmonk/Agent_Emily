@@ -99,7 +99,9 @@ const ConnectionCards = ({ compact = false }) => {
       if (platformId === 'google') {
         // Handle Google OAuth
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
-        const response = await fetch(`${API_BASE_URL}/connections/google/auth/initiate`)
+        // Ensure no double slashes in URL
+        const cleanUrl = API_BASE_URL.replace(/\/+$/, '') + '/connections/google/auth/initiate'
+        const response = await fetch(cleanUrl)
         
         if (!response.ok) {
           const errorText = await response.text()
@@ -137,7 +139,9 @@ const ConnectionCards = ({ compact = false }) => {
       if (platformId === 'google') {
         // Handle Google disconnect
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
-        const response = await fetch(`${API_BASE_URL}/connections/google/disconnect`, {
+        // Ensure no double slashes in URL
+        const cleanUrl = API_BASE_URL.replace(/\/+$/, '') + '/connections/google/disconnect'
+        const response = await fetch(cleanUrl, {
           method: 'GET'
         })
         const data = await response.json()

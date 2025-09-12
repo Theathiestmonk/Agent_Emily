@@ -40,7 +40,9 @@ const GoogleCallback = () => {
 
       // Call backend to complete OAuth flow
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
-      const response = await fetch(`${API_BASE_URL}/connections/google/callback?code=${code}&state=${state}`)
+      // Ensure no double slashes in URL
+      const baseUrl = API_BASE_URL.replace(/\/+$/, '')
+      const response = await fetch(`${baseUrl}/connections/google/callback?code=${code}&state=${state}`)
       
       if (!response.ok) {
         const errorText = await response.text()

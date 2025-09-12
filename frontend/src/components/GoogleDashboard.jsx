@@ -24,30 +24,32 @@ const GoogleDashboard = () => {
       setError(null)
 
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+      // Ensure no double slashes in URLs
+      const baseUrl = API_BASE_URL.replace(/\/+$/, '')
 
       // Fetch Gmail messages
-      const gmailResponse = await fetch(`${API_BASE_URL}/connections/google/gmail/messages?limit=5`)
+      const gmailResponse = await fetch(`${baseUrl}/connections/google/gmail/messages?limit=5`)
       const gmailData = await gmailResponse.json()
       if (gmailData.messages) {
         setGmailMessages(gmailData.messages)
       }
 
       // Fetch Drive files
-      const driveResponse = await fetch(`${API_BASE_URL}/connections/google/drive/files?limit=5`)
+      const driveResponse = await fetch(`${baseUrl}/connections/google/drive/files?limit=5`)
       const driveData = await driveResponse.json()
       if (driveData.files) {
         setDriveFiles(driveData.files)
       }
 
       // Fetch Sheets
-      const sheetsResponse = await fetch(`${API_BASE_URL}/connections/google/sheets/spreadsheets?limit=5`)
+      const sheetsResponse = await fetch(`${baseUrl}/connections/google/sheets/spreadsheets?limit=5`)
       const sheetsData = await sheetsResponse.json()
       if (sheetsData.spreadsheets) {
         setSheets(sheetsData.spreadsheets)
       }
 
       // Fetch Docs
-      const docsResponse = await fetch(`${API_BASE_URL}/connections/google/docs/documents?limit=5`)
+      const docsResponse = await fetch(`${baseUrl}/connections/google/docs/documents?limit=5`)
       const docsData = await docsResponse.json()
       if (docsData.documents) {
         setDocs(docsData.documents)
@@ -67,8 +69,10 @@ const GoogleDashboard = () => {
       setLoading(true)
       
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+      // Ensure no double slashes in URL
+      const baseUrl = API_BASE_URL.replace(/\/+$/, '')
       
-      const response = await fetch(`${API_BASE_URL}/connections/google/gmail/send`, {
+      const response = await fetch(`${baseUrl}/connections/google/gmail/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
