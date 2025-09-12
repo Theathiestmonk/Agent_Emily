@@ -168,7 +168,7 @@ async def google_auth(current_user: User = Depends(get_current_user)):
             "user_id": current_user.id,
             "platform": "google",
             "state": state,
-            "expires_at": (datetime.now() + timedelta(minutes=10)).isoformat()
+            "expires_at": (datetime.now() + timedelta(minutes=30)).isoformat()
         }
         
         supabase_admin.table("oauth_states").insert(oauth_state_data).execute()
@@ -198,6 +198,7 @@ async def google_auth(current_user: User = Depends(get_current_user)):
         
         print(f"Google OAuth initiated for user {current_user.id}")
         print(f"Generated state: {state}")
+        print(f"State expires at: {oauth_state_data['expires_at']}")
         print(f"Redirect URI: {redirect_uri}")
         print(f"Auth URL: {auth_url}")
         
@@ -223,6 +224,23 @@ async def google_auth_callback(code: str = None, state: str = None, error: str =
     """Handle Google OAuth callback from /auth/google/callback path"""
     print(f"🔗 Google OAuth callback received - code: {code[:10] if code else 'None'}..., state: {state[:10] if state else 'None'}..., error: {error}")
     return await handle_google_callback(code, state, error)
+
+@router.get("/auth/google/callback/redirect")
+async def google_callback_redirect(code: str = None, state: str = None, error: str = None):
+    """Redirect from /auth/google/callback to /callback for compatibility"""
+    from fastapi.responses import RedirectResponse
+    base_url = "https://agent-emily.onrender.com/connections/google/callback"
+    params = []
+    if code:
+        params.append(f"code={code}")
+    if state:
+        params.append(f"state={state}")
+    if error:
+        params.append(f"error={error}")
+    
+    redirect_url = f"{base_url}?{'&'.join(params)}"
+    print(f"🔗 Redirecting to: {redirect_url}")
+    return RedirectResponse(url=redirect_url)
 
 async def handle_google_callback(code: str = None, state: str = None, error: str = None):
     """Handle Google OAuth callback"""
@@ -268,9 +286,15 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
             """
         
         # Validate OAuth state
+        print(f"🔍 Looking for OAuth state: {state}")
         state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", "google").execute()
+        print(f"🔍 State response: {state_response.data}")
         
         if not state_response.data:
+            # Check if state exists but expired
+            expired_state = supabase_admin.table("oauth_states").select("*").eq("state", state).execute()
+            if expired_state.data:
+                print(f"🔍 State found but expired: {expired_state.data[0]}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid or expired OAuth state"
