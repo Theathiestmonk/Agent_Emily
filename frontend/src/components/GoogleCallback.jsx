@@ -84,10 +84,14 @@ const GoogleCallback = () => {
         
         // Send success message to parent window if in popup
         if (window.opener) {
-          window.opener.postMessage({
-            type: 'GOOGLE_OAUTH_SUCCESS',
-            message: 'Google account connected successfully!'
-          }, window.location.origin)
+          console.log('Sending success message to parent window from origin:', window.location.origin)
+          // Small delay to ensure popup is ready
+          setTimeout(() => {
+            window.opener.postMessage({
+              type: 'GOOGLE_OAUTH_SUCCESS',
+              message: 'Google account connected successfully!'
+            }, window.location.origin)
+          }, 500)
         } else {
           // If not in popup, redirect to dashboard
           setTimeout(() => {

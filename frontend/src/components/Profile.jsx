@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
+import EditProfileModal from './EditProfileModal'
 import { User, Mail, Phone, MapPin, Calendar, Edit, Save, X, Loader2, Building2, Globe, Target, BarChart3, Megaphone, Settings } from 'lucide-react'
 
 const Profile = () => {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [editForm, setEditForm] = useState({})
+  const [showEditModal, setShowEditModal] = useState(false)
   const [error, setError] = useState(null)
 
   useEffect(() => {
@@ -38,101 +37,6 @@ const Profile = () => {
       }
 
       setProfile(data)
-      setEditForm({
-        // Basic Information
-        name: data?.name || '',
-        business_name: data?.business_name || '',
-        business_type: data?.business_type || [],
-        industry: data?.industry || [],
-        business_description: data?.business_description || '',
-        target_audience: data?.target_audience || [],
-        unique_value_proposition: data?.unique_value_proposition || '',
-        
-        // Detailed Target Audience
-        target_audience_age_groups: data?.target_audience_age_groups || [],
-        target_audience_life_stages: data?.target_audience_life_stages || [],
-        target_audience_professional_types: data?.target_audience_professional_types || [],
-        target_audience_lifestyle_interests: data?.target_audience_lifestyle_interests || [],
-        target_audience_buyer_behavior: data?.target_audience_buyer_behavior || [],
-        target_audience_other: data?.target_audience_other || '',
-        
-        // Brand & Contact
-        brand_voice: data?.brand_voice || '',
-        brand_tone: data?.brand_tone || '',
-        website_url: data?.website_url || '',
-        phone_number: data?.phone_number || '',
-        street_address: data?.street_address || '',
-        city: data?.city || '',
-        state: data?.state || '',
-        country: data?.country || '',
-        timezone: data?.timezone || '',
-        
-        // Social Media & Goals
-        social_media_platforms: data?.social_media_platforms || [],
-        primary_goals: data?.primary_goals || [],
-        key_metrics_to_track: data?.key_metrics_to_track || [],
-        
-        // Content Strategy
-        monthly_budget_range: data?.monthly_budget_range || '',
-        posting_frequency: data?.posting_frequency || '',
-        preferred_content_types: data?.preferred_content_types || [],
-        content_themes: data?.content_themes || [],
-        
-        // Market & Competition
-        main_competitors: data?.main_competitors || '',
-        market_position: data?.market_position || '',
-        products_or_services: data?.products_or_services || '',
-        
-        // Campaign Planning
-        important_launch_dates: data?.important_launch_dates || '',
-        planned_promotions_or_campaigns: data?.planned_promotions_or_campaigns || '',
-        top_performing_content_types: data?.top_performing_content_types || [],
-        best_time_to_post: data?.best_time_to_post || [],
-        
-        // Performance & Customer
-        successful_campaigns: data?.successful_campaigns || '',
-        hashtags_that_work_well: data?.hashtags_that_work_well || '',
-        customer_pain_points: data?.customer_pain_points || '',
-        typical_customer_journey: data?.typical_customer_journey || '',
-        
-        // Automation & Platform
-        automation_level: data?.automation_level || '',
-        platform_specific_tone: data?.platform_specific_tone || {},
-        current_presence: data?.current_presence || [],
-        focus_areas: data?.focus_areas || [],
-        platform_details: data?.platform_details || {},
-        
-        // Platform Tone Settings
-        platform_tone_instagram: data?.platform_tone_instagram || [],
-        platform_tone_facebook: data?.platform_tone_facebook || [],
-        platform_tone_linkedin: data?.platform_tone_linkedin || [],
-        platform_tone_youtube: data?.platform_tone_youtube || [],
-        platform_tone_x: data?.platform_tone_x || [],
-        
-        // Platform Links
-        facebook_page_name: data?.facebook_page_name || '',
-        instagram_profile_link: data?.instagram_profile_link || '',
-        linkedin_company_link: data?.linkedin_company_link || '',
-        youtube_channel_link: data?.youtube_channel_link || '',
-        x_twitter_profile: data?.x_twitter_profile || '',
-        google_business_profile: data?.google_business_profile || '',
-        google_ads_account: data?.google_ads_account || '',
-        whatsapp_business: data?.whatsapp_business || '',
-        email_marketing_platform: data?.email_marketing_platform || '',
-        meta_ads_accounts: data?.meta_ads_accounts || '',
-        
-        // "Other" Input Fields
-        business_type_other: data?.business_type_other || '',
-        industry_other: data?.industry_other || '',
-        social_platform_other: data?.social_platform_other || '',
-        goal_other: data?.goal_other || '',
-        metric_other: data?.metric_other || '',
-        content_type_other: data?.content_type_other || '',
-        content_theme_other: data?.content_theme_other || '',
-        posting_time_other: data?.posting_time_other || '',
-        current_presence_other: data?.current_presence_other || '',
-        top_performing_content_type_other: data?.top_performing_content_type_other || ''
-      })
     } catch (err) {
       console.error('Error fetching profile:', err)
       setError('Failed to load profile')
@@ -142,228 +46,34 @@ const Profile = () => {
   }
 
   const handleEdit = () => {
-    setEditing(true)
+    setShowEditModal(true)
   }
 
-
-  const handleCancel = () => {
-    setEditing(false)
-    setEditForm({
-      // Basic Information
-      name: profile?.name || '',
-      business_name: profile?.business_name || '',
-      business_type: profile?.business_type || [],
-      industry: profile?.industry || [],
-      business_description: profile?.business_description || '',
-      target_audience: profile?.target_audience || [],
-      unique_value_proposition: profile?.unique_value_proposition || '',
-      
-      // Detailed Target Audience
-      target_audience_age_groups: profile?.target_audience_age_groups || [],
-      target_audience_life_stages: profile?.target_audience_life_stages || [],
-      target_audience_professional_types: profile?.target_audience_professional_types || [],
-      target_audience_lifestyle_interests: profile?.target_audience_lifestyle_interests || [],
-      target_audience_buyer_behavior: profile?.target_audience_buyer_behavior || [],
-      target_audience_other: profile?.target_audience_other || '',
-      
-      // Brand & Contact
-      brand_voice: profile?.brand_voice || '',
-      brand_tone: profile?.brand_tone || '',
-      website_url: profile?.website_url || '',
-      phone_number: profile?.phone_number || '',
-      street_address: profile?.street_address || '',
-      city: profile?.city || '',
-      state: profile?.state || '',
-      country: profile?.country || '',
-      timezone: profile?.timezone || '',
-      
-      // Social Media & Goals
-      social_media_platforms: profile?.social_media_platforms || [],
-      primary_goals: profile?.primary_goals || [],
-      key_metrics_to_track: profile?.key_metrics_to_track || [],
-      
-      // Content Strategy
-      monthly_budget_range: profile?.monthly_budget_range || '',
-      posting_frequency: profile?.posting_frequency || '',
-      preferred_content_types: profile?.preferred_content_types || [],
-      content_themes: profile?.content_themes || [],
-      
-      // Market & Competition
-      main_competitors: profile?.main_competitors || '',
-      market_position: profile?.market_position || '',
-      products_or_services: profile?.products_or_services || '',
-      
-      // Campaign Planning
-      important_launch_dates: profile?.important_launch_dates || '',
-      planned_promotions_or_campaigns: profile?.planned_promotions_or_campaigns || '',
-      top_performing_content_types: profile?.top_performing_content_types || [],
-      best_time_to_post: profile?.best_time_to_post || [],
-      
-      // Performance & Customer
-      successful_campaigns: profile?.successful_campaigns || '',
-      hashtags_that_work_well: profile?.hashtags_that_work_well || '',
-      customer_pain_points: profile?.customer_pain_points || '',
-      typical_customer_journey: profile?.typical_customer_journey || '',
-      
-      // Automation & Platform
-      automation_level: profile?.automation_level || '',
-      platform_specific_tone: profile?.platform_specific_tone || {},
-      current_presence: profile?.current_presence || [],
-      focus_areas: profile?.focus_areas || [],
-      platform_details: profile?.platform_details || {},
-      
-      // Platform Tone Settings
-      platform_tone_instagram: profile?.platform_tone_instagram || [],
-      platform_tone_facebook: profile?.platform_tone_facebook || [],
-      platform_tone_linkedin: profile?.platform_tone_linkedin || [],
-      platform_tone_youtube: profile?.platform_tone_youtube || [],
-      platform_tone_x: profile?.platform_tone_x || [],
-      
-      // Platform Links
-      facebook_page_name: profile?.facebook_page_name || '',
-      instagram_profile_link: profile?.instagram_profile_link || '',
-      linkedin_company_link: profile?.linkedin_company_link || '',
-      youtube_channel_link: profile?.youtube_channel_link || '',
-      x_twitter_profile: profile?.x_twitter_profile || '',
-      google_business_profile: profile?.google_business_profile || '',
-      google_ads_account: profile?.google_ads_account || '',
-      whatsapp_business: profile?.whatsapp_business || '',
-      email_marketing_platform: profile?.email_marketing_platform || '',
-      meta_ads_accounts: profile?.meta_ads_accounts || '',
-      
-      // "Other" Input Fields
-      business_type_other: profile?.business_type_other || '',
-      industry_other: profile?.industry_other || '',
-      social_platform_other: profile?.social_platform_other || '',
-      goal_other: profile?.goal_other || '',
-      metric_other: profile?.metric_other || '',
-      content_type_other: profile?.content_type_other || '',
-      content_theme_other: profile?.content_theme_other || '',
-      posting_time_other: profile?.posting_time_other || '',
-      current_presence_other: profile?.current_presence_other || '',
-      top_performing_content_type_other: profile?.top_performing_content_type_other || ''
-    })
-  }
-
-  const handleSave = async () => {
-    try {
-      setSaving(true)
-      setError(null) // Clear any previous errors
-      
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        setError('User not authenticated')
-        return
-      }
-
-      console.log('Saving profile data:', editForm) // Debug log
-      console.log('User ID:', user.id) // Debug log
-
-      // Check if profile exists first
-      const { data: existingProfile, error: fetchError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .single()
-
-      console.log('Existing profile check:', { existingProfile, fetchError })
-
-      // First, let's try to update the existing record
-      const { data: updateData, error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          ...editForm,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id)
-        .select()
-
-      if (updateError) {
-        console.error('Update error:', updateError)
-        
-        // If update fails, try upsert as fallback
-        console.log('Update failed, trying upsert...')
-        const { data: upsertData, error: upsertError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: user.id,
-            ...editForm,
-            updated_at: new Date().toISOString()
-          })
-          .select()
-
-        if (upsertError) {
-          console.error('Upsert error:', upsertError)
-          setError(`Failed to update profile: ${upsertError.message}`)
-          return
-        }
-        
-        console.log('Profile upserted successfully:', upsertData)
-      } else {
-        console.log('Profile updated successfully:', updateData)
-      }
-
-      // Refresh the profile data from database
-      await fetchProfile()
-      setEditing(false)
-      
-      // Show success message
-      alert('Profile updated successfully!')
-    } catch (err) {
-      console.error('Error updating profile:', err)
-      setError(`Failed to update profile: ${err.message}`)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleInputChange = (field, value) => {
-    setEditForm(prev => ({
-      ...prev,
-      [field]: value
-    }))
-  }
-
-  const handleArrayInputChange = (field, value) => {
-    const array = value.split(',').map(item => item.trim()).filter(item => item)
-    setEditForm(prev => ({
-      ...prev,
-      [field]: array
-    }))
+  const handleEditSuccess = () => {
+    // Refresh profile data after successful edit
+    fetchProfile()
   }
 
   const renderArrayField = (label, field, icon) => {
-    const value = Array.isArray(editForm[field]) ? editForm[field].join(', ') : editForm[field]
     return (
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           {label}
         </label>
-        {editing ? (
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => handleArrayInputChange(field, e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            placeholder="Enter values separated by commas"
-          />
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {Array.isArray(profile?.[field]) && profile[field].length > 0 ? (
-              profile[field].map((item, index) => (
-                <span
-                  key={index}
-                  className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
-                >
-                  {item}
-                </span>
-              ))
-            ) : (
-              <p className="text-gray-500">Not specified</p>
-            )}
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {Array.isArray(profile?.[field]) && profile[field].length > 0 ? (
+            profile[field].map((item, index) => (
+              <span
+                key={index}
+                className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
+              >
+                {item}
+              </span>
+            ))
+          ) : (
+            <p className="text-gray-500">Not specified</p>
+          )}
+        </div>
       </div>
     )
   }
@@ -374,30 +84,10 @@ const Profile = () => {
         <label className="block text-sm font-medium text-gray-700 mb-2">
           {label}
         </label>
-        {editing ? (
-          type === 'textarea' ? (
-            <textarea
-              value={editForm[field]}
-              onChange={(e) => handleInputChange(field, e.target.value)}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              placeholder={placeholder}
-            />
-          ) : (
-            <input
-              type={type}
-              value={editForm[field]}
-              onChange={(e) => handleInputChange(field, e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              placeholder={placeholder}
-            />
-          )
-        ) : (
-          <p className="text-gray-900 py-2 flex items-center">
-            {icon && <span className="mr-2">{icon}</span>}
-            {profile?.[field] || 'Not provided'}
-          </p>
-        )}
+        <p className="text-gray-900 py-2 flex items-center">
+          {icon && <span className="mr-2">{icon}</span>}
+          {profile?.[field] || 'Not provided'}
+        </p>
       </div>
     )
   }
@@ -458,37 +148,13 @@ const Profile = () => {
                 </div>
               </div>
               <div className="flex items-center space-x-3">
-                {!editing ? (
-                  <button
-                    onClick={handleEdit}
-                    className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                  >
-                    <Edit className="w-4 h-4" />
-                    <span>Edit Profile</span>
-                  </button>
-                ) : (
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={handleCancel}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                      <span>Cancel</span>
-                    </button>
-                    <button
-                      onClick={handleSave}
-                      disabled={saving}
-                      className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                    >
-                      {saving ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Save className="w-4 h-4" />
-                      )}
-                      <span>{saving ? 'Saving...' : 'Save Changes'}</span>
-                    </button>
-                  </div>
-                )}
+                <button
+                  onClick={handleEdit}
+                  className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  <Edit className="w-4 h-4" />
+                  <span>Edit Profile</span>
+                </button>
               </div>
             </div>
           </div>
@@ -664,6 +330,13 @@ const Profile = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={handleEditSuccess}
+      />
     </div>
   )
 }

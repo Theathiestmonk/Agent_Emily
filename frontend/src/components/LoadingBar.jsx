@@ -2,7 +2,7 @@ import React from 'react'
 
 const LoadingBar = ({ message = "Loading your content..." }) => {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-transparent flex items-center justify-center">
       <div className="w-full max-w-md mx-auto px-6">
         <div className="text-center mb-6">
           <div className="w-16 h-16 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">

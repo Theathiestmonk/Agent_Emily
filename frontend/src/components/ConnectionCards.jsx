@@ -121,7 +121,19 @@ const ConnectionCards = ({ compact = false }) => {
           
           // Listen for popup messages
           const messageHandler = async (event) => {
-            if (event.origin !== window.location.origin) return
+            // Allow messages from the same origin or from the callback page
+            const allowedOrigins = [
+              window.location.origin,
+              'https://emily.atsnai.com',
+              'https://agent-emily.onrender.com'
+            ]
+            
+            if (!allowedOrigins.includes(event.origin)) {
+              console.log('Ignoring message from origin:', event.origin)
+              return
+            }
+            
+            console.log('Received message:', event.data, 'from origin:', event.origin)
             
             if (event.data.type === 'GOOGLE_OAUTH_SUCCESS') {
               console.log('Google OAuth successful:', event.data)
@@ -143,6 +155,9 @@ const ConnectionCards = ({ compact = false }) => {
             if (popup.closed) {
               clearInterval(checkClosed)
               window.removeEventListener('message', messageHandler)
+              // Refresh connections when popup is closed (in case OAuth completed)
+              console.log('Popup closed, refreshing connections...')
+              fetchConnections()
             }
           }, 1000)
         } else {
