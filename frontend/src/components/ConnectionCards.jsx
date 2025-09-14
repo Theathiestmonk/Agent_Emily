@@ -69,9 +69,9 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'google',
       name: 'Google',
       icon: Mail,
-      color: 'from-red-500 via-yellow-500 via-green-500 to-blue-500',
+      color: 'from-red-500 to-red-600',
       iconColor: 'text-red-500',
-      bgColor: 'bg-gradient-to-r from-red-50 to-blue-50',
+      bgColor: 'bg-red-50',
       borderColor: 'border-red-200'
     }
   ]

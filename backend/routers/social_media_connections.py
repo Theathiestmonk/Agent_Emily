@@ -536,6 +536,110 @@ async def get_instagram_insights(user_id: str, authorization: str = Header(None)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@router.get("/task-executions")
+async def get_task_executions(authorization: str = Header(None)):
+    """Get recent autonomous task executions"""
+    try:
+        user_id = extract_user_id_from_jwt(authorization)
+        
+        # For now, return the weekly content generation task status
+        # In the future, this could be expanded to track all task executions
+        import os
+        from datetime import datetime
+        import pytz
+        
+        # Check for weekly generation marker files
+        scheduler_dir = os.path.join(os.path.dirname(__file__), '..', 'scheduler')
+        marker_files = []
+        
+        if os.path.exists(scheduler_dir):
+            for file in os.listdir(scheduler_dir):
+                if file.startswith('weekly_run_') and file.endswith('.marker'):
+                    marker_files.append(file)
+        
+        # Sort by date (newest first)
+        marker_files.sort(reverse=True)
+        
+        tasks = []
+        
+        # Get the most recent execution
+        if marker_files:
+            latest_marker = marker_files[0]
+            marker_path = os.path.join(scheduler_dir, latest_marker)
+            
+            try:
+                with open(marker_path, 'r') as f:
+                    content = f.read().strip()
+                    # Extract timestamp from content
+                    if 'completed at' in content:
+                        timestamp_str = content.split('completed at ')[1]
+                        execution_time = datetime.fromisoformat(timestamp_str)
+                        
+                        # Calculate next run (next Sunday at 4:00 AM IST)
+                        ist = pytz.timezone('Asia/Kolkata')
+                        now_ist = datetime.now(ist)
+                        
+                        # Find next Sunday
+                        days_until_sunday = (6 - now_ist.weekday()) % 7
+                        if days_until_sunday == 0 and now_ist.hour < 4:
+                            # It's Sunday but before 4 AM, so next run is today
+                            next_run = now_ist.replace(hour=4, minute=0, second=0, microsecond=0)
+                        else:
+                            # Next Sunday at 4 AM
+                            next_sunday = now_ist + timedelta(days=days_until_sunday)
+                            next_run = next_sunday.replace(hour=4, minute=0, second=0, microsecond=0)
+                        
+                        tasks.append({
+                            "id": 1,
+                            "name": "Weekly Content Generation",
+                            "description": "Generated Social Media posts for you this Sunday at 4:00 AM IST",
+                            "status": "completed",
+                            "executionTime": execution_time.isoformat(),
+                            "duration": "2m 15s",  # Estimated
+                            "type": "content_generation",
+                            "frequency": "Weekly (Sundays at 4:00 AM IST)",
+                            "isActive": True,
+                            "nextRun": next_run.strftime("%A, %B %d at %I:%M %p IST")
+                        })
+            except Exception as e:
+                print(f"Error reading marker file: {e}")
+        
+        # If no executions found, show scheduled task
+        if not tasks:
+            ist = pytz.timezone('Asia/Kolkata')
+            now_ist = datetime.now(ist)
+            
+            # Find next Sunday at 4 AM
+            days_until_sunday = (6 - now_ist.weekday()) % 7
+            if days_until_sunday == 0 and now_ist.hour < 4:
+                next_run = now_ist.replace(hour=4, minute=0, second=0, microsecond=0)
+            else:
+                next_sunday = now_ist + timedelta(days=days_until_sunday)
+                next_run = next_sunday.replace(hour=4, minute=0, second=0, microsecond=0)
+            
+            tasks.append({
+                "id": 1,
+                "name": "Weekly Content Generation",
+                "description": "Will generate Social Media posts for you next Sunday at 4:00 AM IST",
+                "status": "scheduled",
+                "executionTime": None,
+                "duration": None,
+                "type": "content_generation",
+                "frequency": "Weekly (Sundays at 4:00 AM IST)",
+                "isActive": True,
+                "nextRun": next_run.strftime("%A, %B %d at %I:%M %p IST")
+            })
+        
+        return {
+            "tasks": tasks,
+            "total_tasks": len(tasks),
+            "last_updated": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        print(f"Error fetching task executions: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.get("/latest-posts")
 async def get_latest_posts(authorization: str = Header(None)):
     """Get latest posts from all connected social media platforms (both OAuth and API token connections)"""
