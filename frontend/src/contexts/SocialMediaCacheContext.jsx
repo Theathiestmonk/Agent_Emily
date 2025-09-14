@@ -116,7 +116,7 @@ export function SocialMediaCacheProvider({ children }) {
       console.log('Fetching fresh posts data from API')
       
       const authToken = await getAuthToken()
-      const response = await fetch(`${getApiBaseUrl()}/social-media/latest-posts`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/social-media/latest-posts`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

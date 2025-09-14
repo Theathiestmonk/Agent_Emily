@@ -147,7 +147,7 @@ const AnalyticsDashboard = () => {
         metrics = [
           { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
           { name: 'Comments', data: last5Posts.map(post => post.comments_count || 0) },
-          { name: 'Saves', data: last5Posts.map(post => post.saves_count || 0) }
+          { name: 'Shares', data: last5Posts.map(post => post.shares_count || 0) }
         ]
         break
       case 'linkedin':
@@ -191,25 +191,29 @@ const AnalyticsDashboard = () => {
 
   const processInsightsData = () => {
     const insights = {}
-    const connectedPlatforms = connections ? connections.filter(conn => conn.is_active) : []
-    connectedPlatforms.forEach(connection => {
-      const platformPosts = posts[connection.platform] || []
-      const platformInsights = calculatePlatformInsights(connection.platform, platformPosts)
+    // Process insights for all platforms that have posts (both OAuth and API token connections)
+    const platformsWithPosts = Object.keys(posts).filter(platform => posts[platform] && posts[platform].length > 0)
+    
+    platformsWithPosts.forEach(platform => {
+      const platformPosts = posts[platform] || []
+      const platformInsights = calculatePlatformInsights(platform, platformPosts)
       if (platformInsights) {
-        insights[connection.platform] = platformInsights
+        insights[platform] = platformInsights
       }
     })
     setInsightsData(insights)
   }
 
   useEffect(() => {
-    if (Object.keys(posts).length > 0 && connections.length > 0) {
+    if (Object.keys(posts).length > 0) {
       processInsightsData()
     }
-  }, [posts, connections])
+  }, [posts])
 
   // Remove the early return for loading - we'll handle it in the main content area
 
+  // Get platforms that have posts (from both OAuth and API token connections)
+  const platformsWithPosts = Object.keys(posts).filter(platform => posts[platform] && posts[platform].length > 0)
   const connectedPlatforms = connections ? connections.filter(conn => conn.is_active) : []
   const hasPosts = Object.keys(posts).length > 0
 
@@ -251,7 +255,7 @@ const AnalyticsDashboard = () => {
             <MainContentLoader message="Loading analytics dashboard..." />
           ) : (
             <>
-          {!hasPosts ? (
+          {platformsWithPosts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-96">
               <BarChart3 className="w-16 h-16 text-gray-300 mb-4" />
               <h3 className="text-xl font-semibold text-gray-600 mb-2">No Analytics Data</h3>

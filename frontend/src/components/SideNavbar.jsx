@@ -58,6 +58,12 @@ const SideNavbar = () => {
       href: '/ads',
       icon: Megaphone,
       description: 'Active advertising campaigns'
+    },
+    {
+      name: 'Settings',
+      href: '/settings',
+      icon: Settings,
+      description: 'Social media connections'
     }
   ]
 

@@ -226,7 +226,7 @@ const SocialMediaDashboard = () => {
         metrics = [
           { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
           { name: 'Comments', data: last5Posts.map(post => post.comments_count || 0) },
-          { name: 'Saves', data: last5Posts.map(post => post.saves_count || 0) }
+          { name: 'Shares', data: last5Posts.map(post => post.shares_count || 0) }
         ]
         break
       case 'linkedin':
@@ -270,25 +270,29 @@ const SocialMediaDashboard = () => {
 
   const processInsightsData = () => {
     const insights = {}
-    const connectedPlatforms = connections.filter(conn => conn.is_active)
-    connectedPlatforms.forEach(connection => {
-      const platformPosts = posts[connection.platform] || []
-      const platformInsights = calculatePlatformInsights(connection.platform, platformPosts)
+    // Process insights for all platforms that have posts (both OAuth and API token connections)
+    const platformsWithPosts = Object.keys(posts).filter(platform => posts[platform] && posts[platform].length > 0)
+    
+    platformsWithPosts.forEach(platform => {
+      const platformPosts = posts[platform] || []
+      const platformInsights = calculatePlatformInsights(platform, platformPosts)
       if (platformInsights) {
-        insights[connection.platform] = platformInsights
+        insights[platform] = platformInsights
       }
     })
     setInsightsData(insights)
   }
 
   useEffect(() => {
-    if (Object.keys(posts).length > 0 && connections.length > 0) {
+    if (Object.keys(posts).length > 0) {
       processInsightsData()
     }
-  }, [posts, connections])
+  }, [posts])
 
   // Remove the early return for loading - we'll handle it in the main content area
 
+  // Get platforms that have posts (from both OAuth and API token connections)
+  const platformsWithPosts = Object.keys(posts).filter(platform => posts[platform] && posts[platform].length > 0)
   const connectedPlatforms = connections ? connections.filter(conn => conn.is_active) : []
   const hasPosts = Object.keys(posts).length > 0
 
@@ -316,8 +320,8 @@ const SocialMediaDashboard = () => {
                       <Users className="w-4 h-4 text-white" />
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-600">Connected</p>
-                      <p className="text-lg font-bold text-gray-900">{connectedPlatforms.length}</p>
+                      <p className="text-xs font-medium text-gray-600">Platforms</p>
+                      <p className="text-lg font-bold text-gray-900">{platformsWithPosts.length}</p>
                     </div>
                   </div>
                   
@@ -327,7 +331,7 @@ const SocialMediaDashboard = () => {
                     </div>
                     <div>
                       <p className="text-xs font-medium text-gray-600">Posts</p>
-                      <p className="text-lg font-bold text-gray-900">{Object.keys(posts).length}</p>
+                      <p className="text-lg font-bold text-gray-900">{Object.values(posts).reduce((total, platformPosts) => total + (platformPosts?.length || 0), 0)}</p>
                     </div>
                   </div>
                 </div>
@@ -386,60 +390,49 @@ const SocialMediaDashboard = () => {
             </div>
           )}
 
-          {connectedPlatforms.length === 0 ? (
+          {platformsWithPosts.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-24 h-24 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6">
                 <AlertCircle className="w-12 h-12 text-gray-400" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No Connected Platforms</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No Social Media Posts</h3>
               <p className="text-gray-500 mb-6">Connect your social media accounts to see your latest posts</p>
               <button
-                onClick={() => window.location.href = '/dashboard'}
+                onClick={() => window.location.href = '/settings'}
                 className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-indigo-600 hover:to-purple-500 transition-all duration-300"
               >
                 Connect Accounts
-              </button>
-            </div>
-          ) : !hasPosts ? (
-            <div className="text-center py-12">
-              <div className="w-24 h-24 bg-gradient-to-r from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <TrendingUp className="w-12 h-12 text-blue-500" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No Recent Posts</h3>
-              <p className="text-gray-500 mb-6">Your connected accounts don't have recent posts or the API is not available yet</p>
-              <button
-                onClick={handleRefresh}
-                className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-blue-500 transition-all duration-300"
-              >
-                Try Again
               </button>
             </div>
           ) : (
             <div className="space-y-6">
               {/* Posts Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {connectedPlatforms.map((connection) => {
-                  const platformPosts = posts[connection.platform] || []
+                {platformsWithPosts.map((platform) => {
+                  const platformPosts = posts[platform] || []
                   const latestPost = platformPosts[0] // Get the most recent post
-                  const theme = getPlatformCardTheme(connection.platform)
+                  const theme = getPlatformCardTheme(platform)
+                  
+                  // Find connection info for this platform (if available)
+                  const connection = connectedPlatforms.find(conn => conn.platform === platform)
                   
                   return (
-                    <div key={connection.id} className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm hover:shadow-lg transition-all duration-300`}>
+                    <div key={platform} className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm hover:shadow-lg transition-all duration-300`}>
                       {/* Platform Header */}
                       <div className="p-4 border-b border-gray-200">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-3">
                             <div className={`w-10 h-10 ${theme.iconBg} rounded-lg flex items-center justify-center`}>
                               <div className="text-white">
-                                {getPlatformIcon(connection.platform)}
+                                {getPlatformIcon(platform)}
                               </div>
                             </div>
                             <div>
                               <h3 className={`font-semibold capitalize ${theme.text}`}>
-                                {connection.platform}
+                                {platform}
                               </h3>
                               <p className="text-sm text-gray-500">
-                                {connection.page_name || connection.platform}
+                                {connection?.page_name || connection?.account_name || platform}
                               </p>
                             </div>
                           </div>
@@ -510,7 +503,7 @@ const SocialMediaDashboard = () => {
                                   className="flex items-center space-x-2 text-sm text-blue-600 hover:text-blue-800 transition-colors"
                                 >
                                   <ExternalLink className="w-4 h-4" />
-                                  <span>View on {connection.platform}</span>
+                                  <span>View on {platform}</span>
                                 </a>
                               </div>
                             )}
