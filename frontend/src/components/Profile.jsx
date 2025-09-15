@@ -119,7 +119,8 @@ const Profile = () => {
         google_ads_account: data?.google_ads_account || '',
         whatsapp_business: data?.whatsapp_business || '',
         email_marketing_platform: data?.email_marketing_platform || '',
-        meta_ads_accounts: data?.meta_ads_accounts || '',
+        meta_ads_facebook: data?.meta_ads_facebook || false,
+        meta_ads_instagram: data?.meta_ads_instagram || false,
         
         // "Other" Input Fields
         business_type_other: data?.business_type_other || '',
@@ -229,7 +230,8 @@ const Profile = () => {
       google_ads_account: profile?.google_ads_account || '',
       whatsapp_business: profile?.whatsapp_business || '',
       email_marketing_platform: profile?.email_marketing_platform || '',
-      meta_ads_accounts: profile?.meta_ads_accounts || '',
+      meta_ads_facebook: profile?.meta_ads_facebook || false,
+      meta_ads_instagram: profile?.meta_ads_instagram || false,
       
       // "Other" Input Fields
       business_type_other: profile?.business_type_other || '',
@@ -352,6 +354,85 @@ const Profile = () => {
           <div className="flex flex-wrap gap-2">
             {Array.isArray(profile?.[field]) && profile[field].length > 0 ? (
               profile[field].map((item, index) => (
+                <span
+                  key={index}
+                  className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
+                >
+                  {item}
+                </span>
+              ))
+            ) : (
+              <p className="text-gray-500">Not specified</p>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const renderCurrentPresenceField = () => {
+    // Use profile data for display, editForm for editing
+    const currentPresence = editing ? (editForm.current_presence || []) : (profile?.current_presence || [])
+    const metaAdsFacebook = editing ? (editForm.meta_ads_facebook || false) : (profile?.meta_ads_facebook || false)
+    const metaAdsInstagram = editing ? (editForm.meta_ads_instagram || false) : (profile?.meta_ads_instagram || false)
+    
+    // Debug logging
+    console.log('Current Presence Debug:', {
+      currentPresence,
+      metaAdsFacebook,
+      metaAdsInstagram,
+      editing,
+      profile: profile?.meta_ads_facebook,
+      editForm: editForm?.meta_ads_facebook,
+      fullProfile: profile,
+      fullEditForm: editForm
+    })
+    
+    // Process current presence to show field:value format for ALL fields
+    const processedPresence = currentPresence.map(presence => {
+      if (presence === 'Meta Ads (Facebook/Instagram)') {
+        const subOptions = []
+        if (metaAdsFacebook) subOptions.push('Facebook Ads')
+        if (metaAdsInstagram) subOptions.push('Instagram Ads')
+        
+        if (subOptions.length > 0) {
+          return `Meta Ads Account: ${subOptions.join(', ')}`
+        } else {
+          return 'Meta Ads Account: Not specified'
+        }
+      }
+      
+      // For Website, show the actual URL
+      if (presence === 'Website') {
+        const websiteUrl = editing ? (editForm.website_url || '') : (profile?.website_url || '')
+        return websiteUrl ? `Website: ${websiteUrl}` : 'Website: URL not provided'
+      }
+      
+      // For other fields, show in "field: value" format
+      return `${presence}: Active`
+    })
+
+    // If no current presence but we have Meta Ads data, show it anyway
+    if (currentPresence.length === 0 && (metaAdsFacebook || metaAdsInstagram)) {
+      const subOptions = []
+      if (metaAdsFacebook) subOptions.push('Facebook Ads')
+      if (metaAdsInstagram) subOptions.push('Instagram Ads')
+      processedPresence.push(`Meta Ads Account: ${subOptions.join(', ')}`)
+    }
+
+    return (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Current Presence
+        </label>
+        {editing ? (
+          <div className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg min-h-[40px] flex items-center">
+            {processedPresence.join(', ') || 'Not specified'}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {processedPresence.length > 0 ? (
+              processedPresence.map((item, index) => (
                 <span
                   key={index}
                   className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
@@ -636,7 +717,7 @@ const Profile = () => {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {renderTextField('Automation Level', 'automation_level', null, 'text', 'e.g., Beginner, Intermediate, Advanced')}
-                {renderArrayField('Current Presence', 'current_presence')}
+                {renderCurrentPresenceField()}
                 {renderArrayField('Focus Areas', 'focus_areas')}
               </div>
             </div>
@@ -658,7 +739,6 @@ const Profile = () => {
                 {renderTextField('Google Ads Account', 'google_ads_account', null, 'text')}
                 {renderTextField('WhatsApp Business', 'whatsapp_business', null, 'text')}
                 {renderTextField('Email Marketing Platform', 'email_marketing_platform', null, 'text')}
-                {renderTextField('Meta Ads Accounts', 'meta_ads_accounts', null, 'text')}
               </div>
             </div>
           </div>
