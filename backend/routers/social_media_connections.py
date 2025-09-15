@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import httpx
@@ -32,6 +33,50 @@ if encryption_key:
     cipher_suite = Fernet(encryption_key.encode())
 else:
     cipher_suite = None
+
+# Security
+security = HTTPBearer()
+
+# User model for authentication
+class User(BaseModel):
+    id: str
+    email: str
+    name: str
+    created_at: str
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current user from Supabase JWT token (same as main app)"""
+    try:
+        token = credentials.credentials
+        
+        # Verify token with Supabase
+        supabase_client = get_supabase_client()
+        response = supabase_client.auth.get_user(token)
+        if not response.user:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token"
+            )
+        
+        # Convert created_at to string if it's a datetime object
+        created_at_str = response.user.created_at
+        if hasattr(created_at_str, 'isoformat'):
+            created_at_str = created_at_str.isoformat()
+        else:
+            created_at_str = str(created_at_str)
+        
+        return User(
+            id=response.user.id,
+            email=response.user.email,
+            name=response.user.user_metadata.get("name", response.user.email),
+            created_at=created_at_str
+        )
+    except Exception as e:
+        print(f"Authentication error: {e}")
+        raise HTTPException(
+            status_code=401,
+            detail="Could not validate credentials"
+        )
 
 class SocialMediaConnection(BaseModel):
     platform: str
@@ -217,12 +262,12 @@ async def validate_and_get_account_info(platform: str, access_token: str) -> Dic
 @router.post("/connect-token", response_model=ConnectionResponse)
 async def connect_with_token(
     connection: SocialMediaConnection,
-    authorization: str = Header(None)
+    current_user: User = Depends(get_current_user)
 ):
     """Connect social media account using access token"""
     try:
-        # Extract user ID from JWT token
-        user_id = extract_user_id_from_jwt(authorization)
+        # Get user ID from authenticated user
+        user_id = current_user.id
         
         # Add debugging
         print(f"Connecting {connection.platform} for user {user_id}")
@@ -232,7 +277,7 @@ async def connect_with_token(
         account_info = await validate_and_get_account_info(connection.platform, connection.access_token)
         
         # Get authenticated Supabase client
-        supabase_client = get_supabase_client(authorization)
+        supabase_client = get_supabase_client()
         
         # Check if connection already exists
         existing = supabase_client.table("social_media_connections").select("*").eq(
@@ -367,13 +412,13 @@ async def debug_validate_token(request: Dict[str, Any]):
         }
 
 @router.get("/connections")
-async def get_user_connections(authorization: str = Header(None)):
+async def get_user_connections(current_user: User = Depends(get_current_user)):
     """Get all social media connections for the user"""
     try:
-        user_id = extract_user_id_from_jwt(authorization)
+        user_id = current_user.id
         
         # Get authenticated Supabase client
-        supabase_client = get_supabase_client(authorization)
+        supabase_client = get_supabase_client()
         
         result = supabase_client.table("social_media_connections").select("*").eq(
             "user_id", user_id
@@ -392,13 +437,13 @@ async def get_user_connections(authorization: str = Header(None)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.delete("/disconnect/{connection_id}")
-async def disconnect_social_media(connection_id: str, authorization: str = Header(None)):
+async def disconnect_social_media(connection_id: str, current_user: User = Depends(get_current_user)):
     """Disconnect a social media account"""
     try:
-        user_id = extract_user_id_from_jwt(authorization)
+        user_id = current_user.id
         
         # Get authenticated Supabase client
-        supabase_client = get_supabase_client(authorization)
+        supabase_client = get_supabase_client()
         
         # Verify ownership and delete
         result = supabase_client.table("social_media_connections").delete().eq(
@@ -414,14 +459,15 @@ async def disconnect_social_media(connection_id: str, authorization: str = Heade
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/instagram/profile/{user_id}")
-async def get_instagram_profile(user_id: str, authorization: str = Header(None)):
+async def get_instagram_profile(user_id: str, current_user: User = Depends(get_current_user)):
     """Get Instagram profile data using stored token"""
     try:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
+        # Verify the user_id matches the authenticated user
+        if user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
         
         # Get authenticated Supabase client
-        supabase_client = get_supabase_client(authorization)
+        supabase_client = get_supabase_client()
         
         # Get user's Instagram connection
         result = supabase_client.table("social_media_connections").select("*").eq(
@@ -460,14 +506,15 @@ async def get_instagram_profile(user_id: str, authorization: str = Header(None))
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/instagram/media/{user_id}")
-async def get_instagram_media(user_id: str, authorization: str = Header(None)):
+async def get_instagram_media(user_id: str, current_user: User = Depends(get_current_user)):
     """Get Instagram media data using stored token"""
     try:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
+        # Verify the user_id matches the authenticated user
+        if user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
         
         # Get authenticated Supabase client
-        supabase_client = get_supabase_client(authorization)
+        supabase_client = get_supabase_client()
         
         # Get user's Instagram connection
         result = supabase_client.table("social_media_connections").select("*").eq(
@@ -506,14 +553,15 @@ async def get_instagram_media(user_id: str, authorization: str = Header(None)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/instagram/insights/{user_id}")
-async def get_instagram_insights(user_id: str, authorization: str = Header(None)):
+async def get_instagram_insights(user_id: str, current_user: User = Depends(get_current_user)):
     """Get Instagram insights data using stored token"""
     try:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
+        # Verify the user_id matches the authenticated user
+        if user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
         
         # Get authenticated Supabase client
-        supabase_client = get_supabase_client(authorization)
+        supabase_client = get_supabase_client()
         
         # Get user's Instagram connection
         result = supabase_client.table("social_media_connections").select("*").eq(
@@ -553,10 +601,10 @@ async def get_instagram_insights(user_id: str, authorization: str = Header(None)
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/task-executions")
-async def get_task_executions(authorization: str = Header(None)):
+async def get_task_executions(current_user: User = Depends(get_current_user)):
     """Get recent autonomous task executions"""
     try:
-        user_id = extract_user_id_from_jwt(authorization)
+        user_id = current_user.id
         
         # For now, return the weekly content generation task status
         # In the future, this could be expanded to track all task executions
@@ -657,13 +705,13 @@ async def get_task_executions(authorization: str = Header(None)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/latest-posts")
-async def get_latest_posts(authorization: str = Header(None)):
+async def get_latest_posts(current_user: User = Depends(get_current_user)):
     """Get latest posts from all connected social media platforms (both OAuth and API token connections)"""
     try:
-        user_id = extract_user_id_from_jwt(authorization)
+        user_id = current_user.id
         
         # Get authenticated Supabase client
-        supabase_client = get_supabase_client(authorization)
+        supabase_client = get_supabase_client()
         
         # Get OAuth connections from platform_connections table
         oauth_result = supabase_client.table("platform_connections").select("*").eq(
