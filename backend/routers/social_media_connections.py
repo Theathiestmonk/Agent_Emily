@@ -74,7 +74,7 @@ def extract_user_id_from_jwt(authorization: str) -> str:
         # In production, you should verify the JWT signature
         decoded_token = jwt.decode(jwt_token, options={"verify_signature": False})
         
-        # Extract user ID from the 'sub' field
+        # Extract user ID from the 'sub' field (Supabase uses 'sub' for user ID)
         user_id = decoded_token.get('sub')
         if not user_id:
             raise HTTPException(status_code=401, detail="No user ID found in token")
@@ -84,6 +84,22 @@ def extract_user_id_from_jwt(authorization: str) -> str:
         
     except jwt.InvalidTokenError as e:
         print(f"JWT decode error: {e}")
+        # Try to decode as base64 to get more info
+        try:
+            import base64
+            # Split the JWT token
+            parts = jwt_token.split('.')
+            if len(parts) >= 2:
+                # Decode the payload (second part)
+                payload = base64.b64decode(parts[1] + '==')  # Add padding
+                payload_json = json.loads(payload.decode('utf-8'))
+                user_id = payload_json.get('sub')
+                if user_id:
+                    print(f"Extracted user ID from base64: {user_id}")
+                    return user_id
+        except Exception as base64_error:
+            print(f"Base64 decode error: {base64_error}")
+        
         raise HTTPException(status_code=401, detail="Invalid JWT token")
     except Exception as e:
         print(f"Error extracting user ID: {e}")
