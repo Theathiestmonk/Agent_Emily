@@ -37,7 +37,7 @@ const SettingsDashboard = () => {
       id: 'instagram',
       name: 'Instagram',
       icon: Instagram,
-      color: 'bg-gradient-to-r from-purple-500 to-pink-500',
+      color: 'bg-pink-500',
       description: 'Post content, get insights, manage ads',
       oauthSupported: true,
       tokenSupported: true,

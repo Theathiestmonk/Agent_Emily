@@ -25,7 +25,7 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'facebook',
       name: 'Facebook',
       icon: Facebook,
-      color: 'from-blue-600 to-blue-700',
+      color: 'bg-blue-600',
       iconColor: 'text-blue-600',
       bgColor: 'bg-blue-50',
       borderColor: 'border-blue-200'
@@ -34,7 +34,7 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'instagram',
       name: 'Instagram',
       icon: Instagram,
-      color: 'from-pink-500 via-red-500 to-yellow-500',
+      color: 'bg-pink-500',
       iconColor: 'text-pink-500',
       bgColor: 'bg-pink-50',
       borderColor: 'border-pink-200'
@@ -43,7 +43,7 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'linkedin',
       name: 'LinkedIn',
       icon: Linkedin,
-      color: 'from-blue-700 to-blue-800',
+      color: 'bg-blue-700',
       iconColor: 'text-blue-700',
       bgColor: 'bg-blue-50',
       borderColor: 'border-blue-200'
@@ -52,7 +52,7 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'twitter',
       name: 'Twitter',
       icon: Twitter,
-      color: 'from-sky-500 to-sky-600',
+      color: 'bg-sky-500',
       iconColor: 'text-sky-500',
       bgColor: 'bg-sky-50',
       borderColor: 'border-sky-200'
@@ -61,7 +61,7 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'youtube',
       name: 'YouTube',
       icon: Youtube,
-      color: 'from-red-600 to-red-700',
+      color: 'bg-red-600',
       iconColor: 'text-red-600',
       bgColor: 'bg-red-50',
       borderColor: 'border-red-200'
@@ -70,7 +70,7 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'google',
       name: 'Google',
       icon: Mail,
-      color: 'from-red-500 to-red-600',
+      color: 'bg-red-500',
       iconColor: 'text-red-500',
       bgColor: 'bg-red-50',
       borderColor: 'border-red-200'
@@ -302,7 +302,7 @@ const ConnectionCards = ({ compact = false }) => {
               disabled={connecting === platform.id}
               className={`
                 w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200
-                ${connected ? `bg-gradient-to-r ${platform.color}` : 'bg-white border-2 border-gray-200'}
+                ${connected ? `${platform.color}` : 'bg-white border-2 border-gray-200'}
                 hover:shadow-md hover:scale-105
                 disabled:opacity-50 disabled:cursor-not-allowed
                 ${connected ? 'ring-2 ring-green-400' : ''}
