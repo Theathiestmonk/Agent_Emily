@@ -8,6 +8,7 @@ import mediaService from '../services/media'
 import { supabase } from '../lib/supabase'
 import ContentProgress from './ContentProgress'
 import LoadingBar from './LoadingBar'
+import MainContentLoader from './MainContentLoader'
 import SideNavbar from './SideNavbar'
 
 const API_BASE_URL = (() => {
@@ -22,7 +23,7 @@ const API_BASE_URL = (() => {
   }
   
   // Local development fallback
-  return 'http://localhost:8000'
+  return (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 })()
 import { 
   Calendar, 
@@ -285,7 +286,7 @@ const ContentDashboard = () => {
   }
   
   // Local development fallback
-  return 'http://localhost:8000'
+  return (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 })()
       const response = await fetch(`${API_BASE_URL}/content/trigger-weekly`, {
         method: 'POST',
@@ -487,9 +488,7 @@ const ContentDashboard = () => {
     })
   }
 
-  if (loading) {
-    return <LoadingBar message="Loading your content..." />
-  }
+  // Remove the early return for loading - we'll handle it in the main content area
 
   const handleProgressComplete = () => {
     setShowProgress(false)
@@ -1167,8 +1166,11 @@ const ContentDashboard = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 p-6 pt-24">
-
-          {/* Status Message */}
+          {loading ? (
+            <MainContentLoader message="Loading your content..." />
+          ) : (
+            <>
+              {/* Status Message */}
           {generationStatus && (
             <div className={`mb-6 p-4 rounded-lg ${
               generationStatus === 'success' 
@@ -1586,6 +1588,8 @@ const ContentDashboard = () => {
               </div>
             )}
           </div>
+            </>
+          )}
         </div>
       </div>
 

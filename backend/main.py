@@ -16,6 +16,7 @@ from scheduler.background_scheduler import start_background_scheduler, stop_back
 from routers.connections import router as connections_router
 from routers.content import router as content_router
 from routers.social_media import router as social_media_router
+from routers.social_media_connections import router as social_media_connections_router
 from routers.chatbot import router as chatbot_router
 from routers.media import router as media_router
 from routers.google_connections import router as google_router
@@ -51,13 +52,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Include routers
+# Include routers (Google router first to handle /auth/google/callback)
+app.include_router(google_router)
 app.include_router(connections_router)
 app.include_router(content_router)
 app.include_router(social_media_router)
+app.include_router(social_media_connections_router)
 app.include_router(chatbot_router)
 app.include_router(media_router)
-app.include_router(google_router)
 
 # Health check endpoint
 @app.get("/health")

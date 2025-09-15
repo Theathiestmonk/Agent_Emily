@@ -12,7 +12,7 @@ import os
 import json
 import base64
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -41,13 +41,16 @@ router = APIRouter(prefix="/connections/google", tags=["google-connections"])
 
 # Google OAuth scopes
 GOOGLE_SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/gmail.send',
+    'openid',
     'https://www.googleapis.com/auth/drive.readonly',
-    'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/documents',
-    'https://www.googleapis.com/auth/calendar.readonly'
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile'
 ]
 
 # User model
@@ -143,8 +146,8 @@ def get_google_credentials_from_token(access_token: str, refresh_token: str = No
     )
     return creds
 
-@router.get("/auth")
-async def google_auth():
+@router.get("/auth/initiate")
+async def google_auth(current_user: User = Depends(get_current_user)):
     """Initiate Google OAuth flow"""
     try:
         client_id = os.getenv('GOOGLE_CLIENT_ID')
@@ -156,6 +159,19 @@ async def google_auth():
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Google OAuth not configured. Please set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI"
             )
+        
+        # Generate secure state
+        state = generate_oauth_state()
+        
+        # Store state in database for validation
+        oauth_state_data = {
+            "user_id": current_user.id,
+            "platform": "google",
+            "state": state,
+            "expires_at": (datetime.now() + timedelta(minutes=30)).isoformat()
+        }
+        
+        supabase_admin.table("oauth_states").insert(oauth_state_data).execute()
         
         # Create OAuth flow
         flow = Flow.from_client_config(
@@ -172,14 +188,19 @@ async def google_auth():
         )
         flow.redirect_uri = redirect_uri
         
-        # Generate state and authorization URL
-        state = generate_oauth_state()
+        # Generate authorization URL
         auth_url, _ = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
             state=state,
             prompt='consent'  # Force consent screen to get refresh token
         )
+        
+        print(f"Google OAuth initiated for user {current_user.id}")
+        print(f"Generated state: {state}")
+        print(f"State expires at: {oauth_state_data['expires_at']}")
+        print(f"Redirect URI: {redirect_uri}")
+        print(f"Auth URL: {auth_url}")
         
         return {
             "auth_url": auth_url,
@@ -194,9 +215,103 @@ async def google_auth():
         )
 
 @router.get("/callback")
-async def google_callback(code: str, state: str):
+async def google_callback(code: str = None, state: str = None, error: str = None):
+    """Handle Google OAuth callback"""
+    return await handle_google_callback(code, state, error)
+
+@router.get("/auth/google/callback")
+async def google_auth_callback(code: str = None, state: str = None, error: str = None):
+    """Handle Google OAuth callback from /auth/google/callback path"""
+    print(f"🔗 Google OAuth callback received - code: {code[:10] if code else 'None'}..., state: {state[:10] if state else 'None'}..., error: {error}")
+    return await handle_google_callback(code, state, error)
+
+@router.get("/auth/google/callback/redirect")
+async def google_callback_redirect(code: str = None, state: str = None, error: str = None):
+    """Redirect from /auth/google/callback to /callback for compatibility"""
+    from fastapi.responses import RedirectResponse
+    base_url = "https://agent-emily.onrender.com/connections/google/callback"
+    params = []
+    if code:
+        params.append(f"code={code}")
+    if state:
+        params.append(f"state={state}")
+    if error:
+        params.append(f"error={error}")
+    
+    redirect_url = f"{base_url}?{'&'.join(params)}"
+    print(f"🔗 Redirecting to: {redirect_url}")
+    return RedirectResponse(url=redirect_url)
+
+async def handle_google_callback(code: str = None, state: str = None, error: str = None):
     """Handle Google OAuth callback"""
     try:
+        # Check for OAuth error
+        if error:
+            frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+            return f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Google Connection Failed</title>
+            </head>
+            <body>
+                <script>
+                    window.location.href = '{frontend_url}/google-callback?error={error}';
+                </script>
+                <p>Google OAuth error: {error}</p>
+            </body>
+            </html>
+            """
+        
+        # Check for missing parameters
+        if not code or not state:
+            frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+            print(f"Google OAuth callback - Missing parameters: code={code}, state={state}")
+            return f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Connection Failed</title>
+            </head>
+            <body>
+                <h2>Connection Failed</h2>
+                <p>Error: Missing code or state parameter</p>
+                <p>Debug: code={code}, state={state}</p>
+                <script>
+                    window.location.href = '{frontend_url}/google-callback?error=Missing code or state parameter';
+                </script>
+                <p>You can close this window and try again.</p>
+            </body>
+            </html>
+            """
+        
+        # Validate OAuth state
+        print(f"🔍 Looking for OAuth state: {state}")
+        state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", "google").execute()
+        print(f"🔍 State response: {state_response.data}")
+        
+        if not state_response.data:
+            # Check if state exists but expired
+            expired_state = supabase_admin.table("oauth_states").select("*").eq("state", state).execute()
+            if expired_state.data:
+                print(f"🔍 State found but expired: {expired_state.data[0]}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired OAuth state"
+            )
+        
+        # Get the user_id from the state record
+        state_record = state_response.data[0]
+        user_id = state_record['user_id']
+        expires_at = datetime.fromisoformat(state_record['expires_at'].replace('Z', '+00:00'))
+        
+        # Check if state has expired
+        if datetime.now(expires_at.tzinfo) > expires_at:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OAuth state has expired"
+            )
+        
         client_id = os.getenv('GOOGLE_CLIENT_ID')
         client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
         redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
@@ -224,10 +339,10 @@ async def google_callback(code: str, state: str):
         service = build('oauth2', 'v2', credentials=credentials)
         user_info = service.userinfo().get().execute()
         
-        # Store connection in database
-        user_id = user_info.get('id')
+        # Use the validated user_id from the state, not from Google
         email = user_info.get('email')
         name = user_info.get('name')
+        google_user_id = user_info.get('id')
         
         # Check if connection already exists
         existing_connection = supabase_admin.table('platform_connections').select('*').eq('user_id', user_id).eq('platform', 'google').execute()
@@ -248,7 +363,7 @@ async def google_callback(code: str, state: str):
                 'id': str(uuid.uuid4()),
                 'user_id': user_id,
                 'platform': 'google',
-                'page_id': user_id,  # Use user_id as page_id for Google
+                'page_id': google_user_id,  # Use Google user ID as page_id
                 'page_name': name,
                 'access_token_encrypted': encrypt_token(credentials.token),
                 'refresh_token_encrypted': encrypt_token(credentials.refresh_token) if credentials.refresh_token else None,
@@ -262,22 +377,55 @@ async def google_callback(code: str, state: str):
             
             supabase_admin.table('platform_connections').insert(connection_data).execute()
         
-        return {
-            "success": True,
-            "user_info": {
-                "id": user_id,
-                "email": email,
-                "name": name,
-                "picture": user_info.get('picture')
-            },
-            "message": "Google account connected successfully"
-        }
+        # Clean up used state
+        supabase_admin.table("oauth_states").delete().eq("state", state).execute()
+        
+        # Return HTML page that redirects to frontend
+        frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Google Connection Successful</title>
+        </head>
+        <body>
+            <script>
+                // Redirect to frontend callback page
+                window.location.href = '{frontend_url}/google-callback?code={code}&state={state}';
+            </script>
+            <p>Google account connected successfully! Redirecting...</p>
+        </body>
+        </html>
+        """
         
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to complete Google OAuth: {str(e)}"
-        )
+        # Return HTML page that redirects to frontend with error
+        frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+        error_message = str(e).replace("'", "\\'").replace('"', '\\"')
+        
+        # Provide more specific error messages
+        if "Invalid or expired OAuth state" in str(e):
+            error_message = "Invalid or expired OAuth state. Please try connecting again."
+        elif "access_denied" in str(e).lower():
+            error_message = "Access denied. The app may be in testing mode. Please contact the administrator."
+        elif "invalid_grant" in str(e).lower():
+            error_message = "Invalid authorization code. Please try connecting again."
+        
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Google Connection Failed</title>
+        </head>
+        <body>
+            <script>
+                // Redirect to frontend callback page with error
+                window.location.href = '{frontend_url}/google-callback?error={error_message}';
+            </script>
+            <p>Google connection failed: {error_message}</p>
+        </body>
+        </html>
+        """
 
 @router.get("/gmail/messages")
 async def get_gmail_messages(limit: int = 10, current_user: User = Depends(get_current_user)):
@@ -497,6 +645,43 @@ async def send_gmail_message(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to send email: {str(e)}"
         )
+
+@router.get("/health")
+async def google_router_health():
+    """Health check for Google router"""
+    return {
+        "status": "healthy",
+        "router": "google_connections",
+        "message": "Google connections router is working"
+    }
+
+@router.get("/test")
+async def google_router_test():
+    """Test endpoint to verify Google router is accessible"""
+    return {
+        "message": "Google router is working!",
+        "endpoints": [
+            "/connections/google/health",
+            "/connections/google/debug/config",
+            "/connections/google/auth/initiate",
+            "/connections/google/callback",
+            "/connections/google/auth/google/callback"
+        ]
+    }
+
+@router.get("/debug/config")
+async def debug_google_config():
+    """Debug endpoint to check Google OAuth configuration"""
+    return {
+        "client_id": "SET" if os.getenv('GOOGLE_CLIENT_ID') else "MISSING",
+        "client_secret": "SET" if os.getenv('GOOGLE_CLIENT_SECRET') else "MISSING",
+        "redirect_uri": os.getenv('GOOGLE_REDIRECT_URI'),
+        "frontend_url": os.getenv('FRONTEND_URL'),
+        "encryption_key": "SET" if os.getenv('ENCRYPTION_KEY') else "MISSING",
+        "supabase_url": "SET" if os.getenv('SUPABASE_URL') else "MISSING",
+        "supabase_service_key": "SET" if os.getenv('SUPABASE_SERVICE_ROLE_KEY') else "MISSING",
+        "environment": os.getenv('ENVIRONMENT', 'unknown')
+    }
 
 @router.get("/disconnect")
 async def disconnect_google(current_user: User = Depends(get_current_user)):

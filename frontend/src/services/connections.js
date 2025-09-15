@@ -186,8 +186,23 @@ class ConnectionsAPI {
 
   // Helper method to get auth token
   async getAuthToken() {
-    const { data: { session } } = await supabase.auth.getSession()
-    return session?.access_token
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Error getting session:', error)
+        // If there's an error getting the session, try to refresh
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
+        if (refreshError) {
+          console.error('Error refreshing session:', refreshError)
+          return null
+        }
+        return refreshedSession?.access_token
+      }
+      return session?.access_token
+    } catch (error) {
+      console.error('Error in getAuthToken:', error)
+      return null
+    }
   }
 }
 

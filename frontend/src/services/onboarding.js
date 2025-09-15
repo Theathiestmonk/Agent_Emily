@@ -50,4 +50,29 @@ export const onboardingAPI = {
     if (error) throw error
     return { data: { onboarding_completed: data?.onboarding_completed || false } }
   },
+
+  updateProfile: async (data) => {
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('User not authenticated')
+    
+    console.log('Updating profile for user:', user.id)
+    console.log('Update data:', data)
+    
+    const { data: result, error } = await supabase
+      .from('profiles')
+      .update({
+        ...data,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', user.id)
+      .select()
+      .single()
+    
+    console.log('Update result:', result)
+    console.log('Update error:', error)
+    
+    if (error) throw error
+    return { data: { message: 'Profile updated successfully', profile: result } }
+  },
 }

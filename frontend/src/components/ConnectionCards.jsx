@@ -13,6 +13,7 @@ import {
   ExternalLink
 } from 'lucide-react'
 import { connectionsAPI } from '../services/connections'
+import { socialMediaService } from '../services/socialMedia'
 
 const ConnectionCards = ({ compact = false }) => {
   const [connections, setConnections] = useState([])
@@ -24,7 +25,7 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'facebook',
       name: 'Facebook',
       icon: Facebook,
-      color: 'from-blue-600 to-blue-700',
+      color: 'bg-blue-600',
       iconColor: 'text-blue-600',
       bgColor: 'bg-blue-50',
       borderColor: 'border-blue-200'
@@ -33,7 +34,7 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'instagram',
       name: 'Instagram',
       icon: Instagram,
-      color: 'from-pink-500 via-red-500 to-yellow-500',
+      color: 'bg-pink-500',
       iconColor: 'text-pink-500',
       bgColor: 'bg-pink-50',
       borderColor: 'border-pink-200'
@@ -42,7 +43,7 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'linkedin',
       name: 'LinkedIn',
       icon: Linkedin,
-      color: 'from-blue-700 to-blue-800',
+      color: 'bg-blue-700',
       iconColor: 'text-blue-700',
       bgColor: 'bg-blue-50',
       borderColor: 'border-blue-200'
@@ -51,7 +52,7 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'twitter',
       name: 'Twitter',
       icon: Twitter,
-      color: 'from-sky-500 to-sky-600',
+      color: 'bg-sky-500',
       iconColor: 'text-sky-500',
       bgColor: 'bg-sky-50',
       borderColor: 'border-sky-200'
@@ -60,7 +61,7 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'youtube',
       name: 'YouTube',
       icon: Youtube,
-      color: 'from-red-600 to-red-700',
+      color: 'bg-red-600',
       iconColor: 'text-red-600',
       bgColor: 'bg-red-50',
       borderColor: 'border-red-200'
@@ -69,9 +70,9 @@ const ConnectionCards = ({ compact = false }) => {
       id: 'google',
       name: 'Google',
       icon: Mail,
-      color: 'from-red-500 via-yellow-500 via-green-500 to-blue-500',
+      color: 'bg-red-500',
       iconColor: 'text-red-500',
-      bgColor: 'bg-gradient-to-r from-red-50 to-blue-50',
+      bgColor: 'bg-red-50',
       borderColor: 'border-red-200'
     }
   ]
@@ -83,8 +84,28 @@ const ConnectionCards = ({ compact = false }) => {
   const fetchConnections = async () => {
     try {
       setLoading(true)
-      const response = await connectionsAPI.getConnections()
-      setConnections(response.data || [])
+      
+      // Fetch OAuth connections
+      const oauthResponse = await connectionsAPI.getConnections()
+      const oauthConnections = oauthResponse.data || []
+      
+      // Fetch token-based connections
+      let tokenConnections = []
+      try {
+        const tokenResponse = await socialMediaService.getConnections()
+        tokenConnections = tokenResponse || []
+      } catch (error) {
+        console.log('No token connections found or error fetching:', error.message)
+      }
+      
+      // Combine both types of connections
+      const allConnections = [...oauthConnections, ...tokenConnections]
+      setConnections(allConnections)
+      
+      console.log('OAuth connections:', oauthConnections.length)
+      console.log('Token connections:', tokenConnections.length)
+      console.log('Total connections:', allConnections.length)
+      
     } catch (error) {
       console.error('Error fetching connections:', error)
     } finally {
@@ -97,14 +118,71 @@ const ConnectionCards = ({ compact = false }) => {
       setConnecting(platformId)
       
       if (platformId === 'google') {
-        // Handle Google OAuth
-        const response = await fetch('/api/connections/google/auth')
+        // Handle Google OAuth in popup window
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+        // Ensure no double slashes in URL
+        const cleanUrl = API_BASE_URL.replace(/\/+$/, '') + '/connections/google/auth/initiate'
+        const response = await fetch(cleanUrl)
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('Google auth error:', response.status, errorText)
+          throw new Error(`Failed to get Google auth URL: ${response.status}`)
+        }
+        
         const data = await response.json()
         
         if (data.auth_url) {
-          window.location.href = data.auth_url
+          // Open Google OAuth in popup window
+          const popup = window.open(
+            data.auth_url,
+            'google-oauth',
+            'width=500,height=600,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+          )
+          
+          // Listen for popup messages
+          const messageHandler = async (event) => {
+            // Allow messages from the same origin or from the callback page
+            const allowedOrigins = [
+              window.location.origin,
+              'https://emily.atsnai.com',
+              'https://agent-emily.onrender.com'
+            ]
+            
+            if (!allowedOrigins.includes(event.origin)) {
+              console.log('Ignoring message from origin:', event.origin)
+              return
+            }
+            
+            console.log('Received message:', event.data, 'from origin:', event.origin)
+            
+            if (event.data.type === 'GOOGLE_OAUTH_SUCCESS') {
+              console.log('Google OAuth successful:', event.data)
+              popup.close()
+              window.removeEventListener('message', messageHandler)
+              await fetchConnections() // Refresh connections
+            } else if (event.data.type === 'GOOGLE_OAUTH_ERROR') {
+              console.error('Google OAuth error:', event.data.error)
+              popup.close()
+              window.removeEventListener('message', messageHandler)
+              alert(`Google OAuth failed: ${event.data.error}`)
+            }
+          }
+          
+          window.addEventListener('message', messageHandler)
+          
+          // Check if popup was closed manually
+          const checkClosed = setInterval(() => {
+            if (popup.closed) {
+              clearInterval(checkClosed)
+              window.removeEventListener('message', messageHandler)
+              // Refresh connections when popup is closed (in case OAuth completed)
+              console.log('Popup closed, refreshing connections...')
+              fetchConnections()
+            }
+          }, 1000)
         } else {
-          throw new Error('Failed to get Google auth URL')
+          throw new Error('Failed to get Google auth URL from response')
         }
       } else {
         // Handle other platforms
@@ -126,9 +204,15 @@ const ConnectionCards = ({ compact = false }) => {
 
   const handleDisconnect = async (platformId) => {
     try {
+      // Find the connection to determine its type
+      const connection = connections.find(conn => conn.platform === platformId)
+      
       if (platformId === 'google') {
         // Handle Google disconnect
-        const response = await fetch('/api/connections/google/disconnect', {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+        // Ensure no double slashes in URL
+        const cleanUrl = API_BASE_URL.replace(/\/+$/, '') + '/connections/google/disconnect'
+        const response = await fetch(cleanUrl, {
           method: 'GET'
         })
         const data = await response.json()
@@ -138,10 +222,16 @@ const ConnectionCards = ({ compact = false }) => {
         } else {
           throw new Error('Failed to disconnect Google')
         }
-      } else {
-        // Handle other platforms
+      } else if (connection && connection.page_id) {
+        // Handle OAuth connections (platform_connections table)
         await connectionsAPI.disconnectPlatform(platformId)
         await fetchConnections()
+      } else if (connection && connection.id) {
+        // Handle token-based connections (social_media_connections table)
+        await socialMediaService.disconnectAccount(connection.id)
+        await fetchConnections()
+      } else {
+        throw new Error('Connection not found')
       }
     } catch (error) {
       console.error(`Error disconnecting from ${platformId}:`, error)
@@ -151,12 +241,27 @@ const ConnectionCards = ({ compact = false }) => {
 
   const getConnectionStatus = (platformId) => {
     const connection = connections.find(conn => conn.platform === platformId)
-    return connection ? {
+    if (!connection) {
+      return { connected: false, status: 'disconnected' }
+    }
+    
+    // Handle OAuth connections (platform_connections table)
+    if (connection.page_id) {
+      return {
+        connected: connection.is_active,
+        status: connection.connection_status,
+        pageName: connection.page_name,
+        lastSync: connection.last_sync
+      }
+    }
+    
+    // Handle token-based connections (social_media_connections table)
+    return {
       connected: connection.is_active,
-      status: connection.connection_status,
-      pageName: connection.page_name,
+      status: connection.connection_status || 'active',
+      pageName: connection.account_name,
       lastSync: connection.last_sync
-    } : { connected: false, status: 'disconnected' }
+    }
   }
 
   const getStatusIcon = (status) => {
@@ -197,7 +302,7 @@ const ConnectionCards = ({ compact = false }) => {
               disabled={connecting === platform.id}
               className={`
                 w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200
-                ${connected ? `bg-gradient-to-r ${platform.color}` : 'bg-white border-2 border-gray-200'}
+                ${connected ? `${platform.color}` : 'bg-white border-2 border-gray-200'}
                 hover:shadow-md hover:scale-105
                 disabled:opacity-50 disabled:cursor-not-allowed
                 ${connected ? 'ring-2 ring-green-400' : ''}

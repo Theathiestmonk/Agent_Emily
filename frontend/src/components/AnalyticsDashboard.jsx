@@ -5,6 +5,7 @@ import { useSocialMediaCache } from '../contexts/SocialMediaCacheContext'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
+import MainContentLoader from './MainContentLoader'
 import { 
   Facebook, 
   Instagram, 
@@ -146,7 +147,7 @@ const AnalyticsDashboard = () => {
         metrics = [
           { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
           { name: 'Comments', data: last5Posts.map(post => post.comments_count || 0) },
-          { name: 'Saves', data: last5Posts.map(post => post.saves_count || 0) }
+          { name: 'Shares', data: last5Posts.map(post => post.shares_count || 0) }
         ]
         break
       case 'linkedin':
@@ -190,27 +191,29 @@ const AnalyticsDashboard = () => {
 
   const processInsightsData = () => {
     const insights = {}
-    const connectedPlatforms = connections ? connections.filter(conn => conn.is_active) : []
-    connectedPlatforms.forEach(connection => {
-      const platformPosts = posts[connection.platform] || []
-      const platformInsights = calculatePlatformInsights(connection.platform, platformPosts)
+    // Process insights for all platforms that have posts (both OAuth and API token connections)
+    const platformsWithPosts = Object.keys(posts).filter(platform => posts[platform] && posts[platform].length > 0)
+    
+    platformsWithPosts.forEach(platform => {
+      const platformPosts = posts[platform] || []
+      const platformInsights = calculatePlatformInsights(platform, platformPosts)
       if (platformInsights) {
-        insights[connection.platform] = platformInsights
+        insights[platform] = platformInsights
       }
     })
     setInsightsData(insights)
   }
 
   useEffect(() => {
-    if (Object.keys(posts).length > 0 && connections.length > 0) {
+    if (Object.keys(posts).length > 0) {
       processInsightsData()
     }
-  }, [posts, connections])
+  }, [posts])
 
-  if (loading) {
-    return <LoadingBar message="Loading analytics dashboard..." />
-  }
+  // Remove the early return for loading - we'll handle it in the main content area
 
+  // Get platforms that have posts (from both OAuth and API token connections)
+  const platformsWithPosts = Object.keys(posts).filter(platform => posts[platform] && posts[platform].length > 0)
   const connectedPlatforms = connections ? connections.filter(conn => conn.is_active) : []
   const hasPosts = Object.keys(posts).length > 0
 
@@ -248,7 +251,11 @@ const AnalyticsDashboard = () => {
 
         {/* Content */}
         <div className="flex-1 pt-24 p-6">
-          {!hasPosts ? (
+          {loading ? (
+            <MainContentLoader message="Loading analytics dashboard..." />
+          ) : (
+            <>
+          {platformsWithPosts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-96">
               <BarChart3 className="w-16 h-16 text-gray-300 mb-4" />
               <h3 className="text-xl font-semibold text-gray-600 mb-2">No Analytics Data</h3>
@@ -400,6 +407,8 @@ const AnalyticsDashboard = () => {
             <div className="fixed bottom-4 right-4 text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border">
               Last updated: {lastRefresh.toLocaleTimeString()}
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

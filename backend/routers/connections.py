@@ -195,6 +195,10 @@ async def get_connections(
 @router.get("/auth/{platform}/connect")
 async def get_connect_info(platform: str):
     """Get connection info (for debugging)"""
+    # Skip Google platform as it has its own router
+    if platform == "google":
+        raise HTTPException(status_code=404, detail="Not Found")
+    
     print(f"🔍 GET request to {platform} connect endpoint")
     return {"message": f"Use POST method for {platform} connection", "platform": platform}
 
@@ -210,6 +214,10 @@ async def initiate_connection(
     current_user: User = Depends(get_current_user)
 ):
     """Initiate OAuth connection for platform"""
+    # Skip Google platform as it has its own router
+    if platform == "google":
+        raise HTTPException(status_code=404, detail="Not Found")
+    
     try:
         print(f"🔗 Initiating {platform} connection for user: {current_user.id}")
         
@@ -248,6 +256,13 @@ async def handle_oauth_callback(
     error: str = None
 ):
     """Handle OAuth callback and store connection"""
+    print(f"🔗 Main connections router callback - platform: {platform}, code: {code[:10] if code else 'None'}..., state: {state[:10] if state else 'None'}...")
+    
+    # Skip Google platform as it has its own router
+    if platform == "google":
+        print(f"❌ Redirecting Google callback to Google router")
+        raise HTTPException(status_code=404, detail="Not Found")
+    
     try:
         print(f"🔗 OAuth callback for {platform} - code: {code[:10] if code else 'None'}..., state: {state[:10] if state else 'None'}...")
         

@@ -5,9 +5,11 @@ import { useNotifications } from '../contexts/NotificationContext'
 import { onboardingAPI } from '../services/onboarding'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
+import MainContentLoader from './MainContentLoader'
 import ConnectionCards from './ConnectionCards'
 import Chatbot from './Chatbot'
-import DebugPanel from './DebugPanel'
+import RecentTasks from './RecentTasks'
+import TaskNotification from './TaskNotification'
 import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar } from 'lucide-react'
 
 function Dashboard() {
@@ -38,10 +40,6 @@ function Dashboard() {
       setLoading(false)
     }
   }, [user])
-
-  if (loading) {
-    return <LoadingBar message="Loading your dashboard..." />
-  }
 
   if (!user) {
     return (
@@ -88,16 +86,27 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Chatbot Content */}
-        <div className="flex-1 pt-24 flex items-center justify-center">
-          <div className="w-full h-full max-w-6xl">
-            <Chatbot />
+        {/* Main Content Area */}
+        {loading ? (
+          <MainContentLoader message="Loading your dashboard..." />
+        ) : (
+          <div className="flex-1 pt-24 p-6 pl-6 pr-0 flex items-center">
+            <div className="w-full">
+              <div className="flex justify-center">
+                {/* Main Chat Area */}
+                <div className="w-full max-w-4xl">
+                  <div className="bg-transparent rounded-lg h-full min-h-[600px]">
+                    <Chatbot />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
       
-      {/* Debug Panel - Remove this after debugging */}
-      <DebugPanel />
+      {/* Task Notification */}
+      <TaskNotification />
     </div>
   )
 }
