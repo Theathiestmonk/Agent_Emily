@@ -55,7 +55,6 @@ const Onboarding = () => {
     google_ads_account: '',
     whatsapp_business: '',
     email_marketing_platform: '',
-    meta_ads_accounts: '',
     // New fields for comprehensive onboarding
     target_audience_age_groups: [],
     target_audience_life_stages: [],
@@ -87,6 +86,12 @@ const Onboarding = () => {
     targetAudienceOther: '',
     currentPresenceOther: '',
     topPerformingContentTypeOther: ''
+  })
+
+  // State for Meta Ads sub-options
+  const [metaAdsSubOptions, setMetaAdsSubOptions] = useState({
+    facebookAds: false,
+    instagramAds: false
   })
 
   // State for expandable cards
@@ -299,6 +304,13 @@ const Onboarding = () => {
     }))
   }
 
+  const handleMetaAdsSubOptionChange = (option, checked) => {
+    setMetaAdsSubOptions(prev => ({
+      ...prev,
+      [option]: checked
+    }))
+  }
+
   const toggleCard = (cardName) => {
     setExpandedCards(prev => ({
       ...prev,
@@ -394,7 +406,11 @@ const Onboarding = () => {
         content_theme_other: otherInputs.contentThemeOther,
         posting_time_other: otherInputs.postingTimeOther,
         current_presence_other: otherInputs.currentPresenceOther,
-        top_performing_content_type_other: otherInputs.topPerformingContentTypeOther
+        top_performing_content_type_other: otherInputs.topPerformingContentTypeOther,
+        
+        // Include Meta Ads sub-options
+        meta_ads_facebook: metaAdsSubOptions.facebookAds,
+        meta_ads_instagram: metaAdsSubOptions.instagramAds
       }
 
       const response = await onboardingAPI.submitOnboarding(submissionData)
@@ -1080,14 +1096,27 @@ const Onboarding = () => {
                   
                   {formData.current_presence.includes('Meta Ads (Facebook/Instagram)') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">Meta Ads Account Details</label>
-                      <input
-                        type="text"
-                        value={formData.meta_ads_accounts || ''}
-                        onChange={(e) => handleInputChange('meta_ads_accounts', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                        placeholder="e.g., account ID or email"
-                      />
+                      <label className="block text-sm font-medium text-gray-600 mb-2">Meta Ads Account Details</label>
+                      <div className="flex items-center space-x-4">
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={metaAdsSubOptions.facebookAds}
+                            onChange={(e) => handleMetaAdsSubOptionChange('facebookAds', e.target.checked)}
+                            className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                          />
+                          <span className="text-sm text-gray-700">Facebook Ads</span>
+                        </label>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={metaAdsSubOptions.instagramAds}
+                            onChange={(e) => handleMetaAdsSubOptionChange('instagramAds', e.target.checked)}
+                            className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                          />
+                          <span className="text-sm text-gray-700">Instagram Ads</span>
+                        </label>
+                      </div>
                     </div>
                   )}
                 </div>

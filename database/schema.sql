@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS profiles (
     google_ads_account TEXT,
     whatsapp_business TEXT,
     email_marketing_platform TEXT,
-    meta_ads_accounts TEXT
+    meta_ads_facebook BOOLEAN DEFAULT FALSE,
+    meta_ads_instagram BOOLEAN DEFAULT FALSE
 );
 
 -- Enable Row Level Security (RLS)
