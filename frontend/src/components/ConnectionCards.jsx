@@ -13,6 +13,7 @@ import {
   ExternalLink
 } from 'lucide-react'
 import { connectionsAPI } from '../services/connections'
+import { socialMediaService } from '../services/socialMedia'
 
 const ConnectionCards = ({ compact = false }) => {
   const [connections, setConnections] = useState([])
@@ -83,8 +84,28 @@ const ConnectionCards = ({ compact = false }) => {
   const fetchConnections = async () => {
     try {
       setLoading(true)
-      const response = await connectionsAPI.getConnections()
-      setConnections(response.data || [])
+      
+      // Fetch OAuth connections
+      const oauthResponse = await connectionsAPI.getConnections()
+      const oauthConnections = oauthResponse.data || []
+      
+      // Fetch token-based connections
+      let tokenConnections = []
+      try {
+        const tokenResponse = await socialMediaService.getConnections()
+        tokenConnections = tokenResponse || []
+      } catch (error) {
+        console.log('No token connections found or error fetching:', error.message)
+      }
+      
+      // Combine both types of connections
+      const allConnections = [...oauthConnections, ...tokenConnections]
+      setConnections(allConnections)
+      
+      console.log('OAuth connections:', oauthConnections.length)
+      console.log('Token connections:', tokenConnections.length)
+      console.log('Total connections:', allConnections.length)
+      
     } catch (error) {
       console.error('Error fetching connections:', error)
     } finally {
@@ -183,6 +204,9 @@ const ConnectionCards = ({ compact = false }) => {
 
   const handleDisconnect = async (platformId) => {
     try {
+      // Find the connection to determine its type
+      const connection = connections.find(conn => conn.platform === platformId)
+      
       if (platformId === 'google') {
         // Handle Google disconnect
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
@@ -198,10 +222,16 @@ const ConnectionCards = ({ compact = false }) => {
         } else {
           throw new Error('Failed to disconnect Google')
         }
-      } else {
-        // Handle other platforms
+      } else if (connection && connection.page_id) {
+        // Handle OAuth connections (platform_connections table)
         await connectionsAPI.disconnectPlatform(platformId)
         await fetchConnections()
+      } else if (connection && connection.id) {
+        // Handle token-based connections (social_media_connections table)
+        await socialMediaService.disconnectAccount(connection.id)
+        await fetchConnections()
+      } else {
+        throw new Error('Connection not found')
       }
     } catch (error) {
       console.error(`Error disconnecting from ${platformId}:`, error)
@@ -211,12 +241,27 @@ const ConnectionCards = ({ compact = false }) => {
 
   const getConnectionStatus = (platformId) => {
     const connection = connections.find(conn => conn.platform === platformId)
-    return connection ? {
+    if (!connection) {
+      return { connected: false, status: 'disconnected' }
+    }
+    
+    // Handle OAuth connections (platform_connections table)
+    if (connection.page_id) {
+      return {
+        connected: connection.is_active,
+        status: connection.connection_status,
+        pageName: connection.page_name,
+        lastSync: connection.last_sync
+      }
+    }
+    
+    // Handle token-based connections (social_media_connections table)
+    return {
       connected: connection.is_active,
-      status: connection.connection_status,
-      pageName: connection.page_name,
+      status: connection.connection_status || 'active',
+      pageName: connection.account_name,
       lastSync: connection.last_sync
-    } : { connected: false, status: 'disconnected' }
+    }
   }
 
   const getStatusIcon = (status) => {

@@ -17,6 +17,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { socialMediaService } from '../services/socialMedia'
+import { connectionsAPI } from '../services/connections'
 import ConnectionStatus from './ConnectionStatus'
 import SideNavbar from './SideNavbar'
 import MainContentLoader from './MainContentLoader'
@@ -82,8 +83,32 @@ const SettingsDashboard = () => {
   const fetchConnections = async () => {
     try {
       setLoading(true)
-      const connections = await socialMediaService.getConnections()
-      setConnections(connections)
+      
+      // Fetch token-based connections
+      let tokenConnections = []
+      try {
+        tokenConnections = await socialMediaService.getConnections()
+      } catch (error) {
+        console.log('No token connections found:', error.message)
+      }
+      
+      // Fetch OAuth connections
+      let oauthConnections = []
+      try {
+        const oauthResponse = await connectionsAPI.getConnections()
+        oauthConnections = oauthResponse.data || []
+      } catch (error) {
+        console.log('No OAuth connections found:', error.message)
+      }
+      
+      // Combine both types of connections
+      const allConnections = [...tokenConnections, ...oauthConnections]
+      setConnections(allConnections)
+      
+      console.log('Token connections:', tokenConnections.length)
+      console.log('OAuth connections:', oauthConnections.length)
+      console.log('Total connections:', allConnections.length)
+      
     } catch (error) {
       console.error('Error fetching connections:', error)
       setError('Failed to load connections')
