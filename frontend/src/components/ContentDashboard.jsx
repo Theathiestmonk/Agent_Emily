@@ -23,7 +23,7 @@ const API_BASE_URL = (() => {
   }
   
   // Local development fallback
-  return 'http://localhost:8000'
+  return (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 })()
 import { 
   Calendar, 
@@ -286,7 +286,7 @@ const ContentDashboard = () => {
   }
   
   // Local development fallback
-  return 'http://localhost:8000'
+  return (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 })()
       const response = await fetch(`${API_BASE_URL}/content/trigger-weekly`, {
         method: 'POST',
