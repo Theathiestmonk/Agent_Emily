@@ -39,6 +39,12 @@ class User(BaseModel):
     name: str
     created_at: str
 
+class WordPressConnection(BaseModel):
+    site_name: str
+    site_url: str
+    username: str
+    application_password: str
+
 def get_current_user(authorization: str = Header(None)):
     """Get current user from Supabase JWT token"""
     try:
@@ -1703,4 +1709,373 @@ async def post_to_instagram(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to post to Instagram: {str(e)}"
+        )
+
+# WordPress Connection Endpoints
+@router.get("/wordpress")
+async def get_wordpress_connections(
+    current_user: User = Depends(get_current_user)
+):
+    """Get all WordPress connections for current user"""
+    try:
+        print(f"🔍 Fetching WordPress connections for user: {current_user.id}")
+        
+        response = supabase_admin.table("wordpress_connections").select("*").eq("user_id", current_user.id).eq("is_active", True).execute()
+        
+        connections = response.data if response.data else []
+        print(f"📊 Found {len(connections)} active WordPress connections")
+        
+        # Remove sensitive data from response
+        response_connections = []
+        for conn in connections:
+            conn_dict = {
+                "id": conn["id"],
+                "site_name": conn["site_name"],
+                "site_url": conn["site_url"],
+                "username": conn["username"],
+                "is_active": conn["is_active"],
+                "last_checked_at": conn["last_checked_at"],
+                "connected_at": conn["created_at"],
+                "metadata": conn.get("metadata", {})
+            }
+            response_connections.append(conn_dict)
+        
+        return response_connections
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch WordPress connections: {str(e)}"
+        )
+
+@router.post("/wordpress")
+async def create_wordpress_connection(
+    connection_data: WordPressConnection,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new WordPress connection"""
+    try:
+        print(f"🔗 Creating WordPress connection for user: {current_user.id}")
+        print(f"📝 Site: {connection_data.site_name} ({connection_data.site_url})")
+        
+        # Validate WordPress site URL
+        if not connection_data.site_url.startswith(('http://', 'https://')):
+            connection_data.site_url = f"https://{connection_data.site_url}"
+        
+        # Test the connection by making a simple API call
+        test_url = f"{connection_data.site_url.rstrip('/')}/wp-json/wp/v2/users/me"
+        auth = (connection_data.username, connection_data.application_password)
+        
+        print(f"🔍 Testing WordPress connection: {test_url}")
+        test_response = requests.get(test_url, auth=auth, timeout=10)
+        
+        if test_response.status_code != 200:
+            print(f"❌ WordPress connection test failed: {test_response.status_code} - {test_response.text}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to connect to WordPress site. Please check your credentials and site URL. Error: {test_response.status_code}"
+            )
+        
+        # Get site information
+        site_info = test_response.json()
+        print(f"✅ WordPress connection test successful: {site_info.get('name', 'Unknown')}")
+        
+        # Encrypt the application password
+        encrypted_password = encrypt_token(connection_data.application_password)
+        
+        # Store connection in Supabase
+        connection_record = {
+            "user_id": current_user.id,
+            "site_name": connection_data.site_name,
+            "site_url": connection_data.site_url,
+            "username": connection_data.username,
+            "application_password": encrypted_password,
+            "is_active": True,
+            "last_checked_at": datetime.now().isoformat(),
+            "metadata": {
+                "site_title": site_info.get('name', ''),
+                "site_description": site_info.get('description', ''),
+                "user_display_name": site_info.get('name', ''),
+                "user_email": site_info.get('email', ''),
+                "capabilities": site_info.get('capabilities', {}),
+                "wordpress_version": site_info.get('wordpress_version', 'Unknown')
+            }
+        }
+        
+        response = supabase_admin.table("wordpress_connections").insert(connection_record).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to store WordPress connection"
+            )
+        
+        connection_id = response.data[0]["id"]
+        print(f"✅ WordPress connection created: {connection_id}")
+        
+        return {
+            "success": True,
+            "connection_id": connection_id,
+            "message": f"Successfully connected to {connection_data.site_name}",
+            "site_info": {
+                "site_name": connection_data.site_name,
+                "site_url": connection_data.site_url,
+                "site_title": site_info.get('name', ''),
+                "user_display_name": site_info.get('name', '')
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except requests.exceptions.RequestException as e:
+        print(f"❌ WordPress connection error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to connect to WordPress site. Please check your site URL and credentials. Error: {str(e)}"
+        )
+    except Exception as e:
+        print(f"❌ Error creating WordPress connection: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create WordPress connection: {str(e)}"
+        )
+
+@router.put("/wordpress/{connection_id}")
+async def update_wordpress_connection(
+    connection_id: str,
+    connection_data: WordPressConnection,
+    current_user: User = Depends(get_current_user)
+):
+    """Update an existing WordPress connection"""
+    try:
+        print(f"🔧 Updating WordPress connection {connection_id} for user: {current_user.id}")
+        
+        # Verify connection belongs to user
+        existing_response = supabase_admin.table("wordpress_connections").select("*").eq("id", connection_id).eq("user_id", current_user.id).execute()
+        
+        if not existing_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="WordPress connection not found"
+            )
+        
+        # Validate WordPress site URL
+        if not connection_data.site_url.startswith(('http://', 'https://')):
+            connection_data.site_url = f"https://{connection_data.site_url}"
+        
+        # Test the connection
+        test_url = f"{connection_data.site_url.rstrip('/')}/wp-json/wp/v2/users/me"
+        auth = (connection_data.username, connection_data.application_password)
+        
+        print(f"🔍 Testing updated WordPress connection: {test_url}")
+        test_response = requests.get(test_url, auth=auth, timeout=10)
+        
+        if test_response.status_code != 200:
+            print(f"❌ WordPress connection test failed: {test_response.status_code} - {test_response.text}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to connect to WordPress site. Please check your credentials and site URL. Error: {test_response.status_code}"
+            )
+        
+        # Get updated site information
+        site_info = test_response.json()
+        print(f"✅ WordPress connection test successful: {site_info.get('name', 'Unknown')}")
+        
+        # Encrypt the application password
+        encrypted_password = encrypt_token(connection_data.application_password)
+        
+        # Update connection in Supabase
+        update_data = {
+            "site_name": connection_data.site_name,
+            "site_url": connection_data.site_url,
+            "username": connection_data.username,
+            "application_password": encrypted_password,
+            "last_checked_at": datetime.now().isoformat(),
+            "metadata": {
+                "site_title": site_info.get('name', ''),
+                "site_description": site_info.get('description', ''),
+                "user_display_name": site_info.get('name', ''),
+                "user_email": site_info.get('email', ''),
+                "capabilities": site_info.get('capabilities', {}),
+                "wordpress_version": site_info.get('wordpress_version', 'Unknown')
+            }
+        }
+        
+        response = supabase_admin.table("wordpress_connections").update(update_data).eq("id", connection_id).eq("user_id", current_user.id).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update WordPress connection"
+            )
+        
+        print(f"✅ WordPress connection updated: {connection_id}")
+        
+        return {
+            "success": True,
+            "message": f"Successfully updated connection to {connection_data.site_name}",
+            "site_info": {
+                "site_name": connection_data.site_name,
+                "site_url": connection_data.site_url,
+                "site_title": site_info.get('name', ''),
+                "user_display_name": site_info.get('name', '')
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except requests.exceptions.RequestException as e:
+        print(f"❌ WordPress connection error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to connect to WordPress site. Please check your site URL and credentials. Error: {str(e)}"
+        )
+    except Exception as e:
+        print(f"❌ Error updating WordPress connection: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update WordPress connection: {str(e)}"
+        )
+
+@router.delete("/wordpress/{connection_id}")
+async def delete_wordpress_connection(
+    connection_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Delete a WordPress connection"""
+    try:
+        print(f"🗑️ Deleting WordPress connection {connection_id} for user: {current_user.id}")
+        
+        # Verify connection belongs to user
+        existing_response = supabase_admin.table("wordpress_connections").select("*").eq("id", connection_id).eq("user_id", current_user.id).execute()
+        
+        if not existing_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="WordPress connection not found"
+            )
+        
+        # Mark as inactive instead of deleting
+        response = supabase_admin.table("wordpress_connections").update({
+            "is_active": False,
+            "updated_at": datetime.now().isoformat()
+        }).eq("id", connection_id).eq("user_id", current_user.id).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete WordPress connection"
+            )
+        
+        print(f"✅ WordPress connection deleted: {connection_id}")
+        
+        return {
+            "success": True,
+            "message": "WordPress connection deleted successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error deleting WordPress connection: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete WordPress connection: {str(e)}"
+        )
+
+@router.post("/wordpress/{connection_id}/test")
+async def test_wordpress_connection(
+    connection_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Test a WordPress connection"""
+    try:
+        print(f"🔍 Testing WordPress connection {connection_id} for user: {current_user.id}")
+        
+        # Get connection details
+        response = supabase_admin.table("wordpress_connections").select("*").eq("id", connection_id).eq("user_id", current_user.id).eq("is_active", True).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="WordPress connection not found"
+            )
+        
+        connection = response.data[0]
+        
+        # Decrypt the application password
+        try:
+            application_password = decrypt_token(connection['application_password'])
+        except Exception as e:
+            print(f"❌ Error decrypting password: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to decrypt application password"
+            )
+        
+        # Test the connection
+        test_url = f"{connection['site_url'].rstrip('/')}/wp-json/wp/v2/users/me"
+        auth = (connection['username'], application_password)
+        
+        print(f"🔍 Testing WordPress connection: {test_url}")
+        test_response = requests.get(test_url, auth=auth, timeout=10)
+        
+        if test_response.status_code != 200:
+            print(f"❌ WordPress connection test failed: {test_response.status_code} - {test_response.text}")
+            
+            # Update last_checked_at even if test failed
+            supabase_admin.table("wordpress_connections").update({
+                "last_checked_at": datetime.now().isoformat()
+            }).eq("id", connection_id).execute()
+            
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"WordPress connection test failed. Please check your credentials. Error: {test_response.status_code}"
+            )
+        
+        # Get site information
+        site_info = test_response.json()
+        print(f"✅ WordPress connection test successful: {site_info.get('name', 'Unknown')}")
+        
+        # Update last_checked_at and metadata
+        supabase_admin.table("wordpress_connections").update({
+            "last_checked_at": datetime.now().isoformat(),
+            "metadata": {
+                "site_title": site_info.get('name', ''),
+                "site_description": site_info.get('description', ''),
+                "user_display_name": site_info.get('name', ''),
+                "user_email": site_info.get('email', ''),
+                "capabilities": site_info.get('capabilities', {}),
+                "wordpress_version": site_info.get('wordpress_version', 'Unknown'),
+                "last_test_status": "success",
+                "last_test_at": datetime.now().isoformat()
+            }
+        }).eq("id", connection_id).execute()
+        
+        return {
+            "success": True,
+            "message": "WordPress connection test successful",
+            "site_info": {
+                "site_name": connection['site_name'],
+                "site_url": connection['site_url'],
+                "site_title": site_info.get('name', ''),
+                "user_display_name": site_info.get('name', ''),
+                "user_email": site_info.get('email', ''),
+                "capabilities": site_info.get('capabilities', {}),
+                "wordpress_version": site_info.get('wordpress_version', 'Unknown')
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except requests.exceptions.RequestException as e:
+        print(f"❌ WordPress connection test error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to test WordPress connection. Please check your site URL and credentials. Error: {str(e)}"
+        )
+    except Exception as e:
+        print(f"❌ Error testing WordPress connection: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to test WordPress connection: {str(e)}"
         )

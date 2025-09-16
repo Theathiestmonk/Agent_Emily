@@ -41,10 +41,10 @@ import {
   Target,
   Users,
   BarChart3,
-  Facebook,
-  Instagram,
-  Linkedin,
-  Twitter,
+  Facebook, 
+  Instagram, 
+  Linkedin, 
+  Twitter, 
   Youtube,
   DollarSign,
   Eye,
@@ -497,7 +497,7 @@ const AdsDashboard = () => {
                     <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
                       <Target className="w-4 h-4 text-white" />
                     </div>
-                    <div>
+              <div>
                       <p className="text-xs font-medium text-gray-600">Platforms</p>
                       <p className="text-lg font-bold text-gray-900">
                         {new Set(filteredAds.map(ad => ad.platform)).size}
@@ -625,7 +625,7 @@ const AdsDashboard = () => {
                   accent: 'bg-purple-100 text-purple-800',
                   text: 'text-purple-800'
                 }
-                
+
                 return (
                   <div key={ad.id} className={`${viewMode === 'grid' ? 'bg-white rounded-lg shadow-sm border hover:shadow-md transition-all duration-200' : 'bg-white'} ${isExpanded ? 'ring-2 ring-purple-200' : ''}`}>
                     {/* Always show expanded view */}
@@ -692,7 +692,7 @@ const AdsDashboard = () => {
                               </div>
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center space-x-2">
                             <button
                               onClick={() => handleEditAd(ad)}
@@ -764,7 +764,7 @@ const AdsDashboard = () => {
                         {/* Edit Mode or Display Mode */}
                         {editingAd && editingAd.id === ad.id ? (
                           <div className="mb-4 space-y-4">
-                            <div>
+                              <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
                               <input
                                 type="text"
@@ -772,7 +772,7 @@ const AdsDashboard = () => {
                                 onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                               />
-                            </div>
+                              </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">Ad Copy</label>
                               <textarea
@@ -782,7 +782,7 @@ const AdsDashboard = () => {
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                               />
                             </div>
-                            <div>
+                              <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">Call to Action</label>
                               <input
                                 type="text"
@@ -790,8 +790,8 @@ const AdsDashboard = () => {
                                 onChange={(e) => setEditForm(prev => ({ ...prev, call_to_action: e.target.value }))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                               />
-                            </div>
-                            <div>
+                              </div>
+                              <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">Hashtags (comma-separated)</label>
                               <input
                                 type="text"
@@ -800,7 +800,7 @@ const AdsDashboard = () => {
                                 placeholder="hashtag1, hashtag2, hashtag3"
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                               />
-                            </div>
+                              </div>
                             <div className="flex items-center space-x-2">
                               <button
                                 onClick={handleSaveEdit}
@@ -830,14 +830,14 @@ const AdsDashboard = () => {
                               <span className="font-medium text-gray-600">Scheduled:</span>
                               <p className="text-gray-800">{formatDate(ad.scheduled_at)} at {formatTime(ad.scheduled_at.split('T')[1])}</p>
                             </div>
-                            <div>
+                              <div>
                               <span className="font-medium text-gray-600">Status:</span>
                               <p className="text-gray-800 capitalize">{ad.status}</p>
-                            </div>
-                            <div>
+                              </div>
+                              <div>
                               <span className="font-medium text-gray-600">Platform:</span>
                               <p className="text-gray-800">{ad.platform}</p>
-                            </div>
+                              </div>
                             <div>
                               <span className="font-medium text-gray-600">Ad Type:</span>
                               <p className="text-gray-800 capitalize">{ad.ad_type}</p>
@@ -845,7 +845,7 @@ const AdsDashboard = () => {
                             <div>
                               <span className="font-medium text-gray-600">Call to Action:</span>
                               <p className="text-gray-800">{ad.call_to_action}</p>
-                            </div>
+                              </div>
                             <div>
                               <span className="font-medium text-gray-600">Budget:</span>
                               <p className="text-gray-800">{ad.budget_range}</p>
@@ -864,8 +864,8 @@ const AdsDashboard = () => {
                                 <span key={index} className={`text-xs ${theme.accent} px-2 py-1 rounded-lg`}>
                                   #{tag}
                                 </span>
-                              ))}
-                            </div>
+                      ))}
+                    </div>
                           </div>
                         )}
                         
@@ -907,7 +907,7 @@ const AdsDashboard = () => {
               })}
             </div>
           )}
-        </div>
+            </div>
         </div>
       </div>
 

@@ -11,6 +11,7 @@ import pytz
 
 from scheduler.content_scheduler import ContentScheduler
 from scheduler.ads_scheduler import AdsScheduler
+from scheduler.blog_scheduler import BlogScheduler
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +24,7 @@ class BackgroundScheduler:
         self.openai_api_key = openai_api_key
         self.content_scheduler = None
         self.ads_scheduler = None
+        self.blog_scheduler = None
         self.is_running = False
         
     async def start(self):
@@ -34,10 +36,12 @@ class BackgroundScheduler:
         self.is_running = True
         self.content_scheduler = ContentScheduler(self.supabase_url, self.supabase_key, self.openai_api_key)
         self.ads_scheduler = AdsScheduler(self.supabase_url, self.supabase_key, self.openai_api_key)
+        self.blog_scheduler = BlogScheduler(self.supabase_url, self.supabase_key, self.openai_api_key)
         
-        # Start both schedulers
+        # Start all schedulers
         await self.content_scheduler.start()
         await self.ads_scheduler.start()
+        await self.blog_scheduler.start()
         
         logger.info("Background scheduler started - will run every Sunday at 4:00 AM IST")
         
@@ -45,11 +49,13 @@ class BackgroundScheduler:
         """Stop the background scheduler"""
         self.is_running = False
         
-        # Stop both schedulers
+        # Stop all schedulers
         if self.content_scheduler:
             await self.content_scheduler.stop()
         if self.ads_scheduler:
             await self.ads_scheduler.stop()
+        if self.blog_scheduler:
+            await self.blog_scheduler.stop()
             
         logger.info("Background scheduler stopped")
         
