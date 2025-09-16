@@ -15,6 +15,7 @@ import Onboarding from './components/Onboarding'
 import Profile from './components/Profile'
 import GoogleDashboard from './components/GoogleDashboard'
 import GoogleCallback from './components/GoogleCallback'
+import TokenExchangeHandler from './components/TokenExchangeHandler'
 import SettingsDashboard from './components/SettingsDashboard'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingBar from './components/LoadingBar'
@@ -157,6 +158,10 @@ function AppContent() {
         <Route 
           path="/google-callback" 
           element={<GoogleCallback />} 
+        />
+        <Route 
+          path="/auth/callback" 
+          element={<TokenExchangeHandler />} 
         />
         <Route 
           path="/settings" 
