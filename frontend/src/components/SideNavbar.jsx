@@ -11,7 +11,6 @@ import {
   X,
   Sparkles,
   BarChart3,
-  Target,
   Share2,
   Megaphone
 } from 'lucide-react'
@@ -46,12 +45,6 @@ const SideNavbar = () => {
       href: '/analytics',
       icon: BarChart3,
       description: 'Performance insights'
-    },
-    {
-      name: 'Campaigns',
-      href: '/campaigns',
-      icon: Target,
-      description: 'Marketing campaigns'
     },
     {
       name: 'Ads',
