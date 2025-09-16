@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS wordpress_connections (
     site_name VARCHAR(255) NOT NULL,
     site_url VARCHAR(500) NOT NULL,
     username VARCHAR(255) NOT NULL,
-    application_password VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL,
     is_active BOOLEAN DEFAULT true,
     last_checked_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

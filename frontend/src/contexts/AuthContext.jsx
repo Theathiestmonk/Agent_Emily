@@ -26,6 +26,8 @@ export function AuthProvider({ children }) {
       } else if (session) { 
         setUser(session.user)
         setIsAuthenticated(true)
+        // Store token in localStorage for API calls
+        localStorage.setItem('authToken', session.access_token)
       }
       setLoading(false)
     })
@@ -39,9 +41,13 @@ export function AuthProvider({ children }) {
       if (session) {
         setUser(session.user)
         setIsAuthenticated(true)
+        // Store token in localStorage for API calls
+        localStorage.setItem('authToken', session.access_token)
       } else {
         setUser(null)
         setIsAuthenticated(false)
+        // Remove token from localStorage
+        localStorage.removeItem('authToken')
       }
       setLoading(false)
     })

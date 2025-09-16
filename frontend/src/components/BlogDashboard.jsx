@@ -2,22 +2,16 @@ import React, { useState, useEffect } from 'react'
 import { 
   FileText, 
   Plus, 
-  Calendar, 
   Clock, 
   Globe, 
   Edit, 
   Trash2, 
-  Eye, 
   Send,
   RefreshCw,
-  Loader2,
-  Filter,
   Search,
   BarChart3,
   BookOpen,
   Target,
-  TrendingUp,
-  Users,
   CheckCircle,
   AlertCircle,
   XCircle,
@@ -86,20 +80,14 @@ const BlogDashboard = () => {
       setLoading(true)
       console.log('Fetching blog data...')
       
-      // First check for WordPress connections
-      const connections = await fetchWordPressConnections()
-      
-      // Only fetch blog data if we have WordPress connections
-      if (connections && connections.length > 0) {
-        await Promise.all([
-          fetchBlogs(),
-          fetchCampaigns(),
-          fetchStats()
-        ])
-        console.log('Blog data fetched successfully')
-      } else {
-        console.log('No WordPress connections found, skipping blog data fetch')
-      }
+      // Fetch all blog data independently
+      await Promise.all([
+        fetchBlogs(),
+        fetchCampaigns(),
+        fetchStats(),
+        fetchWordPressConnections() // Fetch WordPress connections separately
+      ])
+      console.log('Blog data fetched successfully')
     } catch (error) {
       console.error('Error fetching data:', error)
       alert(`Error loading blog data: ${error.message}`)
@@ -161,6 +149,8 @@ const BlogDashboard = () => {
     } catch (error) {
       console.error('Error fetching WordPress connections:', error)
       console.error('WordPress connections fetch error details:', error.message, error.stack)
+      // Don't show alert for WordPress connection errors - just log them
+      console.log('WordPress connections not available, continuing without them')
       setWordpressConnections([])
       return []
     }

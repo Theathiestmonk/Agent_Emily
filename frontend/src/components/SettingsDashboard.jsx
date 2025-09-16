@@ -34,13 +34,13 @@ const SettingsDashboard = () => {
     siteName: '',
     siteUrl: '',
     username: '',
-    applicationPassword: ''
+    password: ''
   })
   const [wordpressErrors, setWordpressErrors] = useState({
     siteName: '',
     siteUrl: '',
     username: '',
-    applicationPassword: ''
+    password: ''
   })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -51,7 +51,7 @@ const SettingsDashboard = () => {
       siteName: '',
       siteUrl: '',
       username: '',
-      applicationPassword: ''
+      password: ''
     }
 
     // Site Name validation
@@ -82,11 +82,11 @@ const SettingsDashboard = () => {
       errors.username = 'Username must be at least 2 characters'
     }
 
-    // Application Password validation
-    if (!wordpressCredentials.applicationPassword.trim()) {
-      errors.applicationPassword = 'Application password is required'
-    } else if (wordpressCredentials.applicationPassword.trim().length < 8) {
-      errors.applicationPassword = 'Application password must be at least 8 characters'
+    // Password validation
+    if (!wordpressCredentials.password.trim()) {
+      errors.password = 'Password is required'
+    } else if (wordpressCredentials.password.trim().length < 6) {
+      errors.password = 'Password must be at least 6 characters'
     }
 
     setWordpressErrors(errors)
@@ -302,7 +302,7 @@ const SettingsDashboard = () => {
       siteName: '',
       siteUrl: '',
       username: '',
-      applicationPassword: ''
+      password: ''
     })
 
     // Validate credentials first
@@ -322,7 +322,7 @@ const SettingsDashboard = () => {
           site_name: wordpressCredentials.siteName.trim(),
           site_url: wordpressCredentials.siteUrl.trim(),
           username: wordpressCredentials.username.trim(),
-          application_password: wordpressCredentials.applicationPassword.trim()
+          password: wordpressCredentials.password.trim()
         })
       })
 
@@ -344,7 +344,7 @@ const SettingsDashboard = () => {
         siteName: '',
         siteUrl: '',
         username: '',
-        applicationPassword: ''
+        password: ''
       })
       setSelectedPlatform('')
       setConnectionMethod('')
@@ -667,38 +667,29 @@ const SettingsDashboard = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Application Password
+                    Password
                   </label>
                   <input
                     type="password"
-                    value={wordpressCredentials.applicationPassword}
+                    value={wordpressCredentials.password}
                     onChange={(e) => {
-                      setWordpressCredentials(prev => ({ ...prev, applicationPassword: e.target.value }))
-                      clearFieldError('applicationPassword')
+                      setWordpressCredentials(prev => ({ ...prev, password: e.target.value }))
+                      clearFieldError('password')
                     }}
-                    placeholder="Enter your application password"
+                    placeholder="Enter your WordPress password"
                     className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      wordpressErrors.applicationPassword ? 'border-red-500' : 'border-gray-300'
+                      wordpressErrors.password ? 'border-red-500' : 'border-gray-300'
                     }`}
                     required
                   />
-                  {wordpressErrors.applicationPassword && (
+                  {wordpressErrors.password && (
                     <p className="text-red-500 text-xs mt-1 flex items-center">
                       <AlertCircle className="w-3 h-3 mr-1" />
-                      {wordpressErrors.applicationPassword}
+                      {wordpressErrors.password}
                     </p>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    Create an application password in your{' '}
-                    <a
-                      href="https://wordpress.org/support/article/application-passwords/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline flex items-center"
-                    >
-                      WordPress profile settings
-                      <ExternalLink className="w-3 h-3 ml-1" />
-                    </a>
+                    Enter your WordPress account password for API access.
                   </p>
                 </div>
 
