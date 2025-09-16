@@ -12,7 +12,8 @@ import {
   Sparkles,
   BarChart3,
   Share2,
-  Megaphone
+  Megaphone,
+  BookOpen
 } from 'lucide-react'
 
 const SideNavbar = () => {
@@ -51,6 +52,12 @@ const SideNavbar = () => {
       href: '/ads',
       icon: Megaphone,
       description: 'Active advertising campaigns'
+    },
+    {
+      name: 'Blogs',
+      href: '/blogs',
+      icon: BookOpen,
+      description: 'Manage your blog posts'
     },
     {
       name: 'Settings',

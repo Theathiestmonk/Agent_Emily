@@ -10,6 +10,8 @@ import SocialMediaDashboard from './components/SocialMediaDashboard'
 import AnalyticsDashboard from './components/AnalyticsDashboard'
 import CampaignsDashboard from './components/CampaignsDashboard'
 import AdsDashboard from './components/AdsDashboard'
+import BlogDashboard from './components/BlogDashboard'
+import BlogTest from './components/BlogTest'
 import Chatbot from './components/Chatbot'
 import Onboarding from './components/Onboarding'
 import Profile from './components/Profile'
@@ -124,6 +126,14 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <AdsDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/blogs" 
+          element={
+            <ProtectedRoute>
+              <BlogDashboard />
             </ProtectedRoute>
           } 
         />

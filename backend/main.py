@@ -21,6 +21,7 @@ from routers.chatbot import router as chatbot_router
 from routers.media import router as media_router
 from routers.google_connections import router as google_router
 from routers.ads import router as ads_router
+from routers.blogs import router as blogs_router
 
 # Load environment variables
 load_dotenv()
@@ -62,6 +63,7 @@ app.include_router(social_media_connections_router)
 app.include_router(chatbot_router)
 app.include_router(media_router)
 app.include_router(ads_router)
+app.include_router(blogs_router)
 
 # Health check endpoint
 @app.get("/health")
@@ -171,6 +173,8 @@ async def startup_event():
         logger.info("Background scheduler started successfully")
     except Exception as e:
         logger.error(f"Failed to start background scheduler: {e}")
+        # Continue without background scheduler for now
+        logger.info("Continuing without background scheduler")
 
 @app.on_event("shutdown")
 async def shutdown_event():

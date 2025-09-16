@@ -19,6 +19,21 @@ class ContentScheduler:
     def __init__(self, supabase_url: str, supabase_key: str, openai_api_key: str, progress_callback=None):
         self.supabase: Client = create_client(supabase_url, supabase_key)
         self.content_agent = ContentCreationAgent(supabase_url, supabase_key, openai_api_key, progress_callback)
+        self.running = False
+
+    async def start(self):
+        """Start the content scheduler"""
+        if self.running:
+            logger.warning("Content scheduler is already running")
+            return
+        
+        self.running = True
+        logger.info("Content scheduler started")
+
+    async def stop(self):
+        """Stop the content scheduler"""
+        self.running = False
+        logger.info("Content scheduler stopped")
         
     async def get_users_with_completed_onboarding(self) -> List[Dict[str, Any]]:
         """Get all users who have completed onboarding"""

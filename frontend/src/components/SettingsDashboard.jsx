@@ -14,7 +14,8 @@ import {
   Twitter,
   Linkedin,
   X,
-  RefreshCw
+  RefreshCw,
+  Globe
 } from 'lucide-react'
 import { socialMediaService } from '../services/socialMedia'
 import { connectionsAPI } from '../services/connections'
@@ -29,8 +30,75 @@ const SettingsDashboard = () => {
   const [selectedPlatform, setSelectedPlatform] = useState('')
   const [connectionMethod, setConnectionMethod] = useState('')
   const [accessToken, setAccessToken] = useState('')
+  const [wordpressCredentials, setWordpressCredentials] = useState({
+    siteName: '',
+    siteUrl: '',
+    username: '',
+    applicationPassword: ''
+  })
+  const [wordpressErrors, setWordpressErrors] = useState({
+    siteName: '',
+    siteUrl: '',
+    username: '',
+    applicationPassword: ''
+  })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  // Validation functions
+  const validateWordPressCredentials = () => {
+    const errors = {
+      siteName: '',
+      siteUrl: '',
+      username: '',
+      applicationPassword: ''
+    }
+
+    // Site Name validation
+    if (!wordpressCredentials.siteName.trim()) {
+      errors.siteName = 'Site name is required'
+    } else if (wordpressCredentials.siteName.trim().length < 2) {
+      errors.siteName = 'Site name must be at least 2 characters'
+    }
+
+    // Site URL validation
+    if (!wordpressCredentials.siteUrl.trim()) {
+      errors.siteUrl = 'Site URL is required'
+    } else {
+      try {
+        const url = new URL(wordpressCredentials.siteUrl)
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          errors.siteUrl = 'URL must start with http:// or https://'
+        }
+      } catch {
+        errors.siteUrl = 'Please enter a valid URL'
+      }
+    }
+
+    // Username validation
+    if (!wordpressCredentials.username.trim()) {
+      errors.username = 'Username is required'
+    } else if (wordpressCredentials.username.trim().length < 2) {
+      errors.username = 'Username must be at least 2 characters'
+    }
+
+    // Application Password validation
+    if (!wordpressCredentials.applicationPassword.trim()) {
+      errors.applicationPassword = 'Application password is required'
+    } else if (wordpressCredentials.applicationPassword.trim().length < 8) {
+      errors.applicationPassword = 'Application password must be at least 8 characters'
+    }
+
+    setWordpressErrors(errors)
+    return !Object.values(errors).some(error => error !== '')
+  }
+
+  const clearFieldError = (fieldName) => {
+    setWordpressErrors(prev => ({
+      ...prev,
+      [fieldName]: ''
+    }))
+  }
 
   const platforms = [
     {
@@ -72,6 +140,17 @@ const SettingsDashboard = () => {
       oauthSupported: true,
       tokenSupported: true,
       helpUrl: 'https://www.linkedin.com/developers/apps'
+    },
+    {
+      id: 'wordpress',
+      name: 'WordPress',
+      icon: Globe,
+      color: 'bg-gray-600',
+      description: 'Automate blog posting and content management',
+      oauthSupported: false,
+      tokenSupported: false,
+      credentialsSupported: true,
+      helpUrl: 'https://wordpress.org/support/article/application-passwords/'
     }
   ]
 
@@ -101,12 +180,35 @@ const SettingsDashboard = () => {
         console.log('No OAuth connections found:', error.message)
       }
       
-      // Combine both types of connections
-      const allConnections = [...tokenConnections, ...oauthConnections]
+      // Fetch WordPress connections
+      let wordpressConnections = []
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/wordpress`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          wordpressConnections = data.map(conn => ({
+            ...conn,
+            platform: 'wordpress',
+            connection_status: 'active',
+            page_name: conn.site_name,
+            page_username: conn.username
+          }))
+        }
+      } catch (error) {
+        console.log('No WordPress connections found:', error.message)
+      }
+      
+      // Combine all types of connections
+      const allConnections = [...tokenConnections, ...oauthConnections, ...wordpressConnections]
       setConnections(allConnections)
       
       console.log('Token connections:', tokenConnections.length)
       console.log('OAuth connections:', oauthConnections.length)
+      console.log('WordPress connections:', wordpressConnections.length)
       console.log('Total connections:', allConnections.length)
       
     } catch (error) {
@@ -191,13 +293,118 @@ const SettingsDashboard = () => {
     }
   }
 
-  const handleDisconnect = async (connectionId) => {
+  const handleWordPressConnect = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    setSuccess('')
+    setWordpressErrors({
+      siteName: '',
+      siteUrl: '',
+      username: '',
+      applicationPassword: ''
+    })
+
+    // Validate credentials first
+    if (!validateWordPressCredentials()) {
+      setLoading(false)
+      return
+    }
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/wordpress`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
+        body: JSON.stringify({
+          site_name: wordpressCredentials.siteName.trim(),
+          site_url: wordpressCredentials.siteUrl.trim(),
+          username: wordpressCredentials.username.trim(),
+          application_password: wordpressCredentials.applicationPassword.trim()
+        })
+      })
+
+      let result
+      try {
+        result = await response.json()
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError)
+        throw new Error(`Server error: ${response.status} ${response.statusText}`)
+      }
+
+      if (!response.ok) {
+        throw new Error(result.detail || result.message || 'Failed to connect to WordPress')
+      }
+
+      setSuccess(result.message || 'WordPress connected successfully!')
+      setShowConnectionModal(false)
+      setWordpressCredentials({
+        siteName: '',
+        siteUrl: '',
+        username: '',
+        applicationPassword: ''
+      })
+      setSelectedPlatform('')
+      setConnectionMethod('')
+      fetchConnections()
+      
+    } catch (err) {
+      console.error('WordPress connection error:', err)
+      setError(err.message || 'Failed to connect WordPress')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleWordPressDisconnect = async (connectionId) => {
+    try {
+      setLoading(true)
+      setError('')
+      setSuccess('')
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/wordpress/${connectionId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'Failed to disconnect WordPress')
+      }
+
+      setSuccess(result.message)
+      fetchConnections()
+      
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDisconnect = async (connectionId, platform) => {
     if (!window.confirm('Are you sure you want to disconnect this account?')) {
       return
     }
 
     try {
       setLoading(true)
+      setError('')
+      setSuccess('')
+
+      // Handle WordPress disconnect
+      if (platform === 'wordpress') {
+        await handleWordPressDisconnect(connectionId)
+        return
+      }
+
+      // Handle other platforms
       await socialMediaService.disconnectAccount(connectionId)
       setSuccess('Account disconnected successfully')
       fetchConnections()
@@ -280,7 +487,7 @@ const SettingsDashboard = () => {
                       <ConnectionStatus
                         key={connection.id}
                         connection={connection}
-                        onDisconnect={handleDisconnect}
+                        onDisconnect={(connectionId) => handleDisconnect(connectionId, connection.platform)}
                       />
                     ))}
                   </div>
@@ -341,6 +548,15 @@ const SettingsDashboard = () => {
                                 Token
                               </button>
                             )}
+                            {platform.credentialsSupported && (
+                              <button
+                                onClick={() => handleConnectionMethod(platform.id, 'credentials')}
+                                className="w-full px-3 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 flex items-center justify-center"
+                              >
+                                <Key className="w-4 h-4 mr-1" />
+                                Credentials
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -359,7 +575,10 @@ const SettingsDashboard = () => {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">
-                Connect {getPlatformInfo(selectedPlatform).name} with Access Token
+                {selectedPlatform === 'wordpress' 
+                  ? `Connect ${getPlatformInfo(selectedPlatform).name} with Credentials`
+                  : `Connect ${getPlatformInfo(selectedPlatform).name} with Access Token`
+                }
               </h3>
               <button
                 onClick={closeModal}
@@ -369,45 +588,120 @@ const SettingsDashboard = () => {
               </button>
             </div>
             
-            <form onSubmit={handleTokenConnect} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Access Token
-                </label>
-                <input
-                  type="password"
-                  value={accessToken}
-                  onChange={(e) => setAccessToken(e.target.value)}
-                  placeholder="Enter your access token"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Get your access token from{' '}
-                  <a
-                    href={getPlatformInfo(selectedPlatform).helpUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline flex items-center"
-                  >
-                    {getPlatformInfo(selectedPlatform).name} Developer Tools
-                    <ExternalLink className="w-3 h-3 ml-1" />
-                  </a>
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex space-x-2">
-                  <button
-                    type="button"
-                    onClick={handleDebugToken}
-                    disabled={loading || !accessToken}
-                    className="px-3 py-2 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-700 disabled:opacity-50"
-                  >
-                    Debug Token
-                  </button>
+            {selectedPlatform === 'wordpress' ? (
+              <form onSubmit={handleWordPressConnect} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Site Name
+                  </label>
+                  <input
+                    type="text"
+                    value={wordpressCredentials.siteName}
+                    onChange={(e) => {
+                      setWordpressCredentials(prev => ({ ...prev, siteName: e.target.value }))
+                      clearFieldError('siteName')
+                    }}
+                    placeholder="My WordPress Site"
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      wordpressErrors.siteName ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    required
+                  />
+                  {wordpressErrors.siteName && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {wordpressErrors.siteName}
+                    </p>
+                  )}
                 </div>
-                
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Site URL
+                  </label>
+                  <input
+                    type="url"
+                    value={wordpressCredentials.siteUrl}
+                    onChange={(e) => {
+                      setWordpressCredentials(prev => ({ ...prev, siteUrl: e.target.value }))
+                      clearFieldError('siteUrl')
+                    }}
+                    placeholder="https://yoursite.com"
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      wordpressErrors.siteUrl ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    required
+                  />
+                  {wordpressErrors.siteUrl && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {wordpressErrors.siteUrl}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    value={wordpressCredentials.username}
+                    onChange={(e) => {
+                      setWordpressCredentials(prev => ({ ...prev, username: e.target.value }))
+                      clearFieldError('username')
+                    }}
+                    placeholder="your_username"
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      wordpressErrors.username ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    required
+                  />
+                  {wordpressErrors.username && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {wordpressErrors.username}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Application Password
+                  </label>
+                  <input
+                    type="password"
+                    value={wordpressCredentials.applicationPassword}
+                    onChange={(e) => {
+                      setWordpressCredentials(prev => ({ ...prev, applicationPassword: e.target.value }))
+                      clearFieldError('applicationPassword')
+                    }}
+                    placeholder="Enter your application password"
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      wordpressErrors.applicationPassword ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    required
+                  />
+                  {wordpressErrors.applicationPassword && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {wordpressErrors.applicationPassword}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Create an application password in your{' '}
+                    <a
+                      href="https://wordpress.org/support/article/application-passwords/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline flex items-center"
+                    >
+                      WordPress profile settings
+                      <ExternalLink className="w-3 h-3 ml-1" />
+                    </a>
+                  </p>
+                </div>
+
                 <div className="flex space-x-3">
                   <button
                     type="button"
@@ -418,7 +712,7 @@ const SettingsDashboard = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={loading || !accessToken}
+                    disabled={loading}
                     className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
                   >
                     {loading ? (
@@ -431,8 +725,73 @@ const SettingsDashboard = () => {
                     )}
                   </button>
                 </div>
-              </div>
-            </form>
+              </form>
+            ) : (
+              <form onSubmit={handleTokenConnect} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Access Token
+                  </label>
+                  <input
+                    type="password"
+                    value={accessToken}
+                    onChange={(e) => setAccessToken(e.target.value)}
+                    placeholder="Enter your access token"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Get your access token from{' '}
+                    <a
+                      href={getPlatformInfo(selectedPlatform).helpUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline flex items-center"
+                    >
+                      {getPlatformInfo(selectedPlatform).name} Developer Tools
+                      <ExternalLink className="w-3 h-3 ml-1" />
+                    </a>
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex space-x-2">
+                    <button
+                      type="button"
+                      onClick={handleDebugToken}
+                      disabled={loading || !accessToken}
+                      className="px-3 py-2 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-700 disabled:opacity-50"
+                    >
+                      Debug Token
+                    </button>
+                  </div>
+                  
+                  <div className="flex space-x-3">
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading || !accessToken}
+                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Connecting...
+                        </>
+                      ) : (
+                        'Connect'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
