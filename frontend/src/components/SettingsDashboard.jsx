@@ -36,8 +36,69 @@ const SettingsDashboard = () => {
     username: '',
     applicationPassword: ''
   })
+  const [wordpressErrors, setWordpressErrors] = useState({
+    siteName: '',
+    siteUrl: '',
+    username: '',
+    applicationPassword: ''
+  })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  // Validation functions
+  const validateWordPressCredentials = () => {
+    const errors = {
+      siteName: '',
+      siteUrl: '',
+      username: '',
+      applicationPassword: ''
+    }
+
+    // Site Name validation
+    if (!wordpressCredentials.siteName.trim()) {
+      errors.siteName = 'Site name is required'
+    } else if (wordpressCredentials.siteName.trim().length < 2) {
+      errors.siteName = 'Site name must be at least 2 characters'
+    }
+
+    // Site URL validation
+    if (!wordpressCredentials.siteUrl.trim()) {
+      errors.siteUrl = 'Site URL is required'
+    } else {
+      try {
+        const url = new URL(wordpressCredentials.siteUrl)
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          errors.siteUrl = 'URL must start with http:// or https://'
+        }
+      } catch {
+        errors.siteUrl = 'Please enter a valid URL'
+      }
+    }
+
+    // Username validation
+    if (!wordpressCredentials.username.trim()) {
+      errors.username = 'Username is required'
+    } else if (wordpressCredentials.username.trim().length < 2) {
+      errors.username = 'Username must be at least 2 characters'
+    }
+
+    // Application Password validation
+    if (!wordpressCredentials.applicationPassword.trim()) {
+      errors.applicationPassword = 'Application password is required'
+    } else if (wordpressCredentials.applicationPassword.trim().length < 8) {
+      errors.applicationPassword = 'Application password must be at least 8 characters'
+    }
+
+    setWordpressErrors(errors)
+    return !Object.values(errors).some(error => error !== '')
+  }
+
+  const clearFieldError = (fieldName) => {
+    setWordpressErrors(prev => ({
+      ...prev,
+      [fieldName]: ''
+    }))
+  }
 
   const platforms = [
     {
@@ -237,6 +298,18 @@ const SettingsDashboard = () => {
     setLoading(true)
     setError('')
     setSuccess('')
+    setWordpressErrors({
+      siteName: '',
+      siteUrl: '',
+      username: '',
+      applicationPassword: ''
+    })
+
+    // Validate credentials first
+    if (!validateWordPressCredentials()) {
+      setLoading(false)
+      return
+    }
 
     try {
       const response = await fetch('/api/connections/wordpress', {
@@ -246,20 +319,26 @@ const SettingsDashboard = () => {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         },
         body: JSON.stringify({
-          site_name: wordpressCredentials.siteName,
-          site_url: wordpressCredentials.siteUrl,
-          username: wordpressCredentials.username,
-          application_password: wordpressCredentials.applicationPassword
+          site_name: wordpressCredentials.siteName.trim(),
+          site_url: wordpressCredentials.siteUrl.trim(),
+          username: wordpressCredentials.username.trim(),
+          application_password: wordpressCredentials.applicationPassword.trim()
         })
       })
 
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.detail || 'Failed to connect to WordPress')
+      let result
+      try {
+        result = await response.json()
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError)
+        throw new Error(`Server error: ${response.status} ${response.statusText}`)
       }
 
-      setSuccess(result.message)
+      if (!response.ok) {
+        throw new Error(result.detail || result.message || 'Failed to connect to WordPress')
+      }
+
+      setSuccess(result.message || 'WordPress connected successfully!')
       setShowConnectionModal(false)
       setWordpressCredentials({
         siteName: '',
@@ -272,7 +351,8 @@ const SettingsDashboard = () => {
       fetchConnections()
       
     } catch (err) {
-      setError(err.message)
+      console.error('WordPress connection error:', err)
+      setError(err.message || 'Failed to connect WordPress')
     } finally {
       setLoading(false)
     }
@@ -517,11 +597,22 @@ const SettingsDashboard = () => {
                   <input
                     type="text"
                     value={wordpressCredentials.siteName}
-                    onChange={(e) => setWordpressCredentials(prev => ({ ...prev, siteName: e.target.value }))}
+                    onChange={(e) => {
+                      setWordpressCredentials(prev => ({ ...prev, siteName: e.target.value }))
+                      clearFieldError('siteName')
+                    }}
                     placeholder="My WordPress Site"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      wordpressErrors.siteName ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     required
                   />
+                  {wordpressErrors.siteName && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {wordpressErrors.siteName}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -531,11 +622,22 @@ const SettingsDashboard = () => {
                   <input
                     type="url"
                     value={wordpressCredentials.siteUrl}
-                    onChange={(e) => setWordpressCredentials(prev => ({ ...prev, siteUrl: e.target.value }))}
+                    onChange={(e) => {
+                      setWordpressCredentials(prev => ({ ...prev, siteUrl: e.target.value }))
+                      clearFieldError('siteUrl')
+                    }}
                     placeholder="https://yoursite.com"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      wordpressErrors.siteUrl ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     required
                   />
+                  {wordpressErrors.siteUrl && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {wordpressErrors.siteUrl}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -545,11 +647,22 @@ const SettingsDashboard = () => {
                   <input
                     type="text"
                     value={wordpressCredentials.username}
-                    onChange={(e) => setWordpressCredentials(prev => ({ ...prev, username: e.target.value }))}
+                    onChange={(e) => {
+                      setWordpressCredentials(prev => ({ ...prev, username: e.target.value }))
+                      clearFieldError('username')
+                    }}
                     placeholder="your_username"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      wordpressErrors.username ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     required
                   />
+                  {wordpressErrors.username && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {wordpressErrors.username}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -559,11 +672,22 @@ const SettingsDashboard = () => {
                   <input
                     type="password"
                     value={wordpressCredentials.applicationPassword}
-                    onChange={(e) => setWordpressCredentials(prev => ({ ...prev, applicationPassword: e.target.value }))}
+                    onChange={(e) => {
+                      setWordpressCredentials(prev => ({ ...prev, applicationPassword: e.target.value }))
+                      clearFieldError('applicationPassword')
+                    }}
                     placeholder="Enter your application password"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      wordpressErrors.applicationPassword ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     required
                   />
+                  {wordpressErrors.applicationPassword && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {wordpressErrors.applicationPassword}
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">
                     Create an application password in your{' '}
                     <a
