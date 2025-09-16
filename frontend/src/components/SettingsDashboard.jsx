@@ -183,7 +183,7 @@ const SettingsDashboard = () => {
       // Fetch WordPress connections
       let wordpressConnections = []
       try {
-        const response = await fetch('/api/connections/wordpress', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/wordpress`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`
           }
@@ -312,7 +312,7 @@ const SettingsDashboard = () => {
     }
 
     try {
-      const response = await fetch('/api/connections/wordpress', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/wordpress`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -364,7 +364,7 @@ const SettingsDashboard = () => {
       setError('')
       setSuccess('')
 
-      const response = await fetch(`/api/connections/wordpress/${connectionId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/wordpress/${connectionId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

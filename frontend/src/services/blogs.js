@@ -106,7 +106,7 @@ class BlogService {
 
   // WordPress Sites (for blog creation)
   async getWordPressSites() {
-    return this.makeRequest('/api/connections/wordpress')
+    return this.makeRequest('/connections/wordpress')
   }
 }
 
