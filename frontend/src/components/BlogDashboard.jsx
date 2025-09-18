@@ -15,7 +15,8 @@ import {
   CheckCircle,
   AlertCircle,
   XCircle,
-  Save
+  Save,
+  X
 } from 'lucide-react'
 import { blogService } from '../services/blogs'
 import SideNavbar from './SideNavbar'
@@ -44,6 +45,8 @@ const BlogDashboard = () => {
     tags: ''
   })
   const [saving, setSaving] = useState(false)
+  const [selectedBlog, setSelectedBlog] = useState(null)
+  const [showBlogModal, setShowBlogModal] = useState(false)
 
   const statusColors = {
     draft: 'bg-yellow-100 text-yellow-800',
@@ -213,6 +216,16 @@ const BlogDashboard = () => {
   const handleCancelEdit = () => {
     setEditingBlog(null)
     setEditForm({ title: '', content: '', excerpt: '', categories: '', tags: '' })
+  }
+
+  const handleBlogClick = (blog) => {
+    setSelectedBlog(blog)
+    setShowBlogModal(true)
+  }
+
+  const handleCloseBlogModal = () => {
+    setSelectedBlog(null)
+    setShowBlogModal(false)
   }
 
   const handlePublishBlog = async (blogId) => {
@@ -484,108 +497,115 @@ const BlogDashboard = () => {
                 
                 return (
                   <div key={blog.id} className={`${viewMode === 'grid' ? 'bg-white rounded-lg shadow-sm border hover:shadow-md transition-all duration-200' : 'bg-white'} p-6`}>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                          <FileText className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900 line-clamp-2">{blog.title}</h3>
-                          <div className="flex items-center space-x-2 mt-1">
-                            <span className={`px-2 py-1 text-xs rounded-full ${statusColors[blog.status]} flex items-center space-x-1`}>
-                              <StatusIcon className="w-3 h-3" />
-                              <span className="capitalize">{blog.status}</span>
-                            </span>
-                            <span className="flex items-center text-xs text-gray-500">
-                              <Globe className="w-3 h-3 mr-1" />
-                              {blog.wordpress_connections?.site_name || 'Unknown Site'}
-                            </span>
+                    {/* Clickable area for blog content */}
+                    <div 
+                      className="cursor-pointer hover:bg-gray-50 rounded-lg p-2 -m-2 transition-colors"
+                      onClick={() => handleBlogClick(blog)}
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="p-2 bg-blue-100 rounded-lg">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-gray-900 line-clamp-2">{blog.title}</h3>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <span className={`px-2 py-1 text-xs rounded-full ${statusColors[blog.status]} flex items-center space-x-1`}>
+                                <StatusIcon className="w-3 h-3" />
+                                <span className="capitalize">{blog.status}</span>
+                              </span>
+                              <span className="flex items-center text-xs text-gray-500">
+                                <Globe className="w-3 h-3 mr-1" />
+                                {blog.wordpress_connections?.site_name || 'Unknown Site'}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
                       
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleEditBlog(blog)}
-                          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        {blog.status === 'draft' && (
-                          <button
-                            onClick={() => handlePublishBlog(blog.id)}
-                            className="p-2 text-green-500 hover:text-green-700 hover:bg-green-100 rounded-md"
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
+                      {/* Blog Content Preview */}
+                      <div className="mb-4">
+                        <p className="text-gray-700 text-sm leading-relaxed line-clamp-3">{blog.excerpt || blog.content.substring(0, 200) + '...'}</p>
+                      </div>
+                      
+                      {/* Blog Details */}
+                      <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <span className="font-medium text-gray-600">Scheduled:</span>
+                            <p className="text-gray-800">{formatDate(blog.scheduled_at)} at {formatTime(blog.scheduled_at)}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-600">Reading Time:</span>
+                            <p className="text-gray-800">{blog.reading_time} min</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-600">Word Count:</span>
+                            <p className="text-gray-800">{blog.word_count}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-600">SEO Score:</span>
+                            <p className="text-gray-800">{blog.seo_score}/100</p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Categories and Tags */}
+                      <div className="mb-4">
+                        {blog.categories && blog.categories.length > 0 && (
+                          <div className="mb-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-gray-600">Categories</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {blog.categories.map((category, index) => (
+                                <span key={index} className={`text-xs ${theme.accent} px-2 py-1 rounded-lg`}>
+                                  {category}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                         )}
+                        
+                        {blog.tags && blog.tags.length > 0 && (
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-gray-600">Tags</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {blog.tags.map((tag, index) => (
+                                <span key={index} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-lg">
+                                  #{tag}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Action buttons outside clickable area */}
+                    <div className="flex items-center space-x-2 mt-4">
+                      <button
+                        onClick={() => handleEditBlog(blog)}
+                        className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      {blog.status === 'draft' && (
                         <button
-                          onClick={() => handleDeleteBlog(blog.id)}
-                          className="p-2 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-md"
+                          onClick={() => handlePublishBlog(blog.id)}
+                          className="p-2 text-green-500 hover:text-green-700 hover:bg-green-100 rounded-md"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Send className="w-4 h-4" />
                         </button>
-                      </div>
-                    </div>
-                    
-                    {/* Blog Content Preview */}
-                    <div className="mb-4">
-                      <p className="text-gray-700 text-sm leading-relaxed line-clamp-3">{blog.excerpt || blog.content.substring(0, 200) + '...'}</p>
-                    </div>
-                    
-                    {/* Blog Details */}
-                    <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div>
-                          <span className="font-medium text-gray-600">Scheduled:</span>
-                          <p className="text-gray-800">{formatDate(blog.scheduled_at)} at {formatTime(blog.scheduled_at)}</p>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-600">Reading Time:</span>
-                          <p className="text-gray-800">{blog.reading_time} min</p>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-600">Word Count:</span>
-                          <p className="text-gray-800">{blog.word_count}</p>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-600">SEO Score:</span>
-                          <p className="text-gray-800">{blog.seo_score}/100</p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Categories and Tags */}
-                    <div className="mb-4">
-                      {blog.categories && blog.categories.length > 0 && (
-                        <div className="mb-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-medium text-gray-600">Categories</span>
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {blog.categories.map((category, index) => (
-                              <span key={index} className={`text-xs ${theme.accent} px-2 py-1 rounded-lg`}>
-                                {category}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
                       )}
-                      
-                      {blog.tags && blog.tags.length > 0 && (
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-medium text-gray-600">Tags</span>
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {blog.tags.map((tag, index) => (
-                              <span key={index} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-lg">
-                                #{tag}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      <button
+                        onClick={() => handleDeleteBlog(blog.id)}
+                        className="p-2 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-md"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 )
@@ -679,6 +699,137 @@ const BlogDashboard = () => {
               >
                 <Save className="w-4 h-4" />
                 <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Blog Content Modal */}
+      {showBlogModal && selectedBlog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">{selectedBlog.title}</h2>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className={`px-2 py-1 text-xs rounded-full ${statusColors[selectedBlog.status]} flex items-center space-x-1`}>
+                      {(() => {
+                        const StatusIcon = statusIcons[selectedBlog.status] || AlertCircle
+                        return <StatusIcon className="w-3 h-3" />
+                      })()}
+                      <span className="capitalize">{selectedBlog.status}</span>
+                    </span>
+                    <span className="flex items-center text-xs text-gray-500">
+                      <Globe className="w-3 h-3 mr-1" />
+                      {selectedBlog.wordpress_connections?.site_name || 'Unknown Site'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseBlogModal}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {/* Blog Metadata */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium text-gray-600">Scheduled:</span>
+                    <p className="text-gray-800">{formatDate(selectedBlog.scheduled_at)} at {formatTime(selectedBlog.scheduled_at)}</p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-600">Reading Time:</span>
+                    <p className="text-gray-800">{selectedBlog.reading_time} min</p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-600">Word Count:</span>
+                    <p className="text-gray-800">{selectedBlog.word_count}</p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-600">SEO Score:</span>
+                    <p className="text-gray-800">{selectedBlog.seo_score}/100</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Categories and Tags */}
+              {(selectedBlog.categories?.length > 0 || selectedBlog.tags?.length > 0) && (
+                <div className="mb-6">
+                  {selectedBlog.categories?.length > 0 && (
+                    <div className="mb-3">
+                      <h4 className="text-sm font-medium text-gray-600 mb-2">Categories</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedBlog.categories.map((category, index) => (
+                          <span key={index} className="text-xs bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                            {category}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedBlog.tags?.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-600 mb-2">Tags</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedBlog.tags.map((tag, index) => (
+                          <span key={index} className="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded-full">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Blog Content */}
+              <div className="prose prose-lg max-w-none">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Content</h3>
+                <div 
+                  className="text-gray-700 leading-relaxed whitespace-pre-wrap"
+                  dangerouslySetInnerHTML={{ __html: selectedBlog.content.replace(/\n/g, '<br>') }}
+                />
+              </div>
+
+              {/* Excerpt if available */}
+              {selectedBlog.excerpt && (
+                <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-600 mb-2">Excerpt</h4>
+                  <p className="text-gray-700 text-sm leading-relaxed">{selectedBlog.excerpt}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end space-x-3 p-6 border-t bg-gray-50">
+              <button
+                onClick={handleCloseBlogModal}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  handleCloseBlogModal()
+                  handleEditBlog(selectedBlog)
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+              >
+                <Edit className="w-4 h-4" />
+                <span>Edit Blog</span>
               </button>
             </div>
           </div>
