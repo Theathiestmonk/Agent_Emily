@@ -152,6 +152,65 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const sendPasswordResetCode = async (email) => {
+    try {
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`
+      })
+
+      if (error) {
+        return { 
+          success: false, 
+          error: error.message 
+        }
+      }
+
+      return { success: true }
+    } catch (error) {
+      return { 
+        success: false, 
+        error: 'Failed to send verification code' 
+      }
+    }
+  }
+
+  const resetPassword = async (email, otp, newPassword) => {
+    try {
+      // First verify the OTP with type 'recovery'
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        email: email,
+        token: otp,
+        type: 'recovery'
+      })
+
+      if (verifyError) {
+        return { 
+          success: false, 
+          error: verifyError.message 
+        }
+      }
+
+      // Update the password
+      const { data: updateData, error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      })
+
+      if (updateError) {
+        return { 
+          success: false, 
+          error: updateError.message 
+        }
+      }
+
+      return { success: true }
+    } catch (error) {
+      return { 
+        success: false, 
+        error: 'Failed to reset password' 
+      }
+    }
+  }
+
   const value = {
     isAuthenticated,
     user,
@@ -159,7 +218,9 @@ export function AuthProvider({ children }) {
     login,
     register,
     loginWithGoogle,
-    logout
+    logout,
+    sendPasswordResetCode,
+    resetPassword
   }
 
   return (

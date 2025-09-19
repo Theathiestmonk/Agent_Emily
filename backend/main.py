@@ -610,6 +610,64 @@ async def refresh_token(refresh_token: str):
             detail="Invalid refresh token"
         )
 
+@app.post("/auth/forgot-password")
+async def forgot_password(email: str):
+    """Send password reset OTP to user's email"""
+    try:
+        response = supabase.auth.reset_password_for_email(email, {
+            "redirect_to": f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/reset-password"
+        })
+        
+        if response.error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=response.error.message
+            )
+        
+        return {"message": "Verification code sent to your email"}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send verification code: {str(e)}"
+        )
+
+@app.post("/auth/reset-password")
+async def reset_password(email: str, otp: str, new_password: str):
+    """Reset user password using OTP verification"""
+    try:
+        # Verify OTP with type 'recovery'
+        verify_response = supabase.auth.verify_otp({
+            "email": email,
+            "token": otp,
+            "type": "recovery"
+        })
+        
+        if verify_response.error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=verify_response.error.message
+            )
+        
+        # Update password
+        update_response = supabase.auth.update_user({
+            "password": new_password
+        })
+        
+        if update_response.error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=update_response.error.message
+            )
+        
+        return {"message": "Password updated successfully"}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset password: {str(e)}"
+        )
+
 # Onboarding endpoints
 @app.get("/onboarding/profile")
 async def get_user_profile(current_user: User = Depends(get_current_user)):
