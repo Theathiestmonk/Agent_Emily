@@ -632,6 +632,44 @@ async def forgot_password(email: str):
             detail=f"Failed to send verification code: {str(e)}"
         )
 
+@app.get("/auth/check-email")
+async def check_email_exists(email: str):
+    """Check if an email already exists in the system"""
+    try:
+        # Try to get user by email using admin API
+        try:
+            # This will raise an exception if user doesn't exist
+            user_response = supabase.auth.admin.get_user_by_email(email)
+            if user_response and user_response.user:
+                return {"exists": True, "message": "Email already exists"}
+        except Exception as user_error:
+            # Check if it's a "user not found" error
+            error_message = str(user_error).lower()
+            if "user not found" in error_message or "not found" in error_message:
+                return {"exists": False, "message": "Email is available"}
+            else:
+                # Some other error occurred, log it and try alternative approach
+                logger.warning(f"Admin API error: {user_error}")
+                
+                # Alternative: Try to list users and check manually
+                try:
+                    users_response = supabase.auth.admin.list_users()
+                    email_exists = any(user.email == email for user in users_response)
+                    if email_exists:
+                        return {"exists": True, "message": "Email already exists"}
+                    else:
+                        return {"exists": False, "message": "Email is available"}
+                except Exception as list_error:
+                    logger.error(f"List users error: {list_error}")
+                    raise list_error
+            
+    except Exception as e:
+        logger.error(f"Error checking email: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to check email availability"
+        )
+
 @app.post("/auth/reset-password")
 async def reset_password(email: str, otp: str, new_password: str):
     """Reset user password using OTP verification"""

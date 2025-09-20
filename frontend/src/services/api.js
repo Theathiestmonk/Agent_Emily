@@ -35,6 +35,7 @@ export const authAPI = {
   register: (email, password, name) => api.post('/auth/register', { email, password, name }),
   verifyToken: () => api.get('/auth/verify'),
   logout: () => api.post('/auth/logout'),
+  checkEmail: (email) => api.get(`/auth/check-email?email=${encodeURIComponent(email)}`),
 }
 
 export default api

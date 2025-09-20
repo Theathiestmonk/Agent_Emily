@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { authAPI } from '../services/api'
 
 function SignUp() {
   const [formData, setFormData] = useState({
@@ -15,9 +16,69 @@ function SignUp() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [emailValidation, setEmailValidation] = useState({
+    isValidating: false,
+    isValid: null,
+    message: ''
+  })
   
   const { register, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
+
+  // Email validation function
+  const validateEmail = async (email) => {
+    if (!email || !email.includes('@')) {
+      setEmailValidation({
+        isValidating: false,
+        isValid: null,
+        message: ''
+      })
+      return
+    }
+
+    setEmailValidation({
+      isValidating: true,
+      isValid: null,
+      message: ''
+    })
+
+    try {
+      const response = await authAPI.checkEmail(email)
+      setEmailValidation({
+        isValidating: false,
+        isValid: !response.data.exists,
+        message: response.data.message
+      })
+    } catch (error) {
+      setEmailValidation({
+        isValidating: false,
+        isValid: null,
+        message: 'Error checking email availability'
+      })
+    }
+  }
+
+  // Debounced email validation
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (formData.email) {
+        validateEmail(formData.email)
+      }
+    }, 500) // 500ms delay
+
+    return () => clearTimeout(timeoutId)
+  }, [formData.email])
+
+  // Clear password fields when email validation fails
+  useEffect(() => {
+    if (emailValidation.isValid === false) {
+      setFormData(prev => ({
+        ...prev,
+        password: '',
+        confirmPassword: ''
+      }))
+    }
+  }, [emailValidation.isValid])
 
   const handleChange = (e) => {
     setFormData({
@@ -34,18 +95,35 @@ function SignUp() {
     setError('')
     setSuccessMessage('')
 
-    // Validate password confirmation
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
+    // Check if email is valid and available
+    if (emailValidation.isValid === false) {
+      setError('Please use a different email address')
       setLoading(false)
       return
     }
 
-    // Validate password length
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters long')
+    // If email is still being validated, wait for it
+    if (emailValidation.isValidating) {
+      setError('Please wait while we check email availability')
       setLoading(false)
       return
+    }
+
+    // Only validate passwords if email is valid and available
+    if (emailValidation.isValid === true) {
+      // Validate password confirmation
+      if (formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match')
+        setLoading(false)
+        return
+      }
+
+      // Validate password length
+      if (formData.password.length < 6) {
+        setError('Password must be at least 6 characters long')
+        setLoading(false)
+        return
+      }
     }
 
     try {
@@ -130,22 +208,63 @@ function SignUp() {
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email address
               </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors bg-blue-50"
-                placeholder="Enter your email"
-              />
+              <div className="relative">
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={handleChange}
+                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors bg-blue-50 ${
+                    emailValidation.isValid === true 
+                      ? 'border-green-300 focus:ring-green-500' 
+                      : emailValidation.isValid === false 
+                      ? 'border-red-300 focus:ring-red-500' 
+                      : 'border-gray-200'
+                  }`}
+                  placeholder="Enter your email"
+                />
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  {emailValidation.isValidating && (
+                    <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
+                  )}
+                  {!emailValidation.isValidating && emailValidation.isValid === true && (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  )}
+                  {!emailValidation.isValidating && emailValidation.isValid === false && (
+                    <XCircle className="h-5 w-5 text-red-500" />
+                  )}
+                </div>
+              </div>
+              {/* Email validation message */}
+              {emailValidation.message && (
+                <p className={`mt-2 text-sm ${
+                  emailValidation.isValid === true 
+                    ? 'text-green-600' 
+                    : emailValidation.isValid === false 
+                    ? 'text-red-600' 
+                    : 'text-gray-500'
+                }`}>
+                  {emailValidation.message}
+                </p>
+              )}
             </div>
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className={`block text-sm font-medium mb-2 ${
+                emailValidation.isValid === false || emailValidation.isValidating
+                  ? 'text-gray-400'
+                  : 'text-gray-700'
+              }`}>
                 Password
+                {emailValidation.isValid === false && (
+                  <span className="text-xs text-gray-400 ml-1">(Blocked - email exists)</span>
+                )}
+                {emailValidation.isValidating && (
+                  <span className="text-xs text-gray-400 ml-1">(Checking email...)</span>
+                )}
               </label>
               <div className="relative">
                 <input
@@ -155,23 +274,54 @@ function SignUp() {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors bg-blue-50"
-                  placeholder="Create a password"
+                  disabled={emailValidation.isValid === false || emailValidation.isValidating}
+                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors ${
+                    emailValidation.isValid === false || emailValidation.isValidating
+                      ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-50 border-gray-200'
+                  }`}
+                  placeholder={
+                    emailValidation.isValid === false 
+                      ? "Email already exists - password not needed"
+                      : emailValidation.isValidating
+                      ? "Checking email availability..."
+                      : "Create a password"
+                  }
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  disabled={emailValidation.isValid === false || emailValidation.isValidating}
+                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${
+                    emailValidation.isValid === false || emailValidation.isValidating
+                      ? 'text-gray-300 cursor-not-allowed'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {emailValidation.isValid === false && (
+                <p className="mt-1 text-sm text-gray-500">
+                  Please use a different email address to continue
+                </p>
+              )}
             </div>
 
             {/* Confirm Password Field */}
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="confirmPassword" className={`block text-sm font-medium mb-2 ${
+                emailValidation.isValid === false || emailValidation.isValidating
+                  ? 'text-gray-400'
+                  : 'text-gray-700'
+              }`}>
                 Confirm Password
+                {emailValidation.isValid === false && (
+                  <span className="text-xs text-gray-400 ml-1">(Blocked - email exists)</span>
+                )}
+                {emailValidation.isValidating && (
+                  <span className="text-xs text-gray-400 ml-1">(Checking email...)</span>
+                )}
               </label>
               <div className="relative">
                 <input
@@ -181,13 +331,29 @@ function SignUp() {
                   required
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors bg-blue-50"
-                  placeholder="Confirm your password"
+                  disabled={emailValidation.isValid === false || emailValidation.isValidating}
+                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors ${
+                    emailValidation.isValid === false || emailValidation.isValidating
+                      ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-50 border-gray-200'
+                  }`}
+                  placeholder={
+                    emailValidation.isValid === false 
+                      ? "Email already exists - password not needed"
+                      : emailValidation.isValidating
+                      ? "Checking email availability..."
+                      : "Confirm your password"
+                  }
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  disabled={emailValidation.isValid === false || emailValidation.isValidating}
+                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${
+                    emailValidation.isValid === false || emailValidation.isValidating
+                      ? 'text-gray-300 cursor-not-allowed'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
                 >
                   {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
@@ -211,7 +377,7 @@ function SignUp() {
             {/* Sign Up Button */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || emailValidation.isValidating || emailValidation.isValid === false}
               className="w-full bg-gradient-to-r from-pink-500 to-pink-600 text-white py-3 px-4 rounded-lg font-semibold hover:from-pink-600 hover:to-pink-700 focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Creating Account...' : 'Create Account'}
