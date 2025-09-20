@@ -7,6 +7,7 @@ import { contentAPI } from '../services/content'
 import mediaService from '../services/media'
 import { supabase } from '../lib/supabase'
 import ContentProgress from './ContentProgress'
+import ContentGenerationModal from './ContentGenerationModal'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import SideNavbar from './SideNavbar'
@@ -66,7 +67,12 @@ const ContentDashboard = () => {
     loading, 
     fetchScheduledContent, 
     updateContentInCache,
-    getCacheStatus 
+    getCacheStatus,
+    clearCache,
+    setScheduledContent,
+    setContentDate,
+    setLastFetchTime,
+    setCacheValid
   } = useContentCache()
   const navigate = useNavigate()
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
@@ -75,6 +81,8 @@ const ContentDashboard = () => {
   const [generationStatus, setGenerationStatus] = useState(null) // 'success', 'error', null
   const [generationMessage, setGenerationMessage] = useState('')
   const [showProgress, setShowProgress] = useState(false)
+  const [showGenerationModal, setShowGenerationModal] = useState(false)
+  const [fetchingFreshData, setFetchingFreshData] = useState(false)
   const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
   const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]) // Current date in YYYY-MM-DD format
@@ -153,8 +161,11 @@ const ContentDashboard = () => {
   // Images are now loaded immediately when content is fetched, so this useEffect is no longer needed
 
   useEffect(() => {
-    fetchContentByDate(selectedDate)
-  }, [selectedDate])
+    // Only fetch content by date if not currently generating
+    if (!generating) {
+      fetchContentByDate(selectedDate)
+    }
+  }, [selectedDate, generating])
 
   const fetchData = async (forceRefresh = false) => {
     try {
@@ -168,9 +179,14 @@ const ContentDashboard = () => {
         console.log('Platform values in content:', result.data.map(item => ({ id: item.id, platform: item.platform })))
         console.log('Data source:', result.fromCache ? 'cache' : 'API')
         
-        // Load images immediately for all scheduled content
+        // Load images immediately for all scheduled content (with error handling)
         for (const content of result.data) {
-          await fetchPostImages(content.id)
+          try {
+            await fetchPostImages(content.id)
+          } catch (error) {
+            // Silently handle image loading errors to prevent console spam
+            console.debug('Image loading failed for content:', content.id)
+          }
         }
       }
     } catch (error) {
@@ -188,9 +204,14 @@ const ContentDashboard = () => {
         setDateContent(result.data)
         console.log('Date content items:', result.data)
         
-        // Load images immediately for all date content
+        // Load images immediately for all date content (with error handling)
         for (const content of result.data) {
-          await fetchPostImages(content.id)
+          try {
+            await fetchPostImages(content.id)
+          } catch (error) {
+            // Silently handle image loading errors to prevent console spam
+            console.debug('Image loading failed for content:', content.id)
+          }
         }
       } else {
         setDateContent([])
@@ -201,50 +222,64 @@ const ContentDashboard = () => {
     }
   }
 
+  const handleProgressComplete = async () => {
+    console.log('Content generation completed, fetching fresh data...')
+    setShowProgress(false)
+    setGenerating(false)
+    setShowGenerationModal(false)
+    setFetchingFreshData(true) // Start loading state
+    
+    // Clear cache completely to ensure fresh data
+    clearCache()
+    
+    // Wait a moment for the backend to finish storing the content
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    
+    // Fetch fresh data directly from API (bypassing cache)
+    try {
+      const result = await contentAPI.getScheduledContent()
+      if (result.data) {
+        // Update the cache with fresh data
+        setScheduledContent(result.data)
+        setContentDate(result.date)
+        setLastFetchTime(Date.now())
+        setCacheValid(true)
+        
+        // Also update date content if we're viewing today
+        if (selectedDate === new Date().toISOString().split('T')[0]) {
+          setDateContent(result.data)
+        }
+        
+        setFetchingFreshData(false) // End loading state
+        showSuccess('Content Generated!', 'Your new content is ready to view.')
+      }
+    } catch (error) {
+      console.error('Error fetching fresh content:', error)
+      setFetchingFreshData(false) // End loading state
+      // Fallback to page refresh if API fails
+      window.location.reload()
+    }
+  }
+
   const handleGenerateContent = async () => {
     try {
       setGenerating(true)
       setGenerationStatus(null)
       setGenerationMessage('')
-      
-      // Show loading notification
-      showLoading(
-        'Content Generation Started',
-        'AI is creating your content. This may take a few minutes...',
-        {
-          details: 'You can continue using the app while content is being generated.',
-          persistent: true
-        }
-      )
+      setShowGenerationModal(true)
+      setFetchingFreshData(false) // Reset data fetching state
       
       const result = await contentAPI.generateContent()
       
       if (result.data) {
-        setGenerationStatus('success')
-        setGenerationMessage('Content generation started! This may take a few minutes. The page will refresh automatically when complete.')
-        setShowProgress(true)
-        
-        // Refresh data after a short delay
-        setTimeout(async () => {
-          await fetchData()
-        }, 2000)
-        
-        // Auto-refresh every 10 seconds while generating
-        const refreshInterval = setInterval(async () => {
-          await fetchData()
-          // Stop refreshing if we have new content
-          if (scheduledContent.length > 0) {
-            clearInterval(refreshInterval)
-          }
-        }, 10000)
-        
-        // Clear interval after 5 minutes
-        setTimeout(() => {
-          clearInterval(refreshInterval)
-        }, 300000)
+        // Don't set generating to false here - let the modal handle it
+        // The modal will call onComplete when generation is done
         
       } else if (result.error) {
         setGenerationStatus('error')
+        setShowGenerationModal(false)
+        setGenerating(false)
+        
         let errorMessage = 'Failed to start content generation. Please try again.'
         
         if (result.error.message?.includes('onboarding')) {
@@ -261,10 +296,10 @@ const ContentDashboard = () => {
     } catch (error) {
       console.error('Error generating content:', error)
       setGenerationStatus('error')
+      setShowGenerationModal(false)
+      setGenerating(false)
       setGenerationMessage('An unexpected error occurred. Please try again.')
       showError('Content Generation Error', 'An unexpected error occurred. Please try again.')
-    } finally {
-      setGenerating(false)
     }
   }
 
@@ -273,6 +308,7 @@ const ContentDashboard = () => {
       setGenerating(true)
       setGenerationStatus(null)
       setGenerationMessage('')
+      setShowGenerationModal(true)
       
       const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -298,24 +334,21 @@ const ContentDashboard = () => {
       const data = await response.json()
       
       if (data.success) {
-        setGenerationStatus('success')
-        setGenerationMessage('Weekly content generation triggered! This will generate content for all users. Refreshing...')
-        setShowProgress(true)
-        
-        // Refresh data after a short delay
-        setTimeout(async () => {
-          await fetchData(true) // Force refresh from API
-        }, 3000)
+        // Don't set generating to false here - let the modal handle it
       } else {
         setGenerationStatus('error')
+        setShowGenerationModal(false)
+        setGenerating(false)
         setGenerationMessage(data.message || 'Weekly generation failed')
+        showError('Weekly Generation Failed', data.message || 'Weekly generation failed')
       }
     } catch (error) {
       console.error('Error triggering weekly generation:', error)
       setGenerationStatus('error')
-      setGenerationMessage('Weekly generation failed. Please try again.')
-    } finally {
+      setShowGenerationModal(false)
       setGenerating(false)
+      setGenerationMessage('Weekly generation failed. Please try again.')
+      showError('Weekly Generation Error', 'Weekly generation failed. Please try again.')
     }
   }
 
@@ -331,7 +364,10 @@ const ContentDashboard = () => {
 
   // Use date-specific content if available, otherwise fall back to scheduled content
   // Only fall back to scheduled content if we're viewing today's date
-  const contentToDisplay = selectedDate === new Date().toISOString().split('T')[0] 
+  // Hide content during generation and data fetching to prevent showing old/incomplete content
+  const contentToDisplay = (generating || fetchingFreshData)
+    ? [] 
+    : selectedDate === new Date().toISOString().split('T')[0] 
     ? (dateContent.length > 0 ? dateContent : scheduledContent)
     : dateContent
   
@@ -489,30 +525,6 @@ const ContentDashboard = () => {
   }
 
   // Remove the early return for loading - we'll handle it in the main content area
-
-  const handleProgressComplete = () => {
-    setShowProgress(false)
-    setGenerationStatus('success')
-    setGenerationMessage('Content generation completed! Your new content is ready.')
-    
-    // Show success notification
-    showContentGeneration(
-      'Content Generation Complete! 🎉',
-      'Your AI-generated content is ready to view and manage.',
-      {
-        details: 'Click on the Content tab to see your new campaigns and posts.',
-        actions: [
-          {
-            label: 'View Content',
-            primary: true,
-            onClick: () => navigate('/content')
-          }
-        ]
-      }
-    )
-    
-    fetchData() // Refresh the data
-  }
 
   const handlePostContent = async (content) => {
     try {
@@ -734,14 +746,11 @@ const ContentDashboard = () => {
 
   const fetchPostImages = async (postId) => {
     try {
-      console.log('🔄 Fetching images for post:', postId)
       const result = await mediaService.getPostImages(postId)
-      console.log('🔄 API result:', result)
       
       if (result.images && result.images.length > 0) {
         // Store the latest image for this post
         const latestImage = result.images[0] // Assuming we want the latest one
-        console.log('🖼️ Latest image data:', latestImage)
         
         setGeneratedImages(prev => {
           const newImages = {
@@ -754,14 +763,14 @@ const ContentDashboard = () => {
               is_approved: latestImage.is_approved
             }
           }
-          console.log('🖼️ Updated generated images:', newImages)
           return newImages
         })
-      } else {
-        console.log('⚠️ No images found for post:', postId)
       }
     } catch (error) {
-      console.error('Error fetching post images:', error)
+      // Only log errors that are not 404 (Post not found) to reduce console spam
+      if (!error.message?.includes('404') && !error.message?.includes('Post not found')) {
+        console.error('Error fetching post images:', error)
+      }
     }
   }
 
@@ -1035,9 +1044,16 @@ const ContentDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
-      {/* Progress Bar */}
-      <ContentProgress 
-        isVisible={showProgress} 
+      {/* Content Generation Modal */}
+      <ContentGenerationModal 
+        isVisible={showGenerationModal} 
+        onClose={() => {
+          setShowGenerationModal(false)
+          setGenerating(false)
+          setFetchingFreshData(false)
+          setGenerationMessage('')
+          setGenerationStatus(null)
+        }}
         onComplete={handleProgressComplete}
       />
       
@@ -1101,15 +1117,19 @@ const ContentDashboard = () => {
                 </button>
                 <button
                   onClick={handleGenerateContent}
-                  disabled={generating}
+                  disabled={generating || fetchingFreshData}
                   className="flex items-center space-x-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
                 >
                   {generating ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : fetchingFreshData ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
                     <Sparkles className="w-4 h-4" />
                   )}
-                  <span>{generating ? 'Generating...' : 'Generate Content'}</span>
+                  <span>
+                    {generating ? 'Generating...' : fetchingFreshData ? 'Loading...' : 'Generate Content'}
+                  </span>
                 </button>
                 
                 <button
@@ -1170,19 +1190,11 @@ const ContentDashboard = () => {
             <MainContentLoader message="Loading your content..." />
           ) : (
             <>
-              {/* Status Message */}
-          {generationStatus && (
-            <div className={`mb-6 p-4 rounded-lg ${
-              generationStatus === 'success' 
-                ? 'bg-green-50 border border-green-200 text-green-800' 
-                : 'bg-red-50 border border-red-200 text-red-800'
-            }`}>
+              {/* Status Message - Only show error messages */}
+          {generationStatus === 'error' && (
+            <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800">
               <div className="flex items-center">
-                {generationStatus === 'success' ? (
-                  <Sparkles className="w-5 h-5 mr-2" />
-                ) : (
-                  <RefreshCw className="w-5 h-5 mr-2" />
-                )}
+                <RefreshCw className="w-5 h-5 mr-2" />
                 <span className="font-medium">{generationMessage}</span>
               </div>
             </div>
@@ -1207,20 +1219,29 @@ const ContentDashboard = () => {
                   }
                 </h3>
                 <p className="text-gray-500 mb-6">
-                  {selectedDate === new Date().toISOString().split('T')[0] 
+                  {generating 
+                    ? "Content generation in progress. Please wait..."
+                    : fetchingFreshData
+                    ? "Loading your new content..."
+                    : selectedDate === new Date().toISOString().split('T')[0] 
                     ? "Generate content to see it displayed here" 
                     : "Try selecting a different date or generate content for this date"
                   }
                 </p>
                 <button
                   onClick={handleGenerateContent}
-                  disabled={generating}
+                  disabled={generating || fetchingFreshData}
                   className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2 mx-auto"
                 >
                   {generating ? (
                     <>
                       <RefreshCw className="w-5 h-5 animate-spin" />
                       <span>Generating Content...</span>
+                    </>
+                  ) : fetchingFreshData ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Loading Content...</span>
                     </>
                   ) : (
                     <>
