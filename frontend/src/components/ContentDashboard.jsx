@@ -591,6 +591,8 @@ const ContentDashboard = () => {
   }
 
   const postToInstagram = async (content) => {
+    let oauthError = null
+    
     try {
       const authToken = await getAuthToken()
       
@@ -601,33 +603,83 @@ const ContentDashboard = () => {
         console.log('📸 Including image in Instagram post:', imageUrl)
       }
       
-      const response = await fetch(`${API_BASE_URL}/connections/instagram/post`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({
-          message: content.content,
-          title: content.title,
-          hashtags: content.hashtags || [],
-          content_id: content.id,
-          image_url: imageUrl
-        })
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`HTTP error! status: ${response.status}: ${errorText}`)
+      const postData = {
+        message: content.content,
+        title: content.title,
+        hashtags: content.hashtags || [],
+        content_id: content.id,
+        image_url: imageUrl
       }
+      
+      // Try OAuth method first (original endpoint)
+      try {
+        console.log('🔄 Trying Instagram OAuth posting...')
+        const response = await fetch(`${API_BASE_URL}/connections/instagram/post`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify(postData)
+        })
 
-      const result = await response.json()
-      console.log('Instagram post result:', result)
+        if (response.ok) {
+          const result = await response.json()
+          console.log('✅ Instagram OAuth post successful:', result)
+          showSuccess(`Successfully posted to Instagram!`)
+          updateContentInCache(content.id, { status: 'published' })
+          return
+        } else {
+          const errorText = await response.text()
+          console.log('❌ Instagram OAuth failed:', response.status, errorText)
+          oauthError = new Error(`OAuth method failed: ${response.status}: ${errorText}`)
+          // Continue to try token method
+        }
+      } catch (error) {
+        console.log('❌ Instagram OAuth error:', error)
+        oauthError = error
+        // Continue to try token method
+      }
       
-      showSuccess(`Successfully posted to Instagram!`)
-      
-      // Update the content status to published in cache
-      updateContentInCache(content.id, { status: 'published' })
+      // Try token method (new endpoint) - but this will fail for Instagram Basic Display API
+      try {
+        console.log('🔄 Trying Instagram token posting...')
+        const response = await fetch(`${API_BASE_URL}/api/social-media/instagram/post`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify(postData)
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          console.log('✅ Instagram token post successful:', result)
+          showSuccess(`Successfully posted to Instagram!`)
+          updateContentInCache(content.id, { status: 'published' })
+          return
+        } else {
+          const errorText = await response.text()
+          const errorData = JSON.parse(errorText)
+          
+          // Check if it's the Basic Display API limitation
+          if (errorData.detail && errorData.detail.includes('Basic Display API does not support posting')) {
+            throw new Error('Instagram Basic Display API (token method) is read-only and cannot post content. Please use OAuth connection method for posting to Instagram.')
+          }
+          
+          throw new Error(`Token method failed: ${response.status}: ${errorText}`)
+        }
+      } catch (tokenError) {
+        console.log('❌ Instagram token error:', tokenError)
+        
+        // If OAuth failed and token method also failed, show appropriate message
+        if (oauthError) {
+          throw new Error(`Instagram posting failed. OAuth method: ${oauthError.message}. Token method: ${tokenError.message}`)
+        } else {
+          throw tokenError
+        }
+      }
       
     } catch (error) {
       console.error('Error posting to Instagram:', error)
@@ -986,8 +1038,8 @@ const ContentDashboard = () => {
       // Check if URL already has query parameters
       const separator = imageUrl.includes('?') ? '&' : '?'
       // Add resize transformation to create a smaller, faster-loading thumbnail
-      // Using 100x100 with 70% quality for maximum speed
-      return `${imageUrl}${separator}width=100&height=100&resize=cover&quality=70&format=webp`
+      // Using 50x50 with 60% quality for maximum speed
+      return `${imageUrl}${separator}width=50&height=50&resize=cover&quality=60&format=webp`
     }
     
     // For non-generated folder URLs, return null to trigger image generation
@@ -1003,8 +1055,40 @@ const ContentDashboard = () => {
         imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
       // Check if URL already has query parameters
       const separator = imageUrl.includes('?') ? '&' : '?'
-      // Using 50x50 with 50% quality for ultra fast loading in collapsed cards
-      return `${imageUrl}${separator}width=50&height=50&resize=cover&quality=50&format=webp`
+      // Using 30x30 with 40% quality for ultra fast loading in collapsed cards
+      return `${imageUrl}${separator}width=30&height=30&resize=cover&quality=40&format=webp`
+    }
+    
+    // For non-generated folder URLs, return null to trigger image generation
+    return null
+  }
+
+  // Get medium thumbnail for expanded cards (balanced size and quality)
+  const getMediumThumbnailUrl = (imageUrl) => {
+    if (!imageUrl) return null
+    
+    // If it's a Supabase storage URL from the generated or user-uploads folder, add resize transformation for medium thumbnail
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
+      // Check if URL already has query parameters
+      const separator = imageUrl.includes('?') ? '&' : '?'
+      // Using 200x200 with 70% quality for good balance of size and quality
+      return `${imageUrl}${separator}width=200&height=200&resize=cover&quality=70&format=webp`
+    }
+    
+    // For non-generated folder URLs, return null to trigger image generation
+    return null
+  }
+
+  // Get full-size image URL for detailed viewing
+  const getFullSizeImageUrl = (imageUrl) => {
+    if (!imageUrl) return null
+    
+    // If it's a Supabase storage URL, return the original URL for full quality
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
+      // Return original URL without transformations for full quality
+      return imageUrl
     }
     
     // For non-generated folder URLs, return null to trigger image generation
@@ -1284,7 +1368,7 @@ const ContentDashboard = () => {
                                 </div>
                               )}
                               <img 
-                                src={getThumbnailUrl(generatedImages[content.id].image_url)} 
+                                src={getMediumThumbnailUrl(generatedImages[content.id].image_url)} 
                                 alt="Generated content thumbnail" 
                                 className="w-full h-48 object-cover rounded-lg"
                                 loading="lazy"
@@ -1293,7 +1377,9 @@ const ContentDashboard = () => {
                                 onLoadStart={() => startImageLoading(content.id)}
                                 style={{
                                   opacity: imageLoading.has(content.id) ? 0 : 1,
-                                  transition: 'opacity 0.3s ease-in-out'
+                                  filter: imageLoading.has(content.id) ? 'blur(8px)' : 'blur(0px)',
+                                  transform: imageLoading.has(content.id) ? 'scale(1.05)' : 'scale(1)',
+                                  transition: 'all 0.6s ease-in-out'
                                 }}
                               />
                             </div>
@@ -1440,7 +1526,9 @@ const ContentDashboard = () => {
                                         onLoadStart={() => startImageLoading(content.id)}
                                         style={{
                                           opacity: imageLoading.has(content.id) ? 0 : 1,
-                                          transition: 'opacity 0.2s ease-in-out'
+                                          filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
+                                          transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
+                                          transition: 'all 0.5s ease-in-out'
                                         }}
                                       />
                                     )
@@ -1703,7 +1791,7 @@ const ContentDashboard = () => {
                             </div>
                           )}
                           <img 
-                            src={getThumbnailUrl(generatedImages[editForm.id].image_url)} 
+                            src={getMediumThumbnailUrl(generatedImages[editForm.id].image_url)} 
                             alt="Current content thumbnail" 
                             className="w-full h-32 object-cover rounded-lg"
                             loading="lazy"
@@ -1712,7 +1800,9 @@ const ContentDashboard = () => {
                             onLoadStart={() => startImageLoading(editForm.id)}
                             style={{
                               opacity: imageLoading.has(editForm.id) ? 0 : 1,
-                              transition: 'opacity 0.3s ease-in-out'
+                              filter: imageLoading.has(editForm.id) ? 'blur(8px)' : 'blur(0px)',
+                              transform: imageLoading.has(editForm.id) ? 'scale(1.05)' : 'scale(1)',
+                              transition: 'all 0.6s ease-in-out'
                             }}
                           />
                         </div>

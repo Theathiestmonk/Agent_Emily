@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends, Header, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -1070,3 +1070,87 @@ async def fetch_linkedin_posts_new(connection: dict, limit: int) -> List[Dict[st
     """Fetch latest posts from LinkedIn (placeholder)"""
     print("LinkedIn posts not implemented yet")
     return []
+
+@router.post("/instagram/post")
+async def post_to_instagram_token(
+    post_data: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Post content to Instagram using token-based authentication"""
+    try:
+        print(f"📱 Instagram token post request from user: {current_user.id}")
+        print(f"📝 Post data: {post_data}")
+        
+        # Get user's Instagram connection from social_media_connections table
+        supabase_client = get_supabase_client()
+        response = supabase_client.table("social_media_connections").select("*").eq(
+            "user_id", current_user.id
+        ).eq("platform", "instagram").eq("is_active", True).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active Instagram connection found. Please connect your Instagram account first."
+            )
+        
+        connection = response.data[0]
+        print(f"🔗 Found Instagram connection: {connection['id']}")
+        
+        # Decrypt the access token
+        try:
+            access_token = decrypt_token(connection['access_token'])
+            print(f"🔓 Decrypted access token: {access_token[:20]}...")
+        except Exception as e:
+            print(f"❌ Error decrypting token: {e}")
+            # Check if the token is already in plaintext (not encrypted)
+            if connection.get('access_token', '').startswith('EAAB') or connection.get('access_token', '').startswith('IG'):
+                print("🔓 Token appears to be unencrypted, using directly")
+                access_token = connection['access_token']
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to decrypt access token. Please reconnect your Instagram account."
+                )
+        
+        # Prepare the post message
+        message = post_data.get('message', '')
+        title = post_data.get('title', '')
+        hashtags = post_data.get('hashtags', [])
+        image_url = post_data.get('image_url', '')
+        
+        # Combine title, message, and hashtags
+        full_message = ""
+        if title:
+            full_message += f"{title}\n\n"
+        full_message += message
+        if hashtags:
+            hashtag_string = " ".join([f"#{tag}" for tag in hashtags])
+            full_message += f"\n\n{hashtag_string}"
+        
+        print(f"📄 Full message to post: {full_message}")
+        print(f"🖼️ Image URL: {image_url}")
+        
+        # Get Instagram account ID
+        instagram_id = connection.get('account_id')
+        if not instagram_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Instagram account ID not found. Please reconnect your Instagram account."
+            )
+        
+        # For Instagram Basic Display API, we can only read data, not post
+        # Instagram Basic Display API doesn't support posting - only reading
+        # We need to inform the user about this limitation
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Instagram Basic Display API does not support posting content. Please use OAuth connection method for posting to Instagram. The Basic Display API is read-only and only allows you to view your Instagram media."
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error posting to Instagram: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to post to Instagram: {str(e)}"
+        )

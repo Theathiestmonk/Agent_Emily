@@ -404,6 +404,58 @@ const AdsDashboard = () => {
     })
   }
 
+  // Get thumbnail URL for faster loading
+  const getThumbnailUrl = (imageUrl) => {
+    if (!imageUrl) return null
+    
+    // If it's a Supabase storage URL from the generated or user-uploads folder, add resize transformation for thumbnail
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
+      // Check if URL already has query parameters
+      const separator = imageUrl.includes('?') ? '&' : '?'
+      // Add resize transformation to create a smaller, faster-loading thumbnail
+      // Using 50x50 with 60% quality for maximum speed
+      return `${imageUrl}${separator}width=50&height=50&resize=cover&quality=60&format=webp`
+    }
+    
+    // For non-generated folder URLs, return null to trigger image generation
+    return null
+  }
+
+  // Get extra small thumbnail for collapsed cards (ultra fast loading)
+  const getSmallThumbnailUrl = (imageUrl) => {
+    if (!imageUrl) return null
+    
+    // If it's a Supabase storage URL from the generated or user-uploads folder, add resize transformation for very small thumbnail
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
+      // Check if URL already has query parameters
+      const separator = imageUrl.includes('?') ? '&' : '?'
+      // Using 30x30 with 40% quality for ultra fast loading in collapsed cards
+      return `${imageUrl}${separator}width=30&height=30&resize=cover&quality=40&format=webp`
+    }
+    
+    // For non-generated folder URLs, return null to trigger image generation
+    return null
+  }
+
+  // Get medium thumbnail for expanded cards (balanced size and quality)
+  const getMediumThumbnailUrl = (imageUrl) => {
+    if (!imageUrl) return null
+    
+    // If it's a Supabase storage URL from the generated or user-uploads folder, add resize transformation for medium thumbnail
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
+      // Check if URL already has query parameters
+      const separator = imageUrl.includes('?') ? '&' : '?'
+      // Using 200x200 with 70% quality for good balance of size and quality
+      return `${imageUrl}${separator}width=200&height=200&resize=cover&quality=70&format=webp`
+    }
+    
+    // For non-generated folder URLs, return null to trigger image generation
+    return null
+  }
+
   const handleGenerateMedia = async (ad) => {
     try {
       setGeneratingMedia(prev => new Set(prev).add(ad.id))
@@ -742,12 +794,19 @@ const AdsDashboard = () => {
                                   </div>
                                 )}
                                 <img
-                                  src={ad.media_url}
+                                  src={getMediumThumbnailUrl(ad.media_url)}
                                   alt="Ad visual"
                                   className="w-full h-full object-cover"
+                                  loading="lazy"
                                   onLoad={() => handleImageLoad(ad.id)}
                                   onError={() => handleImageError(ad.id)}
                                   onLoadStart={() => startImageLoading(ad.id)}
+                                  style={{
+                                    opacity: imageLoading.has(ad.id) ? 0 : 1,
+                                    filter: imageLoading.has(ad.id) ? 'blur(8px)' : 'blur(0px)',
+                                    transform: imageLoading.has(ad.id) ? 'scale(1.05)' : 'scale(1)',
+                                    transition: 'all 0.6s ease-in-out'
+                                  }}
                                 />
                               </>
                             ) : (
