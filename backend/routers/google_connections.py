@@ -254,28 +254,6 @@ async def google_callback(code: str = None, state: str = None, error: str = None
     """Handle Google OAuth callback"""
     return await handle_google_callback(code, state, error)
 
-@router.get("/auth/google/callback")
-async def google_auth_callback(code: str = None, state: str = None, error: str = None):
-    """Handle Google OAuth callback from /auth/google/callback path"""
-    print(f"🔗 Google OAuth callback received - code: {code[:10] if code else 'None'}..., state: {state[:10] if state else 'None'}..., error: {error}")
-    return await handle_google_callback(code, state, error)
-
-@router.get("/auth/google/callback/redirect")
-async def google_callback_redirect(code: str = None, state: str = None, error: str = None):
-    """Redirect from /auth/google/callback to /callback for compatibility"""
-    from fastapi.responses import RedirectResponse
-    base_url = "https://agent-emily.onrender.com/connections/google/callback"
-    params = []
-    if code:
-        params.append(f"code={code}")
-    if state:
-        params.append(f"state={state}")
-    if error:
-        params.append(f"error={error}")
-    
-    redirect_url = f"{base_url}?{'&'.join(params)}"
-    print(f"🔗 Redirecting to: {redirect_url}")
-    return RedirectResponse(url=redirect_url)
 
 async def handle_google_callback(code: str = None, state: str = None, error: str = None):
     """Handle Google OAuth callback"""
