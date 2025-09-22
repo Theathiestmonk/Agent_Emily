@@ -610,6 +610,102 @@ async def refresh_token(refresh_token: str):
             detail="Invalid refresh token"
         )
 
+@app.post("/auth/forgot-password")
+async def forgot_password(email: str):
+    """Send password reset OTP to user's email"""
+    try:
+        response = supabase.auth.reset_password_for_email(email, {
+            "redirect_to": f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/reset-password"
+        })
+        
+        if response.error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=response.error.message
+            )
+        
+        return {"message": "Verification code sent to your email"}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send verification code: {str(e)}"
+        )
+
+@app.get("/auth/check-email")
+async def check_email_exists(email: str):
+    """Check if an email already exists in the system"""
+    try:
+        # Try to get user by email using admin API
+        try:
+            # This will raise an exception if user doesn't exist
+            user_response = supabase.auth.admin.get_user_by_email(email)
+            if user_response and user_response.user:
+                return {"exists": True, "message": "Email already exists"}
+        except Exception as user_error:
+            # Check if it's a "user not found" error
+            error_message = str(user_error).lower()
+            if "user not found" in error_message or "not found" in error_message:
+                return {"exists": False, "message": "Email is available"}
+            else:
+                # Some other error occurred, log it and try alternative approach
+                logger.warning(f"Admin API error: {user_error}")
+                
+                # Alternative: Try to list users and check manually
+                try:
+                    users_response = supabase.auth.admin.list_users()
+                    email_exists = any(user.email == email for user in users_response)
+                    if email_exists:
+                        return {"exists": True, "message": "Email already exists"}
+                    else:
+                        return {"exists": False, "message": "Email is available"}
+                except Exception as list_error:
+                    logger.error(f"List users error: {list_error}")
+                    raise list_error
+            
+    except Exception as e:
+        logger.error(f"Error checking email: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to check email availability"
+        )
+
+@app.post("/auth/reset-password")
+async def reset_password(email: str, otp: str, new_password: str):
+    """Reset user password using OTP verification"""
+    try:
+        # Verify OTP with type 'recovery'
+        verify_response = supabase.auth.verify_otp({
+            "email": email,
+            "token": otp,
+            "type": "recovery"
+        })
+        
+        if verify_response.error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=verify_response.error.message
+            )
+        
+        # Update password
+        update_response = supabase.auth.update_user({
+            "password": new_password
+        })
+        
+        if update_response.error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=update_response.error.message
+            )
+        
+        return {"message": "Password updated successfully"}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset password: {str(e)}"
+        )
+
 # Onboarding endpoints
 @app.get("/onboarding/profile")
 async def get_user_profile(current_user: User = Depends(get_current_user)):

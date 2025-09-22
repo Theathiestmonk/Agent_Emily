@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 // Emily Digital Marketing Agent - Main App Component
 import Login from './components/Login'
 import SignUp from './components/SignUp'
+import ForgotPassword from './components/ForgotPassword'
 import Dashboard from './components/Dashboard'
 import ContentDashboard from './components/ContentDashboard'
 import ContentCalendar from './components/ContentCalendar'
@@ -72,6 +73,7 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
+        <Route path="/reset-password" element={<ForgotPassword />} />
         <Route 
           path="/dashboard" 
           element={

@@ -113,12 +113,12 @@ function Login() {
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                   Password
                 </label>
-                <button
-                  type="button"
+                <Link
+                  to="/reset-password"
                   className="text-sm text-pink-600 hover:text-pink-700 transition-colors"
                 >
-                  Forgot password?
-                </button>
+                  Reset password?
+                </Link>
               </div>
               <div className="relative">
                 <input

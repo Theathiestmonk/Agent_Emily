@@ -208,7 +208,12 @@ export function ContentCacheProvider({ children }) {
     clearCache,
     getCacheStatus,
     isCacheValid: isCacheValid(),
-    isAllContentCacheValid: isAllContentCacheValid()
+    isAllContentCacheValid: isAllContentCacheValid(),
+    // Expose setters for direct cache manipulation
+    setScheduledContent,
+    setContentDate,
+    setLastFetchTime,
+    setCacheValid
   }
 
   return (
