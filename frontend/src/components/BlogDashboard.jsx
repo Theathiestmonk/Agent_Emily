@@ -285,9 +285,7 @@ const BlogDashboard = () => {
     return <Icon className="w-4 h-4" />
   }
 
-  if (loading) {
-    return <MainContentLoader />
-  }
+  // Remove the early return for loading - we'll handle it in the main content area
 
   // Check if WordPress connections exist - show message in main content area
   const showWordPressConnectionMessage = !wordpressConnections || wordpressConnections.length === 0
@@ -439,7 +437,9 @@ const BlogDashboard = () => {
 
         {/* Main Content Area */}
         <div className="pt-24">
-          {showWordPressConnectionMessage ? (
+          {loading ? (
+            <MainContentLoader message="Loading your blogs..." />
+          ) : showWordPressConnectionMessage ? (
             <div className="p-12 text-center">
               <Globe className="w-16 h-16 text-blue-500 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">Connect to WordPress</h3>
