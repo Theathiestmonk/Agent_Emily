@@ -65,6 +65,24 @@ app.include_router(media_router)
 app.include_router(ads_router)
 app.include_router(blogs_router)
 
+# OAuth callback redirect for Google
+@app.get("/connections/auth/google/callback")
+async def google_oauth_redirect(code: str = None, state: str = None, error: str = None):
+    """Redirect Google OAuth callback to the correct endpoint"""
+    from fastapi.responses import RedirectResponse
+    base_url = "https://agent-emily.onrender.com/connections/google/callback"
+    params = []
+    if code:
+        params.append(f"code={code}")
+    if state:
+        params.append(f"state={state}")
+    if error:
+        params.append(f"error={error}")
+    
+    redirect_url = f"{base_url}?{'&'.join(params)}"
+    print(f"🔗 Redirecting Google OAuth callback to: {redirect_url}")
+    return RedirectResponse(url=redirect_url)
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
