@@ -1147,6 +1147,10 @@ def exchange_code_for_tokens(platform: str, code: str) -> dict:
 
         return exchange_linkedin_code_for_tokens(code)
 
+    elif platform == "twitter":
+
+        return exchange_twitter_code_for_tokens(code)
+
     else:
 
         raise ValueError(f"Unsupported platform: {platform}")
@@ -1399,6 +1403,88 @@ def exchange_linkedin_code_for_tokens(code: str) -> dict:
 
 
 
+def exchange_twitter_code_for_tokens(code: str) -> dict:
+
+    """Exchange Twitter OAuth code for access tokens"""
+
+    import requests
+
+    import base64
+
+    
+
+    twitter_client_id = os.getenv('TWITTER_CLIENT_ID')
+
+    twitter_client_secret = os.getenv('TWITTER_CLIENT_SECRET')
+
+    redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/twitter/callback"
+
+    
+
+    if not twitter_client_id or not twitter_client_secret:
+
+        raise ValueError("Twitter app credentials not configured")
+
+    
+
+    # Create basic auth header for Twitter API
+
+    credentials = f"{twitter_client_id}:{twitter_client_secret}"
+
+    encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+    
+
+    # Exchange code for access token
+
+    token_url = "https://api.twitter.com/2/oauth2/token"
+
+    token_data = {
+
+        'grant_type': 'authorization_code',
+
+        'code': code,
+
+        'redirect_uri': redirect_uri,
+
+        'code_verifier': 'challenge'  # Twitter requires PKCE
+
+    }
+
+    
+
+    headers = {
+
+        'Authorization': f'Basic {encoded_credentials}',
+
+        'Content-Type': 'application/x-www-form-urlencoded'
+
+    }
+
+    
+
+    response = requests.post(token_url, data=token_data, headers=headers)
+
+    response.raise_for_status()
+
+    
+
+    token_response = response.json()
+
+    
+
+    return {
+
+        "access_token": token_response['access_token'],
+
+        "refresh_token": token_response.get('refresh_token', ''),
+
+        "expires_in": token_response.get('expires_in', 7200)
+
+    }
+
+
+
 def get_account_info(platform: str, access_token: str) -> dict:
 
     """Get account information from platform API"""
@@ -1414,6 +1500,10 @@ def get_account_info(platform: str, access_token: str) -> dict:
     elif platform == "linkedin":
 
         return get_linkedin_account_info(access_token)
+
+    elif platform == "twitter":
+
+        return get_twitter_account_info(access_token)
 
     else:
 
@@ -1914,6 +2004,108 @@ def get_linkedin_account_info(access_token: str) -> dict:
     except Exception as e:
 
         print(f"❌ Error getting LinkedIn account info: {e}")
+
+        print(f"❌ Error type: {type(e).__name__}")
+
+        import traceback
+
+        print(f"❌ Traceback: {traceback.format_exc()}")
+
+        return None
+
+
+
+def get_twitter_account_info(access_token: str) -> dict:
+
+    """Get Twitter account information using Twitter API v2"""
+
+    import requests
+
+    
+
+    try:
+
+        print(f"🔍 Getting Twitter account info with token: {access_token[:20]}...")
+
+        
+
+        headers = {
+
+            'Authorization': f'Bearer {access_token}',
+
+            'Content-Type': 'application/json'
+
+        }
+
+        
+
+        # Get user information from Twitter API v2
+
+        user_url = "https://api.twitter.com/2/users/me"
+
+        user_params = {
+
+            'user.fields': 'id,username,name,public_metrics,verified,profile_image_url'
+
+        }
+
+        
+
+        user_response = requests.get(user_url, headers=headers, params=user_params)
+
+        print(f"📊 Twitter user response status: {user_response.status_code}")
+
+        
+
+        if user_response.status_code == 200:
+
+            user_data = user_response.json()
+
+            print(f"✅ Twitter user data: {user_data}")
+
+            
+
+            if 'data' in user_data:
+
+                user_info = user_data['data']
+
+                return {
+
+                    "account_id": user_info['id'],
+
+                    "account_name": user_info['username'],
+
+                    "display_name": user_info['name'],
+
+                    "profile_picture": user_info.get('profile_image_url', ''),
+
+                    "verified": user_info.get('verified', False),
+
+                    "followers_count": user_info.get('public_metrics', {}).get('followers_count', 0),
+
+                    "following_count": user_info.get('public_metrics', {}).get('following_count', 0),
+
+                    "tweet_count": user_info.get('public_metrics', {}).get('tweet_count', 0)
+
+                }
+
+            else:
+
+                print(f"❌ No user data in Twitter response: {user_data}")
+
+                return None
+
+        else:
+
+            print(f"❌ Twitter API error: {user_response.status_code} - {user_response.text}")
+
+            return None
+
+            
+
+    except Exception as e:
+
+        print(f"❌ Error getting Twitter account info: {e}")
 
         print(f"❌ Error type: {type(e).__name__}")
 

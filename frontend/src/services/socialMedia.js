@@ -47,6 +47,81 @@ class SocialMediaService {
     }
   }
 
+  async connectTwitterWithOAuth() {
+    try {
+      const headers = await this.getAuthHeaders()
+      
+      console.log('Initiating Twitter OAuth connection...')
+      
+      const response = await fetch(`${API_URL}/connections/auth/twitter/connect`, {
+        method: 'POST',
+        headers
+      })
+
+      const result = await response.json()
+      console.log('Twitter OAuth response:', result)
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'Failed to initiate Twitter OAuth')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Error initiating Twitter OAuth:', error)
+      throw error
+    }
+  }
+
+  async getTwitterPosts(limit = 10) {
+    try {
+      const headers = await this.getAuthHeaders()
+      
+      const response = await fetch(`${API_URL}/api/social-media/twitter/posts?limit=${limit}`, {
+        method: 'GET',
+        headers
+      })
+
+      const result = await response.json()
+      console.log('Twitter posts response:', result)
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'Failed to fetch Twitter posts')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Error fetching Twitter posts:', error)
+      throw error
+    }
+  }
+
+  async postToTwitter(content, mediaIds = []) {
+    try {
+      const headers = await this.getAuthHeaders()
+      
+      const response = await fetch(`${API_URL}/api/social-media/twitter/post`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          text: content,
+          media_ids: mediaIds
+        })
+      })
+
+      const result = await response.json()
+      console.log('Twitter post response:', result)
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'Failed to post to Twitter')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Error posting to Twitter:', error)
+      throw error
+    }
+  }
+
   async debugValidateToken(platform, accessToken) {
     try {
       const response = await fetch(`${API_URL}/api/social-media/debug/validate-token`, {

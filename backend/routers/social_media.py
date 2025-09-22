@@ -366,9 +366,84 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
         return []
 
 async def fetch_twitter_posts(connection: dict, limit: int) -> List[Dict[str, Any]]:
-    """Fetch latest posts from Twitter (placeholder - requires Twitter API v2)"""
-    print("⚠️ Twitter posts not implemented yet - requires Twitter API v2")
-    return []
+    """Fetch latest posts from Twitter using API v2"""
+    try:
+        print(f"🐦 Fetching Twitter posts for connection: {connection.get('id')}")
+        
+        access_token = decrypt_token(connection.get('access_token_encrypted', ''))
+        if not access_token:
+            print("❌ No access token found for Twitter connection")
+            return []
+        
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Get user's timeline tweets
+        user_id = connection.get('account_id')
+        if not user_id:
+            print("❌ No account ID found for Twitter connection")
+            return []
+        
+        # Fetch user's tweets
+        tweets_url = f"https://api.twitter.com/2/users/{user_id}/tweets"
+        params = {
+            'max_results': limit,
+            'tweet.fields': 'created_at,public_metrics,text,id,attachments',
+            'expansions': 'attachments.media_keys',
+            'media.fields': 'url,preview_image_url,type'
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(tweets_url, headers=headers, params=params)
+            
+            if response.status_code != 200:
+                print(f"❌ Twitter API error: {response.status_code} - {response.text}")
+                return []
+            
+            data = response.json()
+            tweets = data.get('data', [])
+            media_data = data.get('includes', {}).get('media', [])
+            
+            # Create media lookup
+            media_lookup = {media['media_key']: media for media in media_data}
+            
+            posts = []
+            for tweet in tweets:
+                # Get media for this tweet
+                tweet_media = []
+                if 'attachments' in tweet and 'media_keys' in tweet['attachments']:
+                    for media_key in tweet['attachments']['media_keys']:
+                        if media_key in media_lookup:
+                            media = media_lookup[media_key]
+                            tweet_media.append({
+                                'url': media.get('url', ''),
+                                'preview_url': media.get('preview_image_url', ''),
+                                'type': media.get('type', 'photo')
+                            })
+                
+                # Format the post
+                post = {
+                    'id': tweet['id'],
+                    'message': tweet['text'],
+                    'created_time': tweet['created_at'],
+                    'permalink_url': f"https://twitter.com/{connection.get('account_name', 'user')}/status/{tweet['id']}",
+                    'media_url': tweet_media[0]['url'] if tweet_media else None,
+                    'media_type': tweet_media[0]['type'] if tweet_media else None,
+                    'likes_count': tweet['public_metrics'].get('like_count', 0),
+                    'comments_count': tweet['public_metrics'].get('reply_count', 0),
+                    'shares_count': tweet['public_metrics'].get('retweet_count', 0),
+                    'impressions_count': tweet['public_metrics'].get('impression_count', 0)
+                }
+                posts.append(post)
+            
+            print(f"✅ Fetched {len(posts)} Twitter posts")
+            return posts
+            
+    except Exception as e:
+        print(f"❌ Error fetching Twitter posts: {e}")
+        return []
 
 async def fetch_linkedin_posts(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from LinkedIn personal account"""
@@ -518,3 +593,72 @@ async def debug_connections(
     except Exception as e:
         print(f"❌ Error in debug connections: {e}")
         return {"error": str(e), "user_id": current_user.id}
+
+@router.post("/twitter/post")
+async def post_to_twitter(
+    request: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Post content to Twitter"""
+    try:
+        print(f"🐦 Posting to Twitter for user: {current_user.id}")
+        
+        text = request.get('text', '')
+        media_ids = request.get('media_ids', [])
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="Text content is required")
+        
+        # Get user's Twitter connection
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "twitter").eq("is_active", True).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="No active Twitter connection found")
+        
+        connection = response.data[0]
+        access_token = decrypt_token(connection.get('access_token_encrypted', ''))
+        
+        if not access_token:
+            raise HTTPException(status_code=400, detail="Invalid Twitter access token")
+        
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Prepare tweet data
+        tweet_data = {
+            'text': text
+        }
+        
+        if media_ids:
+            tweet_data['media'] = {
+                'media_ids': media_ids
+            }
+        
+        # Post to Twitter
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.twitter.com/2/tweets",
+                headers=headers,
+                json=tweet_data
+            )
+            
+            if response.status_code != 201:
+                print(f"❌ Twitter API error: {response.status_code} - {response.text}")
+                raise HTTPException(status_code=400, detail=f"Failed to post to Twitter: {response.text}")
+            
+            result = response.json()
+            print(f"✅ Posted to Twitter: {result}")
+            
+            return {
+                "success": True,
+                "tweet_id": result['data']['id'],
+                "text": result['data']['text']
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error posting to Twitter: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to post to Twitter: {str(e)}")
