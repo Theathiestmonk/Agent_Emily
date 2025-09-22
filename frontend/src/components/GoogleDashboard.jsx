@@ -13,8 +13,6 @@ const GoogleDashboard = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [connectionStatus, setConnectionStatus] = useState(null)
-  const [testResult, setTestResult] = useState(null)
-  const [reconnectUrl, setReconnectUrl] = useState(null)
   const [sendEmail, setSendEmail] = useState({
     to: '',
     subject: '',
@@ -39,42 +37,13 @@ const GoogleDashboard = () => {
         ...(authToken && { 'Authorization': `Bearer ${authToken}` })
       }
 
-      console.log('🔍 Checking Google connection status...')
       const response = await fetch(`${baseUrl}/connections/google/connection-status`, {
         headers
       })
       const statusData = await response.json()
-      console.log('📊 Connection status:', statusData)
       setConnectionStatus(statusData)
     } catch (error) {
-      console.error('❌ Error checking connection status:', error)
-    }
-  }
-
-  const testGmailAPI = async () => {
-    try {
-      setLoading(true)
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
-      const baseUrl = API_BASE_URL.replace(/\/+$/, '')
-      
-      const authToken = await getAuthToken()
-      const headers = {
-        'Content-Type': 'application/json',
-        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
-      }
-
-      console.log('🧪 Testing Gmail API...')
-      const response = await fetch(`${baseUrl}/connections/google/gmail/test`, {
-        headers
-      })
-      const testData = await response.json()
-      console.log('🧪 Gmail API test result:', testData)
-      setTestResult(testData)
-    } catch (error) {
-      console.error('❌ Error testing Gmail API:', error)
-      setTestResult({ success: false, error: error.message })
-    } finally {
-      setLoading(false)
+      console.error('Error checking connection status:', error)
     }
   }
 
@@ -90,24 +59,20 @@ const GoogleDashboard = () => {
         ...(authToken && { 'Authorization': `Bearer ${authToken}` })
       }
 
-      console.log('🔄 Reconnecting Google account...')
       const response = await fetch(`${baseUrl}/connections/google/reconnect`, {
         method: 'POST',
         headers
       })
       const reconnectData = await response.json()
-      console.log('🔄 Reconnect result:', reconnectData)
       
       if (reconnectData.success) {
-        setReconnectUrl(reconnectData.auth_url)
-        // Open the reconnection URL in a new window
         window.open(reconnectData.auth_url, '_blank')
       } else {
-        setTestResult({ success: false, error: reconnectData.error })
+        setError(reconnectData.error)
       }
     } catch (error) {
-      console.error('❌ Error reconnecting Google account:', error)
-      setTestResult({ success: false, error: error.message })
+      console.error('Error reconnecting Google account:', error)
+      setError(error.message)
     } finally {
       setLoading(false)
     }
@@ -141,27 +106,21 @@ const GoogleDashboard = () => {
 
       // Get authentication token
       const authToken = await getAuthToken()
-      console.log('🔑 Auth token status:', authToken ? 'Present' : 'Missing')
       const headers = {
         'Content-Type': 'application/json',
         ...(authToken && { 'Authorization': `Bearer ${authToken}` })
       }
-      console.log('📤 Request headers:', headers)
 
       // Fetch Gmail messages (top 3 for dashboard)
-      console.log('🔍 Fetching Gmail messages...', { baseUrl, headers })
       const gmailResponse = await fetch(`${baseUrl}/connections/google/gmail/messages?limit=3`, {
         headers
       })
-      console.log('📧 Gmail response status:', gmailResponse.status)
       const gmailData = await gmailResponse.json()
-      console.log('📧 Gmail data received:', gmailData)
       
       if (gmailData.messages) {
         setGmailMessages(gmailData.messages)
-        console.log('✅ Gmail messages set:', gmailData.messages.length)
-      } else {
-        console.log('❌ No Gmail messages in response:', gmailData)
+      } else if (gmailData.error) {
+        console.error('Gmail error:', gmailData.error)
       }
 
       // Fetch Drive files
@@ -169,11 +128,10 @@ const GoogleDashboard = () => {
         headers
       })
       const driveData = await driveResponse.json()
-      console.log('📁 Drive data received:', driveData)
       if (driveData.files) {
         setDriveFiles(driveData.files)
       } else if (driveData.error) {
-        console.log('❌ Drive error:', driveData.error)
+        console.error('Drive error:', driveData.error)
       }
 
       // Fetch Sheets
@@ -181,11 +139,10 @@ const GoogleDashboard = () => {
         headers
       })
       const sheetsData = await sheetsResponse.json()
-      console.log('📊 Sheets data received:', sheetsData)
       if (sheetsData.spreadsheets) {
         setSheets(sheetsData.spreadsheets)
       } else if (sheetsData.error) {
-        console.log('❌ Sheets error:', sheetsData.error)
+        console.error('Sheets error:', sheetsData.error)
       }
 
       // Fetch Docs
@@ -193,11 +150,10 @@ const GoogleDashboard = () => {
         headers
       })
       const docsData = await docsResponse.json()
-      console.log('📄 Docs data received:', docsData)
       if (docsData.documents) {
         setDocs(docsData.documents)
       } else if (docsData.error) {
-        console.log('❌ Docs error:', docsData.error)
+        console.error('Docs error:', docsData.error)
       }
 
     } catch (error) {
@@ -291,18 +247,6 @@ const GoogleDashboard = () => {
               </div>
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={testGmailAPI}
-                  disabled={loading}
-                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Mail className="w-4 h-4" />
-                  )}
-                  <span>Test Gmail API</span>
-                </button>
-                <button
                   onClick={reconnectGoogleAccount}
                   disabled={loading}
                   className="flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
@@ -360,27 +304,11 @@ const GoogleDashboard = () => {
                         ))}
                       </div>
                     ) : (
-                      <div className="text-center py-8">
-                        <Mail className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                        <p className="text-gray-500">No emails found</p>
-                        {connectionStatus ? (
-                          <div className="mt-4">
-                            <p className="text-sm text-gray-400">
-                              Connection Status: {connectionStatus.connected ? '✅ Connected' : '❌ Not Connected'}
-                            </p>
-                            {connectionStatus.error && (
-                              <p className="text-xs text-red-500 mt-2">{connectionStatus.error}</p>
-                            )}
-                            {connectionStatus.connected && (
-                              <p className="text-xs text-gray-400 mt-2">
-                                Connected as: {connectionStatus.page_name || 'Unknown'}
-                              </p>
-                            )}
+                          <div className="text-center py-8">
+                            <Mail className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                            <p className="text-gray-500">No emails found</p>
+                            <p className="text-sm text-gray-400">Connect your Gmail account to see recent emails</p>
                           </div>
-                        ) : (
-                          <p className="text-sm text-gray-400">Connect your Gmail account to see recent emails</p>
-                        )}
-                      </div>
                     )}
                   </div>
                 </div>
@@ -548,49 +476,6 @@ const GoogleDashboard = () => {
                 </div>
           </div>
               
-              {testResult && (
-                <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-blue-900 mb-2">Gmail API Test Results</h3>
-                  {testResult.success ? (
-                    <div>
-                      <p className="text-green-600">✅ Gmail API is working!</p>
-                      <p className="text-sm text-gray-600 mt-2">
-                        Profile: {testResult.profile?.emailAddress || 'Unknown'}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Total messages: {testResult.message_count || 0}
-                      </p>
-                      {testResult.messages && testResult.messages.length > 0 && (
-                        <p className="text-sm text-gray-600">
-                          Sample message ID: {testResult.messages[0].id}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="text-red-600">❌ Gmail API test failed</p>
-                      <p className="text-sm text-red-500 mt-2">{testResult.error}</p>
-                      {testResult.error_type && (
-                        <p className="text-xs text-gray-500">Error type: {testResult.error_type}</p>
-                      )}
-                      {(testResult.error_type === 'RefreshError' || testResult.error_type === 'TokenRefreshError') && (
-                        <div className="mt-4">
-                          <p className="text-sm text-orange-600 mb-2">
-                            Your Google tokens have expired. Please reconnect your account.
-                          </p>
-                          <button
-                            onClick={reconnectGoogleAccount}
-                            disabled={loading}
-                            className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
-                          >
-                            {loading ? 'Reconnecting...' : 'Reconnect Google Account'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
 
           {error && (
                 <div className="mt-8 bg-red-50 border border-red-200 rounded-lg p-4">
