@@ -144,7 +144,42 @@ def get_google_credentials_from_token(access_token: str, refresh_token: str = No
         client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
         scopes=GOOGLE_SCOPES
     )
+    
+    # Try to refresh the token if it's expired
+    try:
+        if creds.expired and creds.refresh_token:
+            print("🔄 Token expired, attempting to refresh...")
+            creds.refresh(Request())
+            print("✅ Token refreshed successfully")
+    except Exception as refresh_error:
+        print(f"❌ Token refresh failed: {str(refresh_error)}")
+        # Don't raise the error here, let the calling function handle it
+    
     return creds
+
+def refresh_and_update_tokens(user_id: str, credentials: Credentials) -> bool:
+    """Refresh tokens and update database if successful"""
+    try:
+        if credentials.expired and credentials.refresh_token:
+            print(f"🔄 Refreshing tokens for user: {user_id}")
+            credentials.refresh(Request())
+            print("✅ Tokens refreshed successfully")
+            
+            # Update the database with new tokens
+            supabase_admin.table('platform_connections').update({
+                'access_token_encrypted': encrypt_token(credentials.token),
+                'refresh_token_encrypted': encrypt_token(credentials.refresh_token) if credentials.refresh_token else None,
+                'token_expires_at': credentials.expiry.isoformat() if credentials.expiry else None,
+                'updated_at': datetime.now().isoformat()
+            }).eq('user_id', user_id).eq('platform', 'google').execute()
+            
+            print("✅ Database updated with new tokens")
+            return True
+    except Exception as e:
+        print(f"❌ Token refresh failed: {str(e)}")
+        return False
+    
+    return True  # Tokens are still valid
 
 @router.get("/auth/initiate")
 async def google_auth(current_user: User = Depends(get_current_user)):
@@ -431,10 +466,15 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
 async def get_gmail_messages(limit: int = 10, current_user: User = Depends(get_current_user)):
     """Get Gmail messages"""
     try:
+        print(f"🔍 Getting Gmail messages for user: {current_user.id}")
+        
         # Get user's Google connection from database
         connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user.id).execute()
         
+        print(f"🔍 Connection query result: {len(connection.data) if connection.data else 0} connections found")
+        
         if not connection.data:
+            print("❌ No active Google connection found")
             return {"messages": [], "error": "No active Google connection found"}
         
         conn = connection.data[0]
@@ -450,45 +490,63 @@ async def get_gmail_messages(limit: int = 10, current_user: User = Depends(get_c
         service = build('gmail', 'v1', credentials=credentials)
         
         # Get messages
-        results = service.users().messages().list(userId='me', maxResults=limit).execute()
-        messages = results.get('messages', [])
+        print(f"🔍 Fetching Gmail messages with limit: {limit}")
+        try:
+            results = service.users().messages().list(userId='me', maxResults=limit).execute()
+            print(f"📧 Gmail API response: {results}")
+            messages = results.get('messages', [])
+            print(f"📧 Found {len(messages)} messages from Gmail API")
+        except Exception as gmail_error:
+            print(f"❌ Gmail API error: {str(gmail_error)}")
+            print(f"❌ Error type: {type(gmail_error).__name__}")
+            raise gmail_error
         
         # Get detailed message info
         detailed_messages = []
-        for message in messages:
-            msg = service.users().messages().get(userId='me', id=message['id']).execute()
-            payload = msg['payload']
-            headers = payload.get('headers', [])
-            
-            # Extract subject and sender
-            subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
-            sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
-            date = next((h['value'] for h in headers if h['name'] == 'Date'), '')
-            
-            detailed_messages.append({
-                'id': message['id'],
-                'subject': subject,
-                'sender': sender,
-                'date': date,
-                'snippet': msg.get('snippet', '')
-            })
+        print(f"🔍 Processing {len(messages)} messages...")
+        for i, message in enumerate(messages):
+            try:
+                print(f"📧 Processing message {i+1}/{len(messages)}: {message['id']}")
+                msg = service.users().messages().get(userId='me', id=message['id']).execute()
+                payload = msg['payload']
+                headers = payload.get('headers', [])
+                
+                # Extract subject and sender
+                subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
+                sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
+                date = next((h['value'] for h in headers if h['name'] == 'Date'), '')
+                
+                message_data = {
+                    'id': message['id'],
+                    'subject': subject,
+                    'sender': sender,
+                    'date': date,
+                    'snippet': msg.get('snippet', '')
+                }
+                detailed_messages.append(message_data)
+                print(f"✅ Processed message: {subject[:50]}...")
+            except Exception as msg_error:
+                print(f"❌ Error processing message {message['id']}: {str(msg_error)}")
+                continue
         
+        print(f"✅ Returning {len(detailed_messages)} detailed messages")
         return {"messages": detailed_messages}
         
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch Gmail messages: {str(e)}"
-        )
+        print(f"❌ Error fetching Gmail messages: {str(e)}")
+        return {"messages": [], "error": f"Failed to fetch Gmail messages: {str(e)}"}
 
 @router.get("/drive/files")
 async def get_drive_files(limit: int = 10, current_user: User = Depends(get_current_user)):
     """Get Google Drive files"""
     try:
+        print(f"🔍 Getting Drive files for user: {current_user.id}")
+        
         # Get user's Google connection from database
         connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user.id).execute()
         
         if not connection.data:
+            print("❌ No active Google connection found for Drive files")
             return {"files": [], "error": "No active Google connection found"}
         
         conn = connection.data[0]
@@ -504,28 +562,31 @@ async def get_drive_files(limit: int = 10, current_user: User = Depends(get_curr
         service = build('drive', 'v3', credentials=credentials)
         
         # Get files
+        print(f"🔍 Fetching Drive files with limit: {limit}")
         results = service.files().list(
             pageSize=limit,
             fields="nextPageToken, files(id, name, mimeType, size, modifiedTime, webViewLink)"
         ).execute()
         files = results.get('files', [])
+        print(f"📁 Found {len(files)} Drive files")
         
         return {"files": files}
         
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch Drive files: {str(e)}"
-        )
+        print(f"❌ Error fetching Drive files: {str(e)}")
+        return {"files": [], "error": f"Failed to fetch Drive files: {str(e)}"}
 
 @router.get("/sheets/spreadsheets")
 async def get_sheets_spreadsheets(limit: int = 10, current_user: User = Depends(get_current_user)):
     """Get Google Sheets spreadsheets"""
     try:
+        print(f"🔍 Getting Sheets for user: {current_user.id}")
+        
         # Get user's Google connection from database
         connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user.id).execute()
         
         if not connection.data:
+            print("❌ No active Google connection found for Sheets")
             return {"spreadsheets": [], "error": "No active Google connection found"}
         
         conn = connection.data[0]
@@ -541,29 +602,32 @@ async def get_sheets_spreadsheets(limit: int = 10, current_user: User = Depends(
         service = build('drive', 'v3', credentials=credentials)
         
         # Search for Google Sheets files
+        print(f"🔍 Fetching Sheets with limit: {limit}")
         results = service.files().list(
             q="mimeType='application/vnd.google-apps.spreadsheet'",
             pageSize=limit,
             fields="nextPageToken, files(id, name, mimeType, size, modifiedTime, webViewLink)"
         ).execute()
         spreadsheets = results.get('files', [])
+        print(f"📊 Found {len(spreadsheets)} Sheets")
         
         return {"spreadsheets": spreadsheets}
         
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch Sheets: {str(e)}"
-        )
+        print(f"❌ Error fetching Sheets: {str(e)}")
+        return {"spreadsheets": [], "error": f"Failed to fetch Sheets: {str(e)}"}
 
 @router.get("/docs/documents")
 async def get_docs_documents(limit: int = 10, current_user: User = Depends(get_current_user)):
     """Get Google Docs documents"""
     try:
+        print(f"🔍 Getting Docs for user: {current_user.id}")
+        
         # Get user's Google connection from database
         connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user.id).execute()
         
         if not connection.data:
+            print("❌ No active Google connection found for Docs")
             return {"documents": [], "error": "No active Google connection found"}
         
         conn = connection.data[0]
@@ -579,20 +643,20 @@ async def get_docs_documents(limit: int = 10, current_user: User = Depends(get_c
         service = build('drive', 'v3', credentials=credentials)
         
         # Search for Google Docs files
+        print(f"🔍 Fetching Docs with limit: {limit}")
         results = service.files().list(
             q="mimeType='application/vnd.google-apps.document'",
             pageSize=limit,
             fields="nextPageToken, files(id, name, mimeType, size, modifiedTime, webViewLink)"
         ).execute()
         documents = results.get('files', [])
+        print(f"📄 Found {len(documents)} Docs")
         
         return {"documents": documents}
         
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch Docs: {str(e)}"
-        )
+        print(f"❌ Error fetching Docs: {str(e)}")
+        return {"documents": [], "error": f"Failed to fetch Docs: {str(e)}"}
 
 @router.post("/gmail/send")
 async def send_gmail_message(
@@ -645,6 +709,170 @@ async def send_gmail_message(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to send email: {str(e)}"
         )
+
+@router.get("/gmail/test")
+async def test_gmail_api(current_user: User = Depends(get_current_user)):
+    """Test Gmail API access"""
+    try:
+        print(f"🧪 Testing Gmail API for user: {current_user.id}")
+        
+        # Get user's Google connection from database
+        connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user.id).execute()
+        
+        if not connection.data:
+            return {"success": False, "error": "No active Google connection found"}
+        
+        conn = connection.data[0]
+        
+        # Decrypt tokens
+        access_token = decrypt_token(conn['access_token_encrypted'])
+        refresh_token = decrypt_token(conn['refresh_token_encrypted']) if conn.get('refresh_token_encrypted') else None
+        
+        # Create credentials
+        credentials = get_google_credentials_from_token(access_token, refresh_token)
+        
+        # Try to refresh tokens if needed
+        if not refresh_and_update_tokens(current_user.id, credentials):
+            return {
+                "success": False,
+                "error": "Token refresh failed. Please re-authenticate your Google account.",
+                "error_type": "TokenRefreshError"
+            }
+        
+        # Build Gmail service
+        service = build('gmail', 'v1', credentials=credentials)
+        
+        # Test basic Gmail API access
+        print("🧪 Testing Gmail profile access...")
+        profile = service.users().getProfile(userId='me').execute()
+        print(f"✅ Gmail profile: {profile}")
+        
+        # Test message list access
+        print("🧪 Testing Gmail messages list...")
+        results = service.users().messages().list(userId='me', maxResults=1).execute()
+        print(f"✅ Gmail messages list: {results}")
+        
+        return {
+            "success": True,
+            "profile": profile,
+            "message_count": results.get('resultSizeEstimate', 0),
+            "messages": results.get('messages', [])
+        }
+        
+    except Exception as e:
+        print(f"❌ Gmail API test error: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
+@router.post("/reconnect")
+async def reconnect_google_account(current_user: User = Depends(get_current_user)):
+    """Reconnect Google account when tokens are invalid"""
+    try:
+        print(f"🔄 Reconnecting Google account for user: {current_user.id}")
+        
+        # Mark current connection as inactive
+        supabase_admin.table('platform_connections').update({
+            'is_active': False,
+            'connection_status': 'reconnect_required',
+            'updated_at': datetime.now().isoformat()
+        }).eq('platform', 'google').eq('user_id', current_user.id).execute()
+        
+        # Generate new OAuth URL
+        client_id = os.getenv('GOOGLE_CLIENT_ID')
+        client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+        redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
+        
+        if not all([client_id, client_secret, redirect_uri]):
+            return {
+                "success": False,
+                "error": "Google OAuth not configured"
+            }
+        
+        # Generate secure state
+        state = generate_oauth_state()
+        
+        # Store state in database for validation
+        oauth_state_data = {
+            "user_id": current_user.id,
+            "platform": "google",
+            "state": state,
+            "expires_at": (datetime.now() + timedelta(minutes=30)).isoformat()
+        }
+        
+        supabase_admin.table("oauth_states").insert(oauth_state_data).execute()
+        
+        # Create OAuth flow
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [redirect_uri]
+                }
+            },
+            scopes=GOOGLE_SCOPES
+        )
+        flow.redirect_uri = redirect_uri
+        
+        # Generate authorization URL
+        auth_url, _ = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            state=state,
+            prompt='consent'  # Force consent screen to get refresh token
+        )
+        
+        return {
+            "success": True,
+            "auth_url": auth_url,
+            "state": state,
+            "message": "Please re-authenticate your Google account"
+        }
+        
+    except Exception as e:
+        print(f"❌ Error reconnecting Google account: {str(e)}")
+        return {
+            "success": False,
+            "error": f"Failed to reconnect: {str(e)}"
+        }
+
+@router.get("/connection-status")
+async def get_connection_status(current_user: User = Depends(get_current_user)):
+    """Check Google connection status"""
+    try:
+        print(f"🔍 Checking connection status for user: {current_user.id}")
+        
+        # Get user's Google connection from database
+        connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user.id).execute()
+        
+        if not connection.data:
+            return {
+                "connected": False,
+                "error": "No active Google connection found",
+                "user_id": current_user.id
+            }
+        
+        conn = connection.data[0]
+        return {
+            "connected": True,
+            "user_id": current_user.id,
+            "connection_id": conn.get('id'),
+            "page_name": conn.get('page_name'),
+            "connected_at": conn.get('connected_at'),
+            "connection_status": conn.get('connection_status')
+        }
+        
+    except Exception as e:
+        return {
+            "connected": False,
+            "error": f"Error checking connection: {str(e)}",
+            "user_id": current_user.id
+        }
 
 @router.get("/health")
 async def google_router_health():

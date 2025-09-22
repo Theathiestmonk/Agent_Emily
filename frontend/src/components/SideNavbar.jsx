@@ -13,7 +13,8 @@ import {
   BarChart3,
   Share2,
   Megaphone,
-  BookOpen
+  BookOpen,
+  Mail
 } from 'lucide-react'
 
 const SideNavbar = () => {
@@ -58,6 +59,12 @@ const SideNavbar = () => {
       href: '/blogs',
       icon: BookOpen,
       description: 'Manage your blog posts'
+    },
+    {
+      name: 'Google Workspace',
+      href: '/google-dashboard',
+      icon: Mail,
+      description: 'Gmail, Drive, Sheets & Docs'
     },
     {
       name: 'Settings',

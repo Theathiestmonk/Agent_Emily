@@ -208,6 +208,15 @@ def get_current_user(authorization: str = Header(None)):
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
+# Import Google callback handler
+from routers.google_connections import handle_google_callback
+
+@router.get("/auth/google/callback")
+async def google_oauth_callback(code: str = None, state: str = None, error: str = None):
+    """Handle Google OAuth callback from /connections/auth/google/callback path"""
+    print(f"🔗 Google OAuth callback received at /connections/auth/google/callback - code: {code[:10] if code else 'None'}..., state: {state[:10] if state else 'None'}..., error: {error}")
+    return await handle_google_callback(code, state, error)
+
 
 
 # Encryption key for tokens
