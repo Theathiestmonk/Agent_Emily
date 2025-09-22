@@ -282,8 +282,8 @@ const GoogleDashboard = () => {
           <div className="flex-1 pt-24 p-6">
             <div className="max-w-7xl mx-auto">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* First Column - Top 3 Emails */}
-                <div className="lg:col-span-1">
+                {/* First Column - Top 3 Emails and Send Email */}
+                <div className="lg:col-span-1 space-y-6">
                   <div className="bg-white rounded-xl shadow-sm border p-6">
                     <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
                       <Mail className="w-5 h-5 mr-2 text-red-500" />
@@ -311,71 +311,72 @@ const GoogleDashboard = () => {
                           </div>
                     )}
                   </div>
+
+                  {/* Send Email Section */}
+                  <div className="bg-white rounded-xl shadow-sm border p-6">
+                    <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                      <Send className="w-5 h-5 mr-2 text-green-600" />
+                      Send Email
+                    </h2>
+                    
+                    <form onSubmit={handleSendEmail} className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            To
+                          </label>
+                          <input
+                            type="email"
+                            value={sendEmail.to}
+                            onChange={(e) => setSendEmail({...sendEmail, to: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            placeholder="recipient@example.com"
+                            required
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Subject
+                          </label>
+                          <input
+                            type="text"
+                            value={sendEmail.subject}
+                            onChange={(e) => setSendEmail({...sendEmail, subject: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            placeholder="Email subject"
+                            required
+                          />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Message
+                        </label>
+                        <textarea
+                          value={sendEmail.body}
+                          onChange={(e) => setSendEmail({...sendEmail, body: e.target.value})}
+                          rows={4}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          placeholder="Your message here..."
+                          required
+                        />
+                      </div>
+                      
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                      >
+                        {loading ? 'Sending...' : 'Send Email'}
+                      </button>
+                    </form>
+                  </div>
                 </div>
 
                 {/* Second and Third Columns - Other Google Services */}
                 <div className="lg:col-span-2 space-y-8">
-          {/* Send Email Section */}
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-              <Send className="w-5 h-5 mr-2 text-green-600" />
-              Send Email
-            </h2>
-            
-            <form onSubmit={handleSendEmail} className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  To
-                </label>
-                <input
-                  type="email"
-                  value={sendEmail.to}
-                  onChange={(e) => setSendEmail({...sendEmail, to: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="recipient@example.com"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Subject
-                </label>
-                <input
-                  type="text"
-                  value={sendEmail.subject}
-                  onChange={(e) => setSendEmail({...sendEmail, subject: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Email subject"
-                  required
-                />
-                        </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Message
-                </label>
-                <textarea
-                  value={sendEmail.body}
-                  onChange={(e) => setSendEmail({...sendEmail, body: e.target.value})}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Your message here..."
-                  required
-                />
-              </div>
-              
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
-                {loading ? 'Sending...' : 'Send Email'}
-              </button>
-            </form>
-          </div>
 
           {/* Google Drive Files Section */}
           <div className="bg-white rounded-xl shadow-sm border p-6">
