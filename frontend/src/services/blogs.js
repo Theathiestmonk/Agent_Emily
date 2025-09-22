@@ -2,7 +2,24 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 class BlogService {
   async getAuthToken() {
-    return localStorage.getItem('authToken')
+    // Try multiple token sources
+    const token = localStorage.getItem('authToken') || 
+                  localStorage.getItem('token') || 
+                  localStorage.getItem('access_token')
+    
+    if (!token) {
+      // Try to get token from Supabase session
+      try {
+        const { supabase } = await import('../lib/supabase')
+        const { data: { session } } = await supabase.auth.getSession()
+        return session?.access_token || null
+      } catch (error) {
+        console.error('Error getting Supabase token:', error)
+        return null
+      }
+    }
+    
+    return token
   }
 
   async makeRequest(endpoint, options = {}) {
@@ -10,6 +27,11 @@ class BlogService {
     const url = `${API_URL}${endpoint}`
     
     console.log('Blog service request:', { url, token: token ? 'present' : 'missing' })
+    
+    if (!token) {
+      console.error('No authentication token found')
+      throw new Error('Authentication required. Please log in.')
+    }
     
     const defaultOptions = {
       headers: {

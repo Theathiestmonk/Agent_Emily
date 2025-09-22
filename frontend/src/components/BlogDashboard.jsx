@@ -137,7 +137,14 @@ const BlogDashboard = () => {
     } catch (error) {
       console.error('Error fetching stats:', error)
       console.error('Stats fetch error details:', error.message, error.stack)
-      // Don't show alert for stats as it's not critical
+      // Set default stats if fetch fails
+      setStats({
+        total_blogs: 0,
+        published_blogs: 0,
+        draft_blogs: 0,
+        scheduled_blogs: 0,
+        total_campaigns: 0
+      })
     }
   }
 
@@ -312,7 +319,14 @@ const BlogDashboard = () => {
     )
   }
 
-  console.log('BlogDashboard render state:', { blogs: blogs.length, campaigns: campaigns.length, loading, stats })
+  console.log('BlogDashboard render state:', { 
+    blogs: blogs.length, 
+    campaigns: campaigns.length, 
+    loading, 
+    stats,
+    statsKeys: Object.keys(stats),
+    statsValues: Object.values(stats)
+  })
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
