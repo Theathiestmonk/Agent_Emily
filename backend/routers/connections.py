@@ -1693,14 +1693,23 @@ def get_instagram_account_info(access_token: str):
                     page_details_response = requests.get(page_details_url)
 
                     if page_details_response.status_code == 200:
-
                         page_details = page_details_response.json()
-
                         print(f"🔍 Page details: {page_details}")
-
+                        
+                        # Check if Instagram account is in the detailed response
+                        if page_details.get('instagram_business_account'):
+                            instagram_account = page_details['instagram_business_account']
+                            instagram_page = page
+                            print(f"✅ Found Instagram account in page details: {instagram_account}")
+                            break
+                        elif page_details.get('connected_instagram_account'):
+                            # Sometimes it's under connected_instagram_account
+                            instagram_account = page_details['connected_instagram_account']
+                            instagram_page = page
+                            print(f"✅ Found Instagram account under connected_instagram_account: {instagram_account}")
+                            break
                     else:
-
-                        print(f"❌ Could not get page details: {page_details_response.status_code}")
+                        print(f"❌ Could not get page details: {page_details_response.status_code} - {page_details_response.text}")
 
                 except Exception as e:
 
@@ -1708,18 +1717,35 @@ def get_instagram_account_info(access_token: str):
         
         
         
+        # If still no Instagram account found, try alternative method
         if not instagram_account:
+            print("🔄 Trying alternative method to find Instagram Business account...")
+            try:
+                # Try to get Instagram accounts directly
+                instagram_accounts_url = f"https://graph.facebook.com/v18.0/me/accounts?fields=id,name,instagram_business_account&access_token={access_token}"
+                instagram_response = requests.get(instagram_accounts_url)
+                
+                if instagram_response.status_code == 200:
+                    instagram_data = instagram_response.json()
+                    print(f"🔍 Instagram accounts response: {instagram_data}")
+                    
+                    for account in instagram_data.get('data', []):
+                        if account.get('instagram_business_account'):
+                            instagram_account = account['instagram_business_account']
+                            instagram_page = account
+                            print(f"✅ Found Instagram account via alternative method: {instagram_account}")
+                            break
+                else:
+                    print(f"❌ Alternative method failed: {instagram_response.status_code} - {instagram_response.text}")
+            except Exception as e:
+                print(f"❌ Error with alternative method: {e}")
 
+        if not instagram_account:
             print("❌ No Instagram Business account found connected to any Facebook page")
-
             print("💡 User needs to:")
-
             print("   1. Convert Instagram to Business account")
-
             print("   2. Connect Instagram to a Facebook Page")
-
             print("   3. Ensure the page has Instagram Business account linked")
-
             return None
         
         
