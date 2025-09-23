@@ -736,22 +736,47 @@ async def handle_oauth_callback(
         
         
         # Try to insert, if it fails due to duplicate key, update instead
-
         try:
-
             connection_response = supabase_admin.table("platform_connections").insert(connection_data).execute()
-
         except Exception as e:
-
             if "duplicate key value violates unique constraint" in str(e):
-
                 # Update existing connection
-
                 connection_response = supabase_admin.table("platform_connections").update(connection_data).eq("user_id", user_id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
-
             else:
-
                 raise e
+        
+        # For Facebook connections, also create Instagram connection if Instagram Business account exists
+        if platform == 'facebook' and account_info.get('instagram_id'):
+            print(f"📱 Facebook connection includes Instagram Business account: {account_info.get('instagram_id')}")
+            
+            instagram_connection_data = {
+                "user_id": user_id,
+                "platform": "instagram",
+                "page_id": account_info.get('instagram_id'),
+                "page_name": account_info.get('username', ''),
+                "page_username": account_info.get('username', ''),
+                "follower_count": account_info.get('follower_count', 0),
+                "access_token_encrypted": encrypt_token(page_access_token),  # Same token works for both
+                "refresh_token_encrypted": encrypt_token(tokens.get('refresh_token', '')),
+                "token_expires_at": (datetime.now() + timedelta(seconds=tokens.get('expires_in', 3600))).isoformat(),
+                "connection_status": 'active',
+                "is_active": True,
+                "last_sync": datetime.now().isoformat(),
+                "instagram_id": account_info.get('instagram_id'),
+                "account_type": account_info.get('account_type'),
+                "media_count": account_info.get('media_count', 0)
+            }
+            
+            try:
+                instagram_connection_response = supabase_admin.table("platform_connections").insert(instagram_connection_data).execute()
+                print(f"✅ Created Instagram connection: {instagram_connection_response.data[0]['id'] if instagram_connection_response.data else 'unknown'}")
+            except Exception as e:
+                if "duplicate key value violates unique constraint" in str(e):
+                    # Update existing Instagram connection
+                    instagram_connection_response = supabase_admin.table("platform_connections").update(instagram_connection_data).eq("user_id", user_id).eq("platform", "instagram").eq("page_id", account_info.get('instagram_id')).execute()
+                    print(f"✅ Updated existing Instagram connection")
+                else:
+                    print(f"❌ Error creating Instagram connection: {e}")
         
         
         

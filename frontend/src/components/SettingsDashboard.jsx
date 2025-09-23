@@ -102,24 +102,15 @@ const SettingsDashboard = () => {
 
   const platforms = [
     {
-      id: 'instagram',
-      name: 'Instagram',
-      icon: Instagram,
-      color: 'bg-pink-500',
-      description: 'Post content, get insights, manage ads',
-      oauthSupported: true,
-      tokenSupported: false,
-      helpUrl: 'https://developers.facebook.com/tools/explorer/'
-    },
-    {
-      id: 'facebook',
-      name: 'Facebook',
+      id: 'facebook_instagram',
+      name: 'Facebook & Instagram',
       icon: Facebook,
       color: 'bg-blue-600',
-      description: 'Manage pages, post content, run ads',
+      description: 'Manage Facebook Pages and Instagram Business accounts',
       oauthSupported: true,
-      tokenSupported: true,
-      helpUrl: 'https://developers.facebook.com/tools/explorer/'
+      tokenSupported: false,
+      helpUrl: 'https://developers.facebook.com/tools/explorer/',
+      platforms: ['facebook', 'instagram']
     },
     {
       id: 'twitter',
@@ -233,7 +224,12 @@ const SettingsDashboard = () => {
 
   const handleOAuthConnect = async (platform) => {
     try {
-      await socialMediaService.connectWithOAuth(platform)
+      if (platform === 'facebook_instagram') {
+        // For combined Facebook & Instagram, use Facebook OAuth
+        await socialMediaService.connectWithOAuth('facebook')
+      } else {
+        await socialMediaService.connectWithOAuth(platform)
+      }
     } catch (error) {
       setError(`Failed to start OAuth for ${platform}: ${error.message}`)
     }
@@ -509,7 +505,9 @@ const SettingsDashboard = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {platforms.map((platform) => {
                     const Icon = platform.icon
-                    const isConnected = connections.some(c => c.platform === platform.id)
+                    const isConnected = platform.id === 'facebook_instagram' 
+                      ? connections.some(c => c.platform === 'facebook' || c.platform === 'instagram')
+                      : connections.some(c => c.platform === platform.id)
                     
                     return (
                       <div key={platform.id} className={`p-6 rounded-lg border-2 transition-all ${
