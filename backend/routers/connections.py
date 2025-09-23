@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Header
 from typing import List, Optional
 from datetime import datetime, timedelta
 import os
+import secrets
+import string
 from cryptography.fernet import Fernet
 import requests
 from supabase import create_client, Client
