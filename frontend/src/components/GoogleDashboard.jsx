@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Mail, FileText, Table, Folder, Calendar, Send, RefreshCw, Loader2 } from 'lucide-react'
+import { Mail, Calendar, Send, RefreshCw, Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import SideNavbar from './SideNavbar'
 import MainContentLoader from './MainContentLoader'
@@ -7,9 +7,6 @@ import MainContentLoader from './MainContentLoader'
 const GoogleDashboard = () => {
   const { user } = useAuth()
   const [gmailMessages, setGmailMessages] = useState([])
-  const [driveFiles, setDriveFiles] = useState([])
-  const [sheets, setSheets] = useState([])
-  const [docs, setDocs] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [connectionStatus, setConnectionStatus] = useState(null)
@@ -123,38 +120,6 @@ const GoogleDashboard = () => {
         console.error('Gmail error:', gmailData.error)
       }
 
-      // Fetch Drive files
-      const driveResponse = await fetch(`${baseUrl}/connections/google/drive/files?limit=5`, {
-        headers
-      })
-      const driveData = await driveResponse.json()
-      if (driveData.files) {
-        setDriveFiles(driveData.files)
-      } else if (driveData.error) {
-        console.error('Drive error:', driveData.error)
-      }
-
-      // Fetch Sheets
-      const sheetsResponse = await fetch(`${baseUrl}/connections/google/sheets/spreadsheets?limit=5`, {
-        headers
-      })
-      const sheetsData = await sheetsResponse.json()
-      if (sheetsData.spreadsheets) {
-        setSheets(sheetsData.spreadsheets)
-      } else if (sheetsData.error) {
-        console.error('Sheets error:', sheetsData.error)
-      }
-
-      // Fetch Docs
-      const docsResponse = await fetch(`${baseUrl}/connections/google/docs/documents?limit=5`, {
-        headers
-      })
-      const docsData = await docsResponse.json()
-      if (docsData.documents) {
-        setDocs(docsData.documents)
-      } else if (docsData.error) {
-        console.error('Docs error:', docsData.error)
-      }
 
     } catch (error) {
       console.error('Error fetching Google data:', error)
@@ -207,12 +172,6 @@ const GoogleDashboard = () => {
     return new Date(dateString).toLocaleDateString()
   }
 
-  const formatFileSize = (bytes) => {
-    if (!bytes) return 'Unknown size'
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(1024))
-    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i]
-  }
 
   if (!user) {
     return (
@@ -271,8 +230,8 @@ const GoogleDashboard = () => {
                   <span>Refresh</span>
                 </button>
               </div>
-        </div>
-      </div>
+            </div>
+          </div>
         </div>
 
         {/* Main Content Area */}
@@ -281,9 +240,9 @@ const GoogleDashboard = () => {
         ) : (
           <div className="flex-1 pt-24 p-6">
             <div className="max-w-7xl mx-auto">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* First Column - Top 3 Emails and Send Email */}
-                <div className="lg:col-span-1 space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* First Column - Top 3 Recent Emails */}
+                <div className="space-y-6">
                   <div className="bg-white rounded-xl shadow-sm border p-6">
                     <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
                       <Mail className="w-5 h-5 mr-2 text-red-500" />
@@ -311,8 +270,10 @@ const GoogleDashboard = () => {
                           </div>
                     )}
                   </div>
+                </div>
 
-                  {/* Send Email Section */}
+                {/* Second Column - Send Email */}
+                <div className="space-y-6">
                   <div className="bg-white rounded-xl shadow-sm border p-6">
                     <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
                       <Send className="w-5 h-5 mr-2 text-green-600" />
@@ -373,117 +334,15 @@ const GoogleDashboard = () => {
                       </button>
                     </form>
                   </div>
+
+                  {error && (
+                    <div className="mt-8 bg-red-50 border border-red-200 rounded-lg p-4">
+                      <p className="text-red-600">{error}</p>
+                    </div>
+                  )}
                 </div>
-
-                {/* Second and Third Columns - Other Google Services */}
-                <div className="lg:col-span-2 space-y-8">
-
-          {/* Google Drive Files Section */}
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-              <Folder className="w-5 h-5 mr-2 text-blue-500" />
-              Google Drive Files
-            </h2>
-            
-            {driveFiles.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {driveFiles.slice(0, 4).map((file, index) => (
-                  <div key={index} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                            <h3 className="font-medium text-gray-900 mb-2 truncate text-sm">{file.name}</h3>
-                            <p className="text-xs text-gray-600 mb-1">{file.mimeType}</p>
-                            <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-                            <p className="text-xs text-gray-500">Modified: {formatDate(file.modifiedTime)}</p>
-                    {file.webViewLink && (
-                      <a
-                        href={file.webViewLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline text-xs"
-                      >
-                        Open in Drive
-                      </a>
-                    )}
-                  </div>
-                ))}
               </div>
-            ) : (
-              <p className="text-gray-500">No files found</p>
-            )}
-          </div>
-
-          {/* Google Sheets Section */}
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-              <Table className="w-5 h-5 mr-2 text-green-500" />
-              Google Sheets
-            </h2>
-            
-            {sheets.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {sheets.slice(0, 4).map((sheet, index) => (
-                  <div key={index} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                            <h3 className="font-medium text-gray-900 mb-2 truncate text-sm">{sheet.name}</h3>
-                            <p className="text-xs text-gray-600 mb-1">{sheet.mimeType}</p>
-                            <p className="text-xs text-gray-500">Modified: {formatDate(sheet.modifiedTime)}</p>
-                    {sheet.webViewLink && (
-                      <a
-                        href={sheet.webViewLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline text-xs"
-                      >
-                        Open in Sheets
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500">No spreadsheets found</p>
-            )}
-          </div>
-
-          {/* Google Docs Section */}
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-              <FileText className="w-5 h-5 mr-2 text-blue-600" />
-              Google Docs
-            </h2>
-            
-            {docs.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {docs.slice(0, 4).map((doc, index) => (
-                  <div key={index} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                            <h3 className="font-medium text-gray-900 mb-2 truncate text-sm">{doc.name}</h3>
-                            <p className="text-xs text-gray-600 mb-1">{doc.mimeType}</p>
-                            <p className="text-xs text-gray-500">Modified: {formatDate(doc.modifiedTime)}</p>
-                    {doc.webViewLink && (
-                      <a
-                        href={doc.webViewLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline text-xs"
-                      >
-                        Open in Docs
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500">No documents found</p>
-            )}
-                  </div>
-                </div>
-          </div>
-              
-
-          {error && (
-                <div className="mt-8 bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-red-600">{error}</p>
             </div>
-          )}
-        </div>
           </div>
         )}
       </div>
