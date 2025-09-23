@@ -1188,7 +1188,10 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # Instagram Business accounts must be connected to Facebook Pages
         print("🔄 Instagram OAuth - using Facebook OAuth with Instagram scopes...")
         
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
+        # Use Instagram redirect URI for Instagram OAuth
+        instagram_redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/instagram/callback"
+        
+        return f"{base_url}?client_id={client_id}&redirect_uri={instagram_redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
 
     elif platform == 'linkedin':
         # LinkedIn scopes for both personal and page management:
@@ -1229,7 +1232,9 @@ def exchange_code_for_tokens(platform: str, code: str) -> dict:
 
     elif platform == "instagram":
         # Instagram uses Facebook OAuth, so use Facebook token exchange
-        return exchange_facebook_code_for_tokens(code)
+        # with Instagram redirect URI
+        instagram_redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/instagram/callback"
+        return exchange_facebook_code_for_tokens(code, instagram_redirect_uri)
 
     elif platform == "linkedin":
 
@@ -1245,19 +1250,20 @@ def exchange_code_for_tokens(platform: str, code: str) -> dict:
 
 
 
-def exchange_facebook_code_for_tokens(code: str) -> dict:
+def exchange_facebook_code_for_tokens(code: str, redirect_uri: str = None) -> dict:
 
     """Exchange Facebook OAuth code for access tokens"""
 
     import requests
 
     
-    
+
     facebook_app_id = os.getenv('FACEBOOK_CLIENT_ID')
 
     facebook_app_secret = os.getenv('FACEBOOK_CLIENT_SECRET')
 
-    redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/facebook/callback"
+    if not redirect_uri:
+        redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/facebook/callback"
 
     
     
