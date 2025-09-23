@@ -15,8 +15,7 @@ import {
   Linkedin,
   X,
   RefreshCw,
-  Globe,
-  Infinity
+  Globe
 } from 'lucide-react'
 import { socialMediaService } from '../services/socialMedia'
 import { connectionsAPI } from '../services/connections'
@@ -103,35 +102,24 @@ const SettingsDashboard = () => {
 
   const platforms = [
     {
-      id: 'meta',
-      name: 'Meta',
-      icon: Infinity,
+      id: 'facebook',
+      name: 'Facebook',
+      icon: Facebook,
       color: 'bg-blue-600',
-      description: 'Manage Facebook Pages and Instagram Business accounts',
-      oauthSupported: false,
+      description: 'Connect Facebook Pages',
+      oauthSupported: true,
       tokenSupported: false,
-      helpUrl: 'https://developers.facebook.com/tools/explorer/',
-      platforms: ['facebook', 'instagram'],
-      subPlatforms: [
-        {
-          id: 'facebook',
-          name: 'Facebook',
-          icon: Facebook,
-          color: 'bg-blue-600',
-          description: 'Connect Facebook Pages',
-          oauthSupported: true,
-          tokenSupported: false
-        },
-        {
-          id: 'instagram',
-          name: 'Instagram',
-          icon: Instagram,
-          color: 'bg-pink-600',
-          description: 'Connect Instagram Business accounts',
-          oauthSupported: true,
-          tokenSupported: false
-        }
-      ]
+      helpUrl: 'https://developers.facebook.com/tools/explorer/'
+    },
+    {
+      id: 'instagram',
+      name: 'Instagram',
+      icon: Instagram,
+      color: 'bg-pink-600',
+      description: 'Connect Instagram Business accounts (via Facebook)',
+      oauthSupported: true,
+      tokenSupported: false,
+      helpUrl: 'https://developers.facebook.com/tools/explorer/'
     },
     {
       id: 'twitter',
@@ -245,23 +233,9 @@ const SettingsDashboard = () => {
 
   const handleOAuthConnect = async (platform) => {
     try {
-      if (platform === 'meta') {
-        // For Meta platform, show options for both Facebook and Instagram
-        setError('Please use the individual Facebook or Instagram connection options below.')
-        return
-      } else {
-        await socialMediaService.connectWithOAuth(platform)
-      }
+      await socialMediaService.connectWithOAuth(platform)
     } catch (error) {
       setError(`Failed to start OAuth for ${platform}: ${error.message}`)
-    }
-  }
-
-  const handleMetaConnect = async (subPlatform) => {
-    try {
-      await socialMediaService.connectWithOAuth(subPlatform)
-    } catch (error) {
-      setError(`Failed to start OAuth for ${subPlatform}: ${error.message}`)
     }
   }
 
@@ -535,9 +509,7 @@ const SettingsDashboard = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {platforms.map((platform) => {
                     const Icon = platform.icon
-                    const isConnected = platform.id === 'meta' 
-                      ? connections.some(c => c.platform === 'facebook' || c.platform === 'instagram')
-                      : connections.some(c => c.platform === platform.id)
+                    const isConnected = connections.some(c => c.platform === platform.id)
                     
                     return (
                       <div key={platform.id} className={`p-6 rounded-lg border-2 transition-all ${
@@ -558,64 +530,32 @@ const SettingsDashboard = () => {
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {platform.id === 'meta' && platform.subPlatforms ? (
-                              // Special handling for Meta with sub-platforms
-                              <div className="space-y-2">
-                                {platform.subPlatforms.map((subPlatform) => {
-                                  const SubIcon = subPlatform.icon
-                                  const isSubConnected = connections.some(c => c.platform === subPlatform.id)
-                                  
-                                  return (
-                                    <div key={subPlatform.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
-                                      <div className="flex items-center">
-                                        <SubIcon className="w-4 h-4 mr-2" style={{ color: subPlatform.color.replace('bg-', '#') }} />
-                                        <span className="text-sm font-medium">{subPlatform.name}</span>
-                                      </div>
-                                      {isSubConnected ? (
-                                        <Check className="w-4 h-4 text-green-600" />
-                                      ) : (
-                                        <button
-                                          onClick={() => handleMetaConnect(subPlatform.id)}
-                                          className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
-                                        >
-                                          Connect
-                                        </button>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            ) : (
-                              // Regular platform handling
-                              <>
-                                {platform.oauthSupported && (
-                                  <button
-                                    onClick={() => handleOAuthConnect(platform.id)}
-                                    className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 flex items-center justify-center"
-                                  >
-                                    <Shield className="w-4 h-4 mr-1" />
-                                    OAuth
-                                  </button>
-                                )}
-                                {platform.tokenSupported && (
-                                  <button
-                                    onClick={() => handleConnectionMethod(platform.id, 'token')}
-                                    className="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 flex items-center justify-center"
-                                  >
-                                    <Key className="w-4 h-4 mr-1" />
-                                    Token
-                                  </button>
-                                )}
-                                {platform.credentialsSupported && (
-                                  <button
-                                    onClick={() => handleConnectionMethod(platform.id, 'credentials')}
-                                    className="w-full px-3 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 flex items-center justify-center"
-                                  >
-                                    <Key className="w-4 h-4 mr-1" />
-                                    Credentials
-                                  </button>
-                                )}
-                              </>
+                            {platform.oauthSupported && (
+                              <button
+                                onClick={() => handleOAuthConnect(platform.id)}
+                                className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 flex items-center justify-center"
+                              >
+                                <Shield className="w-4 h-4 mr-1" />
+                                Connect
+                              </button>
+                            )}
+                            {platform.tokenSupported && (
+                              <button
+                                onClick={() => handleConnectionMethod(platform.id, 'token')}
+                                className="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 flex items-center justify-center"
+                              >
+                                <Key className="w-4 h-4 mr-1" />
+                                Token
+                              </button>
+                            )}
+                            {platform.credentialsSupported && (
+                              <button
+                                onClick={() => handleConnectionMethod(platform.id, 'credentials')}
+                                className="w-full px-3 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 flex items-center justify-center"
+                              >
+                                <Key className="w-4 h-4 mr-1" />
+                                Credentials
+                              </button>
                             )}
                           </div>
                         )}

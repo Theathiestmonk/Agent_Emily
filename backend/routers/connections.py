@@ -578,15 +578,19 @@ async def handle_oauth_callback(
         # Verify state - find the state first to get the user_id
 
         print(f"🔍 Looking for OAuth state: {state[:10]}...")
-
-        state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", platform).execute()
-
         
-        
+        # Check if this is an Instagram-via-Facebook state
+        is_instagram_via_facebook = state.startswith("instagram_via_facebook_")
+        if is_instagram_via_facebook:
+            print("🔄 Detected Instagram-via-Facebook state")
+            # Look for the Instagram-via-Facebook state
+            state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", "instagram_via_facebook").execute()
+        else:
+            # Regular platform state lookup
+            state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", platform).execute()
+
         print(f"📊 State query result: {state_response.data}")
 
-        
-        
         if not state_response.data:
 
             print(f"❌ No OAuth state found for state: {state[:10]}...")
@@ -632,20 +636,19 @@ async def handle_oauth_callback(
         
         
         # Exchange code for tokens
+        # If this is Instagram-via-Facebook, use Facebook token exchange
+        actual_platform = "facebook" if is_instagram_via_facebook else platform
+        
+        print(f"🔄 Exchanging {actual_platform} code for tokens...")
 
-        print(f"🔄 Exchanging {platform} code for tokens...")
-
-        tokens = exchange_code_for_tokens(platform, code)
+        tokens = exchange_code_for_tokens(actual_platform, code)
 
         print(f"✅ Tokens received: {tokens.keys() if tokens else 'None'}")
 
-        
-        
         # Get account information
+        print(f"🔍 Getting account info for {actual_platform}...")
 
-        print(f"🔍 Getting account info for {platform}...")
-
-        account_info = get_account_info(platform, tokens['access_token'])
+        account_info = get_account_info(actual_platform, tokens['access_token'])
 
         print(f"📊 Account info result: {account_info}")
 
@@ -656,8 +659,41 @@ async def handle_oauth_callback(
         if account_info is None:
 
             if platform == "instagram":
-
-                raise Exception("No Instagram Business account found. Please ensure your Instagram account is connected to a Facebook Page and is a Business or Creator account.")
+                # For Instagram, redirect to Facebook OAuth since Instagram Business accounts 
+                # must be connected through Facebook Pages
+                print("🔄 No Instagram Business account found. Redirecting to Facebook OAuth...")
+                
+                # Generate Facebook OAuth URL
+                facebook_oauth_url = generate_oauth_url('facebook', user_id)
+                
+                return HTMLResponse(f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Instagram Setup Required</title>
+                </head>
+                <body>
+                    <h2>Instagram Setup Required</h2>
+                    <p>To connect Instagram, you need to:</p>
+                    <ol>
+                        <li>Convert your Instagram account to a Business account</li>
+                        <li>Connect it to a Facebook Page</li>
+                        <li>Then connect through Facebook</li>
+                    </ol>
+                    <p>Click below to connect via Facebook (which will also connect Instagram if properly set up):</p>
+                    <a href="{facebook_oauth_url}" style="background: #1877f2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Connect via Facebook</a>
+                    <script>
+                        if (window.opener) {{
+                            window.opener.postMessage({{
+                                type: 'OAUTH_ERROR',
+                                platform: 'instagram',
+                                error: 'Instagram requires Facebook Page connection. Please connect via Facebook first.'
+                            }}, '*');
+                        }}
+                    </script>
+                </body>
+                </html>
+                """)
 
             elif platform == "linkedin":
 
@@ -681,7 +717,7 @@ async def handle_oauth_callback(
 
             "user_id": user_id,
 
-            "platform": platform,
+            "platform": "instagram" if is_instagram_via_facebook else platform,
 
             "page_id": account_info.get('page_id'),
 
@@ -830,13 +866,13 @@ async def handle_oauth_callback(
 
                         type: 'OAUTH_SUCCESS',
 
-                        platform: '{platform}',
+                        platform: '{"instagram" if is_instagram_via_facebook else platform}',
 
                         connection: {{
 
                             id: '{connection_id}',
 
-                            platform: '{platform}',
+                            platform: '{"instagram" if is_instagram_via_facebook else platform}',
 
                             page_name: '{account_info.get('page_name', '')}',
 
@@ -1131,16 +1167,29 @@ def generate_oauth_url(platform: str, state: str) -> str:
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,ads_read,ads_management,business_management"
 
     elif platform == 'instagram':
-
-        # Instagram uses Facebook OAuth with Instagram-specific scopes
-
-        # Added pages_manage_posts for proper Instagram Business account access
-
-        # Added ads permissions for Instagram ads data
-
-        # Removed invalid scopes and kept only essential ones
-
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,business_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
+        # Instagram Business accounts must be connected through Facebook Pages
+        # Create a special state that indicates this is an Instagram request via Facebook
+        print("🔄 Instagram connection requires Facebook Page. Redirecting to Facebook OAuth...")
+        
+        # Create a special state for Instagram-via-Facebook
+        instagram_state = f"instagram_via_facebook_{state}"
+        
+        # Store the Instagram state in the database
+        try:
+            supabase_admin.table("oauth_states").insert({
+                "state": instagram_state,
+                "user_id": user_id,
+                "platform": "instagram_via_facebook",
+                "created_at": datetime.now().isoformat()
+            }).execute()
+            print(f"✅ Stored Instagram-via-Facebook state: {instagram_state}")
+        except Exception as e:
+            print(f"❌ Error storing Instagram state: {e}")
+        
+        # Use Facebook OAuth with Instagram scopes
+        facebook_redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/facebook/callback"
+        
+        return f"{base_url}?client_id={client_id}&redirect_uri={facebook_redirect_uri}&state={instagram_state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
 
     elif platform == 'linkedin':
         # LinkedIn scopes for both personal and page management:
@@ -3605,7 +3654,7 @@ async def test_instagram_pages(
         
         # Test with more comprehensive scopes
 
-        test_oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri=https://agent-emily.onrender.com/connections/auth/instagram/callback&state={state}&scope=pages_show_list,pages_read_engagement,business_basic,instagram_content_publish,pages_manage_posts"
+        test_oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri=https://agent-emily.onrender.com/connections/auth/instagram/callback&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
 
         
         
