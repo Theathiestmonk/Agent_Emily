@@ -22,22 +22,14 @@ const ConnectionCards = ({ compact = false }) => {
 
   const platforms = [
     {
-      id: 'facebook',
-      name: 'Facebook',
+      id: 'facebook_instagram',
+      name: 'Facebook & Instagram',
       icon: Facebook,
       color: 'bg-blue-600',
       iconColor: 'text-blue-600',
       bgColor: 'bg-blue-50',
-      borderColor: 'border-blue-200'
-    },
-    {
-      id: 'instagram',
-      name: 'Instagram',
-      icon: Instagram,
-      color: 'bg-pink-500',
-      iconColor: 'text-pink-500',
-      bgColor: 'bg-pink-50',
-      borderColor: 'border-pink-200'
+      borderColor: 'border-blue-200',
+      platforms: ['facebook', 'instagram']
     },
     {
       id: 'linkedin',
@@ -184,6 +176,15 @@ const ConnectionCards = ({ compact = false }) => {
         } else {
           throw new Error('Failed to get Google auth URL from response')
         }
+      } else if (platformId === 'facebook_instagram') {
+        // Handle combined Facebook & Instagram connection
+        const response = await connectionsAPI.connectPlatform('facebook')
+        
+        if (response.auth_url) {
+          window.location.href = response.auth_url
+        } else {
+          throw new Error('Failed to get auth URL')
+        }
       } else {
         // Handle other platforms
         const response = await connectionsAPI.connectPlatform(platformId)
@@ -204,10 +205,21 @@ const ConnectionCards = ({ compact = false }) => {
 
   const handleDisconnect = async (platformId) => {
     try {
-      // Find the connection to determine its type
-      const connection = connections.find(conn => conn.platform === platformId)
-      
-      if (platformId === 'google') {
+      if (platformId === 'facebook_instagram') {
+        // Handle combined Facebook & Instagram disconnect
+        const facebookConnection = connections.find(conn => conn.platform === 'facebook')
+        const instagramConnection = connections.find(conn => conn.platform === 'instagram')
+        
+        // Disconnect both if they exist
+        if (facebookConnection) {
+          await connectionsAPI.disconnectPlatform('facebook')
+        }
+        if (instagramConnection) {
+          await connectionsAPI.disconnectPlatform('instagram')
+        }
+        
+        await fetchConnections()
+      } else if (platformId === 'google') {
         // Handle Google disconnect
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
         // Ensure no double slashes in URL
@@ -222,16 +234,21 @@ const ConnectionCards = ({ compact = false }) => {
         } else {
           throw new Error('Failed to disconnect Google')
         }
-      } else if (connection && connection.page_id) {
-        // Handle OAuth connections (platform_connections table)
-        await connectionsAPI.disconnectPlatform(platformId)
-        await fetchConnections()
-      } else if (connection && connection.id) {
-        // Handle token-based connections (social_media_connections table)
-        await socialMediaService.disconnectAccount(connection.id)
-        await fetchConnections()
       } else {
-        throw new Error('Connection not found')
+        // Find the connection to determine its type
+        const connection = connections.find(conn => conn.platform === platformId)
+        
+        if (connection && connection.page_id) {
+          // Handle OAuth connections (platform_connections table)
+          await connectionsAPI.disconnectPlatform(platformId)
+          await fetchConnections()
+        } else if (connection && connection.id) {
+          // Handle token-based connections (social_media_connections table)
+          await socialMediaService.disconnectAccount(connection.id)
+          await fetchConnections()
+        } else {
+          throw new Error('Connection not found')
+        }
       }
     } catch (error) {
       console.error(`Error disconnecting from ${platformId}:`, error)
@@ -240,6 +257,30 @@ const ConnectionCards = ({ compact = false }) => {
   }
 
   const getConnectionStatus = (platformId) => {
+    // Handle combined Facebook & Instagram connection
+    if (platformId === 'facebook_instagram') {
+      const facebookConnection = connections.find(conn => conn.platform === 'facebook')
+      const instagramConnection = connections.find(conn => conn.platform === 'instagram')
+      
+      // If either Facebook or Instagram is connected, show as connected
+      const connected = facebookConnection?.is_active || instagramConnection?.is_active
+      
+      if (connected) {
+        const primaryConnection = facebookConnection || instagramConnection
+        return {
+          connected: true,
+          status: primaryConnection?.connection_status || 'active',
+          pageName: facebookConnection?.page_name || instagramConnection?.page_name || 'Facebook & Instagram',
+          lastSync: primaryConnection?.last_sync,
+          hasFacebook: !!facebookConnection?.is_active,
+          hasInstagram: !!instagramConnection?.is_active
+        }
+      }
+      
+      return { connected: false, status: 'disconnected' }
+    }
+    
+    // Handle individual platform connections
     const connection = connections.find(conn => conn.platform === platformId)
     if (!connection) {
       return { connected: false, status: 'disconnected' }
@@ -289,7 +330,7 @@ const ConnectionCards = ({ compact = false }) => {
   return (
     <div className="flex flex-wrap gap-2">
         {platforms.map((platform) => {
-        const { connected, status } = getConnectionStatus(platform.id)
+        const { connected, status, hasFacebook, hasInstagram } = getConnectionStatus(platform.id)
         const IconComponent = platform.icon
 
           return (
@@ -307,8 +348,20 @@ const ConnectionCards = ({ compact = false }) => {
                 `}
                 title={`${platform.name} - ${connected ? 'Connected' : 'Not connected'}`}
               >
-                <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
-              </div>
+                  <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+                  
+                  {/* Show platform indicators for Facebook & Instagram */}
+                  {platform.id === 'facebook_instagram' && connected && (
+                    <div className="absolute -bottom-1 -right-1 flex space-x-0.5">
+                      {hasFacebook && (
+                        <div className="w-2 h-2 bg-white rounded-full" title="Facebook connected" />
+                      )}
+                      {hasInstagram && (
+                        <div className="w-2 h-2 bg-pink-300 rounded-full" title="Instagram connected" />
+                      )}
+                    </div>
+                  )}
+                </div>
             ) : (
               // Interactive mode for settings/other pages
               <>
@@ -325,6 +378,18 @@ const ConnectionCards = ({ compact = false }) => {
                   title={`${connected ? 'Disconnect from' : 'Connect to'} ${platform.name}`}
                 >
                   <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+                  
+                  {/* Show platform indicators for Facebook & Instagram */}
+                  {platform.id === 'facebook_instagram' && connected && (
+                    <div className="absolute -bottom-1 -right-1 flex space-x-0.5">
+                      {hasFacebook && (
+                        <div className="w-2 h-2 bg-white rounded-full" title="Facebook connected" />
+                      )}
+                      {hasInstagram && (
+                        <div className="w-2 h-2 bg-pink-300 rounded-full" title="Instagram connected" />
+                      )}
+                    </div>
+                  )}
                   
                   {/* Status indicator dot */}
                   <div className="absolute -top-1 -right-1">
