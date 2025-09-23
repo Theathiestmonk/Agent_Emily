@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi.responses import HTMLResponse
 from typing import List, Optional
 from datetime import datetime, timedelta
 import os
@@ -579,15 +580,8 @@ async def handle_oauth_callback(
 
         print(f"🔍 Looking for OAuth state: {state[:10]}...")
         
-        # Check if this is an Instagram-via-Facebook state
-        is_instagram_via_facebook = state.startswith("instagram_via_facebook_")
-        if is_instagram_via_facebook:
-            print("🔄 Detected Instagram-via-Facebook state")
-            # Look for the Instagram-via-Facebook state
-            state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", "instagram_via_facebook").execute()
-        else:
-            # Regular platform state lookup
-            state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", platform).execute()
+        # Regular platform state lookup
+        state_response = supabase_admin.table("oauth_states").select("*").eq("state", state).eq("platform", platform).execute()
 
         print(f"📊 State query result: {state_response.data}")
 
@@ -636,19 +630,16 @@ async def handle_oauth_callback(
         
         
         # Exchange code for tokens
-        # If this is Instagram-via-Facebook, use Facebook token exchange
-        actual_platform = "facebook" if is_instagram_via_facebook else platform
-        
-        print(f"🔄 Exchanging {actual_platform} code for tokens...")
+        print(f"🔄 Exchanging {platform} code for tokens...")
 
-        tokens = exchange_code_for_tokens(actual_platform, code)
+        tokens = exchange_code_for_tokens(platform, code)
 
         print(f"✅ Tokens received: {tokens.keys() if tokens else 'None'}")
 
         # Get account information
-        print(f"🔍 Getting account info for {actual_platform}...")
+        print(f"🔍 Getting account info for {platform}...")
 
-        account_info = get_account_info(actual_platform, tokens['access_token'])
+        account_info = get_account_info(platform, tokens['access_token'])
 
         print(f"📊 Account info result: {account_info}")
 
@@ -659,35 +650,48 @@ async def handle_oauth_callback(
         if account_info is None:
 
             if platform == "instagram":
-                # For Instagram, redirect to Facebook OAuth since Instagram Business accounts 
-                # must be connected through Facebook Pages
-                print("🔄 No Instagram Business account found. Redirecting to Facebook OAuth...")
-                
-                # Generate Facebook OAuth URL
-                facebook_oauth_url = generate_oauth_url('facebook', user_id)
+                # For Instagram, provide helpful setup instructions
+                print("🔄 No Instagram Business account found. Providing setup instructions...")
                 
                 return HTMLResponse(f"""
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <title>Instagram Setup Required</title>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }}
+                        .step {{ background: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #1877f2; }}
+                        .button {{ background: #1877f2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 10px 0; }}
+                        .button:hover {{ background: #166fe5; }}
+                    </style>
                 </head>
                 <body>
-                    <h2>Instagram Setup Required</h2>
-                    <p>To connect Instagram, you need to:</p>
-                    <ol>
-                        <li>Convert your Instagram account to a Business account</li>
-                        <li>Connect it to a Facebook Page</li>
-                        <li>Then connect through Facebook</li>
-                    </ol>
-                    <p>Click below to connect via Facebook (which will also connect Instagram if properly set up):</p>
-                    <a href="{facebook_oauth_url}" style="background: #1877f2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Connect via Facebook</a>
+                    <h2>Instagram Business Account Setup Required</h2>
+                    <p>To connect Instagram, you need to set up your Instagram Business account first:</p>
+                    
+                    <div class="step">
+                        <h3>Step 1: Convert to Business Account</h3>
+                        <p>In your Instagram app, go to Settings → Account → Switch to Professional Account → Business</p>
+                    </div>
+                    
+                    <div class="step">
+                        <h3>Step 2: Connect to Facebook Page</h3>
+                        <p>In your Instagram app, go to Settings → Account → Linked Accounts → Facebook → Connect to a Page</p>
+                    </div>
+                    
+                    <div class="step">
+                        <h3>Step 3: Try Again</h3>
+                        <p>Once your Instagram Business account is connected to a Facebook Page, try connecting again.</p>
+                    </div>
+                    
+                    <a href="javascript:window.close()" class="button">Close and Try Again</a>
+                    
                     <script>
                         if (window.opener) {{
                             window.opener.postMessage({{
                                 type: 'OAUTH_ERROR',
                                 platform: 'instagram',
-                                error: 'Instagram requires Facebook Page connection. Please connect via Facebook first.'
+                                error: 'Instagram Business account setup required. Please connect your Instagram to a Facebook Page first.'
                             }}, '*');
                         }}
                     </script>
@@ -717,7 +721,7 @@ async def handle_oauth_callback(
 
             "user_id": user_id,
 
-            "platform": "instagram" if is_instagram_via_facebook else platform,
+            "platform": platform,
 
             "page_id": account_info.get('page_id'),
 
@@ -866,13 +870,13 @@ async def handle_oauth_callback(
 
                         type: 'OAUTH_SUCCESS',
 
-                        platform: '{"instagram" if is_instagram_via_facebook else platform}',
+                        platform: '{platform}',
 
                         connection: {{
 
                             id: '{connection_id}',
 
-                            platform: '{"instagram" if is_instagram_via_facebook else platform}',
+                            platform: '{platform}',
 
                             page_name: '{account_info.get('page_name', '')}',
 
@@ -1167,29 +1171,11 @@ def generate_oauth_url(platform: str, state: str) -> str:
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,ads_read,ads_management,business_management"
 
     elif platform == 'instagram':
-        # Instagram Business accounts must be connected through Facebook Pages
-        # Create a special state that indicates this is an Instagram request via Facebook
-        print("🔄 Instagram connection requires Facebook Page. Redirecting to Facebook OAuth...")
+        # Instagram uses Facebook OAuth with Instagram-specific scopes
+        # Instagram Business accounts must be connected to Facebook Pages
+        print("🔄 Instagram OAuth - using Facebook OAuth with Instagram scopes...")
         
-        # Create a special state for Instagram-via-Facebook
-        instagram_state = f"instagram_via_facebook_{state}"
-        
-        # Store the Instagram state in the database
-        try:
-            supabase_admin.table("oauth_states").insert({
-                "state": instagram_state,
-                "user_id": user_id,
-                "platform": "instagram_via_facebook",
-                "created_at": datetime.now().isoformat()
-            }).execute()
-            print(f"✅ Stored Instagram-via-Facebook state: {instagram_state}")
-        except Exception as e:
-            print(f"❌ Error storing Instagram state: {e}")
-        
-        # Use Facebook OAuth with Instagram scopes
-        facebook_redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/facebook/callback"
-        
-        return f"{base_url}?client_id={client_id}&redirect_uri={facebook_redirect_uri}&state={instagram_state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
+        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
 
     elif platform == 'linkedin':
         # LinkedIn scopes for both personal and page management:
@@ -1820,7 +1806,9 @@ def get_instagram_account_info(access_token: str):
             print("   1. Convert Instagram to Business account")
             print("   2. Connect Instagram to a Facebook Page")
             print("   3. Ensure the page has Instagram Business account linked")
-            return None
+            
+            # Return a helpful error message instead of None
+            raise Exception("No Instagram Business account found. Please ensure your Instagram account is connected to a Facebook Page and is a Business or Creator account. You can do this by going to your Instagram app settings and connecting it to a Facebook Page.")
         
         
         
