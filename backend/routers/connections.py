@@ -763,9 +763,10 @@ async def handle_oauth_callback(
         # Add platform-specific fields
 
         if platform == "instagram":
-
-            connection_data["instagram_id"] = account_info.get('instagram_id')
-
+            # For Instagram, use instagram_id as page_id since that's what the table expects
+            if account_info.get('instagram_id'):
+                connection_data["page_id"] = account_info.get('instagram_id')
+            
             connection_data["account_type"] = account_info.get('account_type')
 
             connection_data["media_count"] = account_info.get('media_count', 0)
@@ -805,7 +806,7 @@ async def handle_oauth_callback(
             instagram_connection_data = {
                 "user_id": user_id,
                 "platform": "instagram",
-                "page_id": account_info.get('instagram_id'),
+                "page_id": account_info.get('instagram_id'),  # Use instagram_id as page_id
                 "page_name": account_info.get('username', ''),
                 "page_username": account_info.get('username', ''),
                 "follower_count": account_info.get('follower_count', 0),
@@ -815,7 +816,6 @@ async def handle_oauth_callback(
                 "connection_status": 'active',
                 "is_active": True,
                 "last_sync": datetime.now().isoformat(),
-                "instagram_id": account_info.get('instagram_id'),
                 "account_type": account_info.get('account_type'),
                 "media_count": account_info.get('media_count', 0)
             }
@@ -2920,7 +2920,7 @@ async def debug_instagram_connection(
 
             "connection_id": connection['id'],
 
-            "instagram_id": connection.get('instagram_id'),
+            "instagram_id": connection.get('page_id'),  # Instagram ID is stored in page_id field
 
             "username": connection.get('page_username'),
 
@@ -3856,9 +3856,9 @@ async def post_to_instagram(
 
         
         
-        # Get Instagram Business Account ID
+        # Get Instagram Business Account ID (stored in page_id field)
 
-        instagram_id = connection.get('instagram_id')
+        instagram_id = connection.get('page_id')
 
         if not instagram_id:
 
