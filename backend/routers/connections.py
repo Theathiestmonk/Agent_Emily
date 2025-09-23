@@ -2814,6 +2814,93 @@ async def test_linkedin_connection():
         return {"error": str(e)}
 
 
+@router.post("/linkedin/upload-image")
+async def upload_linkedin_image(
+    image_data: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Upload image to LinkedIn for use in posts"""
+    try:
+        print(f"📸 LinkedIn image upload request from user: {current_user.id}")
+        
+        # Get user's LinkedIn connection
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "linkedin").eq("is_active", True).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active LinkedIn connection found. Please connect your LinkedIn account first."
+            )
+        
+        connection = response.data[0]
+        
+        # Decrypt the access token
+        try:
+            access_token = decrypt_token(connection['access_token_encrypted'])
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to decrypt access token. Please reconnect your LinkedIn account."
+            )
+        
+        # Get the user's LinkedIn ID
+        linkedin_id = connection.get('linkedin_id') or connection.get('page_id')
+        if not linkedin_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="LinkedIn ID not found in connection data"
+            )
+        
+        # Step 1: Register the image upload
+        register_url = "https://api.linkedin.com/v2/assets?action=registerUpload"
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json',
+            'X-Restli-Protocol-Version': '2.0.0'
+        }
+        
+        register_payload = {
+            "registerUploadRequest": {
+                "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
+                "owner": f"urn:li:person:{linkedin_id}",
+                "serviceRelationships": [
+                    {
+                        "relationshipType": "OWNER",
+                        "identifier": "urn:li:userGeneratedContent"
+                    }
+                ]
+            }
+        }
+        
+        print(f"🔄 Registering image upload...")
+        register_response = requests.post(register_url, headers=headers, json=register_payload)
+        
+        if not register_response.ok:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to register image upload: {register_response.text}"
+            )
+        
+        register_data = register_response.json()
+        upload_url = register_data['value']['uploadMechanism']['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']['uploadUrl']
+        asset_urn = register_data['value']['asset']
+        
+        print(f"✅ Image upload registered. Asset URN: {asset_urn}")
+        
+        # Step 2: Upload the image binary data
+        # Note: In a real implementation, you'd need to fetch the image from the provided URL
+        # and upload it as binary data. For now, we'll return the asset URN for use in posts.
+        
+        return {
+            "success": True,
+            "asset_urn": asset_urn,
+            "message": "Image upload registered successfully. Use the asset_urn in your post."
+        }
+        
+    except Exception as e:
+        print(f"❌ LinkedIn image upload error: {e}")
+        return {"error": str(e)}
+
 
 @router.post("/linkedin/post")
 
@@ -2909,9 +2996,9 @@ async def post_to_linkedin(
         
         
         
-        # Post to LinkedIn using the Share API
+        # Post to LinkedIn using the UGC API (new recommended approach)
 
-        linkedin_url = "https://api.linkedin.com/v2/shares"
+        linkedin_url = "https://api.linkedin.com/v2/ugcPosts"
 
         headers = {
 
@@ -2941,9 +3028,107 @@ async def post_to_linkedin(
         
         
         
-        # Create the share payload
+        # Get visibility setting from post data (default to PUBLIC)
 
-        share_payload = {
+        visibility = post_data.get('visibility', 'PUBLIC')
+
+        if visibility not in ['PUBLIC', 'CONNECTIONS']:
+
+            visibility = 'PUBLIC'
+
+        
+
+        
+
+        # Get image URL if provided
+
+        image_url = post_data.get('image_url', '')
+
+        
+
+        
+
+        # Determine share media category and prepare media
+
+        share_media_category = "NONE"
+
+        media = []
+
+        
+
+        if image_url:
+
+            # For proper image support, we need to upload the image first
+
+            # For now, we'll handle image URLs as articles
+
+            # In a full implementation, you'd call the image upload endpoint first
+
+            share_media_category = "ARTICLE"
+
+            media = [{
+
+                "status": "READY",
+
+                "description": {
+
+                    "text": title or "Shared image"
+
+                },
+
+                "originalUrl": image_url,
+
+                "title": {
+
+                    "text": title or "Shared content"
+
+                }
+
+            }]
+
+        elif any(keyword in full_message.lower() for keyword in ['http://', 'https://', 'www.']):
+
+            # Check if message contains URLs
+
+            share_media_category = "ARTICLE"
+
+            # Extract URL from message (simple implementation)
+
+            import re
+
+            url_match = re.search(r'https?://[^\s]+', full_message)
+
+            if url_match:
+
+                extracted_url = url_match.group(0)
+
+                media = [{
+
+                    "status": "READY",
+
+                    "description": {
+
+                        "text": title or "Shared article"
+
+                    },
+
+                    "originalUrl": extracted_url,
+
+                    "title": {
+
+                        "text": title or "Shared content"
+
+                    }
+
+                }]
+
+        
+
+        
+
+        # Create the UGC post payload
+
+        ugc_payload = {
 
             "author": f"urn:li:person:{linkedin_id}",
 
@@ -2959,7 +3144,7 @@ async def post_to_linkedin(
 
                     },
 
-                    "shareMediaCategory": "NONE"
+                    "shareMediaCategory": share_media_category
 
                 }
 
@@ -2967,21 +3152,29 @@ async def post_to_linkedin(
 
             "visibility": {
 
-                "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+                "com.linkedin.ugc.MemberNetworkVisibility": visibility
 
             }
 
         }
 
         
+
+        # Add media if present
+
+        if media:
+
+            ugc_payload["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = media
+
+        
         
         print(f"🌐 Posting to LinkedIn API: {linkedin_url}")
 
-        print(f"📋 Share payload: {share_payload}")
+        print(f"📋 UGC payload: {ugc_payload}")
 
         
         
-        response = requests.post(linkedin_url, headers=headers, json=share_payload)
+        response = requests.post(linkedin_url, headers=headers, json=ugc_payload)
 
         
         

@@ -538,6 +538,8 @@ const ContentDashboard = () => {
         await postToFacebook(content)
       } else if (content.platform.toLowerCase() === 'instagram') {
         await postToInstagram(content)
+      } else if (content.platform.toLowerCase() === 'linkedin') {
+        await postToLinkedIn(content)
       } else {
         // For other platforms, show a message
         showError(`${content.platform} posting not yet implemented`)
@@ -695,6 +697,53 @@ const ContentDashboard = () => {
       
     } catch (error) {
       console.error('Error posting to Instagram:', error)
+      throw error
+    }
+  }
+
+  const postToLinkedIn = async (content) => {
+    try {
+      const authToken = await getAuthToken()
+      
+      // Get the image URL if available
+      let imageUrl = ''
+      if (generatedImages[content.id] && generatedImages[content.id].image_url) {
+        imageUrl = generatedImages[content.id].image_url
+        console.log('📸 Including image in LinkedIn post:', imageUrl)
+      }
+      
+      const postData = {
+        message: content.content,
+        title: content.title,
+        hashtags: content.hashtags || [],
+        content_id: content.id,
+        image_url: imageUrl,
+        visibility: content.linkedin_visibility || 'PUBLIC' // Use content setting or default to PUBLIC
+      }
+      
+      console.log('🔄 Posting to LinkedIn...')
+      const response = await fetch(`${API_BASE_URL}/connections/linkedin/post`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(postData)
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        console.log('✅ LinkedIn post successful:', result)
+        showSuccess(`Successfully posted to LinkedIn!`)
+        updateContentInCache(content.id, { status: 'published' })
+      } else {
+        const errorText = await response.text()
+        console.error('❌ LinkedIn post failed:', response.status, errorText)
+        throw new Error(`LinkedIn posting failed: ${response.status}: ${errorText}`)
+      }
+      
+    } catch (error) {
+      console.error('Error posting to LinkedIn:', error)
       throw error
     }
   }
