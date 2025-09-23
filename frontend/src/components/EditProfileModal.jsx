@@ -156,7 +156,7 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
           <div className="flex-1">
             <div className="flex items-center space-x-3">
-              <h2 className="text-2xl font-bold text-gray-900">Edit Profile</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Edit Profile</h2>
               {hasUnsavedChanges && (
                 <div className="flex items-center space-x-2 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
                   <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
@@ -290,14 +290,14 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
                   </div>
                 </div>
               )}
-            </div>
+          </div>
             
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <X className="w-6 h-6 text-gray-500" />
-            </button>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-6 h-6 text-gray-500" />
+          </button>
           </div>
         </div>
 

@@ -614,35 +614,8 @@ async def refresh_token(refresh_token: str):
 async def forgot_password(email: str):
     """Send password reset OTP to user's email"""
     try:
-        # First check if email exists
-        try:
-            user_response = supabase.auth.admin.get_user_by_email(email)
-            if not user_response or not user_response.user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Email not found"
-                )
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Email not found"
-            )
-        
-        # Generate 6-digit OTP
-        import random
-        otp_code = str(random.randint(100000, 999999))
-        
-        # Store OTP in database with expiration (5 minutes)
-        from datetime import datetime, timedelta
-        expires_at = datetime.utcnow() + timedelta(minutes=5)
-        
-        # Store OTP in a temporary table or use Supabase's built-in OTP
-        # For now, we'll use Supabase's signInWithOtp for email verification
-        response = supabase.auth.sign_in_with_otp({
-            "email": email,
-            "options": {
-                "should_create_user": False
-            }
+        response = supabase.auth.reset_password_for_email(email, {
+            "redirect_to": f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/reset-password"
         })
         
         if response.error:
@@ -653,8 +626,6 @@ async def forgot_password(email: str):
         
         return {"message": "Verification code sent to your email"}
         
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -703,11 +674,11 @@ async def check_email_exists(email: str):
 async def reset_password(email: str, otp: str, new_password: str):
     """Reset user password using OTP verification"""
     try:
-        # Verify OTP with type 'email' (for signInWithOtp)
+        # Verify OTP with type 'recovery'
         verify_response = supabase.auth.verify_otp({
             "email": email,
             "token": otp,
-            "type": "email"
+            "type": "recovery"
         })
         
         if verify_response.error:
@@ -716,11 +687,10 @@ async def reset_password(email: str, otp: str, new_password: str):
                 detail=verify_response.error.message
             )
         
-        # Update password using admin API
-        update_response = supabase.auth.admin.update_user_by_id(
-            verify_response.user.id,
-            {"password": new_password}
-        )
+        # Update password
+        update_response = supabase.auth.update_user({
+            "password": new_password
+        })
         
         if update_response.error:
             raise HTTPException(

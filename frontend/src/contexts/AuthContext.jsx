@@ -154,20 +154,14 @@ export function AuthProvider({ children }) {
 
   const sendPasswordResetCode = async (email) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'}/auth/forgot-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email })
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
+      if (error) {
         return { 
           success: false, 
-          error: data.detail || 'Failed to send verification code' 
+          error: error.message 
         }
       }
 
@@ -182,24 +176,29 @@ export function AuthProvider({ children }) {
 
   const resetPassword = async (email, otp, newPassword) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'}/auth/reset-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          email, 
-          otp, 
-          new_password: newPassword 
-        })
+      // First verify the OTP with type 'recovery'
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        email: email,
+        token: otp,
+        type: 'recovery'
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
+      if (verifyError) {
         return { 
           success: false, 
-          error: data.detail || 'Failed to reset password' 
+          error: verifyError.message 
+        }
+      }
+
+      // Update the password
+      const { data: updateData, error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      })
+
+      if (updateError) {
+        return { 
+          success: false, 
+          error: updateError.message 
         }
       }
 

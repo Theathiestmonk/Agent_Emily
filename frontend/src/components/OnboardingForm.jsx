@@ -1706,10 +1706,10 @@ const OnboardingForm = forwardRef(({
                         <td className="px-4 py-2 text-sm text-gray-700">{platform}</td>
                         <td className="px-4 py-2">
                           <div className="flex flex-wrap gap-4">
-                            {brandTones.map(tone => (
+                          {brandTones.map(tone => (
                               <label key={`${platform.toLowerCase()}-${tone}`} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-                                <input
-                                  type="checkbox"
+                              <input
+                                type="checkbox"
                                   value={tone}
                                   checked={formData[`platform_tone_${platform.toLowerCase()}`]?.includes(tone) || false}
                                   onChange={(e) => {
@@ -1725,13 +1725,13 @@ const OnboardingForm = forwardRef(({
                                     }
                                   }}
                                   className="text-pink-600 focus:ring-pink-500 rounded"
-                                />
-                                <span className="text-sm text-gray-700">{tone}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
+                              />
+                              <span className="text-sm text-gray-700">{tone}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
                     ))}
                   </tbody>
                 </table>
@@ -1844,7 +1844,7 @@ const OnboardingForm = forwardRef(({
       )}
 
       <div className="mb-8 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
-        {renderStep()}
+      {renderStep()}
       </div>
 
       {/* Navigation */}
