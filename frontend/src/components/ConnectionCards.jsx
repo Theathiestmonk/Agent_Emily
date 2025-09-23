@@ -74,6 +74,22 @@ const ConnectionCards = ({ compact = false }) => {
     fetchConnections()
   }, [])
 
+  // Refresh connections when the page becomes visible (handles OAuth redirects)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('Page became visible, refreshing connections...')
+        fetchConnections()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
+
   const fetchConnections = async () => {
     try {
       setLoading(true)
@@ -184,7 +200,55 @@ const ConnectionCards = ({ compact = false }) => {
         const response = await connectionsAPI.connectPlatform('facebook')
         
         if (response.auth_url) {
-          window.location.href = response.auth_url
+          // Open OAuth URL in new window like other platforms
+          const popup = window.open(
+            response.auth_url,
+            'oauth-connection',
+            'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+          )
+          
+          // Listen for popup messages (for OAuth completion)
+          const messageHandler = (event) => {
+            // Allow messages from the same origin or from the callback page
+            const allowedOrigins = [
+              window.location.origin,
+              'https://emily.atsnai.com',
+              'https://agent-emily.onrender.com'
+            ]
+            
+            if (!allowedOrigins.includes(event.origin)) {
+              console.log('Ignoring message from origin:', event.origin)
+              return
+            }
+            
+            console.log('Received OAuth message:', event.data, 'from origin:', event.origin)
+            
+            if (event.data.type === 'OAUTH_SUCCESS') {
+              console.log('OAuth successful:', event.data)
+              popup.close()
+              window.removeEventListener('message', messageHandler)
+              // Refresh the page to show updated connections
+              window.location.reload()
+            } else if (event.data.type === 'OAUTH_ERROR') {
+              console.error('OAuth error:', event.data.error)
+              popup.close()
+              window.removeEventListener('message', messageHandler)
+              alert(`OAuth connection failed: ${event.data.error}`)
+            }
+          }
+          
+          window.addEventListener('message', messageHandler)
+          
+          // Check if popup was closed manually
+          const checkClosed = setInterval(() => {
+            if (popup.closed) {
+              clearInterval(checkClosed)
+              window.removeEventListener('message', messageHandler)
+              // Refresh connections when popup is closed (in case OAuth completed)
+              console.log('Popup closed, refreshing connections...')
+              fetchConnections()
+            }
+          }, 1000)
         } else {
           throw new Error('Failed to get auth URL')
         }

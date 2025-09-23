@@ -1140,7 +1140,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
 
         # Removed invalid scopes and kept only essential ones
 
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
+        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,business_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
 
     elif platform == 'linkedin':
         # LinkedIn scopes for both personal and page management:
@@ -3605,7 +3605,7 @@ async def test_instagram_pages(
         
         # Test with more comprehensive scopes
 
-        test_oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri=https://agent-emily.onrender.com/connections/auth/instagram/callback&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
+        test_oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri=https://agent-emily.onrender.com/connections/auth/instagram/callback&state={state}&scope=pages_show_list,pages_read_engagement,business_basic,instagram_content_publish,pages_manage_posts"
 
         
         
