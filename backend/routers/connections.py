@@ -1099,11 +1099,11 @@ def generate_oauth_url(platform: str, state: str) -> str:
 
         # 3. Get page insights (pages_read_engagement, pages_show_list)
 
-        # 4. Reply to comments (pages_messaging, pages_manage_engagement)
+        # 4. Read ads data (ads_read, ads_management, business_management)
 
-        # 5. Read ads data (ads_read, ads_management, business_management)
+        # Removed invalid scopes: pages_manage_metadata, pages_messaging, pages_manage_engagement, pages_read_user_content
 
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,pages_manage_metadata,pages_messaging,pages_manage_engagement,pages_read_user_content,ads_read,ads_management,business_management"
+        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,ads_read,ads_management,business_management"
 
     elif platform == 'instagram':
 
@@ -1112,6 +1112,8 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # Added pages_manage_posts for proper Instagram Business account access
 
         # Added ads permissions for Instagram ads data
+
+        # Removed invalid scopes and kept only essential ones
 
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
 
