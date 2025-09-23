@@ -108,7 +108,7 @@ const SettingsDashboard = () => {
       color: 'bg-pink-500',
       description: 'Post content, get insights, manage ads',
       oauthSupported: true,
-      tokenSupported: true,
+      tokenSupported: false,
       helpUrl: 'https://developers.facebook.com/tools/explorer/'
     },
     {

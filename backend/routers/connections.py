@@ -1116,8 +1116,13 @@ def generate_oauth_url(platform: str, state: str) -> str:
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
 
     elif platform == 'linkedin':
-
-        oauth_url = f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social"
+        # LinkedIn scopes for both personal and page management:
+        # - openid, profile, email: Basic user info
+        # - w_member_social: Post, comment, and react on personal profile
+        # - w_organization_social: Post, comment, and react on behalf of organizations
+        # - r_organization_social: Read organization data
+        # - rw_organization_admin: Read and write organization data
+        oauth_url = f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social%20w_organization_social%20r_organization_social%20rw_organization_admin"
         print(f"🔗 Generated LinkedIn OAuth URL: {oauth_url}")
         return oauth_url
 
@@ -1979,6 +1984,46 @@ def get_linkedin_account_info(access_token: str) -> dict:
         
         
         
+        # Try to get organization data for page management
+        organizations = []
+        try:
+            print("🔄 Getting organization info for page management...")
+            org_url = "https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED"
+            org_response = requests.get(org_url, headers=headers)
+            print(f"📊 LinkedIn organizations response status: {org_response.status_code}")
+            
+            if org_response.status_code == 200:
+                org_data = org_response.json()
+                print(f"✅ LinkedIn organizations data: {org_data}")
+                
+                for org in org_data.get('elements', []):
+                    org_entity = org.get('organizationalTarget', {})
+                    org_id = org_entity.get('~', '').split(':')[-1] if '~' in org_entity.get('~', '') else ''
+                    
+                    if org_id:
+                        # Get organization details
+                        try:
+                            org_details_url = f"https://api.linkedin.com/v2/organizations/{org_id}"
+                            org_details_response = requests.get(org_details_url, headers=headers)
+                            
+                            if org_details_response.status_code == 200:
+                                org_details = org_details_response.json()
+                                organizations.append({
+                                    'id': org_id,
+                                    'name': org_details.get('name', 'Unknown Organization'),
+                                    'account_type': 'organization',
+                                    'platform': 'linkedin',
+                                    'role': org.get('role', 'ADMINISTRATOR')
+                                })
+                                print(f"✅ Added organization: {org_details.get('name', 'Unknown')}")
+                        except Exception as e:
+                            print(f"❌ Error getting org details for {org_id}: {e}")
+            else:
+                print(f"❌ LinkedIn organizations failed: {org_response.status_code} - {org_response.text}")
+                
+        except Exception as e:
+            print(f"❌ LinkedIn organizations error: {e}")
+
         print("👤 Using personal LinkedIn account")
 
         return {
@@ -2003,7 +2048,9 @@ def get_linkedin_account_info(access_token: str) -> dict:
 
             'account_type': 'personal',
 
-            'is_organization': False
+            'is_organization': False,
+            
+            'organizations': organizations  # Include available organizations for page management
 
         }
         
@@ -2822,6 +2869,92 @@ async def test_linkedin_connection():
         return {"error": str(e)}
 
 
+@router.get("/linkedin/organizations")
+async def get_linkedin_organizations(
+    current_user: User = Depends(get_current_user)
+):
+    """Get available LinkedIn organizations for the user"""
+    try:
+        print(f"🏢 Getting LinkedIn organizations for user: {current_user.id}")
+        
+        # Get user's LinkedIn connection
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "linkedin").eq("is_active", True).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active LinkedIn connection found. Please connect your LinkedIn account first."
+            )
+        
+        connection = response.data[0]
+        
+        try:
+            access_token = decrypt_token(connection['access_token_encrypted'])
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to decrypt access token. Please reconnect your LinkedIn account."
+            )
+        
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json',
+            'X-Restli-Protocol-Version': '2.0.0'
+        }
+        
+        # Get organization data
+        org_url = "https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED"
+        org_response = requests.get(org_url, headers=headers)
+        
+        if org_response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to fetch organizations: {org_response.text}"
+            )
+        
+        org_data = org_response.json()
+        organizations = []
+        
+        for org in org_data.get('elements', []):
+            org_entity = org.get('organizationalTarget', {})
+            org_id = org_entity.get('~', '').split(':')[-1] if '~' in org_entity.get('~', '') else ''
+            
+            if org_id:
+                try:
+                    # Get organization details
+                    org_details_url = f"https://api.linkedin.com/v2/organizations/{org_id}"
+                    org_details_response = requests.get(org_details_url, headers=headers)
+                    
+                    if org_details_response.status_code == 200:
+                        org_details = org_details_response.json()
+                        organizations.append({
+                            'id': org_id,
+                            'name': org_details.get('name', 'Unknown Organization'),
+                            'description': org_details.get('description', ''),
+                            'logo_url': org_details.get('logoV2', {}).get('original~', {}).get('elements', [{}])[0].get('identifiers', [{}])[0].get('identifier', ''),
+                            'role': org.get('role', 'ADMINISTRATOR')
+                        })
+                except Exception as e:
+                    print(f"❌ Error getting org details for {org_id}: {e}")
+                    # Add basic org info even if details fail
+                    organizations.append({
+                        'id': org_id,
+                        'name': 'LinkedIn Organization',
+                        'description': '',
+                        'logo_url': '',
+                        'role': org.get('role', 'ADMINISTRATOR')
+                    })
+        
+        return {
+            "success": True,
+            "organizations": organizations,
+            "message": f"Found {len(organizations)} organizations"
+        }
+        
+    except Exception as e:
+        print(f"❌ LinkedIn organizations error: {e}")
+        return {"error": str(e)}
+
 @router.post("/linkedin/upload-image")
 async def upload_linkedin_image(
     image_data: dict,
@@ -3034,6 +3167,17 @@ async def post_to_linkedin(
 
             )
         
+        # Check if user wants to post to an organization (page)
+        organization_id = post_data.get('organization_id')
+        if organization_id:
+            # Post to organization page
+            author_urn = f"urn:li:organization:{organization_id}"
+            print(f"🏢 Posting to organization: {organization_id}")
+        else:
+            # Post to personal profile
+            author_urn = f"urn:li:person:{linkedin_id}"
+            print(f"👤 Posting to personal profile: {linkedin_id}")
+        
         
         
         # Get visibility setting from post data (default to PUBLIC)
@@ -3138,7 +3282,7 @@ async def post_to_linkedin(
 
         ugc_payload = {
 
-            "author": f"urn:li:person:{linkedin_id}",
+            "author": author_urn,
 
             "lifecycleState": "PUBLISHED",
 

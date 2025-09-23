@@ -296,9 +296,53 @@ class SocialMediaService {
         throw new Error(result.detail || `Failed to initiate ${platform} OAuth`)
       }
 
-      // Redirect to the OAuth URL
+      // Open OAuth URL in new window
       if (result.auth_url) {
-        window.location.href = result.auth_url
+        const popup = window.open(
+          result.auth_url,
+          'oauth-connection',
+          'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+        )
+        
+        // Listen for popup messages (for OAuth completion)
+        const messageHandler = (event) => {
+          // Allow messages from the same origin or from the callback page
+          const allowedOrigins = [
+            window.location.origin,
+            'https://emily.atsnai.com',
+            'https://agent-emily.onrender.com'
+          ]
+          
+          if (!allowedOrigins.includes(event.origin)) {
+            console.log('Ignoring message from origin:', event.origin)
+            return
+          }
+          
+          console.log('Received OAuth message:', event.data, 'from origin:', event.origin)
+          
+          if (event.data.type === 'OAUTH_SUCCESS') {
+            console.log('OAuth successful:', event.data)
+            popup.close()
+            window.removeEventListener('message', messageHandler)
+            // Refresh the page to show updated connections
+            window.location.reload()
+          } else if (event.data.type === 'OAUTH_ERROR') {
+            console.error('OAuth error:', event.data.error)
+            popup.close()
+            window.removeEventListener('message', messageHandler)
+            throw new Error(event.data.error || 'OAuth connection failed')
+          }
+        }
+        
+        window.addEventListener('message', messageHandler)
+        
+        // Check if popup was closed manually
+        const checkClosed = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(checkClosed)
+            window.removeEventListener('message', messageHandler)
+          }
+        }, 1000)
       } else {
         throw new Error('No OAuth URL received from server')
       }
