@@ -15,7 +15,8 @@ import {
   Linkedin,
   X,
   RefreshCw,
-  Globe
+  Globe,
+  Infinity
 } from 'lucide-react'
 import { socialMediaService } from '../services/socialMedia'
 import { connectionsAPI } from '../services/connections'
@@ -102,9 +103,9 @@ const SettingsDashboard = () => {
 
   const platforms = [
     {
-      id: 'facebook_instagram',
-      name: 'Facebook & Instagram',
-      icon: Facebook,
+      id: 'meta',
+      name: 'Meta',
+      icon: Infinity,
       color: 'bg-blue-600',
       description: 'Manage Facebook Pages and Instagram Business accounts',
       oauthSupported: true,
@@ -224,8 +225,8 @@ const SettingsDashboard = () => {
 
   const handleOAuthConnect = async (platform) => {
     try {
-      if (platform === 'facebook_instagram') {
-        // For combined Facebook & Instagram, use Facebook OAuth
+      if (platform === 'meta') {
+        // For Meta (Facebook & Instagram), use Facebook OAuth
         await socialMediaService.connectWithOAuth('facebook')
       } else {
         await socialMediaService.connectWithOAuth(platform)
@@ -505,7 +506,7 @@ const SettingsDashboard = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {platforms.map((platform) => {
                     const Icon = platform.icon
-                    const isConnected = platform.id === 'facebook_instagram' 
+                    const isConnected = platform.id === 'meta' 
                       ? connections.some(c => c.platform === 'facebook' || c.platform === 'instagram')
                       : connections.some(c => c.platform === platform.id)
                     

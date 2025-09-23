@@ -10,7 +10,8 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  Infinity
 } from 'lucide-react'
 import { connectionsAPI } from '../services/connections'
 import { socialMediaService } from '../services/socialMedia'
@@ -22,9 +23,9 @@ const ConnectionCards = ({ compact = false }) => {
 
   const platforms = [
     {
-      id: 'facebook_instagram',
-      name: 'Facebook & Instagram',
-      icon: Facebook,
+      id: 'meta',
+      name: 'Meta',
+      icon: Infinity,
       color: 'bg-blue-600',
       iconColor: 'text-blue-600',
       bgColor: 'bg-blue-50',
@@ -94,9 +95,11 @@ const ConnectionCards = ({ compact = false }) => {
       const allConnections = [...oauthConnections, ...tokenConnections]
       setConnections(allConnections)
       
-      console.log('OAuth connections:', oauthConnections.length)
-      console.log('Token connections:', tokenConnections.length)
-      console.log('Total connections:', allConnections.length)
+      console.log('OAuth connections:', oauthConnections)
+      console.log('Token connections:', tokenConnections)
+      console.log('All connections:', allConnections)
+      console.log('Facebook connections:', allConnections.filter(c => c.platform === 'facebook'))
+      console.log('Instagram connections:', allConnections.filter(c => c.platform === 'instagram'))
       
     } catch (error) {
       console.error('Error fetching connections:', error)
@@ -176,8 +179,8 @@ const ConnectionCards = ({ compact = false }) => {
         } else {
           throw new Error('Failed to get Google auth URL from response')
         }
-      } else if (platformId === 'facebook_instagram') {
-        // Handle combined Facebook & Instagram connection
+      } else if (platformId === 'meta') {
+        // Handle Meta (Facebook & Instagram) connection
         const response = await connectionsAPI.connectPlatform('facebook')
         
         if (response.auth_url) {
@@ -205,8 +208,8 @@ const ConnectionCards = ({ compact = false }) => {
 
   const handleDisconnect = async (platformId) => {
     try {
-      if (platformId === 'facebook_instagram') {
-        // Handle combined Facebook & Instagram disconnect
+      if (platformId === 'meta') {
+        // Handle Meta (Facebook & Instagram) disconnect
         const facebookConnection = connections.find(conn => conn.platform === 'facebook')
         const instagramConnection = connections.find(conn => conn.platform === 'instagram')
         
@@ -257,17 +260,24 @@ const ConnectionCards = ({ compact = false }) => {
   }
 
   const getConnectionStatus = (platformId) => {
-    // Handle combined Facebook & Instagram connection
-    if (platformId === 'facebook_instagram') {
+    // Handle Meta (Facebook & Instagram) connection
+    if (platformId === 'meta') {
       const facebookConnection = connections.find(conn => conn.platform === 'facebook')
       const instagramConnection = connections.find(conn => conn.platform === 'instagram')
+      
+      console.log('Meta (Facebook & Instagram) status check:', {
+        facebookConnection,
+        instagramConnection,
+        facebookActive: facebookConnection?.is_active,
+        instagramActive: instagramConnection?.is_active
+      })
       
       // If either Facebook or Instagram is connected, show as connected
       const connected = facebookConnection?.is_active || instagramConnection?.is_active
       
       if (connected) {
         const primaryConnection = facebookConnection || instagramConnection
-        return {
+        const status = {
           connected: true,
           status: primaryConnection?.connection_status || 'active',
           pageName: facebookConnection?.page_name || instagramConnection?.page_name || 'Facebook & Instagram',
@@ -275,6 +285,8 @@ const ConnectionCards = ({ compact = false }) => {
           hasFacebook: !!facebookConnection?.is_active,
           hasInstagram: !!instagramConnection?.is_active
         }
+        console.log('Meta (Facebook & Instagram) status result:', status)
+        return status
       }
       
       return { connected: false, status: 'disconnected' }
@@ -351,7 +363,7 @@ const ConnectionCards = ({ compact = false }) => {
                   <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
                   
                   {/* Show platform indicators for Facebook & Instagram */}
-                  {platform.id === 'facebook_instagram' && connected && (
+                  {platform.id === 'meta' && connected && (
                     <div className="absolute -bottom-1 -right-1 flex space-x-0.5">
                       {hasFacebook && (
                         <div className="w-2 h-2 bg-white rounded-full" title="Facebook connected" />
@@ -380,7 +392,7 @@ const ConnectionCards = ({ compact = false }) => {
                   <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
                   
                   {/* Show platform indicators for Facebook & Instagram */}
-                  {platform.id === 'facebook_instagram' && connected && (
+                  {platform.id === 'meta' && connected && (
                     <div className="absolute -bottom-1 -right-1 flex space-x-0.5">
                       {hasFacebook && (
                         <div className="w-2 h-2 bg-white rounded-full" title="Facebook connected" />
