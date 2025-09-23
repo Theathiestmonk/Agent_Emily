@@ -59,7 +59,6 @@ const OnboardingForm = ({
     google_ads_account: '',
     whatsapp_business: '',
     email_marketing_platform: '',
-    meta_ads_accounts: '',
     // New fields for comprehensive onboarding
     target_audience_age_groups: [],
     target_audience_life_stages: [],
