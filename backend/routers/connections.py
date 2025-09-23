@@ -638,10 +638,23 @@ async def handle_oauth_callback(
 
         # Get account information
         print(f"🔍 Getting account info for {platform}...")
+        
+        if platform == "instagram":
+            print("🔄 Instagram OAuth - using Facebook token exchange and account info...")
+            print(f"🔑 Access token (first 20 chars): {tokens['access_token'][:20]}...")
 
         account_info = get_account_info(platform, tokens['access_token'])
 
         print(f"📊 Account info result: {account_info}")
+        
+        if platform == "instagram":
+            print("🔍 Instagram-specific debug info:")
+            print(f"   - Has account_info: {account_info is not None}")
+            if account_info:
+                print(f"   - Has instagram_id: {account_info.get('instagram_id') is not None}")
+                print(f"   - Has page_id: {account_info.get('page_id') is not None}")
+                print(f"   - Has page_name: {account_info.get('page_name') is not None}")
+                print(f"   - Account type: {account_info.get('account_type', 'unknown')}")
 
         
         
@@ -1215,8 +1228,8 @@ def exchange_code_for_tokens(platform: str, code: str) -> dict:
         return exchange_facebook_code_for_tokens(code)
 
     elif platform == "instagram":
-
-        return exchange_instagram_code_for_tokens(code)
+        # Instagram uses Facebook OAuth, so use Facebook token exchange
+        return exchange_facebook_code_for_tokens(code)
 
     elif platform == "linkedin":
 
@@ -1569,7 +1582,15 @@ def get_account_info(platform: str, access_token: str) -> dict:
         return get_facebook_account_info(access_token)
 
     elif platform == "instagram":
-
+        # Instagram uses Facebook OAuth, so get Facebook account info first
+        # then look for Instagram Business account data
+        facebook_info = get_facebook_account_info(access_token)
+        
+        # If Facebook info includes Instagram data, return it
+        if facebook_info and facebook_info.get('instagram_id'):
+            return facebook_info
+        
+        # Otherwise, try the dedicated Instagram function
         return get_instagram_account_info(access_token)
 
     elif platform == "linkedin":
