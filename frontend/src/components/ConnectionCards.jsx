@@ -297,35 +297,52 @@ const ConnectionCards = ({ compact = false }) => {
               key={platform.id}
             className="relative group"
           >
-            <button
-              onClick={() => connected ? handleDisconnect(platform.id) : handleConnect(platform.id)}
-              disabled={connecting === platform.id}
-              className={`
-                w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200
-                ${connected ? `${platform.color}` : 'bg-white border-2 border-gray-200'}
-                hover:shadow-md hover:scale-105
-                disabled:opacity-50 disabled:cursor-not-allowed
-                ${connected ? 'ring-2 ring-green-400' : ''}
-              `}
-              title={`${connected ? 'Disconnect from' : 'Connect to'} ${platform.name}`}
-            >
-              <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
-              
-              {/* Status indicator dot */}
-              <div className="absolute -top-1 -right-1">
-                {getStatusIcon(status)}
-                      </div>
-            </button>
+            {compact ? (
+              // Display-only mode for main dashboard
+              <div
+                className={`
+                  w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200
+                  ${connected ? `${platform.color}` : 'bg-white border-2 border-gray-200'}
+                  ${connected ? 'ring-2 ring-green-400' : ''}
+                `}
+                title={`${platform.name} - ${connected ? 'Connected' : 'Not connected'}`}
+              >
+                <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+              </div>
+            ) : (
+              // Interactive mode for settings/other pages
+              <>
+                <button
+                  onClick={() => connected ? handleDisconnect(platform.id) : handleConnect(platform.id)}
+                  disabled={connecting === platform.id}
+                  className={`
+                    w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200
+                    ${connected ? `${platform.color}` : 'bg-white border-2 border-gray-200'}
+                    hover:shadow-md hover:scale-105
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                    ${connected ? 'ring-2 ring-green-400' : ''}
+                  `}
+                  title={`${connected ? 'Disconnect from' : 'Connect to'} ${platform.name}`}
+                >
+                  <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+                  
+                  {/* Status indicator dot */}
+                  <div className="absolute -top-1 -right-1">
+                    {getStatusIcon(status)}
+                  </div>
+                </button>
 
-            {/* Loading spinner for connecting state */}
-            {connecting === platform.id && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                {/* Loading spinner for connecting state */}
+                {connecting === platform.id && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <RefreshCw className="w-4 h-4 animate-spin text-white" />
                   </div>
                 )}
+              </>
+            )}
 
             {/* Google-specific dashboard button when connected */}
-            {connected && platform.id === 'google' && (
+            {connected && platform.id === 'google' && !compact && (
               <div className="absolute top-14 left-0 bg-white rounded-lg shadow-lg border p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
                 <button
                   onClick={() => window.open('/google-dashboard', '_blank')}

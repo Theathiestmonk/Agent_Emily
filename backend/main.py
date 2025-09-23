@@ -293,6 +293,15 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 async def root():
     return {"message": "Emily API is running!"}
 
+# LinkedIn OAuth alias for compatibility
+@app.get("/api/auth/linkedin/oauth")
+async def linkedin_oauth_alias():
+    return {"detail": "Use POST /connections/auth/linkedin/connect to initiate LinkedIn OAuth"}
+
+@app.post("/api/auth/linkedin/oauth")
+async def linkedin_oauth_post_alias():
+    return {"detail": "Use POST /connections/auth/linkedin/connect to initiate LinkedIn OAuth"}
+
 @app.get("/test-auth")
 async def test_auth(current_user: User = Depends(get_current_user)):
     return {"message": "Authentication successful!", "user": current_user.email}

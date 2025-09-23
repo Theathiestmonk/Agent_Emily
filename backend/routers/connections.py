@@ -629,9 +629,13 @@ async def handle_oauth_callback(
         
         
         
-        # Exchange code for tokens (mock for now)
+        # Exchange code for tokens
+
+        print(f"🔄 Exchanging {platform} code for tokens...")
 
         tokens = exchange_code_for_tokens(platform, code)
+
+        print(f"✅ Tokens received: {tokens.keys() if tokens else 'None'}")
 
         
         
@@ -1057,7 +1061,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
 
     if not client_id:
 
-        missing_config.append(f"client_id for {platform} (check {platform.upper()}_APP_ID env var)")
+        missing_config.append(f"client_id for {platform} (check {platform.upper()}_CLIENT_ID env var)")
 
     if not redirect_uri:
 
@@ -1111,7 +1115,9 @@ def generate_oauth_url(platform: str, state: str) -> str:
 
     elif platform == 'linkedin':
 
-        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social"
+        oauth_url = f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social"
+        print(f"🔗 Generated LinkedIn OAuth URL: {oauth_url}")
+        return oauth_url
 
     elif platform == 'twitter':
 

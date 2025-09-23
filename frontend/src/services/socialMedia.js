@@ -170,14 +170,26 @@ class SocialMediaService {
     try {
       const headers = await this.getAuthHeaders()
       
-      const response = await fetch(`${API_URL}/api/social-media/disconnect/${connectionId}`, {
+      // Try OAuth connections endpoint first (for LinkedIn, Facebook, Instagram OAuth)
+      const response = await fetch(`${API_URL}/connections/${connectionId}`, {
         method: 'DELETE',
         headers
       })
 
-      const result = await response.json()
+      if (response.ok) {
+        const result = await response.json()
+        return result
+      }
 
-      if (!response.ok) {
+      // If OAuth endpoint fails, try social media connections endpoint (for token-based connections)
+      const socialResponse = await fetch(`${API_URL}/api/social-media/disconnect/${connectionId}`, {
+        method: 'DELETE',
+        headers
+      })
+
+      const result = await socialResponse.json()
+
+      if (!socialResponse.ok) {
         throw new Error(result.detail || 'Failed to disconnect account')
       }
 
@@ -267,9 +279,35 @@ class SocialMediaService {
 
   // OAuth connection methods (for future implementation)
   async connectWithOAuth(platform) {
-    // Redirect to OAuth flow
-    const oauthUrl = `${API_URL}/api/auth/${platform}/oauth`
-    window.location.href = oauthUrl
+    try {
+      const headers = await this.getAuthHeaders()
+      
+      console.log(`Initiating ${platform} OAuth connection...`)
+      
+      const response = await fetch(`${API_URL}/connections/auth/${platform}/connect`, {
+        method: 'POST',
+        headers
+      })
+
+      const result = await response.json()
+      console.log(`${platform} OAuth response:`, result)
+
+      if (!response.ok) {
+        throw new Error(result.detail || `Failed to initiate ${platform} OAuth`)
+      }
+
+      // Redirect to the OAuth URL
+      if (result.auth_url) {
+        window.location.href = result.auth_url
+      } else {
+        throw new Error('No OAuth URL received from server')
+      }
+
+      return result
+    } catch (error) {
+      console.error(`Error initiating ${platform} OAuth:`, error)
+      throw error
+    }
   }
 
   // Platform-specific connection methods
