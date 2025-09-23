@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
+import EditProfileModal from './EditProfileModal'
 import { User, Mail, Phone, MapPin, Calendar, Edit, Save, X, Loader2, Building2, Globe, Target, BarChart3, Megaphone, Settings } from 'lucide-react'
 
 const Profile = () => {
@@ -10,6 +11,7 @@ const Profile = () => {
   const [saving, setSaving] = useState(false)
   const [editForm, setEditForm] = useState({})
   const [error, setError] = useState(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
 
   useEffect(() => {
     fetchProfile()
@@ -102,13 +104,6 @@ const Profile = () => {
         focus_areas: data?.focus_areas || [],
         platform_details: data?.platform_details || {},
         
-        // Platform Tone Settings
-        platform_tone_instagram: data?.platform_tone_instagram || [],
-        platform_tone_facebook: data?.platform_tone_facebook || [],
-        platform_tone_linkedin: data?.platform_tone_linkedin || [],
-        platform_tone_youtube: data?.platform_tone_youtube || [],
-        platform_tone_x: data?.platform_tone_x || [],
-        
         // Platform Links
         facebook_page_name: data?.facebook_page_name || '',
         instagram_profile_link: data?.instagram_profile_link || '',
@@ -121,6 +116,13 @@ const Profile = () => {
         email_marketing_platform: data?.email_marketing_platform || '',
         meta_ads_facebook: data?.meta_ads_facebook || false,
         meta_ads_instagram: data?.meta_ads_instagram || false,
+        
+        // Platform-specific tone settings
+        platform_tone_instagram: data?.platform_tone_instagram || [],
+        platform_tone_facebook: data?.platform_tone_facebook || [],
+        platform_tone_linkedin: data?.platform_tone_linkedin || [],
+        platform_tone_youtube: data?.platform_tone_youtube || [],
+        platform_tone_x: data?.platform_tone_x || [],
         
         // "Other" Input Fields
         business_type_other: data?.business_type_other || '',
@@ -143,7 +145,16 @@ const Profile = () => {
   }
 
   const handleEdit = () => {
-    setEditing(true)
+    setIsEditModalOpen(true)
+  }
+
+  const handleModalClose = () => {
+    setIsEditModalOpen(false)
+  }
+
+  const handleModalSuccess = () => {
+    setIsEditModalOpen(false)
+    fetchProfile() // Refresh the profile data
   }
 
 
@@ -744,6 +755,13 @@ const Profile = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        isOpen={isEditModalOpen}
+        onClose={handleModalClose}
+        onSuccess={handleModalSuccess}
+      />
     </div>
   )
 }

@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { onboardingAPI } from '../services/onboarding'
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react'
 
-const OnboardingForm = ({ 
+const OnboardingForm = forwardRef(({ 
   initialData = null, 
   isEditMode = false, 
   onClose = null, 
   onSuccess = null,
   showHeader = true,
-  showProgress = true 
-}) => {
+  showProgress = true,
+  onStepChange = null,
+  onFormChange = null,
+  onStepComplete = null
+}, ref) => {
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState({
     business_name: '',
@@ -57,9 +60,10 @@ const OnboardingForm = ({
     x_twitter_profile: '',
     google_business_profile: '',
     google_ads_account: '',
-    whatsapp_business: '',
-    email_marketing_platform: '',
-    meta_ads_accounts: '',
+     whatsapp_business: '',
+     email_marketing_platform: '',
+     meta_ads_facebook: false,
+     meta_ads_instagram: false,
     // New fields for comprehensive onboarding
     target_audience_age_groups: [],
     target_audience_life_stages: [],
@@ -102,6 +106,19 @@ const OnboardingForm = ({
     other: false
   })
 
+  // Expose methods to parent component
+  useImperativeHandle(ref, () => ({
+    goToStep: (stepIndex) => {
+      if (stepIndex >= 0 && stepIndex < steps.length) {
+        setCurrentStep(stepIndex)
+        if (onStepChange) {
+          onStepChange(stepIndex)
+        }
+      }
+    },
+    getCurrentStep: () => currentStep
+  }))
+
   // Load initial data if provided
   useEffect(() => {
     if (initialData) {
@@ -130,6 +147,13 @@ const OnboardingForm = ({
       })
     }
   }, [initialData])
+
+  // Notify parent of step changes
+  useEffect(() => {
+    if (onStepChange) {
+      onStepChange(currentStep)
+    }
+  }, [currentStep, onStepChange])
 
   const steps = [
     'Basic Business Info',
@@ -220,8 +244,7 @@ const OnboardingForm = ({
   ]
 
   const brandTones = [
-    'Formal', 'Informal', 'Humorous', 'Inspirational', 'Empathetic', 
-    'Encouraging', 'Direct', 'Flexible'
+    'Fun', 'Professional', 'Casual', 'Humorous', 'Bold', 'Neutral'
   ]
 
   const timezones = [
@@ -302,6 +325,11 @@ const OnboardingForm = ({
       [field]: value
     }))
     setError('')
+    
+    // Notify parent of form changes
+    if (onFormChange) {
+      onFormChange()
+    }
   }
 
   const handleArrayChange = (field, value, checked) => {
@@ -311,6 +339,11 @@ const OnboardingForm = ({
         ? [...(prev[field] || []), value]
         : (prev[field] || []).filter(item => item !== value)
     }))
+    
+    // Notify parent of form changes
+    if (onFormChange) {
+      onFormChange()
+    }
   }
 
   const handleOtherInputChange = (field, value) => {
@@ -318,6 +351,11 @@ const OnboardingForm = ({
       ...prev,
       [field]: value
     }))
+    
+    // Notify parent of form changes
+    if (onFormChange) {
+      onFormChange()
+    }
   }
 
   const toggleCard = (cardName) => {
@@ -377,6 +415,11 @@ const OnboardingForm = ({
 
   const nextStep = () => {
     if (validateCurrentStep()) {
+      // Mark current step as completed
+      if (onStepComplete) {
+        onStepComplete(currentStep)
+      }
+      
       setCurrentStep(prev => Math.min(prev + 1, steps.length - 1))
       setError('')
     } else {
@@ -990,129 +1033,196 @@ const OnboardingForm = ({
               </div>
             </div>
 
-            {/* Platform-specific details */}
-            <div className="space-y-4">
-              <h4 className="text-lg font-medium text-gray-800">Platform Details</h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Facebook Page Name</label>
-                  <input
-                    type="text"
-                    value={formData.facebook_page_name}
-                    onChange={(e) => handleInputChange('facebook_page_name', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="@yourpage or Your Page Name"
-                  />
+            {/* Platform-specific details - Only show if user has selected platforms */}
+            {formData.current_presence && formData.current_presence.length > 0 && (
+              <div className="space-y-4">
+                <h4 className="text-lg font-medium text-gray-800">Platform Details</h4>
+                <p className="text-sm text-gray-600">Please provide details for the platforms you selected above.</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Website */}
+                  {formData.current_presence.includes('Website') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Website URL *</label>
+                      <input
+                        type="url"
+                        value={formData.website_url}
+                        onChange={(e) => handleInputChange('website_url', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        placeholder="https://your-website.com"
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Must start with https://</p>
+                    </div>
+                  )}
+
+                  {/* Facebook Page */}
+                  {formData.current_presence.includes('Facebook Page') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Facebook Page Name</label>
+                      <input
+                        type="text"
+                        value={formData.facebook_page_name}
+                        onChange={(e) => handleInputChange('facebook_page_name', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        placeholder="@yourpage or Your Page Name"
+                      />
+                    </div>
+                  )}
+
+                  {/* Instagram */}
+                  {formData.current_presence.includes('Instagram') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Instagram Profile Link</label>
+                      <input
+                        type="url"
+                        value={formData.instagram_profile_link}
+                        onChange={(e) => handleInputChange('instagram_profile_link', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        placeholder="https://instagram.com/yourprofile"
+                      />
+                    </div>
+                  )}
+
+                  {/* LinkedIn */}
+                  {formData.current_presence.includes('LinkedIn') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">LinkedIn Company Link</label>
+                      <input
+                        type="url"
+                        value={formData.linkedin_company_link}
+                        onChange={(e) => handleInputChange('linkedin_company_link', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        placeholder="https://linkedin.com/company/yourcompany"
+                      />
+                    </div>
+                  )}
+
+                  {/* YouTube */}
+                  {formData.current_presence.includes('YouTube') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">YouTube Channel Link</label>
+                      <input
+                        type="url"
+                        value={formData.youtube_channel_link}
+                        onChange={(e) => handleInputChange('youtube_channel_link', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        placeholder="https://youtube.com/@yourchannel"
+                      />
+                    </div>
+                  )}
+
+                  {/* X (Twitter) */}
+                  {formData.current_presence.includes('X (formerly Twitter)') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">X (Twitter) Profile</label>
+                      <input
+                        type="text"
+                        value={formData.x_twitter_profile}
+                        onChange={(e) => handleInputChange('x_twitter_profile', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        placeholder="@yourhandle"
+                      />
+                    </div>
+                  )}
+
+                  {/* Google Business Profile */}
+                  {formData.current_presence.includes('Google Business Profile') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Google Business Profile</label>
+                      <input
+                        type="url"
+                        value={formData.google_business_profile}
+                        onChange={(e) => handleInputChange('google_business_profile', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        placeholder="https://business.google.com/yourbusiness"
+                      />
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Instagram Profile Link</label>
-                  <input
-                    type="url"
-                    value={formData.instagram_profile_link}
-                    onChange={(e) => handleInputChange('instagram_profile_link', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="https://instagram.com/yourprofile"
-                  />
-                </div>
+                {/* Marketing platform details - Only show if user has selected marketing platforms */}
+                {(formData.current_presence.includes('Google Ads') || 
+                  formData.current_presence.includes('Meta Ads (Facebook/Instagram)') || 
+                  formData.current_presence.includes('Email Marketing Platform') || 
+                  formData.current_presence.includes('WhatsApp Business')) && (
+                  <div className="space-y-4 mt-6">
+                    <h4 className="text-lg font-medium text-gray-800">Marketing Platform Details</h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Google Ads */}
+                      {formData.current_presence.includes('Google Ads') && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Google Ads Account</label>
+                          <input
+                            type="text"
+                            value={formData.google_ads_account}
+                            onChange={(e) => handleInputChange('google_ads_account', e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                            placeholder="Account ID or Email"
+                          />
+                        </div>
+                      )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">LinkedIn Company Link</label>
-                  <input
-                    type="url"
-                    value={formData.linkedin_company_link}
-                    onChange={(e) => handleInputChange('linkedin_company_link', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="https://linkedin.com/company/yourcompany"
-                  />
-                </div>
+                      {/* WhatsApp Business */}
+                      {formData.current_presence.includes('WhatsApp Business') && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">WhatsApp Business</label>
+                          <input
+                            type="text"
+                            value={formData.whatsapp_business}
+                            onChange={(e) => handleInputChange('whatsapp_business', e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                            placeholder="+1234567890"
+                          />
+                        </div>
+                      )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">YouTube Channel Link</label>
-                  <input
-                    type="url"
-                    value={formData.youtube_channel_link}
-                    onChange={(e) => handleInputChange('youtube_channel_link', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="https://youtube.com/@yourchannel"
-                  />
-                </div>
+                      {/* Email Marketing Platform */}
+                      {formData.current_presence.includes('Email Marketing Platform') && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Email Marketing Platform</label>
+                          <input
+                            type="text"
+                            value={formData.email_marketing_platform}
+                            onChange={(e) => handleInputChange('email_marketing_platform', e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                            placeholder="Mailchimp, Constant Contact, etc."
+                          />
+                        </div>
+                      )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">X (Twitter) Profile</label>
-                  <input
-                    type="text"
-                    value={formData.x_twitter_profile}
-                    onChange={(e) => handleInputChange('x_twitter_profile', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="@yourhandle"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Google Business Profile</label>
-                  <input
-                    type="url"
-                    value={formData.google_business_profile}
-                    onChange={(e) => handleInputChange('google_business_profile', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="https://business.google.com/yourbusiness"
-                  />
-                </div>
+                      {/* Meta Ads */}
+                      {formData.current_presence.includes('Meta Ads (Facebook/Instagram)') && (
+                        <div className="col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-3">Meta Ads Account Details</label>
+                          <div className="space-y-3">
+                             <label className="flex items-center space-x-3">
+                               <input
+                                 type="checkbox"
+                                 checked={formData.meta_ads_facebook}
+                                 onChange={(e) => handleInputChange('meta_ads_facebook', e.target.checked)}
+                                 className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                               />
+                               <span className="text-sm text-gray-700">Facebook Ads</span>
+                             </label>
+                             <label className="flex items-center space-x-3">
+                               <input
+                                 type="checkbox"
+                                 checked={formData.meta_ads_instagram}
+                                 onChange={(e) => handleInputChange('meta_ads_instagram', e.target.checked)}
+                                 className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                               />
+                               <span className="text-sm text-gray-700">Instagram Ads</span>
+                             </label>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-
-            {/* Marketing platform details */}
-            <div className="space-y-4">
-              <h4 className="text-lg font-medium text-gray-800">Marketing Platform Details</h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Google Ads Account</label>
-                  <input
-                    type="text"
-                    value={formData.google_ads_account}
-                    onChange={(e) => handleInputChange('google_ads_account', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="Account ID or Email"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">WhatsApp Business</label>
-                  <input
-                    type="text"
-                    value={formData.whatsapp_business}
-                    onChange={(e) => handleInputChange('whatsapp_business', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="+1234567890"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email Marketing Platform</label>
-                  <input
-                    type="text"
-                    value={formData.email_marketing_platform}
-                    onChange={(e) => handleInputChange('email_marketing_platform', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="Mailchimp, Constant Contact, etc."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Meta Ads Accounts</label>
-                  <input
-                    type="text"
-                    value={formData.meta_ads_accounts}
-                    onChange={(e) => handleInputChange('meta_ads_accounts', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="Account ID or Email"
-                  />
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         )
 
@@ -1325,99 +1435,6 @@ const OnboardingForm = ({
                 </div>
               )}
             </div>
-
-            {/* Platform-specific tone settings */}
-            <div className="space-y-4">
-              <h4 className="text-lg font-medium text-gray-800">Platform-Specific Tone Settings</h4>
-              <p className="text-sm text-gray-600">Customize your brand tone for different platforms</p>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Instagram Tone</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {brandTones.map(tone => (
-                      <label key={`instagram-${tone}`} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.platform_tone_instagram && formData.platform_tone_instagram.includes(tone)}
-                          onChange={(e) => handleArrayChange('platform_tone_instagram', tone, e.target.checked)}
-                          className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                        />
-                        <span className="text-sm text-gray-700">{tone}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Facebook Tone</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {brandTones.map(tone => (
-                      <label key={`facebook-${tone}`} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.platform_tone_facebook && formData.platform_tone_facebook.includes(tone)}
-                          onChange={(e) => handleArrayChange('platform_tone_facebook', tone, e.target.checked)}
-                          className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                        />
-                        <span className="text-sm text-gray-700">{tone}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">LinkedIn Tone</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {brandTones.map(tone => (
-                      <label key={`linkedin-${tone}`} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.platform_tone_linkedin && formData.platform_tone_linkedin.includes(tone)}
-                          onChange={(e) => handleArrayChange('platform_tone_linkedin', tone, e.target.checked)}
-                          className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                        />
-                        <span className="text-sm text-gray-700">{tone}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">YouTube Tone</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {brandTones.map(tone => (
-                      <label key={`youtube-${tone}`} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.platform_tone_youtube && formData.platform_tone_youtube.includes(tone)}
-                          onChange={(e) => handleArrayChange('platform_tone_youtube', tone, e.target.checked)}
-                          className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                        />
-                        <span className="text-sm text-gray-700">{tone}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">X (Twitter) Tone</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {brandTones.map(tone => (
-                      <label key={`x-${tone}`} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.platform_tone_x && formData.platform_tone_x.includes(tone)}
-                          onChange={(e) => handleArrayChange('platform_tone_x', tone, e.target.checked)}
-                          className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                        />
-                        <span className="text-sm text-gray-700">{tone}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )
 
@@ -1428,24 +1445,19 @@ const OnboardingForm = ({
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Market Position *</label>
-              <div className="space-y-3">
+              <select
+                value={formData.market_position}
+                onChange={(e) => handleInputChange('market_position', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                required
+              >
+                <option value="">Select your market position</option>
                 {marketPositions.map(position => (
-                  <label key={position.value} className="flex items-start space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="market_position"
-                      value={position.value}
-                      checked={formData.market_position === position.value}
-                      onChange={(e) => handleInputChange('market_position', e.target.value)}
-                      className="mt-1 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                    />
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-gray-900">{position.label}</div>
-                      <div className="text-sm text-gray-500 mt-1">{position.description}</div>
-                    </div>
-                  </label>
+                  <option key={position.value} value={position.value}>
+                    {position.label} - {position.description}
+                  </option>
                 ))}
-              </div>
+              </select>
             </div>
 
             <div>
@@ -1472,13 +1484,14 @@ const OnboardingForm = ({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Important Launch Dates</label>
-              <textarea
+              <input
+                type="date"
                 value={formData.important_launch_dates}
                 onChange={(e) => handleInputChange('important_launch_dates', e.target.value)}
-                rows={3}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="Any important product launches, events, or dates coming up..."
+                placeholder="Select launch date"
               />
+              <p className="text-xs text-gray-500 mt-1">Select the date for your important product launch or event</p>
             </div>
 
             <div>
@@ -1659,23 +1672,69 @@ const OnboardingForm = ({
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Automation Level *</label>
-              <div className="space-y-3">
+              <select
+                value={formData.automation_level}
+                onChange={(e) => handleInputChange('automation_level', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                required
+              >
+                <option value="">Select your automation level</option>
                 {automationLevels.map(level => (
-                  <label key={level.value} className="flex items-start space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="automation_level"
-                      value={level.value}
-                      checked={formData.automation_level === level.value}
-                      onChange={(e) => handleInputChange('automation_level', e.target.value)}
-                      className="mt-1 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                    />
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-gray-900">{level.label}</div>
-                      <div className="text-sm text-gray-500 mt-1">{level.description}</div>
-                    </div>
-                  </label>
+                  <option key={level.value} value={level.value}>
+                    {level.label} - {level.description}
+                  </option>
                 ))}
+              </select>
+            </div>
+
+            {/* Platform-specific tone settings as table */}
+            <div className="space-y-4">
+              <h4 className="text-lg font-medium text-gray-800">Platform-Specific Tone Settings</h4>
+              <p className="text-sm text-gray-600">Customize your brand tone for different platforms</p>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full border border-gray-200 rounded-lg">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Platform</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Tone</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {['Instagram', 'Facebook', 'LinkedIn', 'YouTube', 'X'].map(platform => (
+                      <tr key={platform}>
+                        <td className="px-4 py-2 text-sm text-gray-700">{platform}</td>
+                        <td className="px-4 py-2">
+                          <div className="flex flex-wrap gap-4">
+                          {brandTones.map(tone => (
+                              <label key={`${platform.toLowerCase()}-${tone}`} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
+                              <input
+                                type="checkbox"
+                                  value={tone}
+                                  checked={formData[`platform_tone_${platform.toLowerCase()}`]?.includes(tone) || false}
+                                  onChange={(e) => {
+                                    const currentTones = formData[`platform_tone_${platform.toLowerCase()}`] || []
+                                    if (e.target.checked) {
+                                      // Add tone if checked
+                                      const newTones = [...currentTones, tone]
+                                      handleInputChange(`platform_tone_${platform.toLowerCase()}`, newTones)
+                                    } else {
+                                      // Remove tone if unchecked
+                                      const newTones = currentTones.filter(t => t !== tone)
+                                      handleInputChange(`platform_tone_${platform.toLowerCase()}`, newTones)
+                                    }
+                                  }}
+                                  className="text-pink-600 focus:ring-pink-500 rounded"
+                              />
+                              <span className="text-sm text-gray-700">{tone}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -1784,10 +1843,12 @@ const OnboardingForm = ({
         </div>
       )}
 
+      <div className="mb-8 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
       {renderStep()}
+      </div>
 
       {/* Navigation */}
-      <div className="flex justify-between">
+      <div className="flex justify-between items-center pt-6 mt-8 border-t border-gray-200 bg-white sticky bottom-0">
         <button
           onClick={prevStep}
           disabled={currentStep === 0}
@@ -1827,6 +1888,6 @@ const OnboardingForm = ({
       </div>
     </div>
   )
-}
+})
 
 export default OnboardingForm
