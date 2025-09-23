@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { onboardingAPI } from '../services/onboarding'
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react'
 
-const OnboardingForm = ({ 
+const OnboardingForm = forwardRef(({ 
   initialData = null, 
   isEditMode = false, 
   onClose = null, 
   onSuccess = null,
   showHeader = true,
-  showProgress = true 
-}) => {
+  showProgress = true,
+  onStepChange = null,
+  onFormChange = null,
+  onStepComplete = null
+}, ref) => {
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState({
     business_name: '',
@@ -103,6 +106,19 @@ const OnboardingForm = ({
     other: false
   })
 
+  // Expose methods to parent component
+  useImperativeHandle(ref, () => ({
+    goToStep: (stepIndex) => {
+      if (stepIndex >= 0 && stepIndex < steps.length) {
+        setCurrentStep(stepIndex)
+        if (onStepChange) {
+          onStepChange(stepIndex)
+        }
+      }
+    },
+    getCurrentStep: () => currentStep
+  }))
+
   // Load initial data if provided
   useEffect(() => {
     if (initialData) {
@@ -131,6 +147,13 @@ const OnboardingForm = ({
       })
     }
   }, [initialData])
+
+  // Notify parent of step changes
+  useEffect(() => {
+    if (onStepChange) {
+      onStepChange(currentStep)
+    }
+  }, [currentStep, onStepChange])
 
   const steps = [
     'Basic Business Info',
@@ -221,8 +244,7 @@ const OnboardingForm = ({
   ]
 
   const brandTones = [
-    'Formal', 'Informal', 'Humorous', 'Inspirational', 'Empathetic', 
-    'Encouraging', 'Direct', 'Flexible'
+    'Fun', 'Professional', 'Casual', 'Humorous', 'Bold', 'Neutral'
   ]
 
   const timezones = [
@@ -303,6 +325,11 @@ const OnboardingForm = ({
       [field]: value
     }))
     setError('')
+    
+    // Notify parent of form changes
+    if (onFormChange) {
+      onFormChange()
+    }
   }
 
   const handleArrayChange = (field, value, checked) => {
@@ -312,6 +339,11 @@ const OnboardingForm = ({
         ? [...(prev[field] || []), value]
         : (prev[field] || []).filter(item => item !== value)
     }))
+    
+    // Notify parent of form changes
+    if (onFormChange) {
+      onFormChange()
+    }
   }
 
   const handleOtherInputChange = (field, value) => {
@@ -319,6 +351,11 @@ const OnboardingForm = ({
       ...prev,
       [field]: value
     }))
+    
+    // Notify parent of form changes
+    if (onFormChange) {
+      onFormChange()
+    }
   }
 
   const toggleCard = (cardName) => {
@@ -378,6 +415,11 @@ const OnboardingForm = ({
 
   const nextStep = () => {
     if (validateCurrentStep()) {
+      // Mark current step as completed
+      if (onStepComplete) {
+        onStepComplete(currentStep)
+      }
+      
       setCurrentStep(prev => Math.min(prev + 1, steps.length - 1))
       setError('')
     } else {
@@ -1651,104 +1693,46 @@ const OnboardingForm = ({
               <p className="text-sm text-gray-600">Customize your brand tone for different platforms</p>
               
               <div className="overflow-x-auto">
-                <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+                <table className="min-w-full border border-gray-200 rounded-lg">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Platform</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tone Settings</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Platform</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Tone</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    <tr>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Instagram</td>
-                      <td className="px-4 py-4">
-                        <div className="grid grid-cols-2 gap-2">
-                          {brandTones.map(tone => (
-                            <label key={`instagram-${tone}`} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={formData.platform_tone_instagram && formData.platform_tone_instagram.includes(tone)}
-                                onChange={(e) => handleArrayChange('platform_tone_instagram', tone, e.target.checked)}
-                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                              />
-                              <span className="text-sm text-gray-700">{tone}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Facebook</td>
-                      <td className="px-4 py-4">
-                        <div className="grid grid-cols-2 gap-2">
-                          {brandTones.map(tone => (
-                            <label key={`facebook-${tone}`} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={formData.platform_tone_facebook && formData.platform_tone_facebook.includes(tone)}
-                                onChange={(e) => handleArrayChange('platform_tone_facebook', tone, e.target.checked)}
-                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                              />
-                              <span className="text-sm text-gray-700">{tone}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">LinkedIn</td>
-                      <td className="px-4 py-4">
-                        <div className="grid grid-cols-2 gap-2">
-                          {brandTones.map(tone => (
-                            <label key={`linkedin-${tone}`} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={formData.platform_tone_linkedin && formData.platform_tone_linkedin.includes(tone)}
-                                onChange={(e) => handleArrayChange('platform_tone_linkedin', tone, e.target.checked)}
-                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                              />
-                              <span className="text-sm text-gray-700">{tone}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">YouTube</td>
-                      <td className="px-4 py-4">
-                        <div className="grid grid-cols-2 gap-2">
-                          {brandTones.map(tone => (
-                            <label key={`youtube-${tone}`} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={formData.platform_tone_youtube && formData.platform_tone_youtube.includes(tone)}
-                                onChange={(e) => handleArrayChange('platform_tone_youtube', tone, e.target.checked)}
-                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                              />
-                              <span className="text-sm text-gray-700">{tone}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">X (Twitter)</td>
-                      <td className="px-4 py-4">
-                        <div className="grid grid-cols-2 gap-2">
-                          {brandTones.map(tone => (
-                            <label key={`x-${tone}`} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={formData.platform_tone_x && formData.platform_tone_x.includes(tone)}
-                                onChange={(e) => handleArrayChange('platform_tone_x', tone, e.target.checked)}
-                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                              />
-                              <span className="text-sm text-gray-700">{tone}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
+                    {['Instagram', 'Facebook', 'LinkedIn', 'YouTube', 'X'].map(platform => (
+                      <tr key={platform}>
+                        <td className="px-4 py-2 text-sm text-gray-700">{platform}</td>
+                        <td className="px-4 py-2">
+                          <div className="flex flex-wrap gap-4">
+                            {brandTones.map(tone => (
+                              <label key={`${platform.toLowerCase()}-${tone}`} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
+                                <input
+                                  type="checkbox"
+                                  value={tone}
+                                  checked={formData[`platform_tone_${platform.toLowerCase()}`]?.includes(tone) || false}
+                                  onChange={(e) => {
+                                    const currentTones = formData[`platform_tone_${platform.toLowerCase()}`] || []
+                                    if (e.target.checked) {
+                                      // Add tone if checked
+                                      const newTones = [...currentTones, tone]
+                                      handleInputChange(`platform_tone_${platform.toLowerCase()}`, newTones)
+                                    } else {
+                                      // Remove tone if unchecked
+                                      const newTones = currentTones.filter(t => t !== tone)
+                                      handleInputChange(`platform_tone_${platform.toLowerCase()}`, newTones)
+                                    }
+                                  }}
+                                  className="text-pink-600 focus:ring-pink-500 rounded"
+                                />
+                                <span className="text-sm text-gray-700">{tone}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -1859,10 +1843,12 @@ const OnboardingForm = ({
         </div>
       )}
 
-      {renderStep()}
+      <div className="mb-8 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
+        {renderStep()}
+      </div>
 
       {/* Navigation */}
-      <div className="flex justify-between">
+      <div className="flex justify-between items-center pt-6 mt-8 border-t border-gray-200 bg-white sticky bottom-0">
         <button
           onClick={prevStep}
           disabled={currentStep === 0}
@@ -1902,6 +1888,6 @@ const OnboardingForm = ({
       </div>
     </div>
   )
-}
+})
 
 export default OnboardingForm
