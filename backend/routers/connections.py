@@ -1184,14 +1184,27 @@ def generate_oauth_url(platform: str, state: str) -> str:
         return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,ads_read,ads_management,business_management"
 
     elif platform == 'instagram':
-        # Instagram uses Facebook OAuth with Instagram-specific scopes
-        # Instagram Business accounts must be connected to Facebook Pages
-        print("🔄 Instagram OAuth - using Facebook OAuth with Instagram scopes...")
+        # Instagram for Business uses Facebook OAuth with specific scopes
+        # Based on how Zapier and other professional tools handle Instagram
+        print("🔄 Instagram for Business OAuth - using Facebook OAuth with Instagram scopes...")
         
         # Use Instagram redirect URI for Instagram OAuth
         instagram_redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/instagram/callback"
         
-        return f"{base_url}?client_id={client_id}&redirect_uri={instagram_redirect_uri}&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts,ads_read,ads_management,business_management"
+        # Instagram for Business requires specific scopes
+        # Based on Facebook's official documentation and Zapier's implementation
+        instagram_scopes = [
+            "pages_show_list",           # List Facebook Pages
+            "pages_read_engagement",     # Read page engagement data
+            "instagram_basic",           # Basic Instagram account info
+            "instagram_content_publish", # Publish to Instagram
+            "pages_manage_posts",        # Manage page posts
+            "business_management"        # Business management
+        ]
+        
+        scope_string = ",".join(instagram_scopes)
+        
+        return f"{base_url}?client_id={client_id}&redirect_uri={instagram_redirect_uri}&state={state}&scope={scope_string}"
 
     elif platform == 'linkedin':
         # LinkedIn scopes for both personal and page management:
@@ -1588,15 +1601,19 @@ def get_account_info(platform: str, access_token: str) -> dict:
         return get_facebook_account_info(access_token)
 
     elif platform == "instagram":
-        # Instagram uses Facebook OAuth, so get Facebook account info first
-        # then look for Instagram Business account data
+        # Instagram for Business uses Facebook OAuth but needs Instagram-specific handling
+        # Follow the same pattern as Zapier and other professional tools
+        print("🔄 Instagram for Business - getting account info via Facebook OAuth...")
+        
+        # Get Facebook account info first (this is what Instagram for Business uses)
         facebook_info = get_facebook_account_info(access_token)
         
-        # If Facebook info includes Instagram data, return it
         if facebook_info and facebook_info.get('instagram_id'):
+            print(f"✅ Found Instagram Business account via Facebook: {facebook_info.get('instagram_id')}")
             return facebook_info
         
-        # Otherwise, try the dedicated Instagram function
+        # If no Instagram found in Facebook info, try dedicated Instagram function
+        print("🔄 No Instagram found in Facebook info, trying dedicated Instagram function...")
         return get_instagram_account_info(access_token)
 
     elif platform == "linkedin":
@@ -1629,7 +1646,7 @@ def get_facebook_account_info(access_token: str) -> dict:
 
         'access_token': access_token,
 
-        'fields': 'id,name,username,followers_count,access_token'
+        'fields': 'id,name,username,followers_count,access_token,instagram_business_account'
 
     }
 
@@ -1657,19 +1674,27 @@ def get_facebook_account_info(access_token: str) -> dict:
 
     
     
-    return {
-
+    # Check if this page has an Instagram Business account
+    instagram_account = page.get('instagram_business_account')
+    
+    result = {
         "page_id": page['id'],
-
         "page_name": page['name'],
-
         "username": page.get('username', ''),
-
         "follower_count": page.get('followers_count', 0),
-
         "page_access_token": page.get('access_token', '')
-
     }
+    
+    # If Instagram Business account exists, include Instagram data
+    if instagram_account:
+        print(f"✅ Found Instagram Business account: {instagram_account}")
+        result.update({
+            "instagram_id": instagram_account['id'],
+            "instagram_username": instagram_account.get('username', ''),
+            "account_type": "business"
+        })
+    
+    return result
 
 
 
