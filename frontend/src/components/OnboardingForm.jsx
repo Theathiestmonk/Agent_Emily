@@ -14,6 +14,7 @@ const OnboardingForm = forwardRef(({
   onStepComplete = null
 }, ref) => {
   const [currentStep, setCurrentStep] = useState(0)
+  const [completedSteps, setCompletedSteps] = useState(new Set())
   const [formData, setFormData] = useState({
     business_name: '',
     business_type: [],
@@ -81,6 +82,21 @@ const OnboardingForm = forwardRef(({
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   
+  // Steps array - must be defined before useEffect hooks
+  const steps = [
+    'Basic Business Info',
+    'Business Description', 
+    'Brand & Contact',
+    'Current Presence & Focus Areas',
+    'Social Media & Goals',
+    'Content Strategy',
+    'Market & Competition',
+    'Campaign Planning',
+    'Performance & Customer',
+    'Automation & Platform',
+    'Review & Submit'
+  ]
+  
   // State for "Other" input fields
   const [otherInputs, setOtherInputs] = useState({
     businessTypeOther: '',
@@ -110,13 +126,95 @@ const OnboardingForm = forwardRef(({
   useImperativeHandle(ref, () => ({
     goToStep: (stepIndex) => {
       if (stepIndex >= 0 && stepIndex < steps.length) {
-        setCurrentStep(stepIndex)
-        if (onStepChange) {
-          onStepChange(stepIndex)
+        // In edit mode, allow navigation to any step without restrictions
+        if (isEditMode) {
+          setCurrentStep(stepIndex)
+          if (onStepChange) {
+            onStepChange(stepIndex)
+          }
+        } else {
+          // Check if user can navigate to this step (only for onboarding mode)
+          if (stepIndex === 0 || stepIndex <= Math.max(...completedSteps) + 1) {
+            setCurrentStep(stepIndex)
+            if (onStepChange) {
+              onStepChange(stepIndex)
+            }
+          } else {
+            setError(`Please complete the previous steps before accessing step ${stepIndex + 1}.`)
+          }
         }
       }
     },
-    getCurrentStep: () => currentStep
+    getCurrentStep: () => currentStep,
+    resetForm: () => {
+      setFormData({
+        business_name: '',
+        business_type: [],
+        industry: [],
+        business_description: '',
+        target_audience: [],
+        unique_value_proposition: '',
+        brand_voice: '',
+        brand_tone: '',
+        website_url: '',
+        phone_number: '',
+        street_address: '',
+        city: '',
+        state: '',
+        country: '',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+        social_media_platforms: [],
+        primary_goals: [],
+        key_metrics_to_track: [],
+        monthly_budget_range: '',
+        posting_frequency: '',
+        preferred_content_types: [],
+        content_themes: [],
+        main_competitors: '',
+        market_position: '',
+        products_or_services: '',
+        important_launch_dates: '',
+        planned_promotions_or_campaigns: '',
+        top_performing_content_types: [],
+        best_time_to_post: [],
+        successful_campaigns: '',
+        hashtags_that_work_well: '',
+        customer_pain_points: '',
+        typical_customer_journey: '',
+        automation_level: '',
+        platform_specific_tone: {},
+        current_presence: [],
+        focus_areas: [],
+        platform_details: {},
+        facebook_page_name: '',
+        instagram_profile_link: '',
+        linkedin_company_link: '',
+        youtube_channel_link: '',
+        x_twitter_profile: '',
+        google_business_profile: '',
+        google_ads_account: '',
+        whatsapp_business: '',
+        email_marketing_platform: '',
+        meta_ads_facebook: false,
+        meta_ads_instagram: false,
+        target_audience_age_groups: [],
+        target_audience_life_stages: [],
+        target_audience_professional_types: [],
+        target_audience_lifestyle_interests: [],
+        target_audience_buyer_behavior: [],
+        target_audience_other: '',
+        platform_tone_instagram: [],
+        platform_tone_facebook: [],
+        platform_tone_linkedin: [],
+        platform_tone_youtube: [],
+        platform_tone_x: [],
+      })
+      setCurrentStep(0)
+      setCompletedSteps(new Set())
+      localStorage.removeItem('onboarding_form_data')
+      localStorage.removeItem('onboarding_current_step')
+      localStorage.removeItem('onboarding_completed_steps')
+    }
   }))
 
   // Load initial data if provided
@@ -155,19 +253,61 @@ const OnboardingForm = forwardRef(({
     }
   }, [currentStep, onStepChange])
 
-  const steps = [
-    'Basic Business Info',
-    'Business Description', 
-    'Brand & Contact',
-    'Current Presence & Focus Areas',
-    'Social Media & Goals',
-    'Content Strategy',
-    'Market & Competition',
-    'Campaign Planning',
-    'Performance & Customer',
-    'Automation & Platform',
-    'Review & Submit'
-  ]
+  // Load saved data from localStorage on component mount
+  useEffect(() => {
+    if (!isEditMode) {
+      const savedFormData = localStorage.getItem('onboarding_form_data')
+      const savedCurrentStep = localStorage.getItem('onboarding_current_step')
+      const savedCompletedSteps = localStorage.getItem('onboarding_completed_steps')
+      
+      if (savedFormData) {
+        try {
+          const parsedData = JSON.parse(savedFormData)
+          setFormData(prev => ({ ...prev, ...parsedData }))
+        } catch (error) {
+          console.error('Error parsing saved form data:', error)
+        }
+      }
+      
+      if (savedCurrentStep) {
+        const step = parseInt(savedCurrentStep, 10)
+        if (step >= 0 && step < steps.length) {
+          setCurrentStep(step)
+        }
+      }
+      
+      if (savedCompletedSteps) {
+        try {
+          const parsedSteps = JSON.parse(savedCompletedSteps)
+          setCompletedSteps(new Set(parsedSteps))
+        } catch (error) {
+          console.error('Error parsing completed steps:', error)
+        }
+      }
+    }
+  }, [isEditMode, steps.length])
+
+  // Save form data to localStorage whenever it changes
+  useEffect(() => {
+    if (!isEditMode) {
+      localStorage.setItem('onboarding_form_data', JSON.stringify(formData))
+    }
+  }, [formData, isEditMode])
+
+  // Save current step to localStorage whenever it changes
+  useEffect(() => {
+    if (!isEditMode) {
+      localStorage.setItem('onboarding_current_step', currentStep.toString())
+    }
+  }, [currentStep, isEditMode])
+
+  // Save completed steps to localStorage whenever it changes
+  useEffect(() => {
+    if (!isEditMode) {
+      localStorage.setItem('onboarding_completed_steps', JSON.stringify([...completedSteps]))
+    }
+  }, [completedSteps, isEditMode])
+
 
   const businessTypes = [
     'B2B', 'B2C', 'E-Commerce', 'SaaS', 'Restaurant', 
@@ -416,6 +556,8 @@ const OnboardingForm = forwardRef(({
   const nextStep = () => {
     if (validateCurrentStep()) {
       // Mark current step as completed
+      setCompletedSteps(prev => new Set([...prev, currentStep]))
+      
       if (onStepComplete) {
         onStepComplete(currentStep)
       }
@@ -430,6 +572,21 @@ const OnboardingForm = forwardRef(({
   const prevStep = () => {
     setCurrentStep(prev => Math.max(prev - 1, 0))
     setError('')
+  }
+
+  // Check if a step is accessible
+  const isStepAccessible = (stepIndex) => {
+    // In edit mode, all steps are accessible
+    if (isEditMode) return true
+    
+    if (stepIndex === 0) return true
+    if (stepIndex <= Math.max(...completedSteps) + 1) return true
+    return false
+  }
+
+  // Check if a step is completed
+  const isStepCompleted = (stepIndex) => {
+    return completedSteps.has(stepIndex)
   }
 
   const handleSubmit = async () => {
@@ -477,6 +634,10 @@ const OnboardingForm = forwardRef(({
         console.log('Calling submitOnboarding API...')
         const result = await onboardingAPI.submitOnboarding(submissionData)
         console.log('Submit result:', result)
+        // Clear localStorage after successful submission
+        localStorage.removeItem('onboarding_form_data')
+        localStorage.removeItem('onboarding_current_step')
+        localStorage.removeItem('onboarding_completed_steps')
         if (onSuccess) onSuccess()
       }
     } catch (err) {
@@ -1815,6 +1976,61 @@ const OnboardingForm = forwardRef(({
               style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
             ></div>
           </div>
+          
+          {/* Step Indicators - Hidden in edit mode */}
+          {!isEditMode && (
+            <div className="flex justify-between mt-4">
+              {steps.map((step, index) => (
+                <div key={index} className="flex flex-col items-center">
+                  <div 
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all duration-200 ${
+                      index === currentStep
+                        ? 'bg-pink-600 text-white shadow-lg'
+                        : isStepCompleted(index)
+                        ? 'bg-green-500 text-white'
+                        : isStepAccessible(index)
+                        ? 'bg-gray-300 text-gray-600 hover:bg-gray-400 cursor-pointer'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                    title={
+                      index === currentStep
+                        ? `Current: ${step}`
+                        : isStepCompleted(index)
+                        ? `Completed: ${step}`
+                        : isStepAccessible(index)
+                        ? `Click to go to: ${step}`
+                        : `Locked: Complete previous steps to unlock ${step}`
+                    }
+                    onClick={() => {
+                      if (isStepAccessible(index)) {
+                        setCurrentStep(index)
+                        if (onStepChange) {
+                          onStepChange(index)
+                        }
+                      }
+                    }}
+                  >
+                    {isStepCompleted(index) ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      index + 1
+                    )}
+                  </div>
+                  <span className={`text-xs mt-1 text-center max-w-16 ${
+                    index === currentStep
+                      ? 'text-pink-600 font-medium'
+                      : isStepCompleted(index)
+                      ? 'text-green-600'
+                      : isStepAccessible(index)
+                      ? 'text-gray-600'
+                      : 'text-gray-400'
+                  }`}>
+                    {step.split(' ')[0]}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1843,12 +2059,25 @@ const OnboardingForm = forwardRef(({
         </div>
       )}
 
+      {/* Step Lock Warning */}
+      {!isEditMode && !isStepAccessible(currentStep) && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-600 px-4 py-3 rounded-lg mb-6">
+          <div className="flex items-center">
+            <X className="w-5 h-5 text-amber-400 mr-2" />
+            <p>
+              This step is locked. Please complete the previous steps to continue.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="mb-8 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
       {renderStep()}
       </div>
 
       {/* Navigation */}
       <div className="flex justify-between items-center pt-6 mt-8 border-t border-gray-200 bg-white sticky bottom-0">
+        <div className="flex items-center space-x-4">
         <button
           onClick={prevStep}
           disabled={currentStep === 0}
@@ -1857,11 +2086,35 @@ const OnboardingForm = forwardRef(({
           <ArrowLeft className="w-4 h-4 mr-2" />
           Previous
         </button>
+          
+          {/* Data Persistence Indicator */}
+          {!isEditMode && (
+            <div className="flex items-center text-sm text-gray-500">
+              <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+              Auto-saved
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-4">
+          {/* Step Status - Hidden in edit mode */}
+          {!isEditMode && (
+            <div className="text-sm text-gray-600">
+              {isStepCompleted(currentStep) ? (
+                <span className="flex items-center text-green-600">
+                  <Check className="w-4 h-4 mr-1" />
+                  Step Complete
+                </span>
+              ) : (
+                <span className="text-amber-600">Step Incomplete</span>
+              )}
+            </div>
+          )}
 
         {currentStep === steps.length - 1 ? (
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting}
+              disabled={isSubmitting || (!isEditMode && !isStepCompleted(currentStep))}
             className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
           >
             {isSubmitting ? (
@@ -1879,12 +2132,14 @@ const OnboardingForm = forwardRef(({
         ) : (
           <button
             onClick={nextStep}
-            className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all"
+              disabled={!isEditMode && !isStepAccessible(currentStep + 1)}
+              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
           >
             Next
             <ArrowRight className="w-4 h-4 ml-2" />
           </button>
         )}
+        </div>
       </div>
     </div>
   )

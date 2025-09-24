@@ -1224,8 +1224,19 @@ def generate_oauth_url(platform: str, state: str) -> str:
         return f"{base_url}?client_key={client_id}&redirect_uri={redirect_uri}&state={state}&scope=user.info.basic,video.publish"
 
     elif platform == 'youtube':
-
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=https://www.googleapis.com/auth/youtube.upload"
+        # YouTube scopes for comprehensive channel management:
+        # - youtube: Manage your YouTube account
+        # - youtube.upload: Upload and manage videos
+        # - youtube.readonly: View analytics and account details
+        # - youtube.force-ssl: Reply to comments and manage engagement
+        youtube_scopes = [
+            'https://www.googleapis.com/auth/youtube',
+            'https://www.googleapis.com/auth/youtube.upload',
+            'https://www.googleapis.com/auth/youtube.readonly',
+            'https://www.googleapis.com/auth/youtube.force-ssl'
+        ]
+        scope_string = ' '.join(youtube_scopes)
+        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope={scope_string}"
     
     
     
