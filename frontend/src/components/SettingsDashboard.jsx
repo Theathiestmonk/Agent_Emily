@@ -129,7 +129,7 @@ const SettingsDashboard = () => {
       icon: Twitter,
       color: 'bg-blue-400',
       description: 'Tweet, get analytics, manage campaigns',
-      oauthSupported: false,
+      oauthSupported: true,
       tokenSupported: true,
       helpUrl: 'https://developer.twitter.com/en/portal/dashboard'
     },
