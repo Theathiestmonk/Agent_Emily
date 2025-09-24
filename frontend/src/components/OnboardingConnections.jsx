@@ -9,7 +9,8 @@ import {
   XCircle,
   ArrowLeft,
   Check,
-  AlertCircle
+  AlertCircle,
+  MapPin
 } from 'lucide-react'
 import { connectionsAPI } from '../services/connections'
 import { socialMediaService } from '../services/socialMedia'
@@ -61,20 +62,12 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
       borderColor: 'border-sky-200',
       description: 'Account'
     },
-    'YouTube': {
-      id: 'youtube',
-      icon: Youtube,
-      color: 'bg-red-600',
-      bgColor: 'bg-red-50',
-      borderColor: 'border-red-200',
-      description: 'Channel'
-    },
     'Google Business Profile': {
       id: 'google',
-      icon: Youtube,
-      color: 'bg-red-500',
-      bgColor: 'bg-red-50',
-      borderColor: 'border-red-200',
+      icon: MapPin,
+      color: 'bg-green-500',
+      bgColor: 'bg-green-50',
+      borderColor: 'border-green-200',
       description: 'Business Profile'
     }
   }
