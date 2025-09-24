@@ -710,26 +710,34 @@ async def get_platform_stats(authorization: str = Header(None)):
         print(f"👤 User ID: {user_id}")
         
         # Get all connections for the user
-        connections_response = supabase_admin.table("platform_connections").select("*").eq("user_id", user_id).eq("status", "active").execute()
+        connections_response = supabase_admin.table("platform_connections").select("*").eq("user_id", user_id).execute()
         connections = connections_response.data
         
-        print(f"🔗 Found {len(connections)} active connections")
+        print(f"🔗 Found {len(connections)} connections")
         
         if not connections:
-            print("❌ No active connections found")
+            print("❌ No connections found")
             return {}
         
         platform_stats = {}
         
         for connection in connections:
             platform = connection.get("platform")
-            access_token = connection.get("access_token")
+            access_token_encrypted = connection.get("access_token_encrypted")
             page_id = connection.get("page_id")
             
             print(f"📱 Processing {platform} connection - page_id: {page_id}")
             
-            if not access_token:
-                print(f"❌ No access token for {platform}")
+            if not access_token_encrypted:
+                print(f"❌ No encrypted access token for {platform}")
+                continue
+                
+            # Decrypt the access token
+            try:
+                access_token = decrypt_token(access_token_encrypted)
+                print(f"🔑 Decrypted access token for {platform}: {access_token[:20]}...")
+            except Exception as e:
+                print(f"❌ Failed to decrypt access token for {platform}: {e}")
                 continue
                 
             try:
@@ -759,7 +767,7 @@ async def get_platform_stats(authorization: str = Header(None)):
                     # Get Facebook page info
                     facebook_url = f"https://graph.facebook.com/v18.0/{page_id}"
                     params = {
-                        "fields": "fan_count,page_name",
+                        "fields": "fan_count,name",
                         "access_token": access_token
                     }
                     
@@ -772,7 +780,7 @@ async def get_platform_stats(authorization: str = Header(None)):
                         print(f"📘 Facebook data: {data}")
                         platform_stats[platform] = {
                             "fan_count": data.get("fan_count", 0),
-                            "page_name": data.get("page_name", "")
+                            "page_name": data.get("name", "")
                         }
                     else:
                         print(f"❌ Facebook API error: {response.text}")
