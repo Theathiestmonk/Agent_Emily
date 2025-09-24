@@ -163,6 +163,22 @@ async def get_ads_by_date(
         
         ads = []
         for ad in response.data:
+            print(f"🔍 Ad data from DB: {ad}")
+            print(f"🔍 Platform field: {ad.get('platform', 'MISSING')}")
+            
+            # Handle missing platform field by deriving from campaign platforms
+            if not ad.get('platform') and ad.get('ad_campaigns', {}).get('platforms'):
+                campaign_platforms = ad['ad_campaigns']['platforms']
+                if campaign_platforms and len(campaign_platforms) > 0:
+                    # Use the first platform from the campaign as fallback
+                    ad['platform'] = campaign_platforms[0]
+                    print(f"🔧 Set platform from campaign: {ad['platform']}")
+            
+            # If still no platform, set a default
+            if not ad.get('platform'):
+                ad['platform'] = 'unknown'
+                print(f"⚠️ No platform found, setting to 'unknown'")
+            
             ads.append(AdCopyResponse(**ad))
         
         return {"ads": ads, "date": date, "count": len(ads)}

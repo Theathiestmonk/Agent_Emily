@@ -185,6 +185,8 @@ const AdsDashboard = () => {
       }
 
       const data = await response.json()
+      console.log('Fetched ads data:', data.ads)
+      console.log('Platforms in ads:', data.ads?.map(ad => ({ id: ad.id, platform: ad.platform })))
       setAds(data.ads || [])
       
     } catch (error) {
@@ -235,7 +237,11 @@ const AdsDashboard = () => {
   }
 
   const getPlatformIcon = (platform) => {
+    console.log('Getting platform icon for:', platform)
+    if (!platform || platform === 'unknown') return <div className="w-6 h-6 bg-gray-500 rounded text-white flex items-center justify-center text-xs">?</div>
+    
     const platformData = platforms.find(p => p.id === platform)
+    console.log('Platform data found:', platformData)
     if (!platformData) return <div className="w-6 h-6 bg-gray-500 rounded text-white flex items-center justify-center text-xs">?</div>
     
     const IconComponent = platformData.icon
@@ -274,6 +280,16 @@ const AdsDashboard = () => {
       ad_copy: ad.ad_copy || '',
       call_to_action: ad.call_to_action || '',
       hashtags: ad.hashtags || []
+    })
+  }
+
+  const handleCancelEdit = () => {
+    setEditingAd(null)
+    setEditForm({
+      title: '',
+      ad_copy: '',
+      call_to_action: '',
+      hashtags: []
     })
   }
 
@@ -645,8 +661,7 @@ const AdsDashboard = () => {
         {/* Ads Grid/List */}
         <div className="bg-white rounded-lg shadow-sm border">
           <div className="p-6 border-b">
-            <h2 className="text-xl font-semibold text-gray-900">Ads for {new Date(selectedDate).toLocaleDateString()}</h2>
-            <p className="text-gray-600 mt-1">{filteredAds.length} ads found</p>
+            <h2 className="text-xl font-semibold text-gray-900">Ads</h2>
           </div>
           
           {filteredAds.length === 0 ? (
@@ -699,7 +714,10 @@ const AdsDashboard = () => {
                                   <span className="ml-1 capitalize">{ad.ad_type}</span>
                                 </span>
                                 <span className="text-xs text-gray-500 capitalize">
-                                  {ad.platform}
+                                  {(() => {
+                                    console.log('Displaying platform for ad:', ad.id, 'platform:', ad.platform);
+                                    return ad.platform === 'unknown' ? 'Unknown Platform' : (ad.platform || 'Unknown Platform');
+                                  })()}
                                 </span>
                               </div>
                             </div>
@@ -895,7 +913,7 @@ const AdsDashboard = () => {
                               </div>
                               <div>
                               <span className="font-medium text-gray-600">Platform:</span>
-                              <p className="text-gray-800">{ad.platform}</p>
+                              <p className="text-gray-800 capitalize">{ad.platform === 'unknown' ? 'Unknown Platform' : (ad.platform || 'Unknown Platform')}</p>
                               </div>
                             <div>
                               <span className="font-medium text-gray-600">Ad Type:</span>
