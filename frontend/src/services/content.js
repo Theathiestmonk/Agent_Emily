@@ -160,6 +160,35 @@ class ContentAPI {
     }
   }
 
+  // Update content status
+  async updateContentStatus(contentId, status) {
+    try {
+      const authToken = await this.getAuthToken()
+      
+      const response = await fetch(buildApiUrl(`/content/update-status/${contentId}`), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          status: status
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}, ${errorText}`)
+      }
+
+      const data = await response.json()
+      return { success: true, data }
+    } catch (error) {
+      console.error('Error updating content status:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
   // Helper method to get auth token
   async getAuthToken() {
     const { data: { session } } = await supabase.auth.getSession()

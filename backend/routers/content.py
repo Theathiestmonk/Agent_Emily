@@ -42,6 +42,10 @@ class ContentUpdate(BaseModel):
     scheduled_time: str
     status: str
 
+# Content status update model
+class ContentStatusUpdate(BaseModel):
+    status: str
+
 def get_current_user(authorization: str = Header(None)):
     """Get current user from Supabase JWT token"""
     try:
@@ -343,4 +347,56 @@ async def update_content(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update content: {str(e)}"
+        )
+
+@router.put("/update-status/{content_id}")
+async def update_content_status(
+    content_id: str,
+    status_data: ContentStatusUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    """Update content status by ID"""
+    try:
+        print(f"📝 Updating content status {content_id} to {status_data.status} for user: {current_user.id}")
+        
+        # First verify the content belongs to the user
+        content_response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", content_id).eq("content_campaigns.user_id", current_user.id).execute()
+        
+        if not content_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Content not found or access denied"
+            )
+        
+        # Update only the status
+        update_response = supabase_admin.table("content_posts").update({
+            "status": status_data.status
+        }).eq("id", content_id).execute()
+        
+        if not update_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update content status"
+            )
+        
+        updated_content = update_response.data[0]
+        print(f"✅ Successfully updated content status {content_id} to {status_data.status}")
+        
+        return {
+            "success": True,
+            "message": "Content status updated successfully",
+            "content": {
+                "id": updated_content["id"],
+                "status": updated_content["status"],
+                "updated_at": updated_content["updated_at"]
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error updating content status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update content status: {str(e)}"
         )
