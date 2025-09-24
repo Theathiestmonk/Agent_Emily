@@ -226,28 +226,6 @@ const SocialMediaDashboard = () => {
               </div>
               
               <div className="flex items-center space-x-4">
-                {/* Stats */}
-                <div className="flex items-center space-x-6">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                      <Users className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-600">Platforms</p>
-                      <p className="text-lg font-bold text-gray-900">{platformsWithPosts.length}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center">
-                      <Activity className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-600">Posts</p>
-                      <p className="text-lg font-bold text-gray-900">{Object.values(posts).reduce((total, platformPosts) => total + (platformPosts?.length || 0), 0)}</p>
-                    </div>
-                  </div>
-                </div>
                 
                 
                 {/* Refresh Button */}
