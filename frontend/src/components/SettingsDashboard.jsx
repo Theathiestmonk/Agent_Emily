@@ -15,7 +15,8 @@ import {
   Linkedin,
   X,
   RefreshCw,
-  Globe
+  Globe,
+  Mail
 } from 'lucide-react'
 import { socialMediaService } from '../services/socialMedia'
 import { connectionsAPI } from '../services/connections'
@@ -151,6 +152,16 @@ const SettingsDashboard = () => {
       tokenSupported: false,
       credentialsSupported: true,
       helpUrl: 'https://wordpress.org/support/article/application-passwords/'
+    },
+    {
+      id: 'google',
+      name: 'Google',
+      icon: Mail,
+      color: 'bg-red-500',
+      description: 'Connect Gmail, Drive, Sheets, and Docs',
+      oauthSupported: true,
+      tokenSupported: false,
+      helpUrl: 'https://console.developers.google.com/'
     }
   ]
 
@@ -202,13 +213,43 @@ const SettingsDashboard = () => {
         console.log('No WordPress connections found:', error.message)
       }
       
+      // Fetch Google connection status
+      let googleConnections = []
+      try {
+        const authToken = await getAuthToken()
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+        const baseUrl = API_BASE_URL.replace(/\/+$/, '')
+        
+        const response = await fetch(`${baseUrl}/connections/google/connection-status`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+          }
+        })
+        
+        if (response.ok) {
+          const statusData = await response.json()
+          if (statusData.connected) {
+            googleConnections = [{
+              platform: 'google',
+              connection_status: 'active',
+              page_name: statusData.email || 'Google Account',
+              page_username: statusData.email || 'Google Account'
+            }]
+          }
+        }
+      } catch (error) {
+        console.log('No Google connection found:', error.message)
+      }
+      
       // Combine all types of connections
-      const allConnections = [...tokenConnections, ...oauthConnections, ...wordpressConnections]
+      const allConnections = [...tokenConnections, ...oauthConnections, ...wordpressConnections, ...googleConnections]
       setConnections(allConnections)
       
       console.log('Token connections:', tokenConnections.length)
       console.log('OAuth connections:', oauthConnections.length)
       console.log('WordPress connections:', wordpressConnections.length)
+      console.log('Google connections:', googleConnections.length)
       console.log('Total connections:', allConnections.length)
       
     } catch (error) {
@@ -236,6 +277,103 @@ const SettingsDashboard = () => {
       await socialMediaService.connectWithOAuth(platform)
     } catch (error) {
       setError(`Failed to start OAuth for ${platform}: ${error.message}`)
+    }
+  }
+
+  const getAuthToken = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (token) {
+        return token
+      }
+      
+      // Try to get token from Supabase session
+      const { supabase } = await import('../lib/supabase')
+      const { data: { session } } = await supabase.auth.getSession()
+      return session?.access_token || null
+    } catch (error) {
+      console.error('Error getting auth token:', error)
+      return null
+    }
+  }
+
+  const handleGoogleConnect = async () => {
+    try {
+      setLoading(true)
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+      const baseUrl = API_BASE_URL.replace(/\/+$/, '')
+      
+      const authToken = await getAuthToken()
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+      }
+
+      const response = await fetch(`${baseUrl}/connections/google/reconnect`, {
+        method: 'POST',
+        headers
+      })
+      const reconnectData = await response.json()
+      
+      if (reconnectData.success) {
+        const popup = window.open(
+          reconnectData.auth_url,
+          'google-oauth',
+          'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+        )
+        
+        // Listen for popup messages (for OAuth completion)
+        const messageHandler = (event) => {
+          // Allow messages from the same origin or from the callback page
+          const allowedOrigins = [
+            window.location.origin,
+            'https://emily.atsnai.com',
+            'https://agent-emily.onrender.com'
+          ]
+          
+          if (!allowedOrigins.includes(event.origin)) {
+            console.log('Ignoring message from origin:', event.origin)
+            return
+          }
+          
+          console.log('Received OAuth message:', event.data, 'from origin:', event.origin)
+          
+          if (event.data.type === 'OAUTH_SUCCESS') {
+            console.log('Google OAuth successful:', event.data)
+            popup.close()
+            window.removeEventListener('message', messageHandler)
+            setSuccess('Google account connected successfully!')
+            // Refresh connections to show the new connection
+            fetchConnections()
+          } else if (event.data.type === 'OAUTH_ERROR') {
+            console.error('Google OAuth error:', event.data.error)
+            popup.close()
+            window.removeEventListener('message', messageHandler)
+            setError(event.data.error || 'Google OAuth connection failed')
+          }
+        }
+        
+        window.addEventListener('message', messageHandler)
+        
+        // Check if popup was closed manually
+        const checkClosed = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(checkClosed)
+            window.removeEventListener('message', messageHandler)
+            // Refresh connections when popup is closed (in case OAuth completed)
+            console.log('Popup closed, refreshing connections...')
+            fetchConnections()
+          }
+        }, 1000)
+        
+        setSuccess('Google connection window opened. Please complete the authorization.')
+      } else {
+        setError('Failed to initiate Google connection')
+      }
+    } catch (error) {
+      setError(`Failed to start Google connection: ${error.message}`)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -532,11 +670,12 @@ const SettingsDashboard = () => {
                           <div className="space-y-2">
                             {platform.oauthSupported && (
                               <button
-                                onClick={() => handleOAuthConnect(platform.id)}
+                                onClick={() => platform.id === 'google' ? handleGoogleConnect() : handleOAuthConnect(platform.id)}
                                 className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 flex items-center justify-center"
+                                disabled={loading && platform.id === 'google'}
                               >
                                 <Shield className="w-4 h-4 mr-1" />
-                                Connect
+                                {loading && platform.id === 'google' ? 'Connecting...' : 'Connect'}
                               </button>
                             )}
                             {platform.tokenSupported && (

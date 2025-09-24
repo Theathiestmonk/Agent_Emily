@@ -55,7 +55,8 @@ import {
   Wand2,
   Loader2,
   Upload,
-  X
+  X,
+  CheckCircle
 } from 'lucide-react'
 
 const ContentDashboard = () => {
@@ -893,6 +894,35 @@ const ContentDashboard = () => {
     }
   }
 
+  const handleApprovePost = async (contentId) => {
+    try {
+      const result = await contentAPI.updateContentStatus(contentId, 'scheduled')
+      
+      if (result.success) {
+        // Update local content cache first
+        updateContentInCache(contentId, { status: 'scheduled' })
+        
+        // Close the expanded content
+        setExpandedContent(null)
+        
+        // Show success message immediately
+        showSuccess('Post approved and scheduled successfully!')
+        
+        // Add a small delay to ensure the status update is processed
+        setTimeout(async () => {
+          // Force refresh the content data to get updated status
+          await fetchData(true)
+        }, 500)
+        
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error approving post:', error)
+      showError('Failed to approve post', error.message)
+    }
+  }
+
   const handleFileSelect = (event) => {
     const file = event.target.files[0]
     if (file) {
@@ -1411,6 +1441,19 @@ const ContentDashboard = () => {
                         )}
                         
                         <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">{content.content}</p>
+                        
+                        {/* Approve Post Button - only show for draft status in expanded view */}
+                        {content.status === 'draft' && (
+                          <div className="mb-4">
+                            <button
+                              onClick={() => handleApprovePost(content.id)}
+                              className="flex items-center space-x-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              <span>Approve Post</span>
+                            </button>
+                          </div>
+                        )}
                         
                         {/* Expanded Details */}
                         <div className="bg-gray-50 rounded-lg p-3 mb-3">
