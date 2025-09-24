@@ -240,6 +240,7 @@ const SettingsDashboard = () => {
         
         if (response.ok) {
           const statusData = await response.json()
+          console.log('Google connection status data:', statusData)
           if (statusData.connected) {
             googleConnections = [{
               platform: 'google',
@@ -247,14 +248,20 @@ const SettingsDashboard = () => {
               page_name: statusData.email || 'Google Account',
               page_username: statusData.email || 'Google Account'
             }]
+            console.log('Created Google connection:', googleConnections[0])
           }
         }
       } catch (error) {
         console.log('No Google connection found:', error.message)
       }
       
-      // Combine all types of connections
-      const allConnections = [...tokenConnections, ...oauthConnections, ...wordpressConnections, ...googleConnections]
+      // Combine all types of connections, filtering out any existing Google connections
+      const allConnections = [
+        ...tokenConnections.filter(conn => conn.platform !== 'google'),
+        ...oauthConnections.filter(conn => conn.platform !== 'google'),
+        ...wordpressConnections,
+        ...googleConnections
+      ]
       setConnections(allConnections)
       
       console.log('Token connections:', tokenConnections.length)
@@ -262,6 +269,7 @@ const SettingsDashboard = () => {
       console.log('WordPress connections:', wordpressConnections.length)
       console.log('Google connections:', googleConnections.length)
       console.log('Total connections:', allConnections.length)
+      console.log('All connections platforms:', allConnections.map(c => c.platform))
       
     } catch (error) {
       console.error('Error fetching connections:', error)
