@@ -454,7 +454,7 @@ const Onboarding = () => {
       case 9: // Automation & Platform
         return formData.automation_level
       case 10: // Review & Submit
-        return false // Review step should not be marked as having data
+        return true // Review step should always allow submission
       default:
         return true
     }
