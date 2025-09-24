@@ -819,33 +819,44 @@ async def fetch_instagram_posts_oauth(connection: dict, limit: int) -> List[Dict
             print("No page_id found for Instagram OAuth connection")
             return []
         
-        # First, get the Instagram Business account ID from the Facebook Page
+        # Check if this is a Facebook Page ID (shorter) or Instagram account ID (longer)
+        # Instagram account IDs are typically 15+ digits, Facebook Page IDs are usually 10-15 digits
+        print(f"🔍 Checking page_id: {page_id} (length: {len(page_id)})")
+        
+        if page_id.isdigit() and len(page_id) <= 15:
+            # This looks like a Facebook Page ID, need to get Instagram account
+            print(f"🔄 page_id looks like Facebook Page ID, looking up Instagram account...")
+            async with httpx.AsyncClient() as client:
+                instagram_account_response = await client.get(
+                    f"https://graph.facebook.com/v18.0/{page_id}",
+                    params={
+                        "access_token": access_token,
+                        "fields": "instagram_business_account"
+                    }
+                )
+                
+                print(f"Instagram account lookup response: {instagram_account_response.status_code}")
+                
+                if instagram_account_response.status_code != 200:
+                    print(f"Instagram account lookup error: {instagram_account_response.status_code} - {instagram_account_response.text}")
+                    return []
+                
+                account_data = instagram_account_response.json()
+                instagram_business_account = account_data.get('instagram_business_account')
+                
+                if not instagram_business_account:
+                    print("No Instagram Business account found for this Facebook Page")
+                    return []
+                
+                instagram_account_id = instagram_business_account.get('id')
+                print(f"Found Instagram Business account ID: {instagram_account_id}")
+        else:
+            # This is already an Instagram account ID (15+ digits)
+            instagram_account_id = page_id
+            print(f"✅ Using page_id as Instagram account ID: {instagram_account_id}")
+        
+        # Now fetch media from Instagram Graph API
         async with httpx.AsyncClient() as client:
-            instagram_account_response = await client.get(
-                f"https://graph.facebook.com/v18.0/{page_id}",
-                params={
-                    "access_token": access_token,
-                    "fields": "instagram_business_account"
-                }
-            )
-            
-            print(f"Instagram account lookup response: {instagram_account_response.status_code}")
-            
-            if instagram_account_response.status_code != 200:
-                print(f"Instagram account lookup error: {instagram_account_response.status_code} - {instagram_account_response.text}")
-                return []
-            
-            account_data = instagram_account_response.json()
-            instagram_business_account = account_data.get('instagram_business_account')
-            
-            if not instagram_business_account:
-                print("No Instagram Business account found for this Facebook Page")
-                return []
-            
-            instagram_account_id = instagram_business_account.get('id')
-            print(f"Found Instagram Business account ID: {instagram_account_id}")
-            
-            # Now fetch media from Instagram Graph API
             response = await client.get(
                 f"https://graph.facebook.com/v18.0/{instagram_account_id}/media",
                 params={

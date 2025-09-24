@@ -151,10 +151,12 @@ async def get_latest_posts(
         for connection in connections:
             platform = connection.get('platform', '').lower()
             print(f"🔍 Processing {platform} connection: {connection.get('id')}")
+            print(f"📊 Connection details: {connection}")
             
             try:
                 if platform == 'facebook':
                     posts = await fetch_facebook_posts(connection, limit)
+                    print(f"📱 Facebook posts fetched: {len(posts) if posts else 0}")
                     # If no real posts found, add some mock data for testing
                     if not posts:
                         print(f"🔄 No real posts found for {platform}, adding mock data for testing")
@@ -169,7 +171,14 @@ async def get_latest_posts(
                             'shares_count': 2
                         }]
                 elif platform == 'instagram':
-                    posts = await fetch_instagram_posts(connection, limit)
+                    print(f"🔄 Attempting to fetch Instagram posts...")
+                    try:
+                        posts = await fetch_instagram_posts(connection, limit)
+                        print(f"📱 Instagram posts fetched: {len(posts) if posts else 0}")
+                    except Exception as instagram_error:
+                        print(f"❌ Error fetching Instagram posts: {instagram_error}")
+                        posts = []
+                    
                     # If no real posts found, add some mock data for testing
                     if not posts:
                         print(f"🔄 No real posts found for {platform}, adding mock data for testing")
@@ -196,6 +205,7 @@ async def get_latest_posts(
                 if posts:
                     posts_by_platform[platform] = posts
                     print(f"✅ Fetched {len(posts)} posts from {platform}")
+                    print(f"📋 Posts for {platform}: {posts}")
                 else:
                     print(f"⚠️ No posts found for {platform}")
                     
@@ -204,6 +214,8 @@ async def get_latest_posts(
                 # Continue with other platforms even if one fails
                 continue
         
+        print(f"📊 Returning posts for platforms: {list(posts_by_platform.keys())}")
+        print(f"📋 Final posts_by_platform: {posts_by_platform}")
         return {
             "posts": posts_by_platform,
             "total_platforms": len(posts_by_platform),
@@ -295,32 +307,46 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
             print("❌ No page_id found for Instagram connection")
             return []
         
-        # First, get the Instagram Business account ID from the Facebook Page
-        instagram_account_url = f"https://graph.facebook.com/v18.0/{page_id}"
-        instagram_account_params = {
-            'access_token': access_token,
-            'fields': 'instagram_business_account'
-        }
+        # For OAuth connections, page_id is already the Instagram Business account ID
+        # For token connections, we need to look it up from Facebook Page
+        instagram_account_id = page_id
         
-        print(f"🌐 Instagram account lookup URL: {instagram_account_url}")
+        # Check if this is a Facebook Page ID (starts with numbers and shorter) or Instagram account ID
+        # Instagram account IDs are typically longer (15+ digits) and different format
+        # Facebook Page IDs are usually 10-15 digits, Instagram Business account IDs are 15+ digits
+        print(f"🔍 Checking page_id: {page_id} (length: {len(page_id)})")
         
-        account_response = requests.get(instagram_account_url, params=instagram_account_params, timeout=10)
-        print(f"📊 Instagram account lookup response: {account_response.status_code}")
-        
-        if account_response.status_code != 200:
-            print(f"❌ Instagram account lookup error: {account_response.status_code} - {account_response.text}")
-            return []
-        
-        account_data = account_response.json()
-        print(f"📱 Instagram account data: {account_data}")
-        
-        instagram_business_account = account_data.get('instagram_business_account')
-        if not instagram_business_account:
-            print("❌ No Instagram Business account found for this Facebook Page")
-            return []
-        
-        instagram_account_id = instagram_business_account.get('id')
-        print(f"📄 Found Instagram Business account ID: {instagram_account_id}")
+        if page_id.isdigit() and len(page_id) <= 15:
+            # This looks like a Facebook Page ID, need to get Instagram account
+            print(f"🔄 page_id looks like Facebook Page ID, looking up Instagram account...")
+            instagram_account_url = f"https://graph.facebook.com/v18.0/{page_id}"
+            instagram_account_params = {
+                'access_token': access_token,
+                'fields': 'instagram_business_account'
+            }
+            
+            print(f"🌐 Instagram account lookup URL: {instagram_account_url}")
+            
+            account_response = requests.get(instagram_account_url, params=instagram_account_params, timeout=10)
+            print(f"📊 Instagram account lookup response: {account_response.status_code}")
+            
+            if account_response.status_code != 200:
+                print(f"❌ Instagram account lookup error: {account_response.status_code} - {account_response.text}")
+                return []
+            
+            account_data = account_response.json()
+            print(f"📱 Instagram account data: {account_data}")
+            
+            instagram_business_account = account_data.get('instagram_business_account')
+            if not instagram_business_account:
+                print("❌ No Instagram Business account found for this Facebook Page")
+                return []
+            
+            instagram_account_id = instagram_business_account.get('id')
+            print(f"📄 Found Instagram Business account ID: {instagram_account_id}")
+        else:
+            # This is already an Instagram account ID (15+ digits)
+            print(f"✅ Using page_id as Instagram account ID: {instagram_account_id}")
         
         # Now fetch media from Instagram Graph API
         url = f"https://graph.facebook.com/v18.0/{instagram_account_id}/media"
