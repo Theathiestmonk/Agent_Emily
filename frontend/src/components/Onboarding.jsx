@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 
 const Onboarding = () => {
   const [currentStep, setCurrentStep] = useState(0)
+  const [completedSteps, setCompletedSteps] = useState(new Set())
   const [formData, setFormData] = useState({
     business_name: '',
     business_type: [],
@@ -128,6 +129,97 @@ const Onboarding = () => {
     'Automation & Platform',
     'Review & Submit'
   ]
+
+  // Load saved data from localStorage on component mount
+  useEffect(() => {
+    const savedFormData = localStorage.getItem('onboarding_form_data')
+    const savedCurrentStep = localStorage.getItem('onboarding_current_step')
+    const savedCompletedSteps = localStorage.getItem('onboarding_completed_steps')
+    
+    console.log('Loading from localStorage:', {
+      savedFormData: savedFormData ? 'exists' : 'null',
+      savedCurrentStep,
+      savedCompletedSteps: savedCompletedSteps ? 'exists' : 'null'
+    })
+    
+    if (savedFormData) {
+      try {
+        const parsedData = JSON.parse(savedFormData)
+        console.log('Loaded form data:', parsedData)
+        // Force update form data if we have meaningful data
+        if (parsedData.business_name || parsedData.business_type?.length > 0 || parsedData.industry?.length > 0) {
+          console.log('Updating form data with loaded data')
+          setFormData(parsedData) // Use parsedData directly instead of merging
+        }
+      } catch (error) {
+        console.error('Error parsing saved form data:', error)
+      }
+    }
+    
+    if (savedCurrentStep) {
+      const step = parseInt(savedCurrentStep, 10)
+      console.log('Parsed saved current step:', step, 'from localStorage:', savedCurrentStep)
+      if (step >= 0 && step < 11) { // Use fixed number instead of steps.length
+        console.log('Setting current step to:', step)
+        setCurrentStep(step)
+      } else {
+        console.log('Invalid step number:', step, 'keeping default 0')
+      }
+    } else {
+      console.log('No saved current step found, keeping default 0')
+    }
+    
+    if (savedCompletedSteps) {
+      try {
+        const parsedSteps = JSON.parse(savedCompletedSteps)
+        console.log('Loaded completed steps:', parsedSteps)
+        setCompletedSteps(new Set(parsedSteps))
+      } catch (error) {
+        console.error('Error parsing completed steps:', error)
+      }
+    }
+  }, []) // Empty dependency array - only run on mount
+
+  // Auto-determine current step based on data after form data loads
+  useEffect(() => {
+    if (formData.business_name || formData.business_type?.length > 0) {
+      const highestStepWithData = getHighestStepWithData()
+      const nextStep = highestStepWithData + 1
+      
+      console.log('Auto-determining step based on data:', {
+        highestStepWithData,
+        nextStep,
+        currentStep
+      })
+      
+      // If currentStep is 0 but we have data, move to the appropriate step
+      if (currentStep === 0 && highestStepWithData >= 0) {
+        const targetStep = Math.min(nextStep, steps.length - 1)
+        console.log('Moving to step based on data:', targetStep)
+        setCurrentStep(targetStep)
+      }
+    }
+  }, [formData, currentStep, steps.length])
+
+  // Save form data to localStorage whenever it changes
+  useEffect(() => {
+    console.log('Saving form data to localStorage:', formData)
+    localStorage.setItem('onboarding_form_data', JSON.stringify(formData))
+  }, [formData])
+
+  // Save current step to localStorage whenever it changes
+  useEffect(() => {
+    console.log('Saving current step to localStorage:', currentStep)
+    localStorage.setItem('onboarding_current_step', currentStep.toString())
+  }, [currentStep])
+
+
+  // Save completed steps to localStorage whenever it changes
+  useEffect(() => {
+    console.log('Saving completed steps to localStorage:', [...completedSteps])
+    localStorage.setItem('onboarding_completed_steps', JSON.stringify([...completedSteps]))
+  }, [completedSteps])
+
 
   const businessTypes = [
     'B2B', 'B2C', 'E-Commerce', 'SaaS', 'Restaurant', 
@@ -358,24 +450,161 @@ const Onboarding = () => {
       case 9: // Automation & Platform
         return formData.automation_level
       case 10: // Review & Submit
-        return true // Review step
+        return false // Review step should not be marked as having data
       default:
         return true
     }
   }
 
+  // Check if a step is accessible based on data entered
+  const isStepAccessible = (stepIndex) => {
+    if (stepIndex === 0) return true
+    
+    // Allow current step
+    if (stepIndex === currentStep) return true
+    
+    // Allow any step that has data
+    if (hasStepData(stepIndex)) return true
+    
+    // Allow next step after the highest step with data, but not too far ahead
+    const highestStepWithData = getHighestStepWithData()
+    if (stepIndex === highestStepWithData + 1 && stepIndex <= currentStep + 1) return true
+    
+    return false
+  }
+
+  // Get the highest step number that has data
+  const getHighestStepWithData = () => {
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (hasStepData(i)) {
+        return i
+      }
+    }
+    return -1 // No steps have data
+  }
+
+  // Check if a step has meaningful data
+  const hasStepData = (stepIndex) => {
+    switch (stepIndex) {
+      case 0: // Basic Business Info
+        return formData.business_name && formData.business_type.length > 0 && formData.industry.length > 0
+      case 1: // Business Description
+        return formData.business_description && formData.unique_value_proposition &&
+               (formData.target_audience_age_groups.length > 0 || 
+                formData.target_audience_life_stages.length > 0 || 
+                formData.target_audience_professional_types.length > 0 || 
+                formData.target_audience_lifestyle_interests.length > 0 || 
+                formData.target_audience_buyer_behavior.length > 0 || 
+                formData.target_audience_other)
+      case 2: // Brand & Contact
+        return formData.brand_voice && formData.brand_tone && formData.phone_number && 
+               formData.street_address && formData.city && formData.state && formData.country
+      case 3: // Current Presence & Focus Areas
+        return formData.current_presence.length > 0 || formData.focus_areas.length > 0
+      case 4: // Social Media & Goals
+        return formData.social_media_platforms.length > 0 && formData.primary_goals.length > 0 && 
+               formData.key_metrics_to_track.length > 0
+      case 5: // Content Strategy
+        return formData.preferred_content_types.length > 0 && formData.content_themes.length > 0
+      case 6: // Market & Competition
+        return formData.market_position && formData.products_or_services
+      case 7: // Campaign Planning
+        return formData.top_performing_content_types.length > 0 && formData.best_time_to_post.length > 0
+      case 8: // Performance & Customer
+        return formData.successful_campaigns && formData.hashtags_that_work_well && 
+               formData.customer_pain_points && formData.typical_customer_journey
+      case 9: // Automation & Platform
+        return formData.automation_level
+      case 10: // Review & Submit
+        return false // Review step should not be marked as having data
+      default:
+        return false
+    }
+  }
+
+  // Check if a step is completed
+  const isStepCompleted = (stepIndex) => {
+    return completedSteps.has(stepIndex)
+  }
+
+  // Get step status for debugging
+  const getStepStatus = (stepIndex) => {
+    if (stepIndex === currentStep) return 'current'
+    if (hasStepData(stepIndex)) return 'completed'
+    if (isStepAccessible(stepIndex)) return 'accessible'
+    return 'locked'
+  }
+
   const nextStep = () => {
+    console.log('nextStep called, currentStep:', currentStep)
+    console.log('validateCurrentStep():', validateCurrentStep())
+    console.log('formData:', formData)
+    
     if (validateCurrentStep()) {
-      setCurrentStep(prev => Math.min(prev + 1, steps.length - 1))
+      // Mark current step as completed
+      console.log('Marking step as completed:', currentStep)
+      setCompletedSteps(prev => {
+        const newSet = new Set([...prev, currentStep])
+        console.log('New completed steps:', [...newSet])
+        return newSet
+      })
+      // Move to next step
+      const nextStepIndex = Math.min(currentStep + 1, steps.length - 1)
+      console.log('Moving to next step:', nextStepIndex)
+      setCurrentStep(nextStepIndex)
       setError('')
     } else {
+      console.log('Step validation failed')
       setError('Please fill in all required fields before proceeding.')
     }
   }
 
+  // Auto-mark ALL steps with data as completed when form data changes
+  useEffect(() => {
+    // Only run this after initial load to avoid interfering with step loading
+    const timeoutId = setTimeout(() => {
+      const stepsWithData = []
+      for (let i = 0; i < steps.length; i++) {
+        if (hasStepData(i)) {
+          stepsWithData.push(i)
+        }
+      }
+      
+      if (stepsWithData.length > 0) {
+        console.log('Found steps with data:', stepsWithData)
+        setCompletedSteps(prev => {
+          const newSet = new Set([...prev, ...stepsWithData])
+          console.log('Auto-completed steps:', [...newSet])
+          return newSet
+        })
+      }
+    }, 100) // Small delay to let initial load complete
+    
+    return () => clearTimeout(timeoutId)
+  }, [formData, steps.length])
+
   const prevStep = () => {
     setCurrentStep(prev => Math.max(prev - 1, 0))
     setError('')
+  }
+
+  // Function to go to a specific step (with step prevention)
+  const goToStep = (stepIndex) => {
+    console.log('goToStep called with:', stepIndex)
+    console.log('isStepAccessible:', isStepAccessible(stepIndex))
+    console.log('hasStepData for step', stepIndex, ':', hasStepData(stepIndex))
+    
+    if (stepIndex >= 0 && stepIndex < steps.length) {
+      // Check if user can navigate to this step
+      if (isStepAccessible(stepIndex)) {
+        console.log('Navigating to step:', stepIndex)
+        setCurrentStep(stepIndex)
+        setError('')
+      } else {
+        console.log('Step not accessible')
+        setError(`Please complete the previous steps before accessing step ${stepIndex + 1}.`)
+      }
+    }
   }
 
   const handleSubmit = async () => {
@@ -414,6 +643,10 @@ const Onboarding = () => {
       }
 
       const response = await onboardingAPI.submitOnboarding(submissionData)
+      // Clear localStorage after successful submission
+      localStorage.removeItem('onboarding_form_data')
+      localStorage.removeItem('onboarding_current_step')
+      localStorage.removeItem('onboarding_completed_steps')
       setShowCompletion(true)
     } catch (err) {
       setError(err.message || 'Failed to submit onboarding')
@@ -1650,9 +1883,16 @@ const Onboarding = () => {
             <span className="text-sm font-medium text-gray-700">
               Step {currentStep + 1} of {steps.length}
             </span>
-            <span className="text-sm text-gray-500">
-              {Math.round(((currentStep + 1) / steps.length) * 100)}% Complete
-            </span>
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-500">
+                {Math.round(((currentStep + 1) / steps.length) * 100)}% Complete
+              </span>
+              {/* Auto-saved Indicator */}
+              <div className="flex items-center text-sm text-gray-600">
+                <div className="w-2 h-2 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full mr-2 animate-pulse"></div>
+                <span className="font-medium">Auto-saved</span>
+              </div>
+            </div>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div 
@@ -1688,11 +1928,23 @@ const Onboarding = () => {
             </div>
           )}
 
+          {/* Step Lock Warning */}
+          {currentStep > 0 && !isStepAccessible(currentStep) && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-600 px-4 py-3 rounded-lg mb-6">
+              <div className="flex items-center">
+                <Check className="w-5 h-5 text-amber-400 mr-2" />
+                <p>
+                  This step is locked. Please complete the previous steps to continue.
+                </p>
+              </div>
+            </div>
+          )}
+
           {renderStep()}
         </div>
 
         {/* Navigation */}
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <button
             onClick={prevStep}
             disabled={currentStep === 0}
@@ -1702,10 +1954,11 @@ const Onboarding = () => {
             Previous
           </button>
 
+          {/* Next/Submit Button */}
           {currentStep === steps.length - 1 ? (
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !validateCurrentStep()}
               className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
             >
               {isSubmitting ? (
@@ -1723,7 +1976,8 @@ const Onboarding = () => {
           ) : (
             <button
               onClick={nextStep}
-              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all"
+              disabled={!validateCurrentStep()}
+              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
             >
               Next
               <ArrowRight className="w-4 h-4 ml-2" />
