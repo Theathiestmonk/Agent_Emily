@@ -96,62 +96,9 @@ const ContentDashboard = () => {
   const [uploadingImage, setUploadingImage] = useState(new Set()) // Track which content is uploading image
   const [showUploadModal, setShowUploadModal] = useState(null) // Track which content is showing upload modal
   const [selectedFile, setSelectedFile] = useState(null) // Selected file for upload
+  const [hoveredButton, setHoveredButton] = useState(null) // Track which button is being hovered
   const [imageLoading, setImageLoading] = useState(new Set()) // Track which images are loading
-  const [refreshingImages, setRefreshingImages] = useState(false) // Track if refreshing all images
 
-  // Define refreshAllImages function early to avoid hoisting issues
-  const refreshAllImages = async (contentList = null) => {
-    const contentToRefresh = contentList || contentToDisplay
-    if (!contentToRefresh || contentToRefresh.length === 0) return
-    
-    setRefreshingImages(true)
-    try {
-      // Fetch images for all content posts in parallel
-      const imagePromises = contentToRefresh.map(async (post) => {
-        try {
-          const result = await mediaService.getPostImages(post.id)
-          if (result.images && result.images.length > 0) {
-            const latestImage = result.images[0]
-            return {
-              postId: post.id,
-              imageData: {
-                image_url: latestImage.image_url,
-                cost: latestImage.generation_cost,
-                generation_time: latestImage.generation_time,
-                generated_at: latestImage.created_at,
-                is_approved: latestImage.is_approved
-              }
-            }
-          }
-          return null
-        } catch (error) {
-          console.error(`Error fetching images for post ${post.id}:`, error)
-          return null
-        }
-      })
-
-      const results = await Promise.all(imagePromises)
-      
-      // Update state with all fetched images
-      const newImages = {}
-      results.forEach(result => {
-        if (result) {
-          newImages[result.postId] = result.imageData
-        }
-      })
-      
-      setGeneratedImages(prev => ({
-        ...prev,
-        ...newImages
-      }))
-      
-      console.log('Refreshed images for', Object.keys(newImages).length, 'posts')
-    } catch (error) {
-      console.error('Error refreshing images:', error)
-    } finally {
-      setRefreshingImages(false)
-    }
-  }
 
   useEffect(() => {
     fetchData()
@@ -1226,17 +1173,6 @@ const ContentDashboard = () => {
                     </div>
                   </div>
                   
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
-                      <Image className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-600">With Media</p>
-                      <p className="text-lg font-bold text-gray-900">
-                        {contentToDisplay.filter(content => content.media_url).length}
-                      </p>
-                    </div>
-                  </div>
                 </div>
               </div>
               
@@ -1265,15 +1201,6 @@ const ContentDashboard = () => {
                   </span>
                 </button>
                 
-                <button
-                  onClick={refreshAllImages}
-                  disabled={refreshingImages}
-                  className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-cyan-600 text-white px-4 py-2 rounded-lg hover:from-cyan-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50"
-                  title="Refresh all images to load latest versions"
-                >
-                  <RefreshCw className={`w-4 h-4 ${refreshingImages ? 'animate-spin' : ''}`} />
-                  <span>{refreshingImages ? 'Refreshing...' : 'Refresh Images'}</span>
-                </button>
                 
                 {/* Filter and View Controls */}
                 <div className="flex items-center space-x-4">
@@ -1571,7 +1498,7 @@ const ContentDashboard = () => {
                                             }}
                                             className="px-3 py-2 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 transition-colors"
                                           >
-                                            Generate Image
+                                            Generate Image with AI
                                           </button>
                                         </div>
                                       )
@@ -1628,7 +1555,7 @@ const ContentDashboard = () => {
                                   ) : (
                                     <>
                                       <Wand2 className="w-8 h-8" />
-                                      <span className="text-xs font-medium">Generate Image</span>
+                                      <span className="text-xs font-medium">Generate Image with AI</span>
                                     </>
                                   )}
                                 </button>
@@ -1687,57 +1614,86 @@ const ContentDashboard = () => {
                       </div>
                       
                       {/* Action Icons */}
-                      <div className="flex items-center space-x-2">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEditContent(content)
-                          }}
-                          className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`} 
-                          title="Edit Content"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleGenerateMedia(content)
-                          }}
-                          disabled={generatingMedia.has(content.id)}
-                          className={`p-2 rounded-lg transition-all duration-200 ${
-                            generatingMedia.has(content.id)
-                              ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
-                              : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90'
-                          }`}
-                          title={generatingMedia.has(content.id) ? 'Generating Media...' : 'Generate Media'}
-                        >
-                          {generatingMedia.has(content.id) ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Wand2 className="w-4 h-4" />
+                      <div className="flex items-center space-x-2 relative">
+                        <div className="relative">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditContent(content)
+                            }}
+                            onMouseEnter={() => setHoveredButton(`${content.id}-edit`)}
+                            onMouseLeave={() => setHoveredButton(null)}
+                            className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          {hoveredButton === `${content.id}-edit` && (
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                              Edit Post
+                              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                            </div>
                           )}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handlePostContent(content)
-                          }}
-                          disabled={content.status === 'published' || postingContent.has(content.id)}
-                          className={`p-2 rounded-lg transition-all duration-200 ${
-                            content.status === 'published' 
-                              ? 'bg-green-100 text-green-700 cursor-not-allowed' 
-                              : postingContent.has(content.id)
-                              ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
-                              : `${theme.iconBg} text-white hover:opacity-90`
-                          }`}
-                          title={content.status === 'published' ? 'Already Published' : postingContent.has(content.id) ? 'Posting...' : `Post to ${content.platform}`}
-                        >
-                          {postingContent.has(content.id) ? (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Share2 className="w-4 h-4" />
+                        </div>
+                        
+                        <div className="relative">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleGenerateMedia(content)
+                            }}
+                            onMouseEnter={() => setHoveredButton(`${content.id}-generate`)}
+                            onMouseLeave={() => setHoveredButton(null)}
+                            disabled={generatingMedia.has(content.id)}
+                            className={`p-2 rounded-lg transition-all duration-200 ${
+                              generatingMedia.has(content.id)
+                                ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90'
+                            }`}
+                          >
+                            {generatingMedia.has(content.id) ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Wand2 className="w-4 h-4" />
+                            )}
+                          </button>
+                          {hoveredButton === `${content.id}-generate` && (
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                              {generatingMedia.has(content.id) ? 'Generating Image with AI...' : 'Generate Image with AI'}
+                              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                            </div>
                           )}
-                        </button>
+                        </div>
+                        
+                        <div className="relative">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handlePostContent(content)
+                            }}
+                            onMouseEnter={() => setHoveredButton(`${content.id}-post`)}
+                            onMouseLeave={() => setHoveredButton(null)}
+                            disabled={content.status === 'published' || postingContent.has(content.id)}
+                            className={`p-2 rounded-lg transition-all duration-200 ${
+                              content.status === 'published' 
+                                ? 'bg-green-100 text-green-700 cursor-not-allowed' 
+                                : postingContent.has(content.id)
+                                ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                : `${theme.iconBg} text-white hover:opacity-90`
+                            }`}
+                          >
+                            {postingContent.has(content.id) ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Share2 className="w-4 h-4" />
+                            )}
+                          </button>
+                          {hoveredButton === `${content.id}-post` && (
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                              {content.status === 'published' ? 'Already Published' : postingContent.has(content.id) ? 'Posting...' : `Post on ${content.platform}`}
+                              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
