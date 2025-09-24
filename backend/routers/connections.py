@@ -767,9 +767,8 @@ async def handle_oauth_callback(
             if account_info.get('instagram_id'):
                 connection_data["page_id"] = account_info.get('instagram_id')
             
-            connection_data["account_type"] = account_info.get('account_type')
-
-            connection_data["media_count"] = account_info.get('media_count', 0)
+            # Only include fields that exist in the database schema
+            # Skip account_type, media_count, and other custom fields
 
         elif platform == "linkedin":
 
@@ -815,9 +814,8 @@ async def handle_oauth_callback(
                 "token_expires_at": (datetime.now() + timedelta(seconds=tokens.get('expires_in', 3600))).isoformat(),
                 "connection_status": 'active',
                 "is_active": True,
-                "last_sync": datetime.now().isoformat(),
-                "account_type": account_info.get('account_type'),
-                "media_count": account_info.get('media_count', 0)
+                "last_sync": datetime.now().isoformat()
+                # Skip account_type, media_count and other custom fields that don't exist in DB
             }
             
             try:
