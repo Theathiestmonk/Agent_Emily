@@ -221,7 +221,12 @@ async def get_latest_posts(
         return {
             "posts": posts_by_platform,
             "total_platforms": len(posts_by_platform),
-            "total_posts": sum(len(posts) for posts in posts_by_platform.values())
+            "total_posts": sum(len(posts) for posts in posts_by_platform.values()),
+            "debug_info": {
+                "instagram_connections_found": len([conn for conn in connections if conn.get('platform', '').lower() == 'instagram']),
+                "instagram_posts_found": len(posts_by_platform.get('instagram', [])),
+                "all_connections": [{"platform": conn.get('platform'), "page_id": conn.get('page_id'), "is_active": conn.get('is_active')} for conn in connections]
+            }
         }
         
     except Exception as e:
@@ -313,6 +318,11 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
         instagram_account_id = page_id
         print(f"📱 Using Instagram Business account ID: {instagram_account_id}")
         
+        # Validate Instagram account ID format
+        if not instagram_account_id or not instagram_account_id.isdigit():
+            print(f"❌ Invalid Instagram account ID format: {instagram_account_id}")
+            return []
+        
         # Now fetch media from Instagram Graph API
         url = f"https://graph.facebook.com/v18.0/{instagram_account_id}/media"
         params = {
@@ -327,6 +337,8 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
         response = requests.get(url, params=params, timeout=10)
         
         print(f"📊 Instagram API response status: {response.status_code}")
+        print(f"📊 Instagram API response headers: {dict(response.headers)}")
+        print(f"📊 Instagram API response text: {response.text}")
         
         if response.status_code == 200:
             data = response.json()
@@ -355,6 +367,52 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
     except Exception as e:
         print(f"❌ Error fetching Instagram posts: {e}")
         return []
+
+@router.get("/debug/instagram-posts")
+async def debug_instagram_posts(
+    current_user: User = Depends(get_current_user)
+):
+    """Debug endpoint to test Instagram posts fetching"""
+    try:
+        print(f"🔍 Debug Instagram posts for user: {current_user.id}")
+        
+        # Get user's Instagram connections
+        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "instagram").eq("is_active", True).execute()
+        connections = response.data if response.data else []
+        
+        print(f"📱 Found {len(connections)} Instagram connections")
+        
+        if not connections:
+            return {
+                "error": "No Instagram connections found",
+                "connections_count": 0
+            }
+        
+        connection = connections[0]
+        print(f"🔍 Instagram connection data: {connection}")
+        
+        # Test the Instagram posts fetching
+        posts = await fetch_instagram_posts(connection, 5)
+        
+        return {
+            "connection_found": True,
+            "connection_data": {
+                "id": connection.get('id'),
+                "platform": connection.get('platform'),
+                "page_id": connection.get('page_id'),
+                "page_name": connection.get('page_name'),
+                "is_active": connection.get('is_active')
+            },
+            "posts_fetched": len(posts),
+            "posts": posts
+        }
+        
+    except Exception as e:
+        print(f"❌ Debug Instagram posts error: {e}")
+        return {
+            "error": str(e),
+            "connection_found": False
+        }
 
 async def fetch_twitter_posts(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from Twitter using API v2"""
