@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { onboardingAPI } from '../services/onboarding'
 import OnboardingComplete from './OnboardingComplete'
+import OnboardingConnections from './OnboardingConnections'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 
 const Onboarding = () => {
@@ -74,6 +75,7 @@ const Onboarding = () => {
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showCompletion, setShowCompletion] = useState(false)
+  const [showConnections, setShowConnections] = useState(false)
   
   // State for "Other" input fields
   const [otherInputs, setOtherInputs] = useState({
@@ -657,12 +659,30 @@ const Onboarding = () => {
       localStorage.removeItem('onboarding_form_data')
       localStorage.removeItem('onboarding_current_step')
       localStorage.removeItem('onboarding_completed_steps')
-      setShowCompletion(true)
+      // Show connection phase instead of completion
+      setShowConnections(true)
     } catch (err) {
       setError(err.message || 'Failed to submit onboarding')
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  // Connection phase handlers
+  const handleConnectionComplete = () => {
+    setShowConnections(false)
+    setShowCompletion(true)
+  }
+
+  const handleConnectionSkip = () => {
+    setShowConnections(false)
+    setShowCompletion(true)
+  }
+
+  const handleConnectionBack = () => {
+    setShowConnections(false)
+    // Reset to last step of onboarding
+    setCurrentStep(steps.length - 1)
   }
 
   const renderStep = () => {
@@ -1871,6 +1891,17 @@ const Onboarding = () => {
   }
 
   // Show completion screen after successful submission
+  if (showConnections) {
+    return (
+      <OnboardingConnections
+        selectedPlatforms={formData.social_media_platforms || []}
+        onComplete={handleConnectionComplete}
+        onSkip={handleConnectionSkip}
+        onBack={handleConnectionBack}
+      />
+    )
+  }
+
   if (showCompletion) {
     return <OnboardingComplete />
   }

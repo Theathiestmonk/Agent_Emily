@@ -142,6 +142,16 @@ const SettingsDashboard = () => {
       helpUrl: 'https://www.linkedin.com/developers/apps'
     },
     {
+      id: 'youtube',
+      name: 'YouTube',
+      icon: Youtube,
+      color: 'bg-red-600',
+      description: 'Upload videos, manage comments, and get analytics',
+      oauthSupported: true,
+      tokenSupported: false,
+      helpUrl: 'https://developers.google.com/youtube/v3/getting-started'
+    },
+    {
       id: 'wordpress',
       name: 'WordPress',
       icon: Globe,
