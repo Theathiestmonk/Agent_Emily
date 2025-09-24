@@ -126,14 +126,22 @@ const OnboardingForm = forwardRef(({
   useImperativeHandle(ref, () => ({
     goToStep: (stepIndex) => {
       if (stepIndex >= 0 && stepIndex < steps.length) {
-        // Check if user can navigate to this step
-        if (stepIndex === 0 || stepIndex <= Math.max(...completedSteps) + 1) {
+        // In edit mode, allow navigation to any step without restrictions
+        if (isEditMode) {
           setCurrentStep(stepIndex)
           if (onStepChange) {
             onStepChange(stepIndex)
           }
         } else {
-          setError(`Please complete the previous steps before accessing step ${stepIndex + 1}.`)
+          // Check if user can navigate to this step (only for onboarding mode)
+          if (stepIndex === 0 || stepIndex <= Math.max(...completedSteps) + 1) {
+            setCurrentStep(stepIndex)
+            if (onStepChange) {
+              onStepChange(stepIndex)
+            }
+          } else {
+            setError(`Please complete the previous steps before accessing step ${stepIndex + 1}.`)
+          }
         }
       }
     },
@@ -568,6 +576,9 @@ const OnboardingForm = forwardRef(({
 
   // Check if a step is accessible
   const isStepAccessible = (stepIndex) => {
+    // In edit mode, all steps are accessible
+    if (isEditMode) return true
+    
     if (stepIndex === 0) return true
     if (stepIndex <= Math.max(...completedSteps) + 1) return true
     return false
@@ -2047,7 +2058,7 @@ const OnboardingForm = forwardRef(({
       )}
 
       {/* Step Lock Warning */}
-      {!isStepAccessible(currentStep) && (
+      {!isEditMode && !isStepAccessible(currentStep) && (
         <div className="bg-amber-50 border border-amber-200 text-amber-600 px-4 py-3 rounded-lg mb-6">
           <div className="flex items-center">
             <X className="w-5 h-5 text-amber-400 mr-2" />
@@ -2117,7 +2128,7 @@ const OnboardingForm = forwardRef(({
         ) : (
           <button
             onClick={nextStep}
-              disabled={!isStepAccessible(currentStep + 1)}
+              disabled={!isEditMode && !isStepAccessible(currentStep + 1)}
               className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
           >
             Next
