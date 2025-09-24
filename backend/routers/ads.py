@@ -78,6 +78,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ads", tags=["ads"])
 security = HTTPBearer()
 
+@router.get("/test")
+async def test_ads_router():
+    """Test endpoint to verify ads router is working"""
+    return {"message": "Ads router is working", "status": "ok"}
+
 class AdCopyResponse(BaseModel):
     id: str
     title: str
@@ -116,6 +121,9 @@ class AdUpdateRequest(BaseModel):
     title: Optional[str] = None
     ad_copy: Optional[str] = None
     call_to_action: Optional[str] = None
+    target_audience: Optional[str] = None
+    budget_range: Optional[str] = None
+    campaign_objective: Optional[str] = None
     hashtags: Optional[List[str]] = None
     status: Optional[str] = None
 
@@ -179,7 +187,54 @@ async def get_ads_by_date(
                 ad['platform'] = 'unknown'
                 print(f"⚠️ No platform found, setting to 'unknown'")
             
-            ads.append(AdCopyResponse(**ad))
+            try:
+                # Parse datetime fields properly
+                ad_copy = AdCopyResponse(
+                    id=ad['id'],
+                    title=ad['title'],
+                    ad_copy=ad['ad_copy'],
+                    platform=ad['platform'],
+                    ad_type=ad['ad_type'],
+                    call_to_action=ad['call_to_action'],
+                    target_audience=ad['target_audience'],
+                    budget_range=ad['budget_range'],
+                    campaign_objective=ad['campaign_objective'],
+                    scheduled_at=datetime.fromisoformat(ad['scheduled_at'].replace('Z', '+00:00')),
+                    status=ad['status'],
+                    media_url=ad.get('media_url'),
+                    hashtags=ad.get('hashtags', []),
+                    metadata=ad.get('metadata', {}),
+                    campaign_id=ad['campaign_id'],
+                    created_at=datetime.fromisoformat(ad['created_at'].replace('Z', '+00:00'))
+                )
+                ads.append(ad_copy)
+                print(f"✅ Successfully parsed ad: {ad_copy.id} - Platform: {ad_copy.platform}")
+            except Exception as e:
+                print(f"❌ Error parsing ad {ad.get('id', 'unknown')}: {e}")
+                # Create a fallback ad with minimal data
+                try:
+                    fallback_ad = AdCopyResponse(
+                        id=ad.get('id', 'unknown'),
+                        title=ad.get('title', 'Unknown Title'),
+                        ad_copy=ad.get('ad_copy', ''),
+                        platform=ad.get('platform', 'unknown'),
+                        ad_type=ad.get('ad_type', 'text'),
+                        call_to_action=ad.get('call_to_action', ''),
+                        target_audience=ad.get('target_audience', ''),
+                        budget_range=ad.get('budget_range', ''),
+                        campaign_objective=ad.get('campaign_objective', ''),
+                        scheduled_at=datetime.now(),
+                        status=ad.get('status', 'draft'),
+                        media_url=ad.get('media_url'),
+                        hashtags=ad.get('hashtags', []),
+                        metadata=ad.get('metadata', {}),
+                        campaign_id=ad.get('campaign_id', ''),
+                        created_at=datetime.now()
+                    )
+                    ads.append(fallback_ad)
+                    print(f"🔧 Created fallback ad: {fallback_ad.id} - Platform: {fallback_ad.platform}")
+                except Exception as fallback_error:
+                    print(f"❌ Failed to create fallback ad: {fallback_error}")
         
         return {"ads": ads, "date": date, "count": len(ads)}
         
@@ -222,7 +277,7 @@ async def get_campaign(
         campaign = AdCampaignResponse(**response.data[0])
         
         # Get ads for this campaign
-        ads_response = supabase.table("ad_copies").select("*").eq("campaign_id", campaign_id).execute()
+        ads_response = supabase_client.table("ad_copies").select("*").eq("campaign_id", campaign_id).execute()
         ads = [AdCopyResponse(**ad) for ad in ads_response.data]
         
         return {"campaign": campaign, "ads": ads, "ads_count": len(ads)}
@@ -315,17 +370,22 @@ async def update_ad(
     current_user: dict = Depends(get_current_user)
 ):
     """Update an ad"""
+    print(f"🔧 PUT /api/ads/{ad_id} called with data: {ad_data.dict()}")
     try:
         supabase_client = supabase_admin
         
         # Check if ad exists and belongs to user
-        ad_response = supabase.table("ad_copies").select("""
+        ad_response = supabase_client.table("ad_copies").select("""
             *,
             ad_campaigns!inner(
                 id,
                 user_id
             )
         """).eq("id", ad_id).eq("ad_campaigns.user_id", current_user["id"]).execute()
+        
+        print(f"🔧 Ad query result: {ad_response.data}")
+        print(f"🔧 User ID: {current_user['id']}")
+        print(f"🔧 Ad ID: {ad_id}")
         
         if not ad_response.data:
             raise HTTPException(status_code=404, detail="Ad not found")
@@ -357,7 +417,7 @@ async def approve_ad(
         supabase_client = supabase_admin
         
         # Check if ad exists and belongs to user
-        ad_response = supabase.table("ad_copies").select("""
+        ad_response = supabase_client.table("ad_copies").select("""
             *,
             ad_campaigns!inner(
                 id,
@@ -401,7 +461,7 @@ async def reject_ad(
         supabase_client = supabase_admin
         
         # Check if ad exists and belongs to user
-        ad_response = supabase.table("ad_copies").select("""
+        ad_response = supabase_client.table("ad_copies").select("""
             *,
             ad_campaigns!inner(
                 id,
@@ -439,7 +499,7 @@ async def delete_ad(
         supabase_client = supabase_admin
         
         # Check if ad exists and belongs to user
-        ad_response = supabase.table("ad_copies").select("""
+        ad_response = supabase_client.table("ad_copies").select("""
             *,
             ad_campaigns!inner(
                 id,
@@ -477,7 +537,7 @@ async def get_ad_performance(
         supabase_client = supabase_admin
         
         # Check if ad exists and belongs to user
-        ad_response = supabase.table("ad_copies").select("""
+        ad_response = supabase_client.table("ad_copies").select("""
             *,
             ad_campaigns!inner(
                 id,
@@ -548,7 +608,7 @@ async def delete_campaign(
             raise HTTPException(status_code=404, detail="Campaign not found")
         
         # Get all ads for this campaign
-        ads_response = supabase.table("ad_copies").select("id").eq("campaign_id", campaign_id).execute()
+        ads_response = supabase_client.table("ad_copies").select("id").eq("campaign_id", campaign_id).execute()
         ad_ids = [ad["id"] for ad in ads_response.data]
         
         # Delete ad images

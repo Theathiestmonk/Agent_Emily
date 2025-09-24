@@ -6,6 +6,9 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        'sans': ['Roboto', 'sans-serif'],
+      },
       colors: {
         pink: {
           500: '#ec4899',

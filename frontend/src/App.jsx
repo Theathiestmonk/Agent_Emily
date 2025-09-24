@@ -15,7 +15,6 @@ import BlogDashboard from './components/BlogDashboard'
 import Chatbot from './components/Chatbot'
 import Onboarding from './components/Onboarding'
 import Profile from './components/Profile'
-import GoogleDashboard from './components/GoogleDashboard'
 import GoogleCallback from './components/GoogleCallback'
 import TokenExchangeHandler from './components/TokenExchangeHandler'
 import SettingsDashboard from './components/SettingsDashboard'
@@ -155,14 +154,6 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <Profile />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/google-dashboard" 
-          element={
-            <ProtectedRoute>
-              <GoogleDashboard />
             </ProtectedRoute>
           } 
         />

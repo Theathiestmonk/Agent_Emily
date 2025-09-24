@@ -53,7 +53,7 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
+    <div className="min-h-screen bg-white">
       {/* Side Navbar */}
       <SideNavbar />
       
@@ -64,15 +64,9 @@ function Dashboard() {
           <div className="px-6 py-4">
             <div className="flex justify-between items-center">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Welcome back, {profile?.business_name || user?.user_metadata?.name || 'there'}!
+                <h1 className="text-2xl text-gray-900">
+                  <span className="font-bold">Welcome,</span> {profile?.business_name || user?.user_metadata?.name || 'there'}
                 </h1>
-                <p className="text-sm text-gray-500">
-                  {profile?.business_name 
-                    ? `Ready to take ${profile.business_name} to new heights? Let's create some amazing content!`
-                    : "Ready to supercharge your marketing? Let's create some amazing content!"
-                  }
-                </p>
               </div>
               
               {/* Compact Social Media Connections */}

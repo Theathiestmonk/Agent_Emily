@@ -129,22 +129,40 @@ const AdsDashboard = () => {
   const [generatedImages, setGeneratedImages] = useState({})
   const [imageLoading, setImageLoading] = useState(new Set())
   const [generatingMedia, setGeneratingMedia] = useState(new Set())
-  const [editingAd, setEditingAd] = useState(null)
+  const [expandedAds, setExpandedAds] = useState(new Set()) // Track expanded ads
+  const [editingAd, setEditingAd] = useState(null) // Track which ad is being edited
   const [editForm, setEditForm] = useState({
     title: '',
     ad_copy: '',
     call_to_action: '',
+    target_audience: '',
+    budget_range: '',
+    campaign_objective: '',
     hashtags: []
   })
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving] = useState(false) // Saving state for edit
 
   const platforms = [
     { id: 'facebook', name: 'Facebook', icon: Facebook, color: 'bg-blue-600' },
     { id: 'instagram', name: 'Instagram', icon: Instagram, color: 'bg-pink-500' },
     { id: 'linkedin', name: 'LinkedIn', icon: Linkedin, color: 'bg-blue-700' },
     { id: 'twitter', name: 'Twitter', icon: Twitter, color: 'bg-sky-500' },
-    { id: 'youtube', name: 'YouTube', icon: Youtube, color: 'bg-red-600' }
+    { id: 'youtube', name: 'YouTube', icon: Youtube, color: 'bg-red-600' },
+    { id: 'tiktok', name: 'TikTok', icon: Activity, color: 'bg-gray-900' },
+    { id: 'google', name: 'Google', icon: Activity, color: 'bg-red-500' },
+    { id: 'unknown', name: 'Unknown Platform', icon: AlertCircle, color: 'bg-gray-500' }
   ]
+  
+  // Debug: Check if icons are properly imported
+  console.log('Icon imports check:', {
+    Facebook: typeof Facebook,
+    Instagram: typeof Instagram,
+    Linkedin: typeof Linkedin,
+    Twitter: typeof Twitter,
+    Youtube: typeof Youtube,
+    Activity: typeof Activity,
+    AlertCircle: typeof AlertCircle
+  })
 
   const adTypes = [
     { id: 'text', name: 'Text Ad', icon: FileText, color: 'bg-gray-500' },
@@ -186,8 +204,19 @@ const AdsDashboard = () => {
 
       const data = await response.json()
       console.log('Fetched ads data:', data.ads)
-      console.log('Platforms in ads:', data.ads?.map(ad => ({ id: ad.id, platform: ad.platform })))
-      setAds(data.ads || [])
+      console.log('Platforms in ads:', data.ads?.map(ad => ({ id: ad.id, platform: ad.platform, title: ad.title })))
+      
+      // Process ads to ensure platform field is present
+      const processedAds = (data.ads || []).map(ad => {
+        console.log('Processing ad:', ad.id, 'platform:', ad.platform)
+        return {
+          ...ad,
+          platform: ad.platform || 'unknown'
+        }
+      })
+      
+      console.log('Processed ads:', processedAds)
+      setAds(processedAds)
       
     } catch (error) {
       console.error('Error fetching ads:', error)
@@ -237,15 +266,96 @@ const AdsDashboard = () => {
   }
 
   const getPlatformIcon = (platform) => {
-    console.log('Getting platform icon for:', platform)
-    if (!platform || platform === 'unknown') return <div className="w-6 h-6 bg-gray-500 rounded text-white flex items-center justify-center text-xs">?</div>
+    // Simple switch statement for reliable icon rendering
+    switch (platform) {
+      case 'facebook':
+        return <Facebook className="w-6 h-6 text-white" />
+      case 'instagram':
+        return <Instagram className="w-6 h-6 text-white" />
+      case 'linkedin':
+        return <Linkedin className="w-6 h-6 text-white" />
+      case 'twitter':
+        return <Twitter className="w-6 h-6 text-white" />
+      case 'youtube':
+        return <Youtube className="w-6 h-6 text-white" />
+      case 'tiktok':
+        return <Activity className="w-6 h-6 text-white" />
+      case 'google':
+        return <Activity className="w-6 h-6 text-white" />
+      default:
+        return <AlertCircle className="w-6 h-6 text-white" />
+    }
+  }
+
+  const getPlatformCardTheme = (platform) => {
+    const themes = {
+      facebook: {
+        bg: 'bg-blue-50',
+        border: 'border-blue-200',
+        iconBg: 'bg-blue-500',
+        text: 'text-blue-700'
+      },
+      instagram: {
+        bg: 'bg-pink-50',
+        border: 'border-pink-200',
+        iconBg: 'bg-pink-500',
+        text: 'text-pink-700'
+      },
+      linkedin: {
+        bg: 'bg-blue-50',
+        border: 'border-blue-200',
+        iconBg: 'bg-blue-600',
+        text: 'text-blue-700'
+      },
+      twitter: {
+        bg: 'bg-sky-50',
+        border: 'border-sky-200',
+        iconBg: 'bg-sky-500',
+        text: 'text-sky-700'
+      },
+      youtube: {
+        bg: 'bg-red-50',
+        border: 'border-red-200',
+        iconBg: 'bg-red-500',
+        text: 'text-red-700'
+      },
+      tiktok: {
+        bg: 'bg-gray-50',
+        border: 'border-gray-200',
+        iconBg: 'bg-gray-900',
+        text: 'text-gray-700'
+      },
+      google: {
+        bg: 'bg-red-50',
+        border: 'border-red-200',
+        iconBg: 'bg-red-500',
+        text: 'text-red-700'
+      },
+      unknown: {
+        bg: 'bg-gray-50',
+        border: 'border-gray-200',
+        iconBg: 'bg-gray-500',
+        text: 'text-gray-700'
+      }
+    }
     
-    const platformData = platforms.find(p => p.id === platform)
-    console.log('Platform data found:', platformData)
-    if (!platformData) return <div className="w-6 h-6 bg-gray-500 rounded text-white flex items-center justify-center text-xs">?</div>
-    
-    const IconComponent = platformData.icon
-    return <IconComponent className="w-6 h-6" />
+    return themes[platform] || {
+      bg: 'bg-gray-50',
+      border: 'border-gray-200',
+      iconBg: 'bg-gray-500',
+      text: 'text-gray-700'
+    }
+  }
+
+  const getStatusColor = (status) => {
+    const colors = {
+      draft: 'bg-gray-100 text-gray-800',
+      scheduled: 'bg-blue-100 text-blue-800',
+      published: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
+      approved: 'bg-green-100 text-green-800'
+    }
+    return colors[status] || 'bg-gray-100 text-gray-800'
   }
 
   const getAdTypeIcon = (adType) => {
@@ -273,12 +383,28 @@ const AdsDashboard = () => {
     }
   }
 
+
+  const toggleAdExpansion = (adId) => {
+    setExpandedAds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(adId)) {
+        newSet.delete(adId)
+      } else {
+        newSet.add(adId)
+      }
+      return newSet
+    })
+  }
+
   const handleEditAd = (ad) => {
     setEditingAd(ad)
     setEditForm({
       title: ad.title || '',
       ad_copy: ad.ad_copy || '',
       call_to_action: ad.call_to_action || '',
+      target_audience: ad.target_audience || '',
+      budget_range: ad.budget_range || '',
+      campaign_objective: ad.campaign_objective || '',
       hashtags: ad.hashtags || []
     })
   }
@@ -289,15 +415,24 @@ const AdsDashboard = () => {
       title: '',
       ad_copy: '',
       call_to_action: '',
+      target_audience: '',
+      budget_range: '',
+      campaign_objective: '',
       hashtags: []
     })
   }
 
   const handleSaveEdit = async (adId) => {
     try {
+      setSaving(true)
       const authToken = await getAuthToken()
       
-      const response = await fetch(`${API_BASE_URL}/api/ads/${adId}`, {
+      const url = `${API_BASE_URL}/api/ads/${adId}`
+      console.log('🔧 PUT request URL:', url)
+      console.log('🔧 Request data:', editForm)
+      console.log('🔧 Auth token:', authToken ? 'Present' : 'Missing')
+      
+      const response = await fetch(url, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -306,17 +441,33 @@ const AdsDashboard = () => {
         body: JSON.stringify(editForm)
       })
 
+      console.log('🔧 Response status:', response.status)
+      console.log('🔧 Response headers:', Object.fromEntries(response.headers.entries()))
+      
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const errorText = await response.text()
+        console.log('🔧 Error response:', errorText)
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
       }
 
       showSuccess('Ad updated successfully!')
       setEditingAd(null)
+      setEditForm({
+        title: '',
+        ad_copy: '',
+        call_to_action: '',
+        target_audience: '',
+        budget_range: '',
+        campaign_objective: '',
+        hashtags: []
+      })
       fetchAds()
       
     } catch (error) {
       console.error('Error updating ad:', error)
       showError('Failed to update ad', error.message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -377,10 +528,15 @@ const AdsDashboard = () => {
   }
 
   const filteredAds = ads.filter(ad => {
+    console.log('Filtering ad:', ad.id, 'platform:', ad.platform, 'status:', ad.status)
     const platformMatch = filterPlatform === 'all' || ad.platform === filterPlatform
     const statusMatch = filterStatus === 'all' || ad.status === filterStatus
+    console.log('Platform match:', platformMatch, 'Status match:', statusMatch)
     return platformMatch && statusMatch
   })
+  
+  console.log('Filtered ads count:', filteredAds.length)
+  console.log('Filtered ads platforms:', filteredAds.map(ad => ({ id: ad.id, platform: ad.platform })))
 
 
 
@@ -524,7 +680,7 @@ const AdsDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-white">
       {/* Side Navbar */}
       <SideNavbar />
       
@@ -658,8 +814,8 @@ const AdsDashboard = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 p-6 pt-24">
-        {/* Ads Grid/List */}
-        <div className="bg-white rounded-lg shadow-sm border">
+          {/* Ads Grid/List */}
+          <div className="bg-white rounded-lg shadow-sm border">
           <div className="p-6 border-b">
             <h2 className="text-xl font-semibold text-gray-900">Ads</h2>
           </div>
@@ -683,383 +839,437 @@ const AdsDashboard = () => {
               </button>
             </div>
           ) : (
-            <div className={viewMode === 'grid' ? 'p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'divide-y'}>
+            <div className={`grid gap-6 items-start ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1'} p-6`}>
               {filteredAds.map(ad => {
-                const isExpanded = true // Always show expanded view
-                const theme = {
-                  primary: 'bg-gradient-to-r from-purple-500 to-pink-500',
-                  secondary: 'bg-gradient-to-r from-blue-500 to-indigo-500',
-                  accent: 'bg-purple-100 text-purple-800',
-                  text: 'text-purple-800'
-                }
-
+                console.log('Rendering ad card:', ad.id, 'platform:', ad.platform, 'platform type:', typeof ad.platform)
+                const platform = ad.platform?.toLowerCase() || 'unknown'
+                const theme = getPlatformCardTheme(platform)
+                const isExpanded = expandedAds.has(ad.id)
+                console.log('Theme for platform', platform, ':', theme)
                 return (
-                  <div key={ad.id} className={`${viewMode === 'grid' ? 'bg-white rounded-lg shadow-sm border hover:shadow-md transition-all duration-200' : 'bg-white'} ${isExpanded ? 'ring-2 ring-purple-200' : ''}`}>
-                    {/* Always show expanded view */}
-                    {false ? (
-                      <div className="p-4 cursor-pointer" onClick={() => toggleAdExpansion(ad.id)}>
-                        <div className="flex items-center justify-between mb-3">
+                  <div 
+                    key={ad.id} 
+                    className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm p-6 hover:shadow-lg transition-all duration-300 hover:scale-[1.02] cursor-pointer self-start`}
+                    onClick={() => toggleAdExpansion(ad.id)}
+                  >
+                    {!isExpanded ? (
+                      // Collapsed View
+                      <>
+                        <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center space-x-3">
-                            <div className={`p-2 rounded-lg ${platforms.find(p => p.id === ad.platform)?.color || 'bg-gray-500'} text-white`}>
-                              {getPlatformIcon(ad.platform)}
+                            <div className={`w-12 h-12 ${theme.iconBg} rounded-xl flex items-center justify-center shadow-sm`}>
+                              {(() => {
+                                console.log('Platform for icon:', platform)
+                                
+                                switch (platform) {
+                                  case 'facebook':
+                                    return <Facebook className="w-6 h-6 text-white" />
+                                  case 'instagram':
+                                    return <Instagram className="w-6 h-6 text-white" />
+                                  case 'linkedin':
+                                    return <Linkedin className="w-6 h-6 text-white" />
+                                  case 'twitter':
+                                    return <Twitter className="w-6 h-6 text-white" />
+                                  case 'youtube':
+                                    return <Youtube className="w-6 h-6 text-white" />
+                                  default:
+                                    return <AlertCircle className="w-6 h-6 text-white" />
+                                }
+                              })()}
                             </div>
                             <div>
-                              <h3 className="font-semibold text-gray-900 text-sm">{ad.title}</h3>
-                              <div className="flex items-center space-x-2 mt-1">
-                                <span className={`px-2 py-1 text-xs rounded-full ${statusColors[ad.status]}`}>
-                                  {ad.status}
-                                </span>
-                                <span className="flex items-center text-xs text-gray-500">
-                                  {getAdTypeIcon(ad.ad_type)}
-                                  <span className="ml-1 capitalize">{ad.ad_type}</span>
-                                </span>
-                                <span className="text-xs text-gray-500 capitalize">
-                                  {(() => {
-                                    console.log('Displaying platform for ad:', ad.id, 'platform:', ad.platform);
-                                    return ad.platform === 'unknown' ? 'Unknown Platform' : (ad.platform || 'Unknown Platform');
-                                  })()}
-                                </span>
-                              </div>
+                              <h4 className={`font-semibold capitalize ${theme.text}`}>{platform || 'Unknown Platform'}</h4>
+                              <p className="text-sm text-gray-500">{ad.status}</p>
                             </div>
                           </div>
-                          
+                          <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(ad.status)}`}>
+                            {ad.status}
+                          </div>
+                        </div>
+                      
+                        {ad.title && (
+                          <h5 className="font-medium text-gray-900 mb-3">{ad.title}</h5>
+                        )}
+                        
+                        <p className="text-gray-600 text-sm mb-4 line-clamp-3">{ad.ad_copy}</p>
+                        
+                        <div className="flex items-center justify-between text-xs text-gray-500 mb-4">
                           <div className="flex items-center space-x-2">
-                            <ChevronRight className="w-4 h-4 text-gray-400" />
+                            <span className="flex items-center">
+                              {getAdTypeIcon(ad.ad_type)}
+                              <span className="ml-1 capitalize">{ad.ad_type}</span>
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Clock className="w-3 h-3" />
+                            <span>{new Date(ad.scheduled_at).toLocaleDateString()}</span>
                           </div>
                         </div>
                         
-                        <p className="text-gray-600 text-sm mb-3 line-clamp-2">{ad.ad_copy}</p>
-                        
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                          <span className="flex items-center">
-                            <Clock className="w-3 h-3 mr-1" />
-                            {formatDate(ad.scheduled_at)}
-                          </span>
-                          <span className="flex items-center">
-                            <DollarSign className="w-3 h-3 mr-1" />
-                            {ad.budget_range}
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
-                      /* Expanded View */
-                      <div className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center space-x-3">
-                            <div className={`p-2 rounded-lg ${platforms.find(p => p.id === ad.platform)?.color || 'bg-gray-500'} text-white`}>
-                              {getPlatformIcon(ad.platform)}
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-gray-900">{ad.title}</h3>
-                              <div className="flex items-center space-x-2 mt-1">
-                                <span className={`px-2 py-1 text-xs rounded-full ${statusColors[ad.status]}`}>
-                                  {ad.status}
-                                </span>
-                                <span className="flex items-center text-xs text-gray-500">
-                                  {getAdTypeIcon(ad.ad_type)}
-                                  <span className="ml-1 capitalize">{ad.ad_type}</span>
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
+                        <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-2">
                             <button
-                              onClick={() => handleEditAd(ad)}
-                              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleApproveAd(ad.id)
+                              }}
+                              className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRejectAd(ad.id)
+                              }}
+                              className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-xs"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                          
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEditAd(ad)
+                              }}
+                              className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                              title="Edit Ad"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => handleCopyAd(ad)}
-                              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleCopyAd(ad)
+                              }}
+                              className="p-2 text-gray-400 hover:text-green-600 transition-colors"
+                              title="Copy Ad"
                             >
-                              <Copy className="w-4 h-4" />
+                              <Share2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      // Expanded View
+                      <>
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-12 h-12 ${theme.iconBg} rounded-xl flex items-center justify-center shadow-sm`}>
+                              {(() => {
+                                switch (platform) {
+                                  case 'facebook':
+                                    return <Facebook className="w-6 h-6 text-white" />
+                                  case 'instagram':
+                                    return <Instagram className="w-6 h-6 text-white" />
+                                  case 'linkedin':
+                                    return <Linkedin className="w-6 h-6 text-white" />
+                                  case 'twitter':
+                                    return <Twitter className="w-6 h-6 text-white" />
+                                  case 'youtube':
+                                    return <Youtube className="w-6 h-6 text-white" />
+                                  default:
+                                    return <AlertCircle className="w-6 h-6 text-white" />
+                                }
+                              })()}
+                            </div>
+                            <div>
+                              <h4 className={`font-semibold capitalize ${theme.text}`}>{platform || 'Unknown Platform'}</h4>
+                              <p className="text-sm text-gray-500">{ad.status}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(ad.status)}`}>
+                              {ad.status}
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleAdExpansion(ad.id)
+                              }}
+                              className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
                         
-                        {/* Media Display */}
-                        <div className="mb-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-600">Ad Visual</span>
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => handleGenerateMedia(ad)}
-                                disabled={generatingMedia.has(ad.id)}
-                                className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1 rounded hover:opacity-90 transition-colors disabled:opacity-50 flex items-center space-x-1"
-                              >
-                                {generatingMedia.has(ad.id) ? (
-                                  <>
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    <span>Generating...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Wand2 className="w-3 h-3" />
-                                    <span>Generate Media</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                          <div className="relative w-full aspect-square bg-gray-200 rounded-lg overflow-hidden">
-                            {ad.media_url ? (
-                              <>
-                                {imageLoading.has(ad.id) && (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                                    <div className="w-8 h-8 bg-gray-300 rounded animate-pulse"></div>
-                                  </div>
-                                )}
-                                <img
-                                  src={getMediumThumbnailUrl(ad.media_url)}
-                                  alt="Ad visual"
-                                  className="w-full h-full object-cover"
-                                  loading="lazy"
-                                  onLoad={() => handleImageLoad(ad.id)}
-                                  onError={() => handleImageError(ad.id)}
-                                  onLoadStart={() => startImageLoading(ad.id)}
-                                  style={{
-                                    opacity: imageLoading.has(ad.id) ? 0 : 1,
-                                    filter: imageLoading.has(ad.id) ? 'blur(8px)' : 'blur(0px)',
-                                    transform: imageLoading.has(ad.id) ? 'scale(1.05)' : 'scale(1)',
-                                    transition: 'all 0.6s ease-in-out'
-                                  }}
-                                />
-                              </>
-                            ) : (
-                              <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                                <div className="text-center">
-                                  <Image className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                  <p className="text-sm text-gray-500">No media generated yet</p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Edit Mode or Display Mode */}
-                        {editingAd && editingAd.id === ad.id ? (
-                          <div className="mb-4 space-y-4">
-                              <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                              <input
-                                type="text"
-                                value={editForm.title}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                              />
-                              </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Ad Copy</label>
-                              <textarea
-                                value={editForm.ad_copy}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, ad_copy: e.target.value }))}
-                                rows={4}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                              />
-                            </div>
-                              <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Call to Action</label>
-                              <input
-                                type="text"
-                                value={editForm.call_to_action}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, call_to_action: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                              />
-                              </div>
-                              <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Hashtags (comma-separated)</label>
-                              <input
-                                type="text"
-                                value={editForm.hashtags}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, hashtags: e.target.value }))}
-                                placeholder="hashtag1, hashtag2, hashtag3"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                              />
-                              </div>
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={handleSaveEdit}
-                                disabled={saving}
-                                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                              >
-                                <Save className="w-4 h-4" />
-                                <span>{saving ? 'Saving...' : 'Save'}</span>
-                              </button>
-                              <button
-                                onClick={handleCancelEdit}
-                                className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                              >
-                                <X className="w-4 h-4" />
-                                <span>Cancel</span>
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">{ad.ad_copy}</p>
+                        {ad.title && (
+                          <h5 className="font-medium text-gray-900 mb-4">{ad.title}</h5>
                         )}
                         
-                        {/* Expanded Details */}
-                        <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                          <div className="grid grid-cols-2 gap-3 text-xs">
-                            <div>
-                              <span className="font-medium text-gray-600">Scheduled:</span>
-                              <p className="text-gray-800">{formatDate(ad.scheduled_at)} at {formatTime(ad.scheduled_at.split('T')[1])}</p>
-                            </div>
-                              <div>
-                              <span className="font-medium text-gray-600">Status:</span>
-                              <p className="text-gray-800 capitalize">{ad.status}</p>
-                              </div>
-                              <div>
-                              <span className="font-medium text-gray-600">Platform:</span>
-                              <p className="text-gray-800 capitalize">{ad.platform === 'unknown' ? 'Unknown Platform' : (ad.platform || 'Unknown Platform')}</p>
-                              </div>
-                            <div>
-                              <span className="font-medium text-gray-600">Ad Type:</span>
-                              <p className="text-gray-800 capitalize">{ad.ad_type}</p>
-                            </div>
-                            <div>
-                              <span className="font-medium text-gray-600">Call to Action:</span>
-                              <p className="text-gray-800">{ad.call_to_action}</p>
-                              </div>
-                            <div>
-                              <span className="font-medium text-gray-600">Budget:</span>
-                              <p className="text-gray-800">{ad.budget_range}</p>
-                            </div>
+                        <div className="mb-4">
+                          <p className="text-gray-700 text-sm leading-relaxed">{ad.ad_copy}</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+                          <div>
+                            <span className="font-medium text-gray-600">Call to Action:</span>
+                            <p className="text-gray-800">{ad.call_to_action}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-600">Target Audience:</span>
+                            <p className="text-gray-800">{ad.target_audience}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-600">Budget Range:</span>
+                            <p className="text-gray-800">{ad.budget_range}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-600">Campaign Objective:</span>
+                            <p className="text-gray-800">{ad.campaign_objective}</p>
                           </div>
                         </div>
                         
-                        {/* Hashtags */}
+                        {ad.media_url && (
+                          <div className="mb-4">
+                            <img 
+                              src={ad.media_url} 
+                              alt="Ad media" 
+                              className="w-full h-48 object-cover rounded-lg"
+                              onLoad={() => handleImageLoad(ad.id)}
+                              onError={() => handleImageError(ad.id)}
+                            />
+                          </div>
+                        )}
+                        
+                        {!ad.media_url && ad.ad_type === 'image' && (
+                          <div className="mb-4">
+                            <div className="w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center">
+                              <div className="text-center">
+                                <Image className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                                <p className="text-gray-500 text-sm mb-3">No media generated yet</p>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleGenerateMedia(ad)
+                                  }}
+                                  disabled={generatingMedia.has(ad.id)}
+                                  className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 mx-auto"
+                                >
+                                  {generatingMedia.has(ad.id) ? (
+                                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                  ) : (
+                                    <Sparkles className="w-4 h-4 mr-2" />
+                                  )}
+                                  Generate Media
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
                         {ad.hashtags && ad.hashtags.length > 0 && (
                           <div className="mb-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium text-gray-600">Hashtags</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
+                            <div className="flex flex-wrap gap-2">
                               {ad.hashtags.map((tag, index) => (
-                                <span key={index} className={`text-xs ${theme.accent} px-2 py-1 rounded-lg`}>
+                                <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
                                   #{tag}
                                 </span>
-                      ))}
-                    </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                         
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4 text-sm text-gray-500">
-                            <span className="flex items-center">
-                              <Users className="w-4 h-4 mr-1" />
-                              {ad.target_audience}
-                            </span>
-                            <span className="flex items-center">
-                              <Target className="w-4 h-4 mr-1" />
-                              {ad.campaign_objective}
-                            </span>
-                          </div>
-                          
-                          <div className="flex items-center space-x-2">
-                            {ad.status === 'draft' && (
-                              <>
-                                <button
-                                  onClick={() => handleApproveAd(ad.id)}
-                                  className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full hover:bg-green-200"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => handleRejectAd(ad.id)}
-                                  className="px-3 py-1 bg-red-100 text-red-700 text-xs rounded-full hover:bg-red-200"
-                                >
-                                  Reject
-                                </button>
-                              </>
-                            )}
+                        <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEditAd(ad)
+                              }}
+                              className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                              title="Edit Ad"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleCopyAd(ad)
+                              }}
+                              className="p-2 text-gray-400 hover:text-green-600 transition-colors"
+                              title="Copy Ad"
+                            >
+                              <Share2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
-                      </div>
+                        
+                        {/* Approve/Reject buttons after content */}
+                        <div className="flex items-center justify-center space-x-2 mt-4">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleApproveAd(ad.id)
+                            }}
+                            className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                          >
+                            <CheckCircle className="w-3 h-3" />
+                            <span>Approve</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleRejectAd(ad.id)
+                            }}
+                            className="flex items-center space-x-1 px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+                          >
+                            <X className="w-3 h-3" />
+                            <span>Reject</span>
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 )
               })}
             </div>
           )}
-            </div>
+          </div>
         </div>
       </div>
 
       {/* Edit Modal */}
       {editingAd && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Edit Ad</h3>
-              <button
-                onClick={handleCancelEdit}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                <input
-                  type="text"
-                  value={editForm.title}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">Edit Ad</h3>
+                <button
+                  onClick={handleCancelEdit}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Title
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.title}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter ad title"
+                  />
+                </div>
+
+                {/* Ad Copy */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Ad Copy
+                  </label>
+                  <textarea
+                    value={editForm.ad_copy}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, ad_copy: e.target.value }))}
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter ad content"
+                  />
+                </div>
+
+                {/* Call to Action */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Call to Action
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.call_to_action}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, call_to_action: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter call to action"
+                  />
+                </div>
+
+                {/* Target Audience */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Target Audience
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.target_audience}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, target_audience: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter target audience"
+                  />
+                </div>
+
+                {/* Budget Range */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Budget Range
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.budget_range}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, budget_range: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter budget range"
+                  />
+                </div>
+
+                {/* Campaign Objective */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Campaign Objective
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.campaign_objective}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, campaign_objective: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter campaign objective"
+                  />
+                </div>
+
+                {/* Hashtags */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Hashtags (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.hashtags.join(', ')}
+                    onChange={(e) => setEditForm(prev => ({ 
+                      ...prev, 
+                      hashtags: e.target.value.split(',').map(tag => tag.trim()).filter(tag => tag)
+                    }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="hashtag1, hashtag2, hashtag3"
+                  />
+                </div>
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ad Copy</label>
-                <textarea
-                  value={editForm.ad_copy}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, ad_copy: e.target.value }))}
-                  rows={6}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  onClick={handleCancelEdit}
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleSaveEdit(editingAd.id)}
+                  disabled={saving}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {saving ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-4 h-4" />
+                  )}
+                  <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                </button>
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Call to Action</label>
-                <input
-                  type="text"
-                  value={editForm.call_to_action}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, call_to_action: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Hashtags (comma-separated)</label>
-                <input
-                  type="text"
-                  value={editForm.hashtags}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, hashtags: e.target.value }))}
-                  placeholder="hashtag1, hashtag2, hashtag3"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-            
-            <div className="flex items-center justify-end space-x-3 mt-6">
-              <button
-                onClick={handleCancelEdit}
-                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={saving}
-                className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-              >
-                <Save className="w-4 h-4" />
-                <span>{saving ? 'Saving...' : 'Save Changes'}</span>
-              </button>
             </div>
           </div>
         </div>
