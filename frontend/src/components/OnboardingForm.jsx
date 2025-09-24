@@ -2114,7 +2114,7 @@ const OnboardingForm = forwardRef(({
         {currentStep === steps.length - 1 ? (
           <button
             onClick={handleSubmit}
-              disabled={isSubmitting || !isStepCompleted(currentStep)}
+              disabled={isSubmitting || (!isEditMode && !isStepCompleted(currentStep))}
             className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
           >
             {isSubmitting ? (

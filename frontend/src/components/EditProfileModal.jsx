@@ -9,7 +9,6 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
   const [error, setError] = useState(null)
   const [showStepNavigation, setShowStepNavigation] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showSaveIndicator, setShowSaveIndicator] = useState(false)
   const [completedSteps, setCompletedSteps] = useState(new Set())
   const [showHelpTooltip, setShowHelpTooltip] = useState(false)
@@ -125,25 +124,12 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
     setCurrentStep(stepIndex)
   }
 
-  const handleFormChange = () => {
-    setHasUnsavedChanges(true)
-  }
-
   const handleStepComplete = (stepIndex) => {
     setCompletedSteps(prev => new Set([...prev, stepIndex]))
   }
 
-  const resetChanges = () => {
-    setHasUnsavedChanges(false)
-    setShowSaveIndicator(false)
-    if (onboardingFormRef.current && onboardingFormRef.current.resetForm) {
-      onboardingFormRef.current.resetForm()
-    }
-  }
-
   const showSaveSuccess = () => {
     setShowSaveIndicator(true)
-    setHasUnsavedChanges(false)
     setTimeout(() => setShowSaveIndicator(false), 2000)
   }
 
@@ -157,12 +143,6 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
           <div className="flex-1">
             <div className="flex items-center space-x-3">
             <h2 className="text-2xl font-bold text-gray-900">Edit Profile</h2>
-              {hasUnsavedChanges && (
-                <div className="flex items-center space-x-2 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-                  Unsaved Changes
-                </div>
-              )}
               {showSaveIndicator && (
                 <div className="flex items-center space-x-2 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
                   <CheckCircle className="w-3 h-3" />
@@ -175,16 +155,6 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
           
           {/* Action Buttons */}
           <div className="flex items-center space-x-2 mr-4">
-            {hasUnsavedChanges && (
-              <button
-                onClick={resetChanges}
-                className="flex items-center space-x-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Reset Changes"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>Reset</span>
-              </button>
-            )}
           </div>
 
           {/* Step Navigation */}
@@ -336,7 +306,6 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
               showHeader={false}
               showProgress={true}
               onStepChange={handleStepUpdate}
-              onFormChange={handleFormChange}
               onStepComplete={handleStepComplete}
             />
           ) : null}
