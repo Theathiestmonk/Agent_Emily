@@ -688,3 +688,165 @@ async def post_to_twitter(
     except Exception as e:
         print(f"❌ Error posting to Twitter: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to post to Twitter: {str(e)}")
+
+
+@router.get("/platform-stats")
+async def get_platform_stats(authorization: str = Header(None)):
+    """Get platform-specific stats for connected accounts"""
+    try:
+        print("🔍 Platform stats endpoint called")
+        
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = authorization.split(" ")[1]
+        
+        # Get user from token
+        user_response = supabase.auth.get_user(token)
+        if not user_response.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        user_id = user_response.user.id
+        print(f"👤 User ID: {user_id}")
+        
+        # Get all connections for the user
+        connections_response = supabase_admin.table("platform_connections").select("*").eq("user_id", user_id).eq("status", "active").execute()
+        connections = connections_response.data
+        
+        print(f"🔗 Found {len(connections)} active connections")
+        
+        if not connections:
+            print("❌ No active connections found")
+            return {}
+        
+        platform_stats = {}
+        
+        for connection in connections:
+            platform = connection.get("platform")
+            access_token = connection.get("access_token")
+            page_id = connection.get("page_id")
+            
+            print(f"📱 Processing {platform} connection - page_id: {page_id}")
+            
+            if not access_token:
+                print(f"❌ No access token for {platform}")
+                continue
+                
+            try:
+                if platform == "instagram":
+                    # Get Instagram account info
+                    instagram_url = f"https://graph.facebook.com/v18.0/{page_id}"
+                    params = {
+                        "fields": "followers_count,media_count",
+                        "access_token": access_token
+                    }
+                    
+                    print(f"📸 Fetching Instagram stats from: {instagram_url}")
+                    response = requests.get(instagram_url, params=params)
+                    print(f"📸 Instagram API response: {response.status_code}")
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        print(f"📸 Instagram data: {data}")
+                        platform_stats[platform] = {
+                            "followers_count": data.get("followers_count", 0),
+                            "media_count": data.get("media_count", 0)
+                        }
+                    else:
+                        print(f"❌ Instagram API error: {response.text}")
+                
+                elif platform == "facebook":
+                    # Get Facebook page info
+                    facebook_url = f"https://graph.facebook.com/v18.0/{page_id}"
+                    params = {
+                        "fields": "fan_count,page_name",
+                        "access_token": access_token
+                    }
+                    
+                    print(f"📘 Fetching Facebook stats from: {facebook_url}")
+                    response = requests.get(facebook_url, params=params)
+                    print(f"📘 Facebook API response: {response.status_code}")
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        print(f"📘 Facebook data: {data}")
+                        platform_stats[platform] = {
+                            "fan_count": data.get("fan_count", 0),
+                            "page_name": data.get("page_name", "")
+                        }
+                    else:
+                        print(f"❌ Facebook API error: {response.text}")
+                
+                elif platform == "linkedin":
+                    # Get LinkedIn organization info
+                    linkedin_url = "https://api.linkedin.com/v2/organizationalEntityAcls"
+                    params = {
+                        "q": "roleAssignee",
+                        "role": "ADMINISTRATOR"
+                    }
+                    headers = {
+                        "Authorization": f"Bearer {access_token}",
+                        "LinkedIn-Version": "202301"
+                    }
+                    
+                    response = requests.get(linkedin_url, params=params, headers=headers)
+                    if response.status_code == 200:
+                        data = response.json()
+                        # For now, we'll return basic info - LinkedIn doesn't provide follower counts easily
+                        platform_stats[platform] = {
+                            "follower_count": 0,  # Would need additional API calls
+                            "organizations": len(data.get("elements", []))
+                        }
+                
+                elif platform == "twitter":
+                    # Get Twitter user info
+                    twitter_url = "https://api.twitter.com/2/users/me"
+                    headers = {
+                        "Authorization": f"Bearer {access_token}"
+                    }
+                    params = {
+                        "user.fields": "public_metrics"
+                    }
+                    
+                    response = requests.get(twitter_url, headers=headers, params=params)
+                    if response.status_code == 200:
+                        data = response.json()
+                        metrics = data.get("data", {}).get("public_metrics", {})
+                        platform_stats[platform] = {
+                            "followers_count": metrics.get("followers_count", 0),
+                            "following_count": metrics.get("following_count", 0),
+                            "tweet_count": metrics.get("tweet_count", 0)
+                        }
+                
+                elif platform == "youtube":
+                    # Get YouTube channel info
+                    youtube_url = "https://www.googleapis.com/youtube/v3/channels"
+                    params = {
+                        "part": "statistics",
+                        "mine": "true",
+                        "access_token": access_token
+                    }
+                    
+                    response = requests.get(youtube_url, params=params)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get("items"):
+                            stats = data["items"][0].get("statistics", {})
+                            platform_stats[platform] = {
+                                "subscriber_count": int(stats.get("subscriberCount", 0)),
+                                "video_count": int(stats.get("videoCount", 0)),
+                                "view_count": int(stats.get("viewCount", 0))
+                            }
+                            
+            except Exception as e:
+                print(f"❌ Error fetching stats for {platform}: {e}")
+                continue
+        
+        print(f"📊 Final platform stats: {platform_stats}")
+        return platform_stats
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error getting platform stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get platform stats: {str(e)}")

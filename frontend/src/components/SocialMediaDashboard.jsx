@@ -43,6 +43,7 @@ const SocialMediaDashboard = () => {
   } = useSocialMediaCache()
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
+  const [platformStats, setPlatformStats] = useState({})
 
   useEffect(() => {
     fetchData()
@@ -57,9 +58,44 @@ const SocialMediaDashboard = () => {
       } else {
         console.log('Data fetched from API')
       }
+      
+      await fetchPlatformStats()
     } catch (error) {
       console.error('Error fetching data:', error)
       showError('Failed to load social media data', error.message)
+    }
+  }
+
+  const getAuthToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token
+  }
+
+  const fetchPlatformStats = async () => {
+    try {
+      const authToken = await getAuthToken()
+      console.log('🔍 Fetching platform stats...')
+      
+      const response = await fetch(`${API_BASE_URL}/social-media/platform-stats`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+
+      console.log('📊 Platform stats response status:', response.status)
+      
+      if (response.ok) {
+        const stats = await response.json()
+        console.log('📊 Platform stats data:', stats)
+        setPlatformStats(stats)
+      } else {
+        const errorText = await response.text()
+        console.error('❌ Platform stats error:', response.status, errorText)
+      }
+    } catch (error) {
+      console.error('❌ Error fetching platform stats:', error)
     }
   }
 
@@ -76,13 +112,6 @@ const SocialMediaDashboard = () => {
     } finally {
       setRefreshing(false)
     }
-  }
-
-
-
-  const getAuthToken = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    return session?.access_token
   }
 
   const getPlatformIcon = (platform) => {
@@ -259,9 +288,10 @@ const SocialMediaDashboard = () => {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Posts Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {platformsWithPosts.map((platform) => {
+              {/* Posts and Stats Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+                {/* First 3 columns - Posts */}
+                {platformsWithPosts.slice(0, 3).map((platform) => {
                   const platformPosts = posts[platform] || []
                   const latestPost = platformPosts[0] // Get the most recent post
                   const theme = getPlatformCardTheme(platform)
@@ -373,6 +403,101 @@ const SocialMediaDashboard = () => {
                     </div>
                   )
                 })}
+                
+                {/* 3rd Column - Blank Space (if only 2 platforms have posts) */}
+                {platformsWithPosts.length === 2 && (
+                  <div></div>
+                )}
+                
+                {/* 2nd and 3rd Columns - Blank Spaces (if only 1 platform has posts) */}
+                {platformsWithPosts.length === 1 && (
+                  <>
+                    <div></div>
+                    <div></div>
+                  </>
+                )}
+                
+                {/* 4th Column - Platform Stats */}
+                <div className="bg-white border border-gray-200 rounded-xl shadow-sm sticky top-6 h-fit">
+                  <div className="p-4 border-b border-gray-200">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">Account Insights</h3>
+                        <p className="text-sm text-gray-500">Platform metrics</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 space-y-4">
+                    {connectedPlatforms.map((connection) => {
+                      const stats = platformStats[connection.platform] || {}
+                      const theme = getPlatformCardTheme(connection.platform)
+                      
+                      return (
+                        <div key={connection.platform} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-8 h-8 ${theme.iconBg} rounded-lg flex items-center justify-center`}>
+                              <div className="text-white">
+                                {getPlatformIcon(connection.platform)}
+                              </div>
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900 capitalize">{connection.platform}</p>
+                              <p className="text-xs text-gray-500">{connection.page_name || connection.account_name}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            {connection.platform === 'instagram' && stats.followers_count && (
+                              <>
+                                <p className="text-sm font-semibold text-gray-900">{formatEngagement(stats.followers_count)}</p>
+                                <p className="text-xs text-gray-500">Followers</p>
+                              </>
+                            )}
+                            {connection.platform === 'facebook' && stats.fan_count && (
+                              <>
+                                <p className="text-sm font-semibold text-gray-900">{formatEngagement(stats.fan_count)}</p>
+                                <p className="text-xs text-gray-500">Page Likes</p>
+                              </>
+                            )}
+                            {connection.platform === 'linkedin' && stats.follower_count && (
+                              <>
+                                <p className="text-sm font-semibold text-gray-900">{formatEngagement(stats.follower_count)}</p>
+                                <p className="text-xs text-gray-500">Followers</p>
+                              </>
+                            )}
+                            {connection.platform === 'twitter' && stats.followers_count && (
+                              <>
+                                <p className="text-sm font-semibold text-gray-900">{formatEngagement(stats.followers_count)}</p>
+                                <p className="text-xs text-gray-500">Followers</p>
+                              </>
+                            )}
+                            {connection.platform === 'youtube' && stats.subscriber_count && (
+                              <>
+                                <p className="text-sm font-semibold text-gray-900">{formatEngagement(stats.subscriber_count)}</p>
+                                <p className="text-xs text-gray-500">Subscribers</p>
+                              </>
+                            )}
+                            {!stats.followers_count && !stats.fan_count && !stats.follower_count && !stats.subscriber_count && (
+                              <p className="text-sm text-gray-400">No data</p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    
+                    {connectedPlatforms.length === 0 && (
+                      <div className="text-center py-8">
+                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <Users className="w-6 h-6 text-gray-400" />
+                        </div>
+                        <p className="text-gray-500 text-sm">No connected accounts</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
             </div>
