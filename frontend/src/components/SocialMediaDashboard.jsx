@@ -291,13 +291,10 @@ const SocialMediaDashboard = () => {
 
   // Remove the early return for loading - we'll handle it in the main content area
 
-  // Get all connected platforms (regardless of posts)
-  const connectedPlatforms = connections ? connections.filter(conn => conn.is_active) : []
+  // Get platforms that have posts (from both OAuth and API token connections)
   const platformsWithPosts = Object.keys(posts).filter(platform => posts[platform] && posts[platform].length > 0)
+  const connectedPlatforms = connections ? connections.filter(conn => conn.is_active) : []
   const hasPosts = Object.keys(posts).length > 0
-  
-  // Get all connected platform names for display
-  const connectedPlatformNames = connectedPlatforms.map(conn => conn.platform.toLowerCase())
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -324,7 +321,7 @@ const SocialMediaDashboard = () => {
                     </div>
                     <div>
                       <p className="text-xs font-medium text-gray-600">Platforms</p>
-                      <p className="text-lg font-bold text-gray-900">{connectedPlatforms.length}</p>
+                      <p className="text-lg font-bold text-gray-900">{platformsWithPosts.length}</p>
                     </div>
                   </div>
                   
@@ -393,12 +390,12 @@ const SocialMediaDashboard = () => {
             </div>
           )}
 
-          {connectedPlatforms.length === 0 ? (
+          {platformsWithPosts.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-24 h-24 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6">
                 <AlertCircle className="w-12 h-12 text-gray-400" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No Connected Platforms</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No Social Media Posts</h3>
               <p className="text-gray-500 mb-6">Connect your social media accounts to see your latest posts</p>
               <button
                 onClick={() => window.location.href = '/settings'}
@@ -409,13 +406,15 @@ const SocialMediaDashboard = () => {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Connected Platforms Grid */}
+              {/* Posts Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {connectedPlatforms.map((connection) => {
-                  const platform = connection.platform.toLowerCase()
+                {platformsWithPosts.map((platform) => {
                   const platformPosts = posts[platform] || []
                   const latestPost = platformPosts[0] // Get the most recent post
                   const theme = getPlatformCardTheme(platform)
+                  
+                  // Find connection info for this platform (if available)
+                  const connection = connectedPlatforms.find(conn => conn.platform === platform)
                   
                   return (
                     <div key={platform} className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm hover:shadow-lg transition-all duration-300`}>
@@ -433,7 +432,7 @@ const SocialMediaDashboard = () => {
                                 {platform}
                               </h3>
                               <p className="text-sm text-gray-500">
-                                {connection.page_name || connection.account_name || platform}
+                                {connection?.page_name || connection?.account_name || platform}
                               </p>
                             </div>
                           </div>

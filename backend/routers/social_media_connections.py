@@ -801,53 +801,10 @@ async def get_latest_posts(current_user: User = Depends(get_current_user)):
             "oauth_connections": len(oauth_connections),
             "token_connections": len(token_connections)
         }
-
-@router.get("/debug/instagram-posts")
-async def debug_instagram_posts(
-    current_user: User = Depends(get_current_user)
-):
-    """Debug endpoint to test Instagram posts fetching"""
-    try:
-        print(f"🔍 Debug Instagram posts for user: {current_user.id}")
-        
-        # Get user's Instagram connections from platform_connections table
-        supabase_client = get_supabase_client()
-        response = supabase_client.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "instagram").eq("is_active", True).execute()
-        connections = response.data if response.data else []
-        
-        print(f"📱 Found {len(connections)} Instagram connections")
-        
-        if not connections:
-            return {
-                "error": "No Instagram connections found",
-                "connections_count": 0
-            }
-        
-        connection = connections[0]
-        print(f"🔍 Instagram connection data: {connection}")
-        
-        # Test the Instagram posts fetching directly
-        posts = await fetch_instagram_posts_new(connection, 5)
-        
-        return {
-            "connection_found": True,
-            "connection_data": {
-                "id": connection.get('id'),
-                "platform": connection.get('platform'),
-                "page_id": connection.get('page_id'),
-                "page_name": connection.get('page_name'),
-                "is_active": connection.get('is_active')
-            },
-            "posts_fetched": len(posts),
-            "posts": posts
-        }
         
     except Exception as e:
-        print(f"❌ Debug Instagram posts error: {e}")
-        return {
-            "error": str(e),
-            "connection_found": False
-        }
+        print(f"Error fetching latest posts: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 async def fetch_instagram_posts_oauth(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from Instagram using OAuth connection (Facebook Graph API)"""
@@ -981,7 +938,6 @@ async def fetch_instagram_posts_new(connection: dict, limit: int) -> List[Dict[s
     except Exception as e:
         print(f"Error fetching Instagram posts: {e}")
         return []
-
 
 async def fetch_facebook_posts_oauth(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from Facebook using OAuth connection"""

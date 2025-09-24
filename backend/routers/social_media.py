@@ -144,19 +144,7 @@ async def get_latest_posts(
         
         print(f"📊 Found {len(connections)} active connections")
         for conn in connections:
-            print(f"🔗 Connection: {conn.get('platform')} - {conn.get('page_name', 'Unknown')} - Active: {conn.get('is_active')} - Page ID: {conn.get('page_id')}")
-        
-        # Check specifically for Instagram connections
-        instagram_connections = [conn for conn in connections if conn.get('platform', '').lower() == 'instagram']
-        print(f"📱 Found {len(instagram_connections)} Instagram connections")
-        for insta_conn in instagram_connections:
-            print(f"📱 Instagram: {insta_conn.get('page_name')} - Page ID: {insta_conn.get('page_id')} - Active: {insta_conn.get('is_active')}")
-        
-        # Also check for Facebook connections that might have Instagram
-        facebook_connections = [conn for conn in connections if conn.get('platform', '').lower() == 'facebook']
-        print(f"📘 Found {len(facebook_connections)} Facebook connections")
-        for fb_conn in facebook_connections:
-            print(f"📘 Facebook: {fb_conn.get('page_name')} - Page ID: {fb_conn.get('page_id')} - Active: {fb_conn.get('is_active')}")
+            print(f"🔗 Connection: {conn.get('platform')} - {conn.get('page_name', 'Unknown')} - Active: {conn.get('is_active')}")
         
         posts_by_platform = {}
         
@@ -181,9 +169,7 @@ async def get_latest_posts(
                             'shares_count': 2
                         }]
                 elif platform == 'instagram':
-                    print(f"📱 Processing Instagram connection: {connection.get('id')}")
                     posts = await fetch_instagram_posts(connection, limit)
-                    print(f"📱 Instagram posts fetched: {len(posts) if posts else 0}")
                     # If no real posts found, add some mock data for testing
                     if not posts:
                         print(f"🔄 No real posts found for {platform}, adding mock data for testing")
@@ -221,12 +207,7 @@ async def get_latest_posts(
         return {
             "posts": posts_by_platform,
             "total_platforms": len(posts_by_platform),
-            "total_posts": sum(len(posts) for posts in posts_by_platform.values()),
-            "debug_info": {
-                "instagram_connections_found": len([conn for conn in connections if conn.get('platform', '').lower() == 'instagram']),
-                "instagram_posts_found": len(posts_by_platform.get('instagram', [])),
-                "all_connections": [{"platform": conn.get('platform'), "page_id": conn.get('page_id'), "is_active": conn.get('is_active')} for conn in connections]
-            }
+            "total_posts": sum(len(posts) for posts in posts_by_platform.values())
         }
         
     except Exception as e:
@@ -314,14 +295,32 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
             print("❌ No page_id found for Instagram connection")
             return []
         
-        # page_id already contains the Instagram Business account ID
-        instagram_account_id = page_id
-        print(f"📱 Using Instagram Business account ID: {instagram_account_id}")
+        # First, get the Instagram Business account ID from the Facebook Page
+        instagram_account_url = f"https://graph.facebook.com/v18.0/{page_id}"
+        instagram_account_params = {
+            'access_token': access_token,
+            'fields': 'instagram_business_account'
+        }
         
-        # Validate Instagram account ID format
-        if not instagram_account_id or not instagram_account_id.isdigit():
-            print(f"❌ Invalid Instagram account ID format: {instagram_account_id}")
+        print(f"🌐 Instagram account lookup URL: {instagram_account_url}")
+        
+        account_response = requests.get(instagram_account_url, params=instagram_account_params, timeout=10)
+        print(f"📊 Instagram account lookup response: {account_response.status_code}")
+        
+        if account_response.status_code != 200:
+            print(f"❌ Instagram account lookup error: {account_response.status_code} - {account_response.text}")
             return []
+        
+        account_data = account_response.json()
+        print(f"📱 Instagram account data: {account_data}")
+        
+        instagram_business_account = account_data.get('instagram_business_account')
+        if not instagram_business_account:
+            print("❌ No Instagram Business account found for this Facebook Page")
+            return []
+        
+        instagram_account_id = instagram_business_account.get('id')
+        print(f"📄 Found Instagram Business account ID: {instagram_account_id}")
         
         # Now fetch media from Instagram Graph API
         url = f"https://graph.facebook.com/v18.0/{instagram_account_id}/media"
@@ -337,8 +336,6 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
         response = requests.get(url, params=params, timeout=10)
         
         print(f"📊 Instagram API response status: {response.status_code}")
-        print(f"📊 Instagram API response headers: {dict(response.headers)}")
-        print(f"📊 Instagram API response text: {response.text}")
         
         if response.status_code == 200:
             data = response.json()
@@ -367,52 +364,6 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
     except Exception as e:
         print(f"❌ Error fetching Instagram posts: {e}")
         return []
-
-@router.get("/debug/instagram-posts")
-async def debug_instagram_posts(
-    current_user: User = Depends(get_current_user)
-):
-    """Debug endpoint to test Instagram posts fetching"""
-    try:
-        print(f"🔍 Debug Instagram posts for user: {current_user.id}")
-        
-        # Get user's Instagram connections
-        response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "instagram").eq("is_active", True).execute()
-        connections = response.data if response.data else []
-        
-        print(f"📱 Found {len(connections)} Instagram connections")
-        
-        if not connections:
-            return {
-                "error": "No Instagram connections found",
-                "connections_count": 0
-            }
-        
-        connection = connections[0]
-        print(f"🔍 Instagram connection data: {connection}")
-        
-        # Test the Instagram posts fetching
-        posts = await fetch_instagram_posts(connection, 5)
-        
-        return {
-            "connection_found": True,
-            "connection_data": {
-                "id": connection.get('id'),
-                "platform": connection.get('platform'),
-                "page_id": connection.get('page_id'),
-                "page_name": connection.get('page_name'),
-                "is_active": connection.get('is_active')
-            },
-            "posts_fetched": len(posts),
-            "posts": posts
-        }
-        
-    except Exception as e:
-        print(f"❌ Debug Instagram posts error: {e}")
-        return {
-            "error": str(e),
-            "connection_found": False
-        }
 
 async def fetch_twitter_posts(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from Twitter using API v2"""
