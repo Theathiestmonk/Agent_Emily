@@ -152,6 +152,12 @@ async def get_latest_posts(
         for insta_conn in instagram_connections:
             print(f"📱 Instagram: {insta_conn.get('page_name')} - Page ID: {insta_conn.get('page_id')} - Active: {insta_conn.get('is_active')}")
         
+        # Also check for Facebook connections that might have Instagram
+        facebook_connections = [conn for conn in connections if conn.get('platform', '').lower() == 'facebook']
+        print(f"📘 Found {len(facebook_connections)} Facebook connections")
+        for fb_conn in facebook_connections:
+            print(f"📘 Facebook: {fb_conn.get('page_name')} - Page ID: {fb_conn.get('page_id')} - Active: {fb_conn.get('is_active')}")
+        
         posts_by_platform = {}
         
         for connection in connections:
