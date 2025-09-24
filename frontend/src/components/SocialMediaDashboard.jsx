@@ -21,7 +21,6 @@ import {
   Calendar,
   TrendingUp,
   Users,
-  BarChart3,
   AlertCircle,
   CheckCircle,
   Activity,
@@ -44,8 +43,6 @@ const SocialMediaDashboard = () => {
   } = useSocialMediaCache()
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
-  const [debugData, setDebugData] = useState(null)
-  const [insightsData, setInsightsData] = useState({})
 
   useEffect(() => {
     fetchData()
@@ -81,32 +78,6 @@ const SocialMediaDashboard = () => {
     }
   }
 
-  const handleDebugConnections = async () => {
-    try {
-      const authToken = await getAuthToken()
-      console.log('🔍 Debugging connections...')
-      
-      const response = await fetch(`${API_BASE_URL}/social-media/debug-connections`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log('🔍 Debug data:', data)
-      setDebugData(data)
-      showSuccess('Debug data loaded! Check console for details.')
-    } catch (error) {
-      console.error('Error debugging connections:', error)
-      showError('Failed to debug connections', error.message)
-    }
-  }
 
 
   const getAuthToken = async () => {
@@ -201,93 +172,6 @@ const SocialMediaDashboard = () => {
     return count?.toString() || '0'
   }
 
-  const calculatePlatformInsights = (platform, posts) => {
-    if (!posts || posts.length === 0) return null
-
-    const last5Posts = posts.slice(-5)
-    
-    // Debug: Log the structure of posts to see what date fields are available
-    if (last5Posts.length > 0) {
-      console.log(`Posts structure for ${platform}:`, last5Posts[0])
-    }
-    
-    // Calculate platform-specific metrics
-    let metrics = []
-    
-    switch (platform.toLowerCase()) {
-      case 'facebook':
-        metrics = [
-          { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
-          { name: 'Comments', data: last5Posts.map(post => post.comments_count || 0) },
-          { name: 'Shares', data: last5Posts.map(post => post.shares_count || 0) }
-        ]
-        break
-      case 'instagram':
-        metrics = [
-          { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
-          { name: 'Comments', data: last5Posts.map(post => post.comments_count || 0) },
-          { name: 'Shares', data: last5Posts.map(post => post.shares_count || 0) }
-        ]
-        break
-      case 'linkedin':
-        metrics = [
-          { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
-          { name: 'Comments', data: last5Posts.map(post => post.comments_count || 0) },
-          { name: 'Shares', data: last5Posts.map(post => post.shares_count || 0) }
-        ]
-        break
-      case 'twitter':
-        metrics = [
-          { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
-          { name: 'Retweets', data: last5Posts.map(post => post.retweets_count || 0) },
-          { name: 'Replies', data: last5Posts.map(post => post.replies_count || 0) }
-        ]
-        break
-      case 'youtube':
-        metrics = [
-          { name: 'Views', data: last5Posts.map(post => post.views_count || 0) },
-          { name: 'Likes', data: last5Posts.map(post => post.likes_count || 0) },
-          { name: 'Comments', data: last5Posts.map(post => post.comments_count || 0) }
-        ]
-        break
-      default:
-        metrics = [
-          { name: 'Engagement', data: last5Posts.map(post => (post.likes_count || 0) + (post.comments_count || 0)) },
-          { name: 'Reach', data: last5Posts.map(post => post.reach_count || 0) },
-          { name: 'Impressions', data: last5Posts.map(post => post.impressions_count || 0) }
-        ]
-    }
-
-    return {
-      platform,
-      posts: last5Posts,
-      metrics,
-      postTitles: last5Posts.map(post => 
-        (post.message || post.text || 'Untitled').substring(0, 30) + '...'
-      )
-    }
-  }
-
-  const processInsightsData = () => {
-    const insights = {}
-    // Process insights for all platforms that have posts (both OAuth and API token connections)
-    const platformsWithPosts = Object.keys(posts).filter(platform => posts[platform] && posts[platform].length > 0)
-    
-    platformsWithPosts.forEach(platform => {
-      const platformPosts = posts[platform] || []
-      const platformInsights = calculatePlatformInsights(platform, platformPosts)
-      if (platformInsights) {
-        insights[platform] = platformInsights
-      }
-    })
-    setInsightsData(insights)
-  }
-
-  useEffect(() => {
-    if (Object.keys(posts).length > 0) {
-      processInsightsData()
-    }
-  }, [posts])
 
   // Remove the early return for loading - we'll handle it in the main content area
 
@@ -327,7 +211,7 @@ const SocialMediaDashboard = () => {
                   
                   <div className="flex items-center space-x-2">
                     <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center">
-                      <BarChart3 className="w-4 h-4 text-white" />
+                      <Activity className="w-4 h-4 text-white" />
                     </div>
                     <div>
                       <p className="text-xs font-medium text-gray-600">Posts</p>
@@ -336,14 +220,6 @@ const SocialMediaDashboard = () => {
                   </div>
                 </div>
                 
-                {/* Debug Button */}
-                <button
-                  onClick={handleDebugConnections}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-yellow-500 transition-all duration-300"
-                >
-                  <AlertCircle className="w-4 h-4" />
-                  <span>Debug</span>
-                </button>
                 
                 {/* Refresh Button */}
                 <button
@@ -366,29 +242,6 @@ const SocialMediaDashboard = () => {
             <MainContentLoader message="Loading social media dashboard..." />
           ) : (
             <>
-          {/* Debug Data Display */}
-          {debugData && (
-            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <h3 className="text-lg font-semibold text-yellow-800 mb-2">Debug Information</h3>
-              <div className="text-sm text-yellow-700">
-                <p><strong>User ID:</strong> {debugData.user_id}</p>
-                <p><strong>Total Connections:</strong> {debugData.total_connections}</p>
-                <p><strong>Active Connections:</strong> {debugData.active_connections}</p>
-                <div className="mt-2">
-                  <p><strong>Active Connections:</strong></p>
-                  <ul className="list-disc list-inside ml-4">
-                    {debugData.active_connections_data.map((conn, index) => (
-                      <li key={index}>
-                        {conn.platform} - {conn.page_name} (ID: {conn.page_id}) - 
-                        Token: {conn.has_access_token ? 'Yes' : 'No'} - 
-                        Status: {conn.connection_status}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}
 
           {platformsWithPosts.length === 0 ? (
             <div className="text-center py-12">
@@ -522,140 +375,6 @@ const SocialMediaDashboard = () => {
                 })}
               </div>
 
-              {/* Social Media Insights Cards */}
-              {insightsData && Object.keys(insightsData).length > 0 && (
-                <div className="mt-8">
-                  <h2 className="text-xl font-bold text-gray-900 mb-6">Performance Insights</h2>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {Object.entries(insightsData).map(([platform, data]) => {
-                      const theme = getPlatformCardTheme(platform)
-                      const maxValue = Math.max(...data.metrics.flatMap(metric => metric.data))
-                      
-                      return (
-                        <div key={platform} className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm hover:shadow-lg transition-all duration-300`}>
-                          {/* Card Header */}
-                          <div className="p-4 border-b border-gray-200">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-3">
-                                <div className={`w-10 h-10 ${theme.iconBg} rounded-lg flex items-center justify-center`}>
-                                  <div className="text-white">
-                                    {getPlatformIcon(platform)}
-                                  </div>
-                                </div>
-                                <div>
-                                  <h3 className={`font-semibold capitalize ${theme.text}`}>
-                                    {platform} Insights
-                                  </h3>
-                                  <p className="text-sm text-gray-500">Last 5 posts performance</p>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-1">
-                                <BarChart3 className="w-4 h-4 text-gray-500" />
-                                <span className="text-xs text-gray-600">Analytics</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Bar Chart */}
-                          <div className="p-4">
-                            {/* Grouped Bar Chart */}
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-gray-700">Performance Metrics</span>
-                                <span className="text-xs text-gray-500">Last 5 posts</span>
-                              </div>
-                              
-                              {/* Grouped Bar Chart */}
-                              <div className="space-y-2">
-                                {/* Chart Container */}
-                                <div className="flex items-end space-x-2 h-32">
-                                  {data.posts.map((post, postIndex) => {
-                                    const maxValue = Math.max(...data.metrics.map(metric => Math.max(...metric.data)))
-                                    const colors = ['bg-gradient-to-br from-purple-300 to-purple-400', 'bg-violet-500', 'bg-blue-500']
-                                    
-                                    return (
-                                      <div key={postIndex} className="flex-1 flex flex-col items-center space-y-1">
-                                        {/* Bars for each metric */}
-                                        <div className="flex items-end space-x-1 h-24 w-full">
-                                          {data.metrics.map((metric, metricIndex) => {
-                                            const value = metric.data[postIndex] || 0
-                                            const height = maxValue > 0 ? (value / maxValue) * 100 : 0
-                                            
-                                            return (
-                                              <div
-                                                key={metricIndex}
-                                                className={`${colors[metricIndex]} rounded-t-sm flex-1 min-h-[2px] transition-all duration-300 hover:opacity-80`}
-                                                style={{ height: `${Math.max(height, 2)}%` }}
-                                                title={`${metric.name}: ${formatEngagement(value)}`}
-                                              />
-                                            )
-                                          })}
-                                        </div>
-                                        
-                                        {/* Post Date Label */}
-                                        <div className="text-xs text-gray-400 text-center">
-                                          {(() => {
-                                            const postDate = post.created_at || post.published_at || post.scheduled_date || post.date || post.timestamp
-                                            
-                                            if (postDate) {
-                                              try {
-                                                return new Date(postDate).toLocaleDateString('en-US', { 
-                                                  month: 'short', 
-                                                  day: 'numeric' 
-                                                })
-                                              } catch (error) {
-                                                console.log('Date parsing error:', error, 'for post:', post)
-                                              }
-                                            }
-                                            
-                                            return `Post ${postIndex + 1}`
-                                          })()}
-                                        </div>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                                
-                                {/* Legend */}
-                                <div className="flex justify-center space-x-4 mt-2">
-                                  {data.metrics.map((metric, index) => {
-                                    const colors = ['bg-gradient-to-br from-purple-300 to-purple-400', 'bg-violet-500', 'bg-blue-500']
-                                    return (
-                                      <div key={index} className="flex items-center space-x-1">
-                                        <div className={`w-3 h-3 ${colors[index]} rounded-sm`}></div>
-                                        <span className="text-xs text-gray-600">{metric.name}</span>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Summary Stats */}
-                            <div className="mt-4 pt-4 border-t border-gray-200">
-                              <div className="grid grid-cols-3 gap-4 text-center">
-                                {data.metrics.map((metric, index) => {
-                                  const total = metric.data.reduce((a, b) => a + b, 0)
-                                  const avg = total / metric.data.length
-                                  return (
-                                    <div key={index} className="space-y-1">
-                                      <div className="text-xs text-gray-500">{metric.name}</div>
-                                      <div className={`text-sm font-semibold ${theme.text}`}>
-                                        {formatEngagement(Math.round(avg))}
-                                      </div>
-                                      <div className="text-xs text-gray-400">avg</div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
           )}
           
