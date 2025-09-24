@@ -1977,58 +1977,60 @@ const OnboardingForm = forwardRef(({
             ></div>
           </div>
           
-          {/* Step Indicators */}
-          <div className="flex justify-between mt-4">
-            {steps.map((step, index) => (
-              <div key={index} className="flex flex-col items-center">
-                <div 
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all duration-200 ${
-                    index === currentStep
-                      ? 'bg-pink-600 text-white shadow-lg'
-                      : isStepCompleted(index)
-                      ? 'bg-green-500 text-white'
-                      : isStepAccessible(index)
-                      ? 'bg-gray-300 text-gray-600 hover:bg-gray-400 cursor-pointer'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                  title={
-                    index === currentStep
-                      ? `Current: ${step}`
-                      : isStepCompleted(index)
-                      ? `Completed: ${step}`
-                      : isStepAccessible(index)
-                      ? `Click to go to: ${step}`
-                      : `Locked: Complete previous steps to unlock ${step}`
-                  }
-                  onClick={() => {
-                    if (isStepAccessible(index)) {
-                      setCurrentStep(index)
-                      if (onStepChange) {
-                        onStepChange(index)
-                      }
+          {/* Step Indicators - Hidden in edit mode */}
+          {!isEditMode && (
+            <div className="flex justify-between mt-4">
+              {steps.map((step, index) => (
+                <div key={index} className="flex flex-col items-center">
+                  <div 
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all duration-200 ${
+                      index === currentStep
+                        ? 'bg-pink-600 text-white shadow-lg'
+                        : isStepCompleted(index)
+                        ? 'bg-green-500 text-white'
+                        : isStepAccessible(index)
+                        ? 'bg-gray-300 text-gray-600 hover:bg-gray-400 cursor-pointer'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                    title={
+                      index === currentStep
+                        ? `Current: ${step}`
+                        : isStepCompleted(index)
+                        ? `Completed: ${step}`
+                        : isStepAccessible(index)
+                        ? `Click to go to: ${step}`
+                        : `Locked: Complete previous steps to unlock ${step}`
                     }
-                  }}
-                >
-                  {isStepCompleted(index) ? (
-                    <Check className="w-4 h-4" />
-                  ) : (
-                    index + 1
-                  )}
+                    onClick={() => {
+                      if (isStepAccessible(index)) {
+                        setCurrentStep(index)
+                        if (onStepChange) {
+                          onStepChange(index)
+                        }
+                      }
+                    }}
+                  >
+                    {isStepCompleted(index) ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      index + 1
+                    )}
+                  </div>
+                  <span className={`text-xs mt-1 text-center max-w-16 ${
+                    index === currentStep
+                      ? 'text-pink-600 font-medium'
+                      : isStepCompleted(index)
+                      ? 'text-green-600'
+                      : isStepAccessible(index)
+                      ? 'text-gray-600'
+                      : 'text-gray-400'
+                  }`}>
+                    {step.split(' ')[0]}
+                  </span>
                 </div>
-                <span className={`text-xs mt-1 text-center max-w-16 ${
-                  index === currentStep
-                    ? 'text-pink-600 font-medium'
-                    : isStepCompleted(index)
-                    ? 'text-green-600'
-                    : isStepAccessible(index)
-                    ? 'text-gray-600'
-                    : 'text-gray-400'
-                }`}>
-                  {step.split(' ')[0]}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -2095,17 +2097,19 @@ const OnboardingForm = forwardRef(({
         </div>
 
         <div className="flex items-center space-x-4">
-          {/* Step Status */}
-          <div className="text-sm text-gray-600">
-            {isStepCompleted(currentStep) ? (
-              <span className="flex items-center text-green-600">
-                <Check className="w-4 h-4 mr-1" />
-                Step Complete
-              </span>
-            ) : (
-              <span className="text-amber-600">Step Incomplete</span>
-            )}
-          </div>
+          {/* Step Status - Hidden in edit mode */}
+          {!isEditMode && (
+            <div className="text-sm text-gray-600">
+              {isStepCompleted(currentStep) ? (
+                <span className="flex items-center text-green-600">
+                  <Check className="w-4 h-4 mr-1" />
+                  Step Complete
+                </span>
+              ) : (
+                <span className="text-amber-600">Step Incomplete</span>
+              )}
+            </div>
+          )}
 
         {currentStep === steps.length - 1 ? (
           <button
