@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 import os
 import secrets
 import string
+import hashlib
+import base64
 from cryptography.fernet import Fernet
 import requests
 from supabase import create_client, Client
@@ -632,7 +634,7 @@ async def handle_oauth_callback(
         # Exchange code for tokens
         print(f"🔄 Exchanging {platform} code for tokens...")
 
-        tokens = exchange_code_for_tokens(platform, code)
+        tokens = exchange_code_for_tokens(platform, code, state)
 
         print(f"✅ Tokens received: {tokens.keys() if tokens else 'None'}")
 
@@ -1056,6 +1058,17 @@ async def disconnect_account(
 
 
 # Helper functions for platform-specific OAuth
+def generate_pkce_params():
+    """Generate PKCE parameters for OAuth 2.0"""
+    # Generate code verifier
+    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
+    
+    # Generate code challenge
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode('utf-8')).digest()
+    ).decode('utf-8').rstrip('=')
+    
+    return code_verifier, code_challenge
 
 def generate_oauth_url(platform: str, state: str) -> str:
 
@@ -1216,8 +1229,17 @@ def generate_oauth_url(platform: str, state: str) -> str:
         return oauth_url
 
     elif platform == 'twitter':
-
-        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=tweet.read%20tweet.write%20users.read"
+        # Twitter OAuth 2.0 scopes for API v2 with PKCE
+        # - read: Read tweets and user data
+        # - write: Post tweets and manage content
+        # - offline.access: Refresh tokens for long-term access
+        code_verifier, code_challenge = generate_pkce_params()
+        
+        # Store code_verifier in state for later use
+        # We'll encode it in the state parameter
+        state_with_verifier = f"{state}:{code_verifier}"
+        
+        return f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state_with_verifier}&scope=read%20write%20offline.access&code_challenge={code_challenge}&code_challenge_method=S256"
 
     elif platform == 'tiktok':
 
@@ -1244,7 +1266,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
 
 
 
-def exchange_code_for_tokens(platform: str, code: str) -> dict:
+def exchange_code_for_tokens(platform: str, code: str, state: str = None) -> dict:
 
     """Exchange OAuth code for access tokens"""
 
@@ -1264,7 +1286,7 @@ def exchange_code_for_tokens(platform: str, code: str) -> dict:
 
     elif platform == "twitter":
 
-        return exchange_twitter_code_for_tokens(code)
+        return exchange_twitter_code_for_tokens(code, state)
 
     else:
 
@@ -1519,7 +1541,7 @@ def exchange_linkedin_code_for_tokens(code: str) -> dict:
 
 
 
-def exchange_twitter_code_for_tokens(code: str) -> dict:
+def exchange_twitter_code_for_tokens(code: str, state: str = None) -> dict:
 
     """Exchange Twitter OAuth code for access tokens"""
 
@@ -1542,29 +1564,27 @@ def exchange_twitter_code_for_tokens(code: str) -> dict:
         raise ValueError("Twitter app credentials not configured")
 
     
+    # Extract code_verifier from state if provided
+    code_verifier = 'challenge'  # Default fallback
+    if state and ':' in state:
+        try:
+            _, code_verifier = state.split(':', 1)
+            print(f"🔑 Extracted code_verifier from state: {code_verifier[:10]}...")
+        except Exception as e:
+            print(f"⚠️ Failed to extract code_verifier from state: {e}")
+            code_verifier = 'challenge'
 
     # Create basic auth header for Twitter API
-
     credentials = f"{twitter_client_id}:{twitter_client_secret}"
-
     encoded_credentials = base64.b64encode(credentials.encode()).decode()
 
-    
-
     # Exchange code for access token
-
     token_url = "https://api.twitter.com/2/oauth2/token"
-
     token_data = {
-
         'grant_type': 'authorization_code',
-
         'code': code,
-
         'redirect_uri': redirect_uri,
-
-        'code_verifier': 'challenge'  # Twitter requires PKCE
-
+        'code_verifier': code_verifier  # Use proper PKCE code verifier
     }
 
     
