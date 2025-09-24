@@ -82,6 +82,21 @@ const OnboardingForm = forwardRef(({
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   
+  // Steps array - must be defined before useEffect hooks
+  const steps = [
+    'Basic Business Info',
+    'Business Description', 
+    'Brand & Contact',
+    'Current Presence & Focus Areas',
+    'Social Media & Goals',
+    'Content Strategy',
+    'Market & Competition',
+    'Campaign Planning',
+    'Performance & Customer',
+    'Automation & Platform',
+    'Review & Submit'
+  ]
+  
   // State for "Other" input fields
   const [otherInputs, setOtherInputs] = useState({
     businessTypeOther: '',
@@ -285,19 +300,6 @@ const OnboardingForm = forwardRef(({
     }
   }, [completedSteps, isEditMode])
 
-  const steps = [
-    'Basic Business Info',
-    'Business Description', 
-    'Brand & Contact',
-    'Current Presence & Focus Areas',
-    'Social Media & Goals',
-    'Content Strategy',
-    'Market & Competition',
-    'Campaign Planning',
-    'Performance & Customer',
-    'Automation & Platform',
-    'Review & Submit'
-  ]
 
   const businessTypes = [
     'B2B', 'B2C', 'E-Commerce', 'SaaS', 'Restaurant', 
