@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 const Onboarding = () => {
   const [currentStep, setCurrentStep] = useState(0)
   const [completedSteps, setCompletedSteps] = useState(new Set())
+  const [userNavigatedToStep0, setUserNavigatedToStep0] = useState(false)
   const [formData, setFormData] = useState({
     business_name: '',
     business_type: [],
@@ -182,6 +183,9 @@ const Onboarding = () => {
 
   // Auto-determine current step based on data after form data loads
   useEffect(() => {
+    // Don't auto-redirect if user manually navigated to step 0
+    if (userNavigatedToStep0) return
+    
     if (formData.business_name || formData.business_type?.length > 0) {
       const highestStepWithData = getHighestStepWithData()
       const nextStep = highestStepWithData + 1
@@ -192,14 +196,14 @@ const Onboarding = () => {
         currentStep
       })
       
-      // If currentStep is 0 but we have data, move to the appropriate step
+      // Only auto-redirect if we're on step 0 and have data (initial load)
       if (currentStep === 0 && highestStepWithData >= 0) {
         const targetStep = Math.min(nextStep, steps.length - 1)
         console.log('Moving to step based on data:', targetStep)
         setCurrentStep(targetStep)
       }
     }
-  }, [formData, currentStep, steps.length])
+  }, [formData, currentStep, steps.length, userNavigatedToStep0])
 
   // Save form data to localStorage whenever it changes
   useEffect(() => {
@@ -598,6 +602,12 @@ const Onboarding = () => {
       // Check if user can navigate to this step
       if (isStepAccessible(stepIndex)) {
         console.log('Navigating to step:', stepIndex)
+        
+        // Set flag if user manually navigates to step 0
+        if (stepIndex === 0) {
+          setUserNavigatedToStep0(true)
+        }
+        
         setCurrentStep(stepIndex)
         setError('')
       } else {
@@ -1894,6 +1904,32 @@ const Onboarding = () => {
               </div>
             </div>
           </div>
+          
+          {/* Step Navigation Dots */}
+          <div className="flex justify-center space-x-2 mb-4">
+            {steps.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => goToStep(index)}
+                disabled={!isStepAccessible(index)}
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-200 ${
+                  index === currentStep
+                    ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
+                    : isStepAccessible(index)
+                    ? 'bg-gray-200 text-gray-600 hover:bg-gray-300 cursor-pointer'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
+                title={`Step ${index + 1}: ${steps[index]}`}
+              >
+                {hasStepData(index) ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  index + 1
+                )}
+              </button>
+            ))}
+          </div>
+          
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div 
               className="bg-gradient-to-r from-pink-500 to-purple-600 h-2 rounded-full transition-all duration-300"
