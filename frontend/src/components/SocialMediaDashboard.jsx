@@ -321,7 +321,7 @@ const SocialMediaDashboard = () => {
                                 <img 
                                   src={latestPost.media_url} 
                                   alt="Post media"
-                                  className="w-full h-48 object-cover"
+                                  className="w-full h-auto object-contain"
                                 />
                               </div>
                             )}
