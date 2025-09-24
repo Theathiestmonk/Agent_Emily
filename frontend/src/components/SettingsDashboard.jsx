@@ -198,6 +198,7 @@ const SettingsDashboard = () => {
       try {
         const oauthResponse = await connectionsAPI.getConnections()
         oauthConnections = oauthResponse.data || []
+        console.log('OAuth connections fetched:', oauthConnections)
       } catch (error) {
         console.log('No OAuth connections found:', error.message)
       }
@@ -241,18 +242,32 @@ const SettingsDashboard = () => {
         if (response.ok) {
           const statusData = await response.json()
           console.log('Google connection status data:', statusData)
-          if (statusData.connected) {
+          console.log('Google connection status response:', response.status)
+          
+          // Check if connected (handle different possible response formats)
+          if (statusData.connected === true || statusData.connected === 'true' || statusData.status === 'connected') {
             googleConnections = [{
               platform: 'google',
               connection_status: 'active',
-              page_name: statusData.email || 'Google Account',
-              page_username: statusData.email || 'Google Account'
+              page_name: statusData.email || statusData.name || 'Google Account',
+              page_username: statusData.email || statusData.name || 'Google Account'
             }]
             console.log('Created Google connection:', googleConnections[0])
+          } else {
+            console.log('Google not connected. Status data:', statusData)
           }
+        } else {
+          console.log('Google connection status API error:', response.status, response.statusText)
         }
       } catch (error) {
         console.log('No Google connection found:', error.message)
+      }
+      
+      // Check if Google is already in OAuth connections
+      const existingGoogleConnection = oauthConnections.find(conn => conn.platform === 'google')
+      if (existingGoogleConnection) {
+        console.log('Found existing Google connection in OAuth:', existingGoogleConnection)
+        googleConnections = [existingGoogleConnection]
       }
       
       // Combine all types of connections, filtering out any existing Google connections
