@@ -144,7 +144,13 @@ async def get_latest_posts(
         
         print(f"📊 Found {len(connections)} active connections")
         for conn in connections:
-            print(f"🔗 Connection: {conn.get('platform')} - {conn.get('page_name', 'Unknown')} - Active: {conn.get('is_active')}")
+            print(f"🔗 Connection: {conn.get('platform')} - {conn.get('page_name', 'Unknown')} - Active: {conn.get('is_active')} - Page ID: {conn.get('page_id')}")
+        
+        # Check specifically for Instagram connections
+        instagram_connections = [conn for conn in connections if conn.get('platform', '').lower() == 'instagram']
+        print(f"📱 Found {len(instagram_connections)} Instagram connections")
+        for insta_conn in instagram_connections:
+            print(f"📱 Instagram: {insta_conn.get('page_name')} - Page ID: {insta_conn.get('page_id')} - Active: {insta_conn.get('is_active')}")
         
         posts_by_platform = {}
         
@@ -169,7 +175,9 @@ async def get_latest_posts(
                             'shares_count': 2
                         }]
                 elif platform == 'instagram':
+                    print(f"📱 Processing Instagram connection: {connection.get('id')}")
                     posts = await fetch_instagram_posts(connection, limit)
+                    print(f"📱 Instagram posts fetched: {len(posts) if posts else 0}")
                     # If no real posts found, add some mock data for testing
                     if not posts:
                         print(f"🔄 No real posts found for {platform}, adding mock data for testing")
