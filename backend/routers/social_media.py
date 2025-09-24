@@ -295,32 +295,9 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
             print("❌ No page_id found for Instagram connection")
             return []
         
-        # First, get the Instagram Business account ID from the Facebook Page
-        instagram_account_url = f"https://graph.facebook.com/v18.0/{page_id}"
-        instagram_account_params = {
-            'access_token': access_token,
-            'fields': 'instagram_business_account'
-        }
-        
-        print(f"🌐 Instagram account lookup URL: {instagram_account_url}")
-        
-        account_response = requests.get(instagram_account_url, params=instagram_account_params, timeout=10)
-        print(f"📊 Instagram account lookup response: {account_response.status_code}")
-        
-        if account_response.status_code != 200:
-            print(f"❌ Instagram account lookup error: {account_response.status_code} - {account_response.text}")
-            return []
-        
-        account_data = account_response.json()
-        print(f"📱 Instagram account data: {account_data}")
-        
-        instagram_business_account = account_data.get('instagram_business_account')
-        if not instagram_business_account:
-            print("❌ No Instagram Business account found for this Facebook Page")
-            return []
-        
-        instagram_account_id = instagram_business_account.get('id')
-        print(f"📄 Found Instagram Business account ID: {instagram_account_id}")
+        # page_id already contains the Instagram Business account ID
+        instagram_account_id = page_id
+        print(f"📱 Using Instagram Business account ID: {instagram_account_id}")
         
         # Now fetch media from Instagram Graph API
         url = f"https://graph.facebook.com/v18.0/{instagram_account_id}/media"
