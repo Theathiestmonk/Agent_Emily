@@ -724,6 +724,14 @@ async def handle_oauth_callback(
         
         
         
+        # Clean up any existing failed connections for this platform before creating new one
+        try:
+            print(f"🧹 Cleaning up any existing failed connections for user {user_id} and platform {platform}")
+            cleanup_response = supabase_admin.table("platform_connections").delete().eq("user_id", user_id).eq("platform", platform).eq("is_active", False).execute()
+            print(f"✅ Cleaned up {len(cleanup_response.data) if cleanup_response.data else 0} failed connections")
+        except Exception as cleanup_error:
+            print(f"⚠️ Error during cleanup: {cleanup_error}")
+
         # Store connection in Supabase (upsert - update if exists, insert if not)
 
         # Use page access token for posting, not user access token
@@ -731,7 +739,7 @@ async def handle_oauth_callback(
         page_access_token = account_info.get('page_access_token', tokens['access_token'])
 
         
-        
+
         connection_data = {
 
             "user_id": user_id,
@@ -932,7 +940,16 @@ async def handle_oauth_callback(
         print(f"❌ Traceback: {traceback.format_exc()}")
 
         
-        
+        # Clean up any partial connection data that might have been created
+        try:
+            if 'user_id' in locals():
+                print(f"🧹 Cleaning up failed connection for user {user_id} and platform {platform}")
+                # Delete any failed connection attempts
+                supabase_admin.table("platform_connections").delete().eq("user_id", user_id).eq("platform", platform).eq("is_active", False).execute()
+                print(f"✅ Cleaned up failed connection")
+        except Exception as cleanup_error:
+            print(f"⚠️ Error during cleanup: {cleanup_error}")
+
         # Return a more detailed error page
 
         frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
@@ -940,7 +957,7 @@ async def handle_oauth_callback(
         error_message = str(e).replace("'", "\\'").replace('"', '\\"')
 
         
-        
+
         return f"""
 
         <!DOCTYPE html>
@@ -1052,6 +1069,61 @@ async def disconnect_account(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
 
             detail=f"Failed to disconnect: {str(e)}"
+
+        )
+
+
+@router.delete("/cleanup-failed/{platform}")
+
+async def cleanup_failed_connections(
+
+    platform: str,
+
+    current_user: User = Depends(get_current_user)
+
+):
+
+    """Clean up failed/inactive connections for a platform"""
+
+    try:
+
+        print(f"🧹 Cleaning up failed {platform} connections for user {current_user.id}")
+
+        
+
+        # Delete all inactive connections for this platform and user
+
+        cleanup_response = supabase_admin.table("platform_connections").delete().eq("user_id", current_user.id).eq("platform", platform).eq("is_active", False).execute()
+
+        
+
+        deleted_count = len(cleanup_response.data) if cleanup_response.data else 0
+
+        print(f"✅ Cleaned up {deleted_count} failed {platform} connections")
+
+        
+
+        return {
+
+            "success": True, 
+
+            "message": f"Cleaned up {deleted_count} failed {platform} connections",
+
+            "deleted_count": deleted_count
+
+        }
+
+        
+
+    except Exception as e:
+
+        print(f"❌ Error cleaning up failed connections: {e}")
+
+        raise HTTPException(
+
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+
+            detail=f"Failed to cleanup failed connections: {str(e)}"
 
         )
 

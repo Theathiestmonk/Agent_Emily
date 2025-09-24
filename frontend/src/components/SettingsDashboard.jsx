@@ -179,6 +179,26 @@ const SettingsDashboard = () => {
 
   useEffect(() => {
     fetchConnections()
+    
+    // Listen for OAuth success/error events from socialMediaService
+    const handleOAuthSuccess = (event) => {
+      console.log('OAuth success event received:', event.detail)
+      setSuccess(event.detail.message)
+      fetchConnections()
+    }
+    
+    const handleOAuthError = (event) => {
+      console.log('OAuth error event received:', event.detail)
+      setError(event.detail.error)
+    }
+    
+    window.addEventListener('oauthSuccess', handleOAuthSuccess)
+    window.addEventListener('oauthError', handleOAuthError)
+    
+    return () => {
+      window.removeEventListener('oauthSuccess', handleOAuthSuccess)
+      window.removeEventListener('oauthError', handleOAuthError)
+    }
   }, [])
 
   const fetchConnections = async () => {
@@ -308,9 +328,39 @@ const SettingsDashboard = () => {
 
   const handleOAuthConnect = async (platform) => {
     try {
+      setLoading(true)
+      setError('')
+      setSuccess('')
+      
+      // Clean up any existing failed connections before starting new OAuth
+      try {
+        const authToken = await getAuthToken()
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+        const baseUrl = API_BASE_URL.replace(/\/+$/, '')
+        
+        const cleanupResponse = await fetch(`${baseUrl}/connections/cleanup-failed/${platform}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          }
+        })
+        
+        if (cleanupResponse.ok) {
+          const cleanupData = await cleanupResponse.json()
+          console.log(`✅ Cleaned up ${cleanupData.deleted_count || 0} failed ${platform} connections`)
+        }
+      } catch (cleanupError) {
+        console.log(`⚠️ Cleanup warning: ${cleanupError.message}`)
+        // Don't fail the OAuth process if cleanup fails
+      }
+      
+      setSuccess(`${platform.charAt(0).toUpperCase() + platform.slice(1)} connection window opened. Please complete the authorization.`)
       await socialMediaService.connectWithOAuth(platform)
     } catch (error) {
       setError(`Failed to start OAuth for ${platform}: ${error.message}`)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -706,10 +756,10 @@ const SettingsDashboard = () => {
                               <button
                                 onClick={() => platform.id === 'google' ? handleGoogleConnect() : handleOAuthConnect(platform.id)}
                                 className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 flex items-center justify-center"
-                                disabled={loading && platform.id === 'google'}
+                                disabled={loading}
                               >
                                 <Shield className="w-4 h-4 mr-1" />
-                                {loading && platform.id === 'google' ? 'Connecting...' : 'Connect'}
+                                {loading ? 'Connecting...' : 'Connect'}
                               </button>
                             )}
                             {platform.tokenSupported && (
