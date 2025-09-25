@@ -1260,20 +1260,22 @@ def generate_oauth_url(platform: str, state: str) -> str:
     # Platform-specific OAuth parameters
 
     if platform == 'facebook':
-
         # Facebook permissions for:
-
         # 1. Post on Facebook (pages_manage_posts)
-
         # 2. Get post insights (pages_read_engagement, pages_show_list)
-
         # 3. Get page insights (pages_read_engagement, pages_show_list)
-
         # 4. Read ads data (ads_read, ads_management, business_management)
-
-        # Removed invalid scopes: pages_manage_metadata, pages_messaging, pages_manage_engagement, pages_read_user_content
-
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,ads_read,ads_management,business_management"
+        
+        # Get Facebook Login for Business config_id from environment
+        facebook_config_id = os.getenv('FACEBOOK_CONFIG_ID')
+        
+        # Build OAuth URL with config_id if available
+        oauth_url = f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,ads_read,ads_management,business_management"
+        
+        if facebook_config_id:
+            oauth_url += f"&config_id={facebook_config_id}"
+        
+        return oauth_url
 
     elif platform == 'instagram':
         # Instagram for Business uses Facebook OAuth with specific scopes
@@ -2769,6 +2771,45 @@ async def test_facebook_connection():
         return {"error": str(e)}
 
 
+@router.get("/facebook/test-basic")
+async def test_facebook_basic_permissions():
+    """Test Facebook OAuth with basic permissions only"""
+    try:
+        print("🔍 Testing Facebook OAuth with basic permissions")
+        
+        # Generate test state
+        import uuid
+        test_state = str(uuid.uuid4())
+        
+        # Get environment variables
+        facebook_app_id = os.getenv('FACEBOOK_CLIENT_ID')
+        facebook_config_id = os.getenv('FACEBOOK_CONFIG_ID')
+        api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+        
+        if not facebook_app_id:
+            return {"error": "FACEBOOK_CLIENT_ID not configured"}
+        
+        # Build OAuth URL with basic permissions only
+        redirect_uri = f"{api_base_url}/connections/auth/facebook/callback"
+        oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri={redirect_uri}&state={test_state}&scope=email,public_profile"
+        
+        # Add config_id if available
+        if facebook_config_id:
+            oauth_url += f"&config_id={facebook_config_id}"
+        
+        return {
+            "test_oauth_url": oauth_url,
+            "facebook_app_id": facebook_app_id,
+            "facebook_config_id": facebook_config_id,
+            "redirect_uri": redirect_uri,
+            "test_state": test_state,
+            "instructions": "Click the test_oauth_url to test Facebook OAuth with basic permissions"
+        }
+        
+    except Exception as e:
+        print(f"❌ Test error: {e}")
+        return {"error": str(e)}
+
 
 @router.post("/facebook/post")
 
@@ -3301,7 +3342,6 @@ async def test_linkedin_connection():
         print(f"❌ LinkedIn test error: {e}")
 
         return {"error": str(e)}
-
 
 @router.get("/linkedin/organizations")
 async def get_linkedin_organizations(
