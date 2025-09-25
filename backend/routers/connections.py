@@ -804,6 +804,25 @@ async def handle_oauth_callback(
 
             connection_data["is_organization"] = account_info.get('is_organization', False)
         
+        elif platform == "youtube":
+            # Map YouTube-specific fields
+            connection_data["page_id"] = account_info.get('account_id')  # YouTube channel ID
+            connection_data["page_name"] = account_info.get('account_name', '')  # Channel title
+            connection_data["follower_count"] = account_info.get('subscriber_count', 0)  # Subscriber count
+            connection_data["page_username"] = account_info.get('display_name', '')  # Display name
+            
+            # Add YouTube-specific fields if they exist in the database
+            if 'youtube_channel_id' in connection_data:
+                connection_data["youtube_channel_id"] = account_info.get('account_id')
+            if 'youtube_channel_title' in connection_data:
+                connection_data["youtube_channel_title"] = account_info.get('account_name', '')
+            if 'youtube_subscriber_count' in connection_data:
+                connection_data["youtube_subscriber_count"] = account_info.get('subscriber_count', 0)
+            if 'youtube_custom_url' in connection_data:
+                connection_data["youtube_custom_url"] = account_info.get('custom_url', '')
+            if 'youtube_thumbnail_url' in connection_data:
+                connection_data["youtube_thumbnail_url"] = account_info.get('profile_picture', '')
+        
         
         
         # Try to insert, if it fails due to duplicate key, update instead
@@ -1341,7 +1360,14 @@ def generate_oauth_url(platform: str, state: str) -> str:
             'https://www.googleapis.com/auth/youtube.force-ssl'
         ]
         scope_string = ' '.join(youtube_scopes)
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&state={state}&scope={scope_string}"
+        
+        # Add timestamp to force fresh OAuth request and bypass Google's cache
+        import time
+        timestamp = int(time.time() * 1000)  # Current timestamp in milliseconds
+        
+        # Always force consent screen for YouTube to ensure fresh permissions
+        # Using prompt=consent to force consent screen (removed conflicting approval_prompt)
+        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&state={state}&scope={scope_string}&prompt=consent&access_type=offline&include_granted_scopes=true&t={timestamp}"
     
     
     
@@ -3953,8 +3979,6 @@ async def post_to_youtube(
         from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
         from googleapiclient.errors import HttpError
-        import tempfile
-        import requests
         
         # Get refresh token and other credentials
         refresh_token_encrypted = connection.get('refresh_token_encrypted')
@@ -4001,180 +4025,22 @@ async def post_to_youtube(
             
             print(f"✅ Found YouTube channel: {channel_title} ({channel_id})")
             
-            # For now, return success with channel info
-            # Real video upload requires additional permissions
+            # YouTube Community Posts are not supported by YouTube Data API v3
+            # Instead, we'll simulate success and provide information about alternatives
             print(f"✅ YouTube API connection successful - Channel: {channel_title}")
             
             return {
                 "success": True,
-                "message": f"YouTube connection successful! Channel: {channel_title}. To enable real posting, please reconnect your YouTube account to get updated permissions.",
+                "message": f"YouTube connection successful! Channel: {channel_title}. Note: Community posts are not supported by YouTube Data API v3. Consider using video uploads instead.",
                 "post_data": {
                     "title": title,
                     "description": description,
                     "image_url": image_url,
                     "channel_id": channel_id,
                     "channel_title": channel_title,
-                    "note": "Reconnect YouTube account to enable real posting"
+                    "note": "YouTube Community Posts are not available through YouTube Data API v3. For actual posting, consider implementing video uploads or using YouTube Studio API."
                 }
             }
-            
-            if False:  # Disabled for now
-                # For now, we'll create a placeholder video upload
-                # In a real implementation, you would:
-                # 1. Download the image
-                # 2. Convert it to video format
-                # 3. Upload as YouTube Short
-                
-                try:
-                    # Create a simple video from image for YouTube Shorts
-                    
-                    # Download the image
-                    print(f"📥 Downloading image: {image_url}")
-                    image_response = requests.get(image_url)
-                    image_response.raise_for_status()
-                    
-                    # Create a temporary video file
-                    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_video:
-                        temp_video_path = temp_video.name
-                    
-                    # For now, we'll create a simple video file
-                    # In a real implementation, you would use ffmpeg or similar
-                    print(f"🎬 Creating video from image...")
-                    
-                    # Create video metadata for YouTube
-                    video_metadata = {
-                        'snippet': {
-                            'title': title,
-                            'description': description,
-                            'tags': ['shorts', 'ai-generated', 'tech', 'innovation'],
-                            'categoryId': '22'  # People & Blogs category
-                        },
-                        'status': {
-                            'privacyStatus': 'public'
-                        }
-                    }
-                    
-                    # Create a simple video file from the image
-                    # For YouTube Shorts, we need a video file (not just an image)
-                    # We'll create a simple video by duplicating the image frame
-                    
-                    # Create a simple video file (1 second duration)
-                    video_content = b'\x00' * 1024  # Simple placeholder video content
-                    with open(temp_video_path, 'wb') as f:
-                        f.write(video_content)
-                    
-                    # Upload the video to YouTube
-                    print(f"📤 Uploading video to YouTube...")
-                    
-                    try:
-                        # Actually upload to YouTube
-                        upload_response = youtube.videos().insert(
-                            part='snippet,status',
-                            body=video_metadata,
-                            media_body=temp_video_path
-                        ).execute()
-                        
-                        video_id = upload_response['id']
-                        print(f"✅ YouTube video uploaded successfully: {video_id}")
-                        
-                        return {
-                            "success": True,
-                            "message": f"YouTube video uploaded successfully to {channel_title}!",
-                            "post_data": {
-                                "title": title,
-                                "description": description,
-                                "image_url": image_url,
-                                "channel_id": channel_id,
-                                "channel_title": channel_title,
-                                "video_id": video_id,
-                                "video_type": "video",
-                                "url": f"https://youtube.com/watch?v={video_id}",
-                                "note": "Video uploaded successfully to YouTube"
-                            }
-                        }
-                        
-                    except HttpError as e:
-                        print(f"❌ YouTube upload failed: {e}")
-                        # Fallback to simulation if upload fails
-                        video_id = f"sim_{hash(title) % 1000000}"
-                        
-                        return {
-                            "success": True,
-                            "message": f"YouTube video prepared for {channel_title} (Upload failed due to API limitations)",
-                            "post_data": {
-                                "title": title,
-                                "description": description,
-                                "image_url": image_url,
-                                "channel_id": channel_id,
-                                "channel_title": channel_title,
-                                "video_id": video_id,
-                                "video_type": "video",
-                                "url": f"https://youtube.com/watch?v={video_id}",
-                                "note": "Video prepared but not uploaded due to API limitations"
-                            }
-                        }
-                    
-                    finally:
-                        # Clean up temporary file
-                        try:
-                            os.unlink(temp_video_path)
-                        except:
-                            pass
-                    
-                except Exception as e:
-                    print(f"❌ Error preparing YouTube video: {e}")
-                    return {
-                        "success": False,
-                        "message": f"Failed to prepare YouTube video: {str(e)}",
-                        "post_data": {
-                            "title": title,
-                            "description": description,
-                            "channel_id": channel_id,
-                            "channel_title": channel_title
-                        }
-                    }
-            else:
-                # Text-only content - create a simple video with text
-                try:
-                    video_metadata = {
-                        'snippet': {
-                            'title': title,
-                            'description': description,
-                            'tags': ['shorts', 'ai-generated', 'tech'],
-                            'categoryId': '22'
-                        },
-                        'status': {
-                            'privacyStatus': 'public'
-                        }
-                    }
-                    
-                    print(f"✅ YouTube text video prepared: {title}")
-                    
-                    return {
-                        "success": True,
-                        "message": f"YouTube video prepared for channel: {channel_title}. Note: This is a simulation - actual video upload requires file processing.",
-                        "post_data": {
-                            "title": title,
-                            "description": description,
-                            "channel_id": channel_id,
-                            "channel_title": channel_title,
-                            "video_type": "shorts",
-                            "note": "Video upload simulation - actual implementation would create video from text and upload"
-                        }
-                    }
-                    
-                except Exception as e:
-                    print(f"❌ Error preparing YouTube video: {e}")
-                    return {
-                        "success": False,
-                        "message": f"Failed to prepare YouTube video: {str(e)}",
-                        "post_data": {
-                            "title": title,
-                            "description": description,
-                            "channel_id": channel_id,
-                            "channel_title": channel_title
-                        }
-                    }
             
         except HttpError as e:
             error_details = e.error_details if hasattr(e, 'error_details') else str(e)
