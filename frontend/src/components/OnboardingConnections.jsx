@@ -104,18 +104,23 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
     }
   }
 
-  const handleConnect = async (platformId) => {
+  const handleConnect = async (platformId, forceReconnect = false) => {
     try {
       setConnecting(platformId)
       
       // Special handling for YouTube with user-friendly messaging
       if (platformId === 'youtube') {
-        const userConfirmed = window.confirm(
-          "🔑 To connect your YouTube account, I need permission through Google.\n\n" +
-          "You'll be redirected to Google's secure login page where you enter your Google email and password. I will never see your password.\n\n" +
-          "After login, you must grant access so I can manage your YouTube account.\n\n" +
-          "Do you want to continue?"
-        )
+        const message = forceReconnect 
+          ? "🔄 Force Reconnect YouTube Account\n\n" +
+            "This will show the Google consent screen again, even if you've connected before.\n\n" +
+            "You'll be redirected to Google's secure login page where you can review and update permissions.\n\n" +
+            "Do you want to continue?"
+          : "🔑 To connect your YouTube account, I need permission through Google.\n\n" +
+            "You'll be redirected to Google's secure login page where you enter your Google email and password. I will never see your password.\n\n" +
+            "After login, you must grant access so I can manage your YouTube account.\n\n" +
+            "Do you want to continue?"
+            
+        const userConfirmed = window.confirm(message)
         
         if (!userConfirmed) {
           setConnecting(null)
@@ -123,14 +128,22 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
         }
         
         // Show additional info about permissions
-        alert(
-          "📋 On the Google permission screen, please allow the requested permissions:\n\n" +
-          "• Manage your YouTube account\n" +
-          "• Upload and manage videos\n" +
-          "• View analytics and account details\n" +
-          "• Reply to comments and manage engagement\n\n" +
-          "Once you click Allow, you will be redirected back to the app."
-        )
+        const permissionMessage = forceReconnect
+          ? "🔄 Force Reconnect Mode\n\n" +
+            "You will see the Google consent screen again. Please review and allow the requested permissions:\n\n" +
+            "• Manage your YouTube account\n" +
+            "• Upload and manage videos\n" +
+            "• View analytics and account details\n" +
+            "• Reply to comments and manage engagement\n\n" +
+            "This ensures you have the latest permissions for your YouTube account."
+          : "📋 On the Google permission screen, please allow the requested permissions:\n\n" +
+            "• Manage your YouTube account\n" +
+            "• Upload and manage videos\n" +
+            "• View analytics and account details\n" +
+            "• Reply to comments and manage engagement\n\n" +
+            "Once you click Allow, you will be redirected back to the app."
+            
+        alert(permissionMessage)
       }
       
       // Use the same method as settings page
@@ -359,13 +372,24 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
                     </button>
                     
                     {isConnected && (
-                      <button 
-                        onClick={() => handleConnect(config.id)}
-                        disabled={connecting === config.id}
-                        className="w-full py-1 px-4 text-sm text-gray-600 hover:text-gray-800 underline"
-                      >
-                        Reconnect
-                      </button>
+                      <div className="space-y-1">
+                        <button 
+                          onClick={() => handleConnect(config.id)}
+                          disabled={connecting === config.id}
+                          className="w-full py-1 px-4 text-sm text-gray-600 hover:text-gray-800 underline"
+                        >
+                          Reconnect
+                        </button>
+                        {config.id === 'youtube' && (
+                          <button 
+                            onClick={() => handleConnect(config.id, true)}
+                            disabled={connecting === config.id}
+                            className="w-full py-1 px-4 text-sm text-blue-600 hover:text-blue-800 underline"
+                          >
+                            🔄 Force Reconnect (Show Consent Screen)
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
