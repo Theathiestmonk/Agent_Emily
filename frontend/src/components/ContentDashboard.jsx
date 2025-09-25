@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useContentCache } from '../contexts/ContentCacheContext'
@@ -43,6 +43,7 @@ import {
   List,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Sparkles,
   Target,
   Users,
@@ -76,6 +77,7 @@ const ContentDashboard = () => {
     setCacheValid
   } = useContentCache()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
   const [filterPlatform, setFilterPlatform] = useState('all')
   const [generating, setGenerating] = useState(false)
@@ -86,7 +88,19 @@ const ContentDashboard = () => {
   const [fetchingFreshData, setFetchingFreshData] = useState(false)
   const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
   const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]) // Current date in YYYY-MM-DD format
+  const [selectedDate, setSelectedDate] = useState(() => {
+    // Get date from URL params or default to today
+    const urlDate = searchParams.get('date')
+    if (urlDate) {
+      console.log('Initializing with date from URL:', urlDate)
+      return urlDate
+    }
+    // Use local date to avoid timezone issues
+    const today = new Date()
+    return today.getFullYear() + '-' + 
+           String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+           String(today.getDate()).padStart(2, '0')
+  }) // Current date in YYYY-MM-DD format
   const [dateContent, setDateContent] = useState([]) // Content for selected date
   const [editingContent, setEditingContent] = useState(null) // Content being edited
   const [editForm, setEditForm] = useState({}) // Edit form data
@@ -99,12 +113,65 @@ const ContentDashboard = () => {
   const [selectedFile, setSelectedFile] = useState(null) // Selected file for upload
   const [hoveredButton, setHoveredButton] = useState(null) // Track which button is being hovered
   const [imageLoading, setImageLoading] = useState(new Set()) // Track which images are loading
+  const [availableDates, setAvailableDates] = useState([]) // Dates that have content
+  const [currentDateIndex, setCurrentDateIndex] = useState(0) // Current position in available dates
 
 
   useEffect(() => {
     fetchData()
     fetchContentByDate(selectedDate)
+    getAvailableDates()
   }, [])
+
+  // Handle URL parameter changes
+  useEffect(() => {
+    const urlDate = searchParams.get('date')
+    if (urlDate && urlDate !== selectedDate) {
+      console.log('URL date changed to:', urlDate)
+      setSelectedDate(urlDate)
+    }
+  }, [searchParams, selectedDate])
+
+  // Update current date index when selectedDate changes
+  useEffect(() => {
+    if (availableDates.length > 0) {
+      const currentIndex = availableDates.indexOf(selectedDate)
+      setCurrentDateIndex(currentIndex >= 0 ? currentIndex : 0)
+    }
+  }, [selectedDate, availableDates])
+
+  // Auto-navigate to next available date when current date has no content
+  useEffect(() => {
+    if (availableDates.length > 0 && !generating && !fetchingFreshData) {
+      const currentIndex = availableDates.indexOf(selectedDate)
+      
+      // Check if current date has no content by checking dateContent and scheduledContent
+      const hasContent = dateContent.length > 0 || (selectedDate === new Date().toISOString().split('T')[0] && scheduledContent.length > 0)
+      
+      // If current date is not in available dates or has no content, find next available date
+      if (currentIndex === -1 || !hasContent) {
+        // Find the next date with content
+        let nextIndex = currentIndex + 1
+        if (currentIndex === -1) {
+          // If current date is not in available dates, find the closest future date
+          const today = new Date().toISOString().split('T')[0]
+          nextIndex = availableDates.findIndex(date => date >= today)
+          if (nextIndex === -1) {
+            // If no future dates, use the last available date
+            nextIndex = availableDates.length - 1
+          }
+        }
+        
+        if (nextIndex >= 0 && nextIndex < availableDates.length) {
+          const nextDate = availableDates[nextIndex]
+          console.log('Auto-navigating to next available date:', nextDate)
+          setSelectedDate(nextDate)
+          setCurrentDateIndex(nextIndex)
+          navigate(`/content?date=${nextDate}`)
+        }
+      }
+    }
+  }, [availableDates, dateContent.length, scheduledContent.length, selectedDate, generating, fetchingFreshData, navigate])
 
   // Images are now loaded immediately when content is fetched, so this useEffect is no longer needed
 
@@ -144,6 +211,7 @@ const ContentDashboard = () => {
 
   const fetchContentByDate = async (date) => {
     try {
+      console.log('Fetching content for date:', date)
       const result = await contentAPI.getContentByDate(date)
       
       console.log('Fetched content for date:', date, result)
@@ -167,6 +235,57 @@ const ContentDashboard = () => {
     } catch (error) {
       console.error('Error fetching content by date:', error)
       setDateContent([])
+    }
+  }
+
+  // Get all available dates with content
+  const getAvailableDates = async () => {
+    try {
+      const result = await contentAPI.getAllContent(1000, 0) // Get more content to find all dates
+      if (result.data) {
+        // Extract unique dates from content
+        const dates = [...new Set(result.data.map(content => {
+          const scheduledDate = content.scheduled_at || content.scheduled_date
+          if (scheduledDate) {
+            if (scheduledDate.includes('T')) {
+              return new Date(scheduledDate).toISOString().split('T')[0]
+            }
+            return scheduledDate
+          }
+          return null
+        }).filter(Boolean))].sort()
+        
+        setAvailableDates(dates)
+        console.log('Available dates with content:', dates)
+        
+        // Find current date index
+        const currentIndex = dates.indexOf(selectedDate)
+        setCurrentDateIndex(currentIndex >= 0 ? currentIndex : 0)
+      }
+    } catch (error) {
+      console.error('Error fetching available dates:', error)
+    }
+  }
+
+  // Navigate to previous date with content
+  const navigateToPreviousDate = () => {
+    if (currentDateIndex > 0) {
+      const prevDate = availableDates[currentDateIndex - 1]
+      setSelectedDate(prevDate)
+      setCurrentDateIndex(currentDateIndex - 1)
+      // Update URL
+      navigate(`/content?date=${prevDate}`)
+    }
+  }
+
+  // Navigate to next date with content
+  const navigateToNextDate = () => {
+    if (currentDateIndex < availableDates.length - 1) {
+      const nextDate = availableDates[currentDateIndex + 1]
+      setSelectedDate(nextDate)
+      setCurrentDateIndex(currentDateIndex + 1)
+      // Update URL
+      navigate(`/content?date=${nextDate}`)
     }
   }
 
@@ -199,6 +318,7 @@ const ContentDashboard = () => {
         }
         
         setFetchingFreshData(false) // End loading state
+        await getAvailableDates() // Refresh available dates after content generation
         showSuccess('Content Generated!', 'Your new content is ready to view.')
       }
     } catch (error) {
@@ -313,9 +433,16 @@ const ContentDashboard = () => {
   // Use date-specific content if available, otherwise fall back to scheduled content
   // Only fall back to scheduled content if we're viewing today's date
   // Hide content during generation and data fetching to prevent showing old/incomplete content
+  const todayStr = (() => {
+    const today = new Date()
+    return today.getFullYear() + '-' + 
+           String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+           String(today.getDate()).padStart(2, '0')
+  })()
+  
   const contentToDisplay = (generating || fetchingFreshData)
     ? [] 
-    : selectedDate === new Date().toISOString().split('T')[0] 
+    : selectedDate === todayStr 
     ? (dateContent.length > 0 ? dateContent : scheduledContent)
     : dateContent
   
@@ -1224,32 +1351,29 @@ const ContentDashboard = () => {
           <div className="px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center space-x-8">
-                {/* Stats Cards in Header */}
-                <div className="flex items-center space-x-6">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                      <Calendar className="w-4 h-4 text-white" />
+                {/* Content Date Header */}
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                      <Calendar className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-600">
-                        {selectedDate === new Date().toISOString().split('T')[0] ? "Today's Content" : "Selected Date Content"}
-                      </p>
-                      <p className="text-lg font-bold text-gray-900">{contentToDisplay.length}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center">
-                      <FileText className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-600">Platforms</p>
-                      <p className="text-lg font-bold text-gray-900">
-                        {new Set(contentToDisplay.map(content => content.platform)).size}
+                      <h1 className="text-xl font-bold text-gray-900">
+                        {selectedDate === new Date().toISOString().split('T')[0] 
+                          ? "Today's Content" 
+                          : new Date(selectedDate).toLocaleDateString('en-US', { 
+                              weekday: 'long', 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            })
+                        }
+                      </h1>
+                      <p className="text-sm text-gray-600">
+                        {contentToDisplay.length} {contentToDisplay.length === 1 ? 'post' : 'posts'}
                       </p>
                     </div>
                   </div>
-                  
                 </div>
               </div>
               
@@ -1279,42 +1403,20 @@ const ContentDashboard = () => {
                 </button>
                 
                 
-                {/* Filter and View Controls */}
-                <div className="flex items-center space-x-4">
-                  {/* Date Selector */}
-                  <div className="flex items-center space-x-3">
-                    <Calendar className="w-5 h-5 text-gray-600" />
-                    <div>
-                      <label htmlFor="date-slider" className="text-sm font-medium text-gray-700">
-                        Select Date:
-                      </label>
-                    <input
-                        id="date-slider"
-                        type="date"
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        className="ml-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
-                        min="2025-01-01"
-                        max="2025-12-31"
-                      />
-                    </div>
-                  </div>
-                  
-                  
-                  <div className="flex items-center space-x-1">
-                    <button
-                      onClick={() => setViewMode('grid')}
-                      className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      <Grid className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setViewMode('list')}
-                      className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      <List className="w-4 h-4" />
-                    </button>
-                  </div>
+                {/* View Controls */}
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    <Grid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -1347,7 +1449,7 @@ const ContentDashboard = () => {
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   {selectedDate === new Date().toISOString().split('T')[0] 
                     ? "No content for today" 
-                    : `NO content planned for ${new Date(selectedDate).toLocaleDateString('en-US', { 
+                    : `No content for ${new Date(selectedDate).toLocaleDateString('en-US', { 
                         weekday: 'long', 
                         year: 'numeric', 
                         month: 'long', 
@@ -1362,7 +1464,7 @@ const ContentDashboard = () => {
                     ? "Loading your new content..."
                     : selectedDate === new Date().toISOString().split('T')[0] 
                     ? "Generate content to see it displayed here" 
-                    : "Try selecting a different date or generate content for this date"
+                    : "This date has no content. Use the navigation arrows to find dates with content."
                   }
                 </p>
                 <button
@@ -1792,9 +1894,57 @@ const ContentDashboard = () => {
               </div>
             )}
           </div>
+
             </>
           )}
         </div>
+
+        {/* Footer Navigation - Only show if there are multiple dates with content */}
+        {availableDates.length > 1 && (
+          <div className="bg-white border-t border-gray-200 shadow-lg">
+            <div className="flex items-center justify-center space-x-4 py-4 px-6">
+              <button
+                onClick={navigateToPreviousDate}
+                disabled={currentDateIndex === 0}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  currentDateIndex === 0
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 hover:border-pink-300 hover:text-pink-600 shadow-sm hover:shadow-md'
+                }`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="text-sm font-medium">Previous</span>
+              </button>
+
+              <div className="flex items-center space-x-2 px-4 py-2 bg-gray-50 rounded-lg">
+                <Calendar className="w-4 h-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-700">
+                  {currentDateIndex + 1} of {availableDates.length}
+                </span>
+                <span className="text-xs text-gray-500">
+                  ({new Date(selectedDate).toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric',
+                    year: 'numeric'
+                  })})
+                </span>
+              </div>
+
+              <button
+                onClick={navigateToNextDate}
+                disabled={currentDateIndex === availableDates.length - 1}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  currentDateIndex === availableDates.length - 1
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 hover:border-pink-300 hover:text-pink-600 shadow-sm hover:shadow-md'
+                }`}
+              >
+                <span className="text-sm font-medium">Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Edit Modal */}

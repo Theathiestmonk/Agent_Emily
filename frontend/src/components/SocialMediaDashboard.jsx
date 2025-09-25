@@ -44,13 +44,16 @@ const SocialMediaDashboard = () => {
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [platformStats, setPlatformStats] = useState({})
+  const [dataLoaded, setDataLoaded] = useState(false)
 
   useEffect(() => {
+    setDataLoaded(false)
     fetchData()
   }, [])
 
   const fetchData = async (forceRefresh = false) => {
     try {
+      setDataLoaded(false)
       const result = await fetchAllData(forceRefresh)
       
       if (result.fromCache) {
@@ -60,9 +63,11 @@ const SocialMediaDashboard = () => {
       }
       
       await fetchPlatformStats()
+      setDataLoaded(true)
     } catch (error) {
       console.error('Error fetching data:', error)
       showError('Failed to load social media data', error.message)
+      setDataLoaded(true) // Set to true even on error to prevent infinite loading
     }
   }
 
@@ -103,6 +108,7 @@ const SocialMediaDashboard = () => {
   const handleRefresh = async () => {
     try {
       setRefreshing(true)
+      setDataLoaded(false)
       await fetchData(true) // Force refresh from API
       setLastRefresh(new Date())
       showSuccess('Social media data refreshed successfully!')
@@ -245,7 +251,7 @@ const SocialMediaDashboard = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 p-6 pt-24">
-          {loading ? (
+          {loading || !dataLoaded ? (
             <MainContentLoader message="Loading social media dashboard..." />
           ) : (
             <>

@@ -124,7 +124,12 @@ const ContentCalendar = () => {
   const getContentForDate = (date) => {
     if (!date) return []
     
-    const dateStr = date.toISOString().split('T')[0]
+    // Use local date string to avoid timezone issues
+    const dateStr = date.getFullYear() + '-' + 
+                   String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(date.getDate()).padStart(2, '0')
+    
+    console.log('Calendar looking for content on date:', dateStr)
     
     // Use allContent from cache for calendar display
     const filteredPosts = allContent.filter(post => {
@@ -135,17 +140,21 @@ const ContentCalendar = () => {
       // Handle both DATE and TIMESTAMP formats
       let postDateStr
       if (scheduledDate.includes('T')) {
-        // It's a timestamp
+        // It's a timestamp - convert to local date
         const postDate = new Date(scheduledDate)
-        postDateStr = postDate.toISOString().split('T')[0]
+        postDateStr = postDate.getFullYear() + '-' + 
+                     String(postDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                     String(postDate.getDate()).padStart(2, '0')
       } else {
         // It's already a date string
         postDateStr = scheduledDate
       }
       
+      console.log('Comparing calendar date:', dateStr, 'with post date:', postDateStr)
       return postDateStr === dateStr
     })
     
+    console.log('Found', filteredPosts.length, 'posts for date:', dateStr)
     return filteredPosts
   }
 
@@ -173,6 +182,14 @@ const ContentCalendar = () => {
     setSelectedDate(date)
     const content = getContentForDate(date)
     setSelectedDateContent(content)
+    
+    // Navigate to content dashboard with selected date
+    const dateStr = date.getFullYear() + '-' + 
+                   String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(date.getDate()).padStart(2, '0')
+    
+    console.log('Navigating to content dashboard with date:', dateStr)
+    navigate(`/content?date=${dateStr}`)
   }
 
   const formatDate = (date) => {

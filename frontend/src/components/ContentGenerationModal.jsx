@@ -200,11 +200,27 @@ const ContentGenerationModal = ({ isVisible, onClose, onComplete }) => {
                 </div>
               )}
 
+              {/* Post Progress - Show when generating content */}
+              {progress.step === 'generating_content' && progress.details && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>Content Generation</span>
+                    <span className="text-purple-600 font-medium">{progress.details}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${progress.percentage || 0}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+
               {/* Status Message */}
               <div className="text-center">
                 <p className="text-sm text-gray-500">
                   {isGenerating 
-                    ? "Please wait while AI creates your content..." 
+                    ? (progress.details || "Please wait while AI creates your content...")
                     : "Generation completed! Refreshing page to show new content..."
                   }
                 </p>

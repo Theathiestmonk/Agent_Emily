@@ -131,6 +131,11 @@ const ContentProgress = ({ isVisible, onComplete }) => {
                 </div>
                 <div className="text-xs text-gray-500">
                   {progress.current_platform && `Platform: ${progress.current_platform}`}
+                  {progress.details && (
+                    <div className="mt-1 text-purple-600 font-medium">
+                      {progress.details}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

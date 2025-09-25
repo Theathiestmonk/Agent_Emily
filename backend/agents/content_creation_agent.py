@@ -28,24 +28,6 @@ class PostType(str, Enum):
     STORY = "story"
     ARTICLE = "article"
 
-class ImageStyle(str, Enum):
-    REALISTIC = "realistic"
-    ARTISTIC = "artistic"
-    CARTOON = "cartoon"
-    MINIMALIST = "minimalist"
-    PHOTOGRAPHIC = "photographic"
-    ILLUSTRATION = "illustration"
-
-class ContentImage(BaseModel):
-    image_url: str
-    image_prompt: str
-    image_style: ImageStyle
-    image_size: str = "1024x1024"
-    image_quality: str = "standard"
-    generation_model: str = "dall-e-3"
-    generation_cost: Optional[float] = None
-    generation_time: Optional[int] = None
-    is_approved: bool = False
 
 class ContentPost(BaseModel):
     platform: str
@@ -55,7 +37,6 @@ class ContentPost(BaseModel):
     hashtags: List[str] = []
     scheduled_date: str
     scheduled_time: str
-    images: List[ContentImage] = []
     metadata: Dict[str, Any] = {}
 
 class ContentCampaign(BaseModel):
@@ -68,18 +49,11 @@ class ContentCampaign(BaseModel):
     total_posts: int = 0
     generated_posts: int = 0
 
-class UserImagePreferences(BaseModel):
-    preferred_style: ImageStyle = ImageStyle.REALISTIC
-    brand_colors: List[str] = []
-    avoid_content: List[str] = []
-    preferred_subjects: List[str] = []
-    image_quality: str = "standard"
 
 class ContentState(BaseModel):
     # User context
     user_profile: Dict[str, Any] = {}
     business_context: Dict[str, Any] = {}
-    image_preferences: Optional[UserImagePreferences] = None
     
     # Campaign data
     campaign: Optional[ContentCampaign] = None
@@ -101,7 +75,7 @@ class ContentState(BaseModel):
     failed_image_requests: List[str] = []
     
     # Retry logic per platform
-    max_retries_per_platform: int = 3
+    max_retries_per_platform: int = 1
     current_platform_retries: int = 0
     
     # Progress tracking
@@ -181,6 +155,17 @@ PLATFORM_GENERATORS = {
             "preferred_styles": ["realistic", "minimalist"],
             "max_images_per_post": 4
         }
+    },
+    "whatsapp business": {
+        "post_types": ["text", "image", "video"],
+        "max_length": 1000,
+        "optimal_length": 150,
+        "hashtag_limit": 5,
+        "image_requirements": {
+            "sizes": ["1080x1080", "1200x630"],
+            "preferred_styles": ["realistic", "professional"],
+            "max_images_per_post": 10
+        }
     }
 }
 
@@ -208,7 +193,6 @@ class ContentCreationAgent:
         graph.add_node("select_platform", self.select_next_platform)
         graph.add_node("load_platform_context", self.load_platform_specific_context)
         graph.add_node("generate_platform_content", self.generate_platform_content)
-        graph.add_node("generate_platform_images", self.generate_platform_images)
         graph.add_node("validate_platform_content", self.validate_platform_content)
         graph.add_node("should_retry_platform", self.should_retry_platform)
         graph.add_node("refine_platform_content", self.refine_platform_content)
@@ -235,8 +219,7 @@ class ContentCreationAgent:
         
         graph.add_edge("select_platform", "load_platform_context")
         graph.add_edge("load_platform_context", "generate_platform_content")
-        graph.add_edge("generate_platform_content", "generate_platform_images")
-        graph.add_edge("generate_platform_images", "validate_platform_content")
+        graph.add_edge("generate_platform_content", "validate_platform_content")
         
         graph.add_conditional_edges(
             "validate_platform_content",
@@ -256,8 +239,10 @@ class ContentCreationAgent:
             }
         )
         
-        graph.add_edge("refine_platform_content", "validate_platform_content")
+        # Direct path from store to mark complete (skip retry logic)
         graph.add_edge("store_platform_content", "mark_platform_complete")
+        
+        graph.add_edge("refine_platform_content", "validate_platform_content")
         graph.add_edge("mark_platform_complete", "check_platforms")
         graph.add_edge("generate_summary", "send_notification")
         graph.add_edge("send_notification", END)
@@ -314,7 +299,8 @@ class ContentCreationAgent:
                 "primary_goals": profile.get("primary_goals", []),
                 "content_themes": profile.get("content_themes", []),
                 "monthly_budget_range": profile.get("monthly_budget_range", ""),
-                "automation_level": profile.get("automation_level", "")
+                "automation_level": profile.get("automation_level", ""),
+                "posting_frequency": profile.get("posting_frequency", "daily")
             }
             
             # Set platforms from user profile
@@ -379,18 +365,23 @@ class ContentCreationAgent:
                 "Initializing content campaign..."
             )
             
-            # Calculate week dates - start from today and go 7 days forward
+            # Calculate campaign dates - start from today and go 30 days forward
             today = datetime.now()
-            week_start = today
-            week_end = today + timedelta(days=6)
+            month_start = today
+            month_end = today + timedelta(days=29)
+            
+            # Calculate total posts based on posting frequency
+            posting_frequency = state.business_context.get("posting_frequency", "daily")
+            posting_schedule = self.calculate_posting_schedule(posting_frequency)
+            posts_per_platform = len(posting_schedule)
             
             campaign_data = {
                 "user_id": user_id,
-                "campaign_name": f"Weekly Content - {week_start.strftime('%Y-%m-%d')}",
-                "week_start_date": week_start.strftime('%Y-%m-%d'),
-                "week_end_date": week_end.strftime('%Y-%m-%d'),
+                "campaign_name": f"Monthly Content - {month_start.strftime('%Y-%m-%d')}",
+                "week_start_date": month_start.strftime('%Y-%m-%d'),
+                "week_end_date": month_end.strftime('%Y-%m-%d'),
                 "status": "generating",
-                "total_posts": len(state.platforms) * 7,  # 7 days per platform
+                "total_posts": len(state.platforms) * posts_per_platform,
                 "generated_posts": 0
             }
             
@@ -441,21 +432,6 @@ class ContentCreationAgent:
     async def load_platform_specific_context(self, state: ContentState) -> ContentState:
         """Load platform-specific context and preferences"""
         try:
-            # Get user image preferences
-            prefs_response = self.supabase.table("user_image_preferences").select("*").eq("user_id", state.user_profile["user_id"]).execute()
-            
-            if prefs_response.data:
-                prefs_data = prefs_response.data[0]
-                state.image_preferences = UserImagePreferences(
-                    preferred_style=ImageStyle(prefs_data.get("preferred_style", "realistic")),
-                    brand_colors=prefs_data.get("brand_colors", []),
-                    avoid_content=prefs_data.get("avoid_content", []),
-                    preferred_subjects=prefs_data.get("preferred_subjects", []),
-                    image_quality=prefs_data.get("image_quality", "standard")
-                )
-            else:
-                # Create default preferences
-                state.image_preferences = UserImagePreferences()
                 
             logger.info(f"Loaded platform context for: {state.current_platform}")
             
@@ -469,7 +445,21 @@ class ContentCreationAgent:
         """Generate content for the current platform"""
         try:
             platform = state.current_platform
-            platform_config = PLATFORM_GENERATORS[platform.lower()]
+            platform_lower = platform.lower()
+            
+            # Get platform config with fallback
+            platform_config = PLATFORM_GENERATORS.get(platform_lower, {
+                "post_types": ["text", "image"],
+                "max_length": 1000,
+                "optimal_length": 150,
+                "hashtag_limit": 5,
+                "image_requirements": {
+                    "sizes": ["1080x1080"],
+                    "preferred_styles": ["realistic"],
+                    "max_images_per_post": 1
+                }
+            })
+            
             business_context = state.business_context
             
             logger.info(f"Generating content for {platform}")
@@ -481,25 +471,64 @@ class ContentCreationAgent:
                 user_id, 
                 "generating_content", 
                 progress_percentage, 
-                f"Generating content for {platform}...",
+                f"Starting content generation for {platform}...",
                 platform
             )
             
-            # Generate 7 days of content for this platform
+            # Calculate posting schedule based on user preference
+            posting_frequency = business_context.get("posting_frequency", "daily")
+            logger.info(f"User posting frequency from business context: '{posting_frequency}'")
+            posting_schedule = self.calculate_posting_schedule(posting_frequency)
+            
+            logger.info(f"Generating {len(posting_schedule)} posts for {platform} with {posting_frequency} frequency")
+            
+            # Generate content for each scheduled post
             content_posts = []
             
-            for day in range(7):
-                post = await self.generate_single_post(
-                    platform=platform,
-                    platform_config=platform_config,
-                    business_context=business_context,
-                    day_of_week=day,
-                    image_preferences=state.image_preferences
-                )
-                content_posts.append(post)
+            for i, schedule_item in enumerate(posting_schedule):
+                try:
+                    logger.info(f"Generating post {i+1}/{len(posting_schedule)} for {platform}")
+                    
+                    # Update progress for individual post generation
+                    if self.progress_callback:
+                        await self.progress_callback(
+                            user_id,
+                            "generating_content",
+                            int(20 + (i / len(posting_schedule)) * 60),  # 20-80% range
+                            f"Generating post {i+1}/{len(posting_schedule)} for {platform}",
+                            platform
+                        )
+                    
+                    post = await self.generate_single_post(
+                        platform=platform,
+                        platform_config=platform_config,
+                        business_context=business_context,
+                        post_index=schedule_item["post_index"],
+                        scheduled_date=schedule_item["scheduled_date"],
+                        scheduled_time=schedule_item["scheduled_time"]
+                    )
+                    if post:
+                        content_posts.append(post)
+                        logger.info(f"Successfully generated post {i+1}")
+                        
+                        # Update progress after successful post generation
+                        if self.progress_callback:
+                            await self.progress_callback(
+                                user_id,
+                                "generating_content",
+                                int(20 + ((i + 1) / len(posting_schedule)) * 60),
+                                f"Generated {i+1}/{len(posting_schedule)} posts for {platform}",
+                                platform
+                            )
+                    else:
+                        logger.warning(f"Failed to generate post {i+1}")
+                except Exception as e:
+                    logger.error(f"Error generating post {i+1}: {e}")
+                    continue
             
             state.platform_content = content_posts
             logger.info(f"Generated {len(content_posts)} posts for {platform}")
+            logger.info(f"Platform content stored in state: {len(state.platform_content)} posts")
             
         except Exception as e:
             logger.error(f"Error generating platform content: {e}")
@@ -510,8 +539,8 @@ class ContentCreationAgent:
         return state
     
     async def generate_single_post(self, platform: str, platform_config: dict, 
-                                 business_context: dict, day_of_week: int, 
-                                 image_preferences: UserImagePreferences) -> ContentPost:
+                                 business_context: dict, post_index: int, 
+                                 scheduled_date: str, scheduled_time: str) -> ContentPost:
         """Generate a single post for a specific platform"""
         try:
             # Get content template for platform
@@ -531,7 +560,7 @@ class ContentCreationAgent:
                 industry=", ".join(business_context["industry"]),
                 brand_voice=business_context["brand_voice"],
                 brand_tone=business_context["brand_tone"],
-                topic=self.get_topic_for_day(day_of_week)
+                topic=self.get_topic_for_day(post_index)
             )
             
             # Create the full prompt for content generation
@@ -554,9 +583,10 @@ class ContentCreationAgent:
             - Max Length: {platform_config['max_length']} characters
             - Optimal Length: {platform_config['optimal_length']} characters
             - Hashtag Limit: {platform_config['hashtag_limit']}
-            - Day of Week: {self.get_day_name(day_of_week)}
+            - Post Index: {post_index}
+            - Scheduled Date: {scheduled_date}
             
-            Content Theme for this post: {self.get_content_theme_for_day(day_of_week, business_context['content_themes'])}
+            Content Theme for this post: {self.get_content_theme_for_day(post_index, business_context['content_themes'])}
             
             Please generate content that:
             1. Matches the brand voice and tone
@@ -579,29 +609,62 @@ class ContentCreationAgent:
             }}
             """
             
-            # Call OpenAI API
-            response = await self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": full_prompt}],
-                max_tokens=platform_config['max_length'],
-                temperature=0.7
+            # Call OpenAI API with timeout
+            import asyncio
+            response = await asyncio.wait_for(
+                self.openai_client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[{"role": "user", "content": full_prompt}],
+                    max_tokens=platform_config['max_length'],
+                    temperature=0.7
+                ),
+                timeout=30.0  # 30 second timeout
             )
             
             # Parse JSON response
+            raw_response = response.choices[0].message.content.strip()
+            logger.info(f"Raw AI response: {raw_response}")
+            
+            # Try to extract JSON from markdown code blocks
+            if "```json" in raw_response:
+                json_start = raw_response.find("```json") + 7
+                json_end = raw_response.find("```", json_start)
+                if json_end != -1:
+                    raw_response = raw_response[json_start:json_end].strip()
+                    logger.info(f"Extracted JSON from markdown: {raw_response}")
+            elif "```" in raw_response:
+                json_start = raw_response.find("```") + 3
+                json_end = raw_response.find("```", json_start)
+                if json_end != -1:
+                    raw_response = raw_response[json_start:json_end].strip()
+                    logger.info(f"Extracted JSON from code block: {raw_response}")
+            
+            # Try to find JSON object in the response
+            if raw_response.startswith('{') and raw_response.endswith('}'):
+                json_text = raw_response
+            else:
+                # Look for JSON object within the text
+                start_idx = raw_response.find('{')
+                end_idx = raw_response.rfind('}')
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    json_text = raw_response[start_idx:end_idx + 1]
+                    logger.info(f"Extracted JSON from text: {json_text}")
+                else:
+                    json_text = raw_response
+            
             try:
-                content_data = json.loads(response.choices[0].message.content)
-            except json.JSONDecodeError:
+                content_data = json.loads(json_text)
+                logger.info(f"Successfully parsed JSON response: {content_data}")
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON parsing failed: {e}")
+                logger.warning(f"Attempted to parse: {json_text}")
                 # Fallback if JSON parsing fails
                 content_data = {
-                    "content": response.choices[0].message.content,
+                    "content": raw_response,
                     "hashtags": [],
                     "post_type": "text",
                     "title": None
                 }
-            
-            # Calculate scheduled date and time
-            scheduled_date = self.calculate_date(day_of_week)
-            scheduled_time = self.get_optimal_time(platform)
             
             return ContentPost(
                 platform=platform,
@@ -613,116 +676,41 @@ class ContentCreationAgent:
                 scheduled_time=scheduled_time,
                 metadata={
                     "generated_by": "emily_agent",
-                    "day_of_week": day_of_week,
+                    "post_index": post_index,
+                    "posting_frequency": business_context.get("posting_frequency", "daily"),
                     "template_used": template.get("template_name", "default") if template_response.data else "default"
                 }
             )
             
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout generating post for {platform} - API call took too long")
+            return None
         except Exception as e:
             logger.error(f"Error generating single post for {platform}: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
-            # Return a fallback post
-            return ContentPost(
-                platform=platform,
-                post_type=PostType.TEXT,
-                content=f"Content generation failed for {platform}. Please try again.",
-                hashtags=[],
-                scheduled_date="2025-09-01",
-                scheduled_time="09:00",
-                images=[]
-            )
-    
-    async def generate_platform_images(self, state: ContentState) -> ContentState:
-        """Generate images for the current platform content"""
-        try:
-            platform = state.current_platform
-            platform_config = PLATFORM_GENERATORS[platform.lower()]
-            image_preferences = state.image_preferences
-            
-            logger.info(f"Generating images for {platform}")
-            
-            # Generate images for each post
-            for post in state.platform_content:
-                if post.post_type in ["image", "carousel"]:
-                    # Generate image for this post
-                    image = await self.generate_single_image(
-                        post=post,
-                        platform=platform,
-                        platform_config=platform_config,
-                        image_preferences=image_preferences,
-                        business_context=state.business_context
-                    )
-                    if image:
-                        post.images.append(image)
-            
-            logger.info(f"Generated images for {platform}")
-            
-        except Exception as e:
-            logger.error(f"Error generating platform images: {e}")
-            # Don't fail the entire process for image generation errors
-            logger.warning(f"Continuing without images for {platform}")
-            
-        return state
-    
-    async def generate_single_image(self, post: ContentPost, platform: str, 
-                                  platform_config: dict, image_preferences: UserImagePreferences, 
-                                  business_context: dict) -> Optional[ContentImage]:
-        """Generate a single image for a post"""
-        try:
-            # Get image template for platform
-            template_response = self.supabase.table("content_templates").select("*").eq("platform", platform).eq("is_active", True).execute()
-            
-            if template_response.data:
-                template = template_response.data[0]
-                image_prompt_template = template.get("image_prompt_template", "")
-                image_style = template.get("image_style", "realistic")
-            else:
-                image_prompt_template = "Professional image related to {content}"
-                image_style = "realistic"
-            
-            # Format image prompt
-            image_prompt = image_prompt_template.format(
-                content=post.content[:100],  # First 100 chars
-                business_name=business_context["business_name"],
-                industry=", ".join(business_context["industry"]),
-                brand_colors=", ".join(image_preferences.brand_colors) if image_preferences.brand_colors else "professional colors"
-            )
-            
-            # Add style and quality instructions
-            full_image_prompt = f"{image_prompt}, {image_style} style, high quality, professional"
-            
-            # Call DALL-E API
-            response = await self.openai_client.images.generate(
-                model="dall-e-3",
-                prompt=full_image_prompt,
-                size="1024x1024",
-                quality="standard",
-                n=1
-            )
-            
-            # Create image record
-            image = ContentImage(
-                image_url=response.data[0].url,
-                image_prompt=full_image_prompt,
-                image_style=ImageStyle(image_style),
-                image_size="1024x1024",
-                image_quality="standard",
-                generation_model="dall-e-3",
-                is_approved=False
-            )
-            
-            return image
-            
-        except Exception as e:
-            logger.error(f"Error generating image: {e}")
             return None
+    
+    
     
     async def validate_platform_content(self, state: ContentState) -> ContentState:
         """Validate generated content for the current platform"""
         try:
             platform = state.current_platform
-            platform_config = PLATFORM_GENERATORS[platform.lower()]
+            platform_lower = platform.lower()
+            
+            # Get platform config with fallback
+            platform_config = PLATFORM_GENERATORS.get(platform_lower, {
+                "post_types": ["text", "image"],
+                "max_length": 1000,
+                "optimal_length": 150,
+                "hashtag_limit": 5,
+                "image_requirements": {
+                    "sizes": ["1080x1080"],
+                    "preferred_styles": ["realistic"],
+                    "max_images_per_post": 1
+                }
+            })
             
             # Basic validation
             is_valid = True
@@ -750,8 +738,27 @@ class ContentCreationAgent:
     
     def is_content_valid(self, state: ContentState) -> str:
         """Check if generated content is valid"""
-        if state.platform_content and len(state.platform_content) == 7:
-            return "valid"
+        if state.platform_content and len(state.platform_content) > 0:
+            # Calculate expected number of posts based on posting frequency
+            posting_frequency = state.business_context.get("posting_frequency", "daily")
+            expected_posts = len(self.calculate_posting_schedule(posting_frequency))
+            actual_posts = len(state.platform_content)
+            
+            # Accept content if we have at least 50% of expected posts
+            min_required = max(1, expected_posts // 2)
+            
+            if actual_posts >= min_required:
+                if actual_posts == expected_posts:
+                    logger.info(f"Perfect! Generated {actual_posts} posts as expected for {posting_frequency} frequency")
+                else:
+                    logger.info(f"Good! Generated {actual_posts} posts (expected {expected_posts}) for {posting_frequency} frequency")
+                logger.info(f"Content validation: VALID - proceeding to store content")
+                return "valid"
+            else:
+                logger.warning(f"Too few posts: got {actual_posts}, need at least {min_required} for {posting_frequency} frequency")
+                logger.info(f"Content validation: INVALID - proceeding to retry logic")
+                return "invalid"
+        logger.info(f"Content validation: INVALID - no content generated")
         return "invalid"
     
     async def should_retry_platform(self, state: ContentState) -> ContentState:
@@ -772,18 +779,36 @@ class ContentCreationAgent:
             
             # Re-generate content with more specific instructions
             platform = state.current_platform
-            platform_config = PLATFORM_GENERATORS[platform.lower()]
+            platform_lower = platform.lower()
+            
+            # Get platform config with fallback
+            platform_config = PLATFORM_GENERATORS.get(platform_lower, {
+                "post_types": ["text", "image"],
+                "max_length": 1000,
+                "optimal_length": 150,
+                "hashtag_limit": 5,
+                "image_requirements": {
+                    "sizes": ["1080x1080"],
+                    "preferred_styles": ["realistic"],
+                    "max_images_per_post": 1
+                }
+            })
             business_context = state.business_context
+            
+            # Calculate posting schedule based on user preference
+            posting_frequency = business_context.get("posting_frequency", "daily")
+            posting_schedule = self.calculate_posting_schedule(posting_frequency)
             
             # Generate refined content
             content_posts = []
-            for day in range(7):
+            for schedule_item in posting_schedule:
                 post = await self.generate_single_post(
                     platform=platform,
                     platform_config=platform_config,
                     business_context=business_context,
-                    day_of_week=day,
-                    image_preferences=state.image_preferences
+                    post_index=schedule_item["post_index"],
+                    scheduled_date=schedule_item["scheduled_date"],
+                    scheduled_time=schedule_item["scheduled_time"]
                 )
                 content_posts.append(post)
             
@@ -802,7 +827,8 @@ class ContentCreationAgent:
             platform = state.current_platform
             campaign_id = state.campaign.id
             
-            logger.info(f"Storing content for {platform}")
+            logger.info(f"STORE: Storing content for {platform}")
+            logger.info(f"STORE: Number of posts to store: {len(state.platform_content)}")
             
             # Store each post
             for post in state.platform_content:
@@ -820,28 +846,14 @@ class ContentCreationAgent:
                     "metadata": post.metadata
                 }
                 
+                logger.info(f"STORE: Post data for {post.platform}: {post_data}")
+                
                 # Insert post
                 post_response = self.supabase.table("content_posts").insert(post_data).execute()
                 
                 if post_response.data:
                     post_id = post_response.data[0]["id"]
                     
-                    # Store images if any
-                    for image in post.images:
-                        image_data = {
-                            "post_id": post_id,
-                            "image_url": image.image_url,
-                            "image_prompt": image.image_prompt,
-                            "image_style": image.image_style.value,
-                            "image_size": image.image_size,
-                            "image_quality": image.image_quality,
-                            "generation_model": image.generation_model,
-                            "generation_cost": image.generation_cost,
-                            "generation_time": image.generation_time,
-                            "is_approved": image.is_approved
-                        }
-                        
-                        self.supabase.table("content_images").insert(image_data).execute()
             
             # Update campaign progress
             self.supabase.table("content_campaigns").update({
@@ -875,7 +887,7 @@ class ContentCreationAgent:
         return state
     
     async def generate_weekly_summary(self, state: ContentState) -> ContentState:
-        """Generate weekly summary of created content"""
+        """Generate monthly summary of created content"""
         try:
             total_posts = len(state.all_content)
             platforms_used = list(set([post.platform for post in state.all_content]))
@@ -884,7 +896,7 @@ class ContentCreationAgent:
             campaign_name = state.campaign.campaign_name if state.campaign else "No Campaign"
             
             summary = f"""
-            Weekly Content Generation Complete!
+            Monthly Content Generation Complete!
             
             Campaign: {campaign_name}
             Total Posts Generated: {total_posts}
@@ -926,26 +938,31 @@ class ContentCreationAgent:
         return state
     
     # Helper methods
-    def get_topic_for_day(self, day_of_week: int) -> str:
-        """Get topic for specific day of week (0=today, 1=tomorrow, etc.)"""
+    def get_topic_for_day(self, post_index: int) -> str:
+        """Get topic for specific post index"""
         topics = [
-            "today's fresh content",
-            "tomorrow's insights",
-            "mid-week updates",
-            "Thursday highlights",
-            "Friday features",
+            "motivation and inspiration",
+            "tips and insights",
+            "wisdom and knowledge",
+            "thoughts and perspectives",
+            "features and highlights",
             "weekend content",
-            "Sunday reflection"
+            "reflection and growth",
+            "industry insights",
+            "behind the scenes",
+            "customer success",
+            "trending topics",
+            "educational content"
         ]
-        return topics[day_of_week]
+        return topics[post_index % len(topics)]
     
-    def get_content_theme_for_day(self, day_of_week: int, content_themes: list) -> str:
-        """Get content theme for specific day, cycling through available themes"""
+    def get_content_theme_for_day(self, post_index: int, content_themes: list) -> str:
+        """Get content theme for specific post, cycling through available themes"""
         if not content_themes:
             return "general business content"
         
-        # Cycle through themes based on day of week
-        theme_index = day_of_week % len(content_themes)
+        # Cycle through themes based on post index
+        theme_index = post_index % len(content_themes)
         selected_theme = content_themes[theme_index]
         
         # Add variation to make each post unique
@@ -959,8 +976,105 @@ class ContentCreationAgent:
             f"Connect with audience through {selected_theme}"
         ]
         
-        variation_index = day_of_week % len(variations)
+        variation_index = post_index % len(variations)
         return variations[variation_index]
+    
+    def calculate_posting_schedule(self, posting_frequency: str) -> List[Dict[str, Any]]:
+        """Calculate posting schedule based on frequency preference"""
+        from datetime import datetime, timedelta
+        
+        today = datetime.now()
+        schedule = []
+        
+        # Normalize posting frequency for comparison
+        freq = posting_frequency.lower().strip() if posting_frequency else "daily"
+        
+        logger.info(f"Calculating posting schedule for frequency: '{posting_frequency}' (normalized: '{freq}')")
+        
+        if freq == "daily":
+            # Generate 30 posts for the month (daily)
+            for i in range(30):
+                post_date = today + timedelta(days=i)
+                schedule.append({
+                    "post_index": i,
+                    "scheduled_date": post_date.strftime('%Y-%m-%d'),
+                    "scheduled_time": self.get_optimal_time("facebook"),  # Default to Facebook time
+                    "day_of_month": post_date.day
+                })
+        
+        elif freq == "3 posts a week" or freq == "3 posts per week" or freq == "3/week":
+            # Generate 12 posts for the month (3 posts per week)
+            posts_per_week = 3
+            weeks_in_month = 4
+            total_posts = posts_per_week * weeks_in_month
+            
+            for i in range(total_posts):
+                # Distribute posts across the month
+                days_apart = 30 // total_posts
+                post_date = today + timedelta(days=i * days_apart)
+                schedule.append({
+                    "post_index": i,
+                    "scheduled_date": post_date.strftime('%Y-%m-%d'),
+                    "scheduled_time": self.get_optimal_time("facebook"),
+                    "day_of_month": post_date.day
+                })
+        
+        elif freq == "weekly" or freq == "once a week" or freq == "1/week":
+            # Generate 4 posts for the month (weekly)
+            for i in range(4):
+                post_date = today + timedelta(days=i * 7)
+                schedule.append({
+                    "post_index": i,
+                    "scheduled_date": post_date.strftime('%Y-%m-%d'),
+                    "scheduled_time": self.get_optimal_time("facebook"),
+                    "day_of_month": post_date.day
+                })
+        
+        elif freq == "bi weekly" or freq == "bi-weekly" or freq == "twice a week" or freq == "2/week":
+            # Generate 8 posts for the month (bi-weekly)
+            for i in range(8):
+                post_date = today + timedelta(days=i * 3.75)  # Distribute across month
+                schedule.append({
+                    "post_index": i,
+                    "scheduled_date": post_date.strftime('%Y-%m-%d'),
+                    "scheduled_time": self.get_optimal_time("facebook"),
+                    "day_of_month": post_date.day
+                })
+        
+        elif freq == "bi monthly" or freq == "bi-monthly" or freq == "twice a month" or freq == "2/month":
+            # Generate 2 posts for the month (bi-monthly)
+            for i in range(2):
+                post_date = today + timedelta(days=i * 15)
+                schedule.append({
+                    "post_index": i,
+                    "scheduled_date": post_date.strftime('%Y-%m-%d'),
+                    "scheduled_time": self.get_optimal_time("facebook"),
+                    "day_of_month": post_date.day
+                })
+        
+        elif freq == "monthly" or freq == "once a month" or freq == "1/month":
+            # Generate 1 post for the month
+            schedule.append({
+                "post_index": 0,
+                "scheduled_date": today.strftime('%Y-%m-%d'),
+                "scheduled_time": self.get_optimal_time("facebook"),
+                "day_of_month": today.day
+            })
+        
+        else:
+            # Default to daily if unknown frequency
+            logger.warning(f"Unknown posting frequency '{posting_frequency}', defaulting to daily")
+            for i in range(30):
+                post_date = today + timedelta(days=i)
+                schedule.append({
+                    "post_index": i,
+                    "scheduled_date": post_date.strftime('%Y-%m-%d'),
+                    "scheduled_time": self.get_optimal_time("facebook"),
+                    "day_of_month": post_date.day
+                })
+        
+        logger.info(f"Generated {len(schedule)} posts for frequency '{posting_frequency}'")
+        return schedule
     
     def get_day_name(self, day_of_week: int) -> str:
         """Get day name for day of week (0=today, 1=tomorrow, etc.)"""
