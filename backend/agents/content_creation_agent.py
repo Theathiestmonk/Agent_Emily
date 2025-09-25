@@ -613,10 +613,10 @@ class ContentCreationAgent:
             import asyncio
             response = await asyncio.wait_for(
                 self.openai_client.chat.completions.create(
-                    model="gpt-4",
-                    messages=[{"role": "user", "content": full_prompt}],
-                    max_tokens=platform_config['max_length'],
-                    temperature=0.7
+                model="gpt-4",
+                messages=[{"role": "user", "content": full_prompt}],
+                max_tokens=platform_config['max_length'],
+                temperature=0.7
                 ),
                 timeout=30.0  # 30 second timeout
             )

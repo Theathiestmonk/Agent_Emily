@@ -35,7 +35,8 @@ import {
   ChevronDown,
   ChevronRight as ChevronRightIcon,
   Plus,
-  RefreshCw
+  RefreshCw,
+  CalendarDays
 } from 'lucide-react'
 
 const ContentCalendar = () => {
@@ -47,6 +48,7 @@ const ContentCalendar = () => {
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState(null)
   const [selectedDateContent, setSelectedDateContent] = useState([])
+  const [showMonthSelector, setShowMonthSelector] = useState(false)
 
   // Platform icons mapping
   const platformIcons = {
@@ -77,6 +79,20 @@ const ContentCalendar = () => {
   useEffect(() => {
     fetchData()
   }, [])
+
+  // Close month selector when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showMonthSelector && !event.target.closest('.month-selector')) {
+        setShowMonthSelector(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showMonthSelector])
 
   const fetchData = async () => {
     try {
@@ -169,11 +185,36 @@ const ContentCalendar = () => {
       const newDate = new Date(prevDate)
       if (direction === 'prev') {
         newDate.setMonth(newDate.getMonth() - 1)
-      } else {
+      } else if (direction === 'next') {
         newDate.setMonth(newDate.getMonth() + 1)
+      } else if (direction === 'today') {
+        return new Date()
       }
       return newDate
     })
+  }
+
+  const goToMonth = (month, year) => {
+    setCurrentDate(new Date(year, month))
+    setShowMonthSelector(false)
+  }
+
+  const getAvailableMonths = () => {
+    const months = []
+    const currentYear = new Date().getFullYear()
+    
+    // Generate months for current year and next year
+    for (let year = currentYear; year <= currentYear + 1; year++) {
+      for (let month = 0; month < 12; month++) {
+        months.push({
+          month,
+          year,
+          name: new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        })
+      }
+    }
+    
+    return months
   }
 
   const handleDateClick = (date) => {
@@ -213,6 +254,12 @@ const ContentCalendar = () => {
     if (!date) return false
     const today = new Date()
     return date.toDateString() === today.toDateString()
+  }
+
+  const isCurrentMonth = () => {
+    const today = new Date()
+    return currentDate.getMonth() === today.getMonth() && 
+           currentDate.getFullYear() === today.getFullYear()
   }
 
   const isPastDate = (date) => {
@@ -255,18 +302,61 @@ const ContentCalendar = () => {
               <div className="flex items-center space-x-4">
                 <button
                   onClick={() => navigateMonth('prev')}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors group"
+                  title="Previous month"
                 >
-                  <ChevronLeft className="w-5 h-5 text-gray-600" />
+                  <ChevronLeft className="w-5 h-5 text-gray-600 group-hover:text-gray-900" />
                 </button>
-                <h2 className="text-xl font-semibold text-gray-900 min-w-[200px] text-center">
-                  {getMonthName(currentDate)}
-                </h2>
+                <div className="flex flex-col items-center relative month-selector">
+                  <button
+                    onClick={() => setShowMonthSelector(!showMonthSelector)}
+                    className="flex items-center space-x-2 hover:bg-gray-50 px-3 py-2 rounded-lg transition-colors"
+                  >
+                    <h2 className={`text-2xl font-bold min-w-[200px] text-center ${
+                      isCurrentMonth() ? 'text-pink-600' : 'text-gray-900'
+                    }`}>
+                      {getMonthName(currentDate)}
+                    </h2>
+                    <ChevronDown className="w-4 h-4 text-gray-500" />
+                  </button>
+                  
+                  {/* Month Selector Dropdown */}
+                  {showMonthSelector && (
+                    <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+                      <div className="p-2">
+                        <div className="text-xs font-medium text-gray-500 mb-2 px-2">Select Month</div>
+                        {getAvailableMonths().map((monthData, index) => (
+                          <button
+                            key={index}
+                            onClick={() => goToMonth(monthData.month, monthData.year)}
+                            className={`w-full text-left px-3 py-2 rounded-md hover:bg-gray-100 transition-colors ${
+                              currentDate.getMonth() === monthData.month && 
+                              currentDate.getFullYear() === monthData.year
+                                ? 'bg-pink-100 text-pink-600 font-medium' 
+                                : 'text-gray-700'
+                            }`}
+                          >
+                            {monthData.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => navigateMonth('next')}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors group"
+                  title="Next month"
                 >
-                  <ChevronRight className="w-5 h-5 text-gray-600" />
+                  <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-gray-900" />
+                </button>
+                <div className="h-6 w-px bg-gray-300"></div>
+                <button
+                  onClick={() => navigateMonth('today')}
+                  className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm font-medium"
+                  title="Go to current month"
+                >
+                  Today
                 </button>
               </div>
             </div>

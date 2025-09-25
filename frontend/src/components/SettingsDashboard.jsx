@@ -740,6 +740,72 @@ const SettingsDashboard = () => {
               )}
 
 
+              {/* Add New Connection */}
+              <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Add New Connection</h2>
+                
+                {platforms.filter(platform => !connections.some(c => c.platform === platform.id)).length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 justify-items-center items-center">
+                    {platforms
+                      .filter(platform => !connections.some(c => c.platform === platform.id))
+                      .map((platform) => {
+                      const Icon = platform.icon
+                      
+                      return (
+                        <div key={platform.id} className="group relative bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-gray-200 mx-auto w-full max-w-xs">
+                          {/* Card Header */}
+                          <div className="relative p-4 pb-3">
+                            <div className="flex items-center justify-center mb-3">
+                              <div className={`w-12 h-12 ${platform.color} rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                                <Icon className="w-6 h-6 text-white" />
+                              </div>
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-gray-700 transition-colors text-center">{platform.name}</h3>
+                            <p className="text-gray-600 text-xs leading-relaxed text-center">{platform.description}</p>
+                          </div>
+
+                          {/* Card Body */}
+                          <div className="px-4 pb-4">
+                            <div className="space-y-2">
+                              {platform.oauthSupported && (
+                                <button
+                                  onClick={() => platform.id === 'google' ? handleGoogleConnect() : handleOAuthConnect(platform.id)}
+                                  className="w-full px-3 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs font-semibold rounded-lg hover:from-emerald-600 hover:to-emerald-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
+                                  disabled={loading}
+                                >
+                                  <Shield className="w-3 h-3 mr-1 group-hover/btn:scale-110 transition-transform" />
+                                  {loading ? 'Connecting...' : 'Connect'}
+                                </button>
+                              )}
+                              {platform.credentialsSupported && (
+                                <button
+                                  onClick={() => handleConnectionMethod(platform.id, 'credentials')}
+                                  className="w-full px-3 py-2 bg-gradient-to-r from-violet-500 to-violet-600 text-white text-xs font-semibold rounded-lg hover:from-violet-600 hover:to-violet-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
+                                >
+                                  <Key className="w-3 h-3 mr-1 group-hover/btn:scale-110 transition-transform" />
+                                  Connect with Credentials
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Hover gradient overlay */}
+                          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Check className="w-8 h-8 text-green-600" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">All platforms connected!</h3>
+                    <p className="text-gray-500">You have successfully connected all available platforms</p>
+                  </div>
+                )}
+              </div>
+
               {/* Connected Accounts */}
               <div className="mb-8">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">Connected Accounts</h2>
@@ -760,86 +826,6 @@ const SettingsDashboard = () => {
                     </div>
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No connections yet</h3>
                     <p className="text-gray-500">Connect your social media accounts to get started</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Add New Connection */}
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Add New Connection</h2>
-                
-                {platforms.filter(platform => !connections.some(c => c.platform === platform.id)).length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {platforms
-                      .filter(platform => !connections.some(c => c.platform === platform.id))
-                      .map((platform) => {
-                      const Icon = platform.icon
-                      
-                      return (
-                        <div key={platform.id} className="group relative bg-white rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-gray-200">
-                          {/* Card Header */}
-                          <div className="relative p-6 pb-4">
-                            <div className="flex items-center justify-between mb-4">
-                              <div className={`w-14 h-14 ${platform.color} rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                                <Icon className="w-7 h-7 text-white" />
-                              </div>
-                              <div className="flex space-x-1">
-                                <div className="w-2 h-2 bg-gray-300 rounded-full group-hover:bg-gray-400 transition-colors"></div>
-                                <div className="w-2 h-2 bg-gray-300 rounded-full group-hover:bg-gray-400 transition-colors"></div>
-                                <div className="w-2 h-2 bg-gray-300 rounded-full group-hover:bg-gray-400 transition-colors"></div>
-                              </div>
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-gray-700 transition-colors">{platform.name}</h3>
-                            <p className="text-gray-600 text-sm leading-relaxed">{platform.description}</p>
-                          </div>
-
-                          {/* Card Body */}
-                          <div className="px-6 pb-6">
-                            <div className="space-y-3">
-                              {platform.oauthSupported && (
-                                <button
-                                  onClick={() => platform.id === 'google' ? handleGoogleConnect() : handleOAuthConnect(platform.id)}
-                                  className="w-full px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-sm font-semibold rounded-xl hover:from-emerald-600 hover:to-emerald-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
-                                  disabled={loading}
-                                >
-                                  <Shield className="w-4 h-4 mr-2 group-hover/btn:scale-110 transition-transform" />
-                                  {loading ? 'Connecting...' : 'Connect with OAuth'}
-                                </button>
-                              )}
-                              {platform.tokenSupported && (
-                                <button
-                                  onClick={() => handleConnectionMethod(platform.id, 'token')}
-                                  className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
-                                >
-                                  <Key className="w-4 h-4 mr-2 group-hover/btn:scale-110 transition-transform" />
-                                  Connect with Token
-                                </button>
-                              )}
-                              {platform.credentialsSupported && (
-                                <button
-                                  onClick={() => handleConnectionMethod(platform.id, 'credentials')}
-                                  className="w-full px-4 py-3 bg-gradient-to-r from-violet-500 to-violet-600 text-white text-sm font-semibold rounded-xl hover:from-violet-600 hover:to-violet-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
-                                >
-                                  <Key className="w-4 h-4 mr-2 group-hover/btn:scale-110 transition-transform" />
-                                  Connect with Credentials
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Hover gradient overlay */}
-                          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Check className="w-8 h-8 text-green-600" />
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">All platforms connected!</h3>
-                    <p className="text-gray-500">You have successfully connected all available platforms</p>
                   </div>
                 )}
               </div>

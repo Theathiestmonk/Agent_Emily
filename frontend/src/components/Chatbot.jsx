@@ -104,13 +104,29 @@ const Chatbot = () => {
               }
               
               if (data.content) {
-                setMessages(prev => 
-                  prev.map(msg => 
-                    msg.id === botMessageId 
-                      ? { ...msg, content: msg.content + data.content, isStreaming: false }
-                      : msg
+                // Check if this is a clear progress command
+                if (data.content.includes('---CLEAR_PROGRESS---')) {
+                  // Clear the progress messages by removing lines that look like progress
+                  setMessages(prev => 
+                    prev.map(msg => 
+                      msg.id === botMessageId 
+                        ? { 
+                            ...msg, 
+                            content: msg.content.replace(/🔍.*?\n|📅.*?\n|🔍.*?\n|✅.*?\n|📝.*?\n|❌.*?\n|📊.*?\n|📈.*?\n|🤖.*?\n|✨.*?\n|---CLEAR_PROGRESS---.*?\n/g, '').trim(),
+                            isStreaming: false 
+                          }
+                        : msg
+                    )
                   )
-                )
+                } else {
+                  setMessages(prev => 
+                    prev.map(msg => 
+                      msg.id === botMessageId 
+                        ? { ...msg, content: msg.content + data.content, isStreaming: false }
+                        : msg
+                    )
+                  )
+                }
               }
             } catch (e) {
               console.error('Error parsing SSE data:', e)

@@ -5,6 +5,7 @@ Handles queries about scheduled posts, insights, and industry trends
 
 import os
 import json
+import time
 from typing import Dict, List, Any, Optional, Generator
 from datetime import datetime, timedelta
 import requests
@@ -45,6 +46,43 @@ class ChatbotState(TypedDict):
 
 # Tools for the chatbot
 @tool
+def approve_draft_posts(user_id: str, post_ids: List[str]) -> Dict[str, Any]:
+    """Approve draft posts to schedule them"""
+    try:
+        if not post_ids:
+            return {
+                "success": False,
+                "error": "No post IDs provided",
+                "approved_count": 0
+            }
+        
+        # Update posts from draft to scheduled status
+        result = supabase.table("content_posts").update({
+            "status": "scheduled"
+        }).in_("id", post_ids).execute()
+        
+        if result.data:
+            return {
+                "success": True,
+                "approved_count": len(result.data),
+                "approved_posts": result.data,
+                "message": f"Successfully approved {len(result.data)} draft posts to scheduled status"
+            }
+        else:
+            return {
+                "success": False,
+                "error": "No posts were updated",
+                "approved_count": 0
+            }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "approved_count": 0
+        }
+
+@tool
 def get_scheduled_posts(user_id: str, platform: str = "") -> Dict[str, Any]:
     """Get scheduled posts for a user, optionally filtered by platform"""
     try:
@@ -62,13 +100,21 @@ def get_scheduled_posts(user_id: str, platform: str = "") -> Dict[str, Any]:
                 "message": "No campaigns found for user"
             }
         
-        # Get scheduled posts from user's campaigns (including drafts as they are scheduled content)
-        scheduled_query = supabase.table("content_posts").select("*").in_("campaign_id", campaign_ids).in_("status", ["scheduled", "draft"])
+        # Get truly scheduled posts (status = 'scheduled')
+        scheduled_query = supabase.table("content_posts").select("*").in_("campaign_id", campaign_ids).eq("status", "scheduled")
         if platform and platform.strip():
             scheduled_query = scheduled_query.eq("platform", platform)
         
         scheduled_response = scheduled_query.order("scheduled_date", desc=False).order("scheduled_time", desc=False).execute()
         scheduled_posts = scheduled_response.data if scheduled_response.data else []
+        
+        # Get draft posts separately
+        draft_query = supabase.table("content_posts").select("*").in_("campaign_id", campaign_ids).eq("status", "draft")
+        if platform and platform.strip():
+            draft_query = draft_query.eq("platform", platform)
+        
+        draft_response = draft_query.order("created_at", desc=True).execute()
+        draft_posts = draft_response.data if draft_response.data else []
         
         # Get published posts for context
         published_query = supabase.table("content_posts").select("*").in_("campaign_id", campaign_ids).eq("status", "published")
@@ -81,8 +127,10 @@ def get_scheduled_posts(user_id: str, platform: str = "") -> Dict[str, Any]:
         return {
             "success": True,
             "scheduled_posts": scheduled_posts,
+            "draft_posts": draft_posts,
             "published_posts": published_posts,
             "scheduled_count": len(scheduled_posts),
+            "draft_count": len(draft_posts),
             "published_count": len(published_posts)
         }
     except Exception as e:
@@ -90,8 +138,10 @@ def get_scheduled_posts(user_id: str, platform: str = "") -> Dict[str, Any]:
             "success": False,
             "error": str(e),
             "scheduled_posts": [],
+            "draft_posts": [],
             "published_posts": [],
             "scheduled_count": 0,
+            "draft_count": 0,
             "published_count": 0
         }
 
@@ -255,7 +305,7 @@ def get_user_profile(user_id: str) -> Dict[str, Any]:
         }
 
 # Initialize tools
-tools = [get_scheduled_posts, get_latest_insights, get_industry_trends, get_user_profile]
+tools = [approve_draft_posts, get_scheduled_posts, get_latest_insights, get_industry_trends, get_user_profile]
 tool_node = ToolNode(tools)
 
 class BusinessChatbot:
@@ -271,6 +321,7 @@ class BusinessChatbot:
         # Add nodes
         workflow.add_node("classify_intent", self.classify_intent)
         workflow.add_node("handle_scheduled_posts", self.handle_scheduled_posts)
+        workflow.add_node("handle_approve_drafts", self.handle_approve_drafts)
         workflow.add_node("handle_insights", self.handle_insights)
         workflow.add_node("handle_trends", self.handle_trends)
         workflow.add_node("generate_response", self.generate_response)
@@ -281,6 +332,7 @@ class BusinessChatbot:
             lambda state: state["intent"],
             {
                 "scheduled_posts": "handle_scheduled_posts",
+                "approve_drafts": "handle_approve_drafts",
                 "insights": "handle_insights", 
                 "trends": "handle_trends",
                 "general": "generate_response"
@@ -289,6 +341,7 @@ class BusinessChatbot:
         
         # All handler nodes go to generate_response
         workflow.add_edge("handle_scheduled_posts", "generate_response")
+        workflow.add_edge("handle_approve_drafts", "generate_response")
         workflow.add_edge("handle_insights", "generate_response")
         workflow.add_edge("handle_trends", "generate_response")
         workflow.add_edge("generate_response", END)
@@ -311,6 +364,11 @@ class BusinessChatbot:
             'scheduled', 'what is scheduled', 'my posts', 'show posts'
         ]):
             state["intent"] = "scheduled_posts"
+        elif any(keyword in query for keyword in [
+            'approve', 'approve drafts', 'approve posts', 'schedule drafts', 
+            'approve all', 'approve all drafts', 'make scheduled', 'approve these'
+        ]):
+            state["intent"] = "approve_drafts"
         elif any(keyword in query for keyword in ['insights', 'performance', 'analytics', 'engagement', 'metrics', 'how did']):
             state["intent"] = "insights"
         elif any(keyword in query for keyword in ['trends', 'industry', 'latest', 'what\'s new', 'current trends']):
@@ -342,6 +400,7 @@ class BusinessChatbot:
             
             if result["success"]:
                 scheduled_posts = result["scheduled_posts"]
+                draft_posts = result["draft_posts"]
                 published_posts = result["published_posts"]
                 
                 if scheduled_posts:
@@ -351,20 +410,38 @@ class BusinessChatbot:
                     state["context"]["scheduled_posts"] = {
                         "next_post": next_post,
                         "all_scheduled": scheduled_posts,
+                        "draft_posts": draft_posts,
                         "recent_published": published_posts,
                         "total_scheduled": result["scheduled_count"],
+                        "total_drafts": result["draft_count"],
                         "total_published": result["published_count"],
                         "platform": platform or "all platforms",
                         "scheduled_at": next_post.get("scheduled_at"),
                         "content_preview": next_post.get("content", "")[:200] + "..." if len(next_post.get("content", "")) > 200 else next_post.get("content", "")
                     }
-                else:
+                elif draft_posts:
+                    # No scheduled posts, but there are drafts
                     state["context"]["scheduled_posts"] = {
-                        "message": f"No posts found for {platform or 'any platform'}",
+                        "message": "No scheduled posts found",
+                        "draft_posts": draft_posts,
                         "recent_published": published_posts,
                         "total_scheduled": 0,
+                        "total_drafts": result["draft_count"],
                         "total_published": result["published_count"],
-                        "platform": platform or "all platforms"
+                        "platform": platform or "all platforms",
+                        "has_drafts": True,
+                        "next_draft": draft_posts[0] if draft_posts else None
+                    }
+                else:
+                    # No scheduled posts and no drafts
+                    state["context"]["scheduled_posts"] = {
+                        "message": f"No scheduled posts or drafts found for {platform or 'any platform'}",
+                        "recent_published": published_posts,
+                        "total_scheduled": 0,
+                        "total_drafts": 0,
+                        "total_published": result["published_count"],
+                        "platform": platform or "all platforms",
+                        "has_drafts": False
                     }
             else:
                 state["context"]["scheduled_posts"] = {
@@ -373,6 +450,47 @@ class BusinessChatbot:
         except Exception as e:
             state["context"]["scheduled_posts"] = {
                 "error": f"Error fetching posts: {str(e)}"
+            }
+        
+        return state
+    
+    def handle_approve_drafts(self, state: ChatbotState) -> ChatbotState:
+        """Handle approve drafts queries"""
+        try:
+            # First get the user's draft posts
+            result = get_scheduled_posts.invoke({"user_id": state["user_id"], "platform": ""})
+            
+            if result["success"] and result["draft_posts"]:
+                draft_posts = result["draft_posts"]
+                post_ids = [post["id"] for post in draft_posts]
+                
+                # Approve all draft posts
+                approve_result = approve_draft_posts.invoke({"user_id": state["user_id"], "post_ids": post_ids})
+                
+                if approve_result["success"]:
+                    state["context"]["approve_drafts"] = {
+                        "success": True,
+                        "approved_count": approve_result["approved_count"],
+                        "message": f"Successfully approved {approve_result['approved_count']} draft posts to scheduled status",
+                        "draft_posts": draft_posts
+                    }
+                else:
+                    state["context"]["approve_drafts"] = {
+                        "success": False,
+                        "error": approve_result.get("error", "Failed to approve drafts"),
+                        "draft_posts": draft_posts
+                    }
+            else:
+                state["context"]["approve_drafts"] = {
+                    "success": False,
+                    "message": "No draft posts found to approve",
+                    "draft_posts": []
+                }
+        except Exception as e:
+            state["context"]["approve_drafts"] = {
+                "success": False,
+                "error": f"Error approving drafts: {str(e)}",
+                "draft_posts": []
             }
         
         return state
@@ -521,7 +639,20 @@ class BusinessChatbot:
             if "error" in context["scheduled_posts"]:
                 prompt += f"\n\nIMPORTANT: The posts context shows an error: {context['scheduled_posts']['error']}. Help the user resolve this issue."
             else:
-                prompt += "\n\nYou have access to posts data. Help the user understand their upcoming content, including next posts, timing, and recent published content."
+                scheduled_data = context["scheduled_posts"]
+                if scheduled_data.get("total_scheduled", 0) > 0:
+                    prompt += f"\n\nYou have access to scheduled posts data. The user has {scheduled_data['total_scheduled']} scheduled posts. Show them their upcoming content, including next posts, timing, and content previews."
+                elif scheduled_data.get("has_drafts", False):
+                    prompt += f"\n\nIMPORTANT: The user has NO scheduled posts, but they have {scheduled_data['total_drafts']} draft posts. Tell them that scheduled posts are nil, but they have drafts that can be approved to schedule them. Show them the draft posts and suggest they approve them to schedule them up."
+                else:
+                    prompt += f"\n\nThe user has no scheduled posts or drafts. Suggest they create new content or check their content generation settings."
+        
+        if "approve_drafts" in context:
+            approve_data = context["approve_drafts"]
+            if approve_data.get("success", False):
+                prompt += f"\n\nIMPORTANT: The user successfully approved {approve_data['approved_count']} draft posts to scheduled status. Confirm this action and let them know their posts are now scheduled."
+            else:
+                prompt += f"\n\nIMPORTANT: There was an issue approving draft posts: {approve_data.get('error', 'Unknown error')}. Help the user understand what went wrong."
         
         if "insights" in context:
             prompt += "\n\nYou have access to performance insights data. Help the user understand their social media performance."
@@ -552,7 +683,7 @@ class BusinessChatbot:
         return result["response"]
     
     def chat_stream(self, user_id: str, query: str) -> Generator[str, None, None]:
-        """Streaming chat interface"""
+        """Streaming chat interface with progress updates"""
         # Create initial state
         state = {
             "user_id": user_id,
@@ -563,16 +694,75 @@ class BusinessChatbot:
             "response": None
         }
         
-        # Run the graph to get context
-        result = self.graph.invoke(state)
-        
-        # Now stream the response using OpenAI streaming
         try:
+            # Show initial progress
+            yield "🔍 Analyzing your request...\n"
+            time.sleep(0.5)  # Small delay for better UX
+            
+            # Run the graph to get context
+            result = self.graph.invoke(state)
+            
+            # Show progress based on intent
+            intent = result.get("intent", "general")
+            context = result.get("context", {})
+            
+            if intent == "scheduled_posts":
+                yield "📅 Searching your database for posts...\n"
+                time.sleep(0.8)
+                yield "🔍 Looking for scheduled posts...\n"
+                time.sleep(0.6)
+                
+                if "scheduled_posts" in context:
+                    scheduled_data = context["scheduled_posts"]
+                    if scheduled_data.get("total_scheduled", 0) > 0:
+                        yield f"✅ Found {scheduled_data['total_scheduled']} scheduled posts\n"
+                    elif scheduled_data.get("has_drafts", False):
+                        yield f"📝 Found {scheduled_data['total_drafts']} draft posts (no scheduled posts)\n"
+                    else:
+                        yield "❌ No scheduled posts or drafts found\n"
+                        
+            elif intent == "approve_drafts":
+                yield "📝 Checking for draft posts...\n"
+                time.sleep(0.8)
+                yield "🔍 Looking for posts in drafts...\n"
+                time.sleep(0.6)
+                
+                if "approve_drafts" in context:
+                    approve_data = context["approve_drafts"]
+                    if approve_data.get("success", False):
+                        yield f"✅ Successfully approved {approve_data['approved_count']} draft posts\n"
+                    else:
+                        yield "❌ Failed to approve draft posts\n"
+                        
+            elif intent == "insights":
+                yield "📊 Analyzing your social media performance...\n"
+                time.sleep(0.8)
+                yield "🔍 Gathering insights data...\n"
+                time.sleep(0.6)
+                
+            elif intent == "trends":
+                yield "📈 Researching industry trends...\n"
+                time.sleep(0.8)
+                yield "🔍 Gathering latest trend data...\n"
+                time.sleep(0.6)
+                
+            else:
+                yield "🤖 Processing your request...\n"
+                time.sleep(0.5)
+            
+            # Show final progress
+            yield "✨ Generating final response...\n"
+            time.sleep(0.3)
+            
+            # Clear all progress messages by sending clear commands
+            # This will make the frontend clear the progress display
+            yield "\n\n---CLEAR_PROGRESS---\n\n"
+            
             # Create system prompt based on context
-            system_prompt = self.create_system_prompt(result["context"])
+            system_prompt = self.create_system_prompt(context)
             
             # Create user message
-            user_message = f"User query: {query}\n\nContext: {json.dumps(result['context'], indent=2)}"
+            user_message = f"User query: {query}\n\nContext: {json.dumps(context, indent=2)}"
             
             # Generate streaming response
             messages = [
@@ -586,7 +776,7 @@ class BusinessChatbot:
                     yield chunk.content
                     
         except Exception as e:
-            yield f"I apologize, but I encountered an error while processing your request: {str(e)}"
+            yield f"\n\n❌ I apologize, but I encountered an error while processing your request: {str(e)}"
 
 # Initialize the chatbot
 chatbot = BusinessChatbot()

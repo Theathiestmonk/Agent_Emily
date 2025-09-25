@@ -157,19 +157,6 @@ const ContentGenerationModal = ({ isVisible, onClose, onComplete }) => {
                 )}
               </div>
 
-              {/* Progress Bar */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm text-gray-600">
-                  <span>Progress</span>
-                  <span>{progress.percentage}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div 
-                    className="bg-gradient-to-r from-pink-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out"
-                    style={{ width: `${progress.percentage || 0}%` }}
-                  ></div>
-                </div>
-              </div>
 
               {/* Platform Progress */}
               {progress.total_platforms > 0 && (
