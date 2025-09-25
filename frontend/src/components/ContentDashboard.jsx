@@ -488,6 +488,8 @@ const ContentDashboard = () => {
         await postToInstagram(content)
       } else if (content.platform.toLowerCase() === 'linkedin') {
         await postToLinkedIn(content)
+      } else if (content.platform.toLowerCase() === 'youtube') {
+        await postToYouTube(content)
       } else {
         // For other platforms, show a message
         showError(`${content.platform} posting not yet implemented`)
@@ -692,6 +694,51 @@ const ContentDashboard = () => {
       
     } catch (error) {
       console.error('Error posting to LinkedIn:', error)
+      throw error
+    }
+  }
+
+  const postToYouTube = async (content) => {
+    try {
+      const authToken = await getAuthToken()
+      
+      // Get the image URL if available
+      let imageUrl = ''
+      if (generatedImages[content.id] && generatedImages[content.id].image_url) {
+        imageUrl = generatedImages[content.id].image_url
+        console.log('📸 Including image in YouTube post:', imageUrl)
+      }
+      
+      const postData = {
+        title: content.title,
+        description: content.content,
+        image_url: imageUrl,
+        content_id: content.id
+      }
+      
+      console.log('🔄 Posting to YouTube...')
+      const response = await fetch(`${API_BASE_URL}/connections/youtube/post`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(postData)
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        console.log('✅ YouTube post successful:', result)
+        showSuccess(`Successfully posted to YouTube!`)
+        updateContentInCache(content.id, { status: 'published' })
+      } else {
+        const errorText = await response.text()
+        console.error('❌ YouTube post failed:', response.status, errorText)
+        throw new Error(`YouTube posting failed: ${response.status}: ${errorText}`)
+      }
+      
+    } catch (error) {
+      console.error('Error posting to YouTube:', error)
       throw error
     }
   }

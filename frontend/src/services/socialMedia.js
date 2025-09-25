@@ -122,6 +122,32 @@ class SocialMediaService {
     }
   }
 
+  async postToYouTube(postData) {
+    try {
+      const headers = await this.getAuthHeaders()
+      
+      console.log('Posting to YouTube:', postData)
+      
+      const response = await fetch(`${API_URL}/connections/youtube/post`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(postData)
+      })
+
+      const result = await response.json()
+      console.log('YouTube post response:', result)
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'Failed to post to YouTube')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Error posting to YouTube:', error)
+      throw error
+    }
+  }
+
   async debugValidateToken(platform, accessToken) {
     try {
       const response = await fetch(`${API_URL}/api/social-media/debug/validate-token`, {
@@ -400,6 +426,10 @@ class SocialMediaService {
     return this.connectWithToken('linkedin', accessToken, method)
   }
 
+  async connectYouTube() {
+    return this.connectWithOAuth('youtube')
+  }
+
   // Utility methods
   getPlatformInfo(platform) {
     const platforms = {
@@ -422,6 +452,11 @@ class SocialMediaService {
         name: 'LinkedIn',
         color: 'bg-blue-700',
         description: 'Share content, get professional insights'
+      },
+      youtube: {
+        name: 'YouTube',
+        color: 'bg-red-600',
+        description: 'Upload videos, create shorts, community posts'
       }
     }
     return platforms[platform] || { name: platform, color: 'bg-gray-500', description: 'Social media platform' }
