@@ -448,6 +448,10 @@ async def initiate_connection(
 
         raise HTTPException(status_code=404, detail="Not Found")
     
+    # Handle YouTube platform (uses Google OAuth)
+    if platform == "youtube":
+        platform = "youtube"  # Keep as youtube for OAuth URL generation
+    
     
     
     try:
@@ -537,6 +541,10 @@ async def handle_oauth_callback(
         print(f"❌ Redirecting Google callback to Google router")
 
         raise HTTPException(status_code=404, detail="Not Found")
+    
+    # Handle YouTube platform (uses Google OAuth)
+    if platform == "youtube":
+        platform = "youtube"  # Keep as youtube for processing
     
     
     
@@ -1091,7 +1099,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
 
         'tiktok': os.getenv('TIKTOK_CLIENT_ID'),
 
-        'youtube': os.getenv('YOUTUBE_CLIENT_ID')
+        'youtube': os.getenv('GOOGLE_CLIENT_ID')
 
     }
 
@@ -1138,8 +1146,9 @@ def generate_oauth_url(platform: str, state: str) -> str:
         missing_config.append(f"base_url for {platform}")
 
     if not client_id:
-
-        missing_config.append(f"client_id for {platform} (check {platform.upper()}_CLIENT_ID env var)")
+        # Special case for YouTube which uses Google OAuth
+        env_var_name = "GOOGLE_CLIENT_ID" if platform == "youtube" else f"{platform.upper()}_CLIENT_ID"
+        missing_config.append(f"client_id for {platform} (check {env_var_name} env var)")
 
     if not redirect_uri:
 
@@ -1236,7 +1245,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
             'https://www.googleapis.com/auth/youtube.force-ssl'
         ]
         scope_string = ' '.join(youtube_scopes)
-        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope={scope_string}"
+        return f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&state={state}&scope={scope_string}"
     
     
     
@@ -1265,6 +1274,10 @@ def exchange_code_for_tokens(platform: str, code: str) -> dict:
     elif platform == "twitter":
 
         return exchange_twitter_code_for_tokens(code)
+
+    elif platform == "youtube":
+
+        return exchange_youtube_code_for_tokens(code)
 
     else:
 
@@ -1601,6 +1614,68 @@ def exchange_twitter_code_for_tokens(code: str) -> dict:
 
 
 
+def exchange_youtube_code_for_tokens(code: str) -> dict:
+
+    """Exchange YouTube OAuth code for access tokens"""
+
+    import requests
+
+    
+
+    youtube_client_id = os.getenv('GOOGLE_CLIENT_ID')
+
+    youtube_client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+
+    redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/youtube/callback"
+
+    
+
+    if not youtube_client_id or not youtube_client_secret:
+
+        raise ValueError("Google app credentials not configured")
+
+    
+
+    # Exchange code for tokens
+
+    token_url = "https://oauth2.googleapis.com/token"
+
+    token_data = {
+
+        "client_id": youtube_client_id,
+
+        "client_secret": youtube_client_secret,
+
+        "code": code,
+
+        "grant_type": "authorization_code",
+
+        "redirect_uri": redirect_uri
+
+    }
+
+    
+
+    response = requests.post(token_url, data=token_data)
+
+    response.raise_for_status()
+
+    token_response = response.json()
+
+    
+
+    return {
+
+        "access_token": token_response['access_token'],
+
+        "refresh_token": token_response.get('refresh_token', ''),
+
+        "expires_in": token_response.get('expires_in', 3600)
+
+    }
+
+
+
 def get_account_info(platform: str, access_token: str) -> dict:
 
     """Get account information from platform API"""
@@ -1632,6 +1707,10 @@ def get_account_info(platform: str, access_token: str) -> dict:
     elif platform == "twitter":
 
         return get_twitter_account_info(access_token)
+
+    elif platform == "youtube":
+
+        return get_youtube_account_info(access_token)
 
     else:
 
@@ -2312,6 +2391,118 @@ def get_twitter_account_info(access_token: str) -> dict:
     except Exception as e:
 
         print(f"❌ Error getting Twitter account info: {e}")
+
+        print(f"❌ Error type: {type(e).__name__}")
+
+        import traceback
+
+        print(f"❌ Traceback: {traceback.format_exc()}")
+
+        return None
+
+
+
+def get_youtube_account_info(access_token: str) -> dict:
+
+    """Get YouTube account information using YouTube Data API v3"""
+
+    import requests
+
+    
+
+    try:
+
+        print(f"🔍 Getting YouTube account info with token: {access_token[:20]}...")
+
+        
+
+        headers = {
+
+            'Authorization': f'Bearer {access_token}',
+
+            'Content-Type': 'application/json'
+
+        }
+
+        
+
+        # Get channel information from YouTube Data API v3
+
+        channel_url = "https://www.googleapis.com/youtube/v3/channels"
+
+        channel_params = {
+
+            'part': 'snippet,statistics,status',
+
+            'mine': 'true'
+
+        }
+
+        
+
+        channel_response = requests.get(channel_url, headers=headers, params=channel_params)
+
+        
+
+        if channel_response.status_code == 200:
+
+            channel_data = channel_response.json()
+
+            
+
+            if 'items' in channel_data and len(channel_data['items']) > 0:
+
+                channel_info = channel_data['items'][0]
+
+                snippet = channel_info.get('snippet', {})
+
+                statistics = channel_info.get('statistics', {})
+
+                status = channel_info.get('status', {})
+
+                
+
+                return {
+
+                    "account_id": channel_info['id'],
+
+                    "account_name": snippet.get('title', ''),
+
+                    "display_name": snippet.get('title', ''),
+
+                    "profile_picture": snippet.get('thumbnails', {}).get('default', {}).get('url', ''),
+
+                    "verified": snippet.get('verified', False),
+
+                    "subscriber_count": int(statistics.get('subscriberCount', 0)),
+
+                    "video_count": int(statistics.get('videoCount', 0)),
+
+                    "view_count": int(statistics.get('viewCount', 0)),
+
+                    "privacy_status": status.get('privacyStatus', 'unknown'),
+
+                    "country": snippet.get('country', '')
+
+                }
+
+            else:
+
+                print(f"❌ No channel data in YouTube response: {channel_data}")
+
+                return None
+
+        else:
+
+            print(f"❌ YouTube API error: {channel_response.status_code} - {channel_response.text}")
+
+            return None
+
+            
+
+    except Exception as e:
+
+        print(f"❌ Error getting YouTube account info: {e}")
 
         print(f"❌ Error type: {type(e).__name__}")
 
