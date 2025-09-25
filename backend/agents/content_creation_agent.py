@@ -545,6 +545,9 @@ class ContentCreationAgent:
             - Brand Tone: {business_context['brand_tone']}
             - Target Audience: {', '.join(business_context['target_audience'])}
             - Content Themes: {', '.join(business_context['content_themes'])}
+            - Business Description: {business_context.get('business_description', 'Not specified')}
+            - Unique Value Proposition: {business_context.get('unique_value_proposition', 'Not specified')}
+            - Products and Services: {business_context.get('products_and_services', 'Not specified')}
             
             Platform Requirements:
             - Platform: {platform}
@@ -553,12 +556,19 @@ class ContentCreationAgent:
             - Hashtag Limit: {platform_config['hashtag_limit']}
             - Day of Week: {self.get_day_name(day_of_week)}
             
+            Content Theme for this post: {self.get_content_theme_for_day(day_of_week, business_context['content_themes'])}
+            
             Please generate content that:
             1. Matches the brand voice and tone
             2. Is appropriate for the platform
             3. Engages the target audience
-            4. Includes relevant hashtags (within limit)
-            5. Is optimized for the platform's character limits
+            4. Incorporates the business description, unique value proposition, and products/services naturally
+            5. Highlights what makes the business unique and valuable
+            6. Focuses on the specific content theme provided above
+            7. Creates unique, non-repetitive content that stands out
+            8. Varies the approach, angle, and style from previous posts
+            9. Includes relevant hashtags (within limit)
+            10. Is optimized for the platform's character limits
             
             Return your response as a valid JSON object with this structure:
             {{
@@ -928,6 +938,29 @@ class ContentCreationAgent:
             "Sunday reflection"
         ]
         return topics[day_of_week]
+    
+    def get_content_theme_for_day(self, day_of_week: int, content_themes: list) -> str:
+        """Get content theme for specific day, cycling through available themes"""
+        if not content_themes:
+            return "general business content"
+        
+        # Cycle through themes based on day of week
+        theme_index = day_of_week % len(content_themes)
+        selected_theme = content_themes[theme_index]
+        
+        # Add variation to make each post unique
+        variations = [
+            f"Focus on {selected_theme} with a fresh perspective",
+            f"Explore {selected_theme} from a new angle",
+            f"Share insights about {selected_theme}",
+            f"Highlight the importance of {selected_theme}",
+            f"Showcase expertise in {selected_theme}",
+            f"Provide value through {selected_theme}",
+            f"Connect with audience through {selected_theme}"
+        ]
+        
+        variation_index = day_of_week % len(variations)
+        return variations[variation_index]
     
     def get_day_name(self, day_of_week: int) -> str:
         """Get day name for day of week (0=today, 1=tomorrow, etc.)"""
