@@ -24,6 +24,7 @@ import { connectionsAPI } from '../services/connections'
 import ConnectionStatus from './ConnectionStatus'
 import SideNavbar from './SideNavbar'
 import MainContentLoader from './MainContentLoader'
+import DisconnectConfirmationModal from './DisconnectConfirmationModal'
 
 const SettingsDashboard = () => {
   const [connections, setConnections] = useState([])
@@ -46,6 +47,13 @@ const SettingsDashboard = () => {
   })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [disconnectModal, setDisconnectModal] = useState({
+    isOpen: false,
+    connectionId: null,
+    platform: '',
+    accountName: '',
+    isLoading: false
+  })
 
   // Validation functions
   const validateWordPressCredentials = () => {
@@ -117,7 +125,7 @@ const SettingsDashboard = () => {
       id: 'instagram',
       name: 'Instagram',
       icon: Instagram,
-      color: 'bg-pink-600',
+      color: 'bg-gradient-to-r from-purple-500 to-pink-500',
       description: 'Connect Instagram Business accounts (via Facebook)',
       oauthSupported: true,
       tokenSupported: false,
@@ -611,12 +619,25 @@ const SettingsDashboard = () => {
   }
 
   const handleDisconnect = async (connectionId, platform) => {
-    if (!window.confirm('Are you sure you want to disconnect this account?')) {
-      return
-    }
+    // Find the connection to get account name
+    const connection = connections.find(conn => conn.id === connectionId)
+    const accountName = connection?.account_name || connection?.page_name || 'Unknown Account'
+    
+    // Show confirmation modal
+    setDisconnectModal({
+      isOpen: true,
+      connectionId,
+      platform,
+      accountName,
+      isLoading: false
+    })
+  }
 
+  const confirmDisconnect = async () => {
+    const { connectionId, platform } = disconnectModal
+    
     try {
-      setLoading(true)
+      setDisconnectModal(prev => ({ ...prev, isLoading: true }))
       setError('')
       setSuccess('')
 
@@ -630,11 +651,30 @@ const SettingsDashboard = () => {
       await socialMediaService.disconnectAccount(connectionId)
       setSuccess('Account disconnected successfully')
       fetchConnections()
+      
+      // Close modal
+      setDisconnectModal({
+        isOpen: false,
+        connectionId: null,
+        platform: '',
+        accountName: '',
+        isLoading: false
+      })
     } catch (error) {
+      console.error('Error disconnecting account:', error)
       setError(`Failed to disconnect account: ${error.message}`)
-    } finally {
-      setLoading(false)
+      setDisconnectModal(prev => ({ ...prev, isLoading: false }))
     }
+  }
+
+  const cancelDisconnect = () => {
+    setDisconnectModal({
+      isOpen: false,
+      connectionId: null,
+      platform: '',
+      accountName: '',
+      isLoading: false
+    })
   }
 
   const closeModal = () => {
@@ -728,64 +768,80 @@ const SettingsDashboard = () => {
               <div className="bg-white rounded-lg shadow-sm border p-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">Add New Connection</h2>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {platforms.map((platform) => {
-                    const Icon = platform.icon
-                    const isConnected = connections.some(c => c.platform === platform.id)
-                    
-                    return (
-                      <div key={platform.id} className={`p-6 rounded-lg border-2 transition-all ${
-                        isConnected
-                          ? 'border-green-200 bg-green-50'
-                          : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
-                      }`}>
-                        <div className={`w-12 h-12 ${platform.color} rounded-lg flex items-center justify-center mx-auto mb-3`}>
-                          <Icon className="w-6 h-6 text-white" />
+                {platforms.filter(platform => !connections.some(c => c.platform === platform.id)).length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {platforms
+                      .filter(platform => !connections.some(c => c.platform === platform.id))
+                      .map((platform) => {
+                      const Icon = platform.icon
+                      
+                      return (
+                        <div key={platform.id} className="group relative bg-white rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-gray-200">
+                          {/* Card Header */}
+                          <div className="relative p-6 pb-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <div className={`w-14 h-14 ${platform.color} rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                                <Icon className="w-7 h-7 text-white" />
+                              </div>
+                              <div className="flex space-x-1">
+                                <div className="w-2 h-2 bg-gray-300 rounded-full group-hover:bg-gray-400 transition-colors"></div>
+                                <div className="w-2 h-2 bg-gray-300 rounded-full group-hover:bg-gray-400 transition-colors"></div>
+                                <div className="w-2 h-2 bg-gray-300 rounded-full group-hover:bg-gray-400 transition-colors"></div>
+                              </div>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-gray-700 transition-colors">{platform.name}</h3>
+                            <p className="text-gray-600 text-sm leading-relaxed">{platform.description}</p>
+                          </div>
+
+                          {/* Card Body */}
+                          <div className="px-6 pb-6">
+                            <div className="space-y-3">
+                              {platform.oauthSupported && (
+                                <button
+                                  onClick={() => platform.id === 'google' ? handleGoogleConnect() : handleOAuthConnect(platform.id)}
+                                  className="w-full px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-sm font-semibold rounded-xl hover:from-emerald-600 hover:to-emerald-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
+                                  disabled={loading}
+                                >
+                                  <Shield className="w-4 h-4 mr-2 group-hover/btn:scale-110 transition-transform" />
+                                  {loading ? 'Connecting...' : 'Connect with OAuth'}
+                                </button>
+                              )}
+                              {platform.tokenSupported && (
+                                <button
+                                  onClick={() => handleConnectionMethod(platform.id, 'token')}
+                                  className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
+                                >
+                                  <Key className="w-4 h-4 mr-2 group-hover/btn:scale-110 transition-transform" />
+                                  Connect with Token
+                                </button>
+                              )}
+                              {platform.credentialsSupported && (
+                                <button
+                                  onClick={() => handleConnectionMethod(platform.id, 'credentials')}
+                                  className="w-full px-4 py-3 bg-gradient-to-r from-violet-500 to-violet-600 text-white text-sm font-semibold rounded-xl hover:from-violet-600 hover:to-violet-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
+                                >
+                                  <Key className="w-4 h-4 mr-2 group-hover/btn:scale-110 transition-transform" />
+                                  Connect with Credentials
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Hover gradient overlay */}
+                          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                         </div>
-                        <h3 className="font-semibold text-gray-900 mb-1">{platform.name}</h3>
-                        <p className="text-sm text-gray-600 mb-3">{platform.description}</p>
-                        
-                        {isConnected ? (
-                          <div className="flex items-center text-green-600">
-                            <Check className="w-4 h-4 mr-1" />
-                            <span className="text-sm">Connected</span>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {platform.oauthSupported && (
-                              <button
-                                onClick={() => platform.id === 'google' ? handleGoogleConnect() : handleOAuthConnect(platform.id)}
-                                className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 flex items-center justify-center"
-                                disabled={loading}
-                              >
-                                <Shield className="w-4 h-4 mr-1" />
-                                {loading ? 'Connecting...' : 'Connect'}
-                              </button>
-                            )}
-                            {platform.tokenSupported && (
-                              <button
-                                onClick={() => handleConnectionMethod(platform.id, 'token')}
-                                className="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 flex items-center justify-center"
-                              >
-                                <Key className="w-4 h-4 mr-1" />
-                                Token
-                              </button>
-                            )}
-                            {platform.credentialsSupported && (
-                              <button
-                                onClick={() => handleConnectionMethod(platform.id, 'credentials')}
-                                className="w-full px-3 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 flex items-center justify-center"
-                              >
-                                <Key className="w-4 h-4 mr-1" />
-                                Credentials
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Check className="w-8 h-8 text-green-600" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">All platforms connected!</h3>
+                    <p className="text-gray-500">You have successfully connected all available platforms</p>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -1009,6 +1065,16 @@ const SettingsDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Disconnect Confirmation Modal */}
+      <DisconnectConfirmationModal
+        isOpen={disconnectModal.isOpen}
+        onClose={cancelDisconnect}
+        onConfirm={confirmDisconnect}
+        platform={disconnectModal.platform}
+        accountName={disconnectModal.accountName}
+        isLoading={disconnectModal.isLoading}
+      />
     </div>
   )
 }

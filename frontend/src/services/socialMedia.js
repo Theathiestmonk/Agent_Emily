@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { Facebook, Instagram, Twitter, Linkedin, Youtube, Globe, Mail } from 'lucide-react'
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 
@@ -436,30 +437,47 @@ class SocialMediaService {
       instagram: {
         name: 'Instagram',
         color: 'bg-gradient-to-r from-purple-500 to-pink-500',
+        icon: Instagram,
         description: 'Post content, get insights, manage ads'
       },
       facebook: {
         name: 'Facebook',
         color: 'bg-blue-600',
+        icon: Facebook,
         description: 'Manage pages, post content, run ads'
       },
       twitter: {
         name: 'Twitter',
         color: 'bg-blue-400',
+        icon: Twitter,
         description: 'Tweet, get analytics, manage campaigns'
       },
       linkedin: {
         name: 'LinkedIn',
         color: 'bg-blue-700',
+        icon: Linkedin,
         description: 'Share content, get professional insights'
       },
       youtube: {
         name: 'YouTube',
         color: 'bg-red-600',
+        icon: Youtube,
         description: 'Upload videos, create shorts, community posts'
+      },
+      wordpress: {
+        name: 'WordPress',
+        color: 'bg-gray-600',
+        icon: Globe,
+        description: 'Automate blog posting and content management'
+      },
+      google: {
+        name: 'Google',
+        color: 'bg-red-500',
+        icon: Mail,
+        description: 'Connect Gmail, Drive, Sheets, and Docs'
       }
     }
-    return platforms[platform] || { name: platform, color: 'bg-gray-500', description: 'Social media platform' }
+    return platforms[platform] || { name: platform, color: 'bg-gray-500', icon: Globe, description: 'Social media platform' }
   }
 
   getConnectionMethodInfo(method) {
