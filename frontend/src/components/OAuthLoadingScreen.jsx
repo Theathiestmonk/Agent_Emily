@@ -3,7 +3,7 @@ import { CheckCircle, Loader2 } from 'lucide-react'
 
 const OAuthLoadingScreen = ({ status, message }) => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 border border-gray-100 text-center">
         {/* Animated Logo */}
         <div className="mb-8">

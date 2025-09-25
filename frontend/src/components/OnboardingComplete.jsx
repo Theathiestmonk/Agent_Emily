@@ -10,7 +10,7 @@ const OnboardingComplete = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
       <div className="max-w-2xl w-full">
         {/* Success Animation */}
         <div className="text-center mb-8">

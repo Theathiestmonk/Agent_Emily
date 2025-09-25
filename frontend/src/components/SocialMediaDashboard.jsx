@@ -210,7 +210,7 @@ const SocialMediaDashboard = () => {
   const hasPosts = Object.keys(posts).length > 0
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+    <div className="min-h-screen bg-white">
       {/* Side Navbar */}
       <SideNavbar />
       
@@ -397,24 +397,24 @@ const SocialMediaDashboard = () => {
                 
                 {/* 4th Column - Platform Stats */}
                 <div className="bg-white border border-gray-200 rounded-xl shadow-sm sticky top-6 h-fit">
-                  <div className="p-4 border-b border-gray-200">
-                    <div className="flex items-center space-x-3">
+                          <div className="p-4 border-b border-gray-200">
+                              <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                         <TrendingUp className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
+                                </div>
+                                <div>
                         <h3 className="font-semibold text-gray-900">Account Insights</h3>
                         <p className="text-sm text-gray-500">Platform metrics</p>
-                      </div>
-                    </div>
-                  </div>
-                  
+                              </div>
+                            </div>
+                          </div>
+
                   <div className="p-4 space-y-4">
                     {connectedPlatforms.map((connection) => {
                       const stats = platformStats[connection.platform] || {}
                       const theme = getPlatformCardTheme(connection.platform)
-                      
-                      return (
+                                    
+                                    return (
                         <div key={connection.platform} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                           <div className="flex items-center space-x-3">
                             <div className={`w-8 h-8 ${theme.iconBg} rounded-lg flex items-center justify-center`}>

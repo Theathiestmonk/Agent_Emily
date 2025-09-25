@@ -324,12 +324,41 @@ class SocialMediaService {
             console.log('OAuth successful:', event.data)
             popup.close()
             window.removeEventListener('message', messageHandler)
+            
+            // Show success message and refresh connections
+            const platformName = event.data.platform || platform
+            const successMessage = `${platformName.charAt(0).toUpperCase() + platformName.slice(1)} account connected successfully!`
+            
+            // Dispatch a custom event to notify the parent component
+            window.dispatchEvent(new CustomEvent('oauthSuccess', {
+              detail: {
+                platform: platformName,
+                message: successMessage
+              }
+            }))
+            
+            // Also try to show a browser notification if possible
+            if (Notification.permission === 'granted') {
+              new Notification(successMessage)
+            }
+            
             // Refresh the page to show updated connections
-            window.location.reload()
+            setTimeout(() => {
+              window.location.reload()
+            }, 1000)
           } else if (event.data.type === 'OAUTH_ERROR') {
             console.error('OAuth error:', event.data.error)
             popup.close()
             window.removeEventListener('message', messageHandler)
+            
+            // Dispatch a custom event to notify the parent component
+            window.dispatchEvent(new CustomEvent('oauthError', {
+              detail: {
+                platform: platform,
+                error: event.data.error || 'OAuth connection failed'
+              }
+            }))
+            
             throw new Error(event.data.error || 'OAuth connection failed')
           }
         }
