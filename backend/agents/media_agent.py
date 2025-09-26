@@ -15,7 +15,7 @@ from typing import Dict, List, Any, Optional, TypedDict
 from dataclasses import dataclass
 from enum import Enum
 
-import google.generativeai as genai
+from google import genai
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
@@ -61,9 +61,9 @@ class MediaAgent:
         if not gemini_api_key:
             raise ValueError("Google Gemini API key is required")
         
-        # Configure Gemini API
-        genai.configure(api_key=gemini_api_key)
-        self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+        # Configure Gemini API with latest library
+        self.gemini_client = genai.Client(api_key=gemini_api_key)
+        self.gemini_model = 'gemini-2.0-flash-exp'  # Latest model for image generation
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
@@ -202,16 +202,36 @@ class MediaAgent:
             Keep it under 400 characters for API limits.
             """
             
-            response = self.gemini_model.generate_content(
-                f"You are an expert at creating detailed image prompts for AI image generation. Create specific, visual prompts that will generate high-quality images for social media content.\n\n{prompt}"
-            )
-            
-            image_prompt = response.text.strip()
-            state["image_prompt"] = image_prompt
-            state["status"] = "generating"
-            
-            logger.info(f"Generated image prompt: {image_prompt}")
-            return state
+            try:
+                response = self.gemini_client.models.generate_content(
+                    model='gemini-2.0-flash-exp',
+                    contents=f"You are an expert at creating detailed image prompts for AI image generation. Create specific, visual prompts that will generate high-quality images for social media content.\n\n{prompt}"
+                )
+                
+                if response and hasattr(response, 'text') and response.text:
+                    image_prompt = response.text.strip()
+                    state["image_prompt"] = image_prompt
+                    state["status"] = "generating"
+                    
+                    logger.info(f"Generated image prompt: {image_prompt}")
+                    return state
+                else:
+                    raise Exception("Empty response from Gemini model")
+                    
+            except Exception as gemini_error:
+                logger.error(f"Gemini API error in prompt generation: {str(gemini_error)}")
+                # Fallback to a simple prompt if Gemini fails
+                post_data = state["post_data"]
+                content = post_data.get("content", "Social media post")
+                platform = post_data.get("platform", "social media")
+                image_style = state["image_style"]
+                
+                fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image featuring: {content[:100]}"
+                state["image_prompt"] = fallback_prompt
+                state["status"] = "generating"
+                
+                logger.warning(f"Using fallback prompt due to Gemini error: {fallback_prompt}")
+                return state
             
         except Exception as e:
             logger.error(f"Error generating image prompt: {str(e)}")
@@ -220,33 +240,93 @@ class MediaAgent:
             return state
     
     async def generate_image(self, state: MediaAgentState) -> MediaAgentState:
-        """Generate image using Google Gemini"""
+        """Generate image using Google Gemini 2.0 Flash Exp"""
         try:
             # Check if Gemini model is available
             if not self.gemini_model:
                 raise Exception("Gemini model not configured. Please set GEMINI_API_KEY environment variable.")
             
-            image_prompt = state["image_prompt"]
+            image_prompt = state.get("image_prompt")
+            if not image_prompt:
+                # Fallback prompt if Gemini prompt generation failed
+                post_data = state.get("post_data", {})
+                content = post_data.get("content", "Social media post")
+                platform = post_data.get("platform", "social media")
+                image_prompt = f"Professional {platform} post image for: {content[:100]}"
+                logger.warning(f"Using fallback image prompt: {image_prompt}")
+            
             image_size = state["image_size"]
             
             start_time = datetime.now()
             
-            # Generate image using Gemini
+            # Generate image using Gemini 2.0 Flash Exp
             logger.info(f"Generating image with prompt: {image_prompt}")
             logger.info(f"Image size: {image_size.value if image_size else '1024x1024'}")
             logger.info(f"Gemini model available: {bool(self.gemini_model)}")
             
             try:
-                # Use Gemini to generate an image description and then create a placeholder
-                # Note: Gemini doesn't directly generate images like DALL-E, so we'll create a placeholder
-                # In a real implementation, you might want to use a different image generation service
-                # or integrate with Google's image generation APIs when they become available
+                # Use Gemini 2.0 Flash Exp model for image generation
+                logger.info("Using Gemini 2.0 Flash Exp model for image generation")
                 
-                # For now, we'll create a placeholder image URL
-                # In production, you would integrate with an actual image generation service
-                image_url = f"https://via.placeholder.com/{image_size.value if image_size else '1024x1024'}/0066CC/FFFFFF?text={image_prompt[:50].replace(' ', '+')}"
+                # Generate image using the latest Gemini client
+                response = self.gemini_client.models.generate_content(
+                    model='gemini-2.0-flash-exp',
+                    contents=f"Create a high-quality, professional image for social media: {image_prompt}"
+                )
                 
-                logger.info(f"Generated placeholder image URL: {image_url}")
+                image_url = None
+                # Check if response contains image data
+                if response and hasattr(response, 'parts'):
+                    for part in response.parts:
+                        if hasattr(part, 'inline_data') and part.inline_data:
+                            # Convert image data to base64 data URL
+                            import base64
+                            image_data = part.inline_data.data
+                            image_url = f"data:image/png;base64,{base64.b64encode(image_data).decode()}"
+                            logger.info(f"Successfully generated image with Gemini 2.0 Flash Exp")
+                            break
+                
+                # If the main model doesn't work, try alternative models
+                if not image_url:
+                    logger.warning("Gemini 2.0 Flash Exp model failed, trying alternative models")
+                    alternative_models = [
+                        "gemini-1.5-flash",
+                        "gemini-1.5-pro"
+                    ]
+                    
+                    for model_name in alternative_models:
+                        try:
+                            logger.info(f"Trying alternative model: {model_name}")
+                            
+                            alt_response = self.gemini_client.models.generate_content(
+                                model=model_name,
+                                contents=f"Generate a high-quality image for social media: {image_prompt}"
+                            )
+                            
+                            if alt_response and hasattr(alt_response, 'parts'):
+                                for part in alt_response.parts:
+                                    if hasattr(part, 'inline_data') and part.inline_data:
+                                        import base64
+                                        image_data = part.inline_data.data
+                                        image_url = f"data:image/png;base64,{base64.b64encode(image_data).decode()}"
+                                        logger.info(f"Successfully generated image with {model_name}")
+                                        break
+                            
+                            if image_url:
+                                break
+                                
+                        except Exception as alt_error:
+                            logger.warning(f"Alternative model {model_name} failed: {str(alt_error)}")
+                            continue
+                
+                # If no model worked, create a placeholder
+                if not image_url:
+                    logger.warning("All Gemini image models failed, using placeholder")
+                    import urllib.parse
+                    safe_prompt = urllib.parse.quote(image_prompt[:50].replace('\n', ' ').replace('\r', ''))
+                    image_url = f"https://via.placeholder.com/{image_size.value if image_size else '1024x1024'}/0066CC/FFFFFF?text={safe_prompt}"
+                
+                logger.info(f"Generated image URL: {image_url[:100]}...")
                 
             except Exception as api_error:
                 logger.error(f"Gemini API error: {str(api_error)}")
@@ -266,9 +346,24 @@ class MediaAgent:
             # Calculate cost (approximate)
             cost = self._calculate_generation_cost(image_size, "standard")
             
-            # Download and upload image to Supabase storage for faster loading
-            logger.info(f"Downloading and uploading image to Supabase storage...")
-            storage_url = await self._download_and_upload_image(image_url, state["post_id"])
+            # Handle image upload to Supabase storage
+            logger.info(f"Processing image for upload to Supabase storage...")
+            logger.info(f"Post ID: {state['post_id']}")
+            
+            try:
+                if image_url.startswith('data:image/'):
+                    # Handle base64 data URL from Gemini
+                    storage_url = await self._upload_base64_image(image_url, state["post_id"])
+                    logger.info(f"Successfully uploaded base64 image to storage: {storage_url}")
+                else:
+                    # Handle regular URL (placeholder)
+                    storage_url = await self._download_and_upload_image(image_url, state["post_id"])
+                    logger.info(f"Successfully uploaded URL image to storage: {storage_url}")
+            except Exception as upload_error:
+                logger.error(f"Failed to upload image to storage: {str(upload_error)}")
+                # Fallback to using the original URL if upload fails
+                storage_url = image_url
+                logger.info(f"Using original URL as fallback: {storage_url}")
             
             state["generated_image_url"] = storage_url
             state["generation_cost"] = cost
@@ -305,7 +400,7 @@ class MediaAgent:
                 "image_style": state["image_style"].value if state["image_style"] else "realistic",
                 "image_size": state["image_size"].value if state["image_size"] else "1024x1024",
                 "image_quality": "standard",
-                "generation_model": "gemini-1.5-flash",
+                "generation_model": "gemini-2.0-flash-exp",
                 "generation_cost": state["generation_cost"],
                 "generation_time": state["generation_time"],
                 "is_approved": False
@@ -441,13 +536,13 @@ class MediaAgent:
     
     def _calculate_generation_cost(self, image_size: ImageSize, quality: str) -> float:
         """Calculate approximate generation cost"""
-        # Gemini pricing (as of 2024) - much cheaper than DALL-E
-        # Note: This is for text generation, actual image generation costs may vary
+        # Gemini 2.5 Flash Image pricing (as of 2024) - very cost effective
+        # Note: Gemini image generation is significantly cheaper than DALL-E
         costs = {
-            ImageSize.SQUARE_1024: 0.001,  # Much cheaper than DALL-E
+            ImageSize.SQUARE_1024: 0.0008,  # Very cheap compared to DALL-E
             ImageSize.SQUARE_512: 0.0005,
-            ImageSize.LANDSCAPE_1792: 0.002,
-            ImageSize.PORTRAIT_1024: 0.002
+            ImageSize.LANDSCAPE_1792: 0.0012,
+            ImageSize.PORTRAIT_1024: 0.0012
         }
         
         # Handle None image_size
@@ -460,6 +555,50 @@ class MediaAgent:
             base_cost *= 2
         
         return round(base_cost, 4)
+
+    async def _upload_base64_image(self, data_url: str, post_id: str) -> str:
+        """Upload base64 data URL image to Supabase storage"""
+        try:
+            # Extract base64 data from data URL
+            if not data_url.startswith('data:image/'):
+                raise Exception("Invalid data URL format")
+            
+            # Parse data URL: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...
+            header, base64_data = data_url.split(',', 1)
+            image_format = header.split('/')[1].split(';')[0]  # Extract format (png, jpeg, etc.)
+            
+            # Decode base64 data
+            import base64
+            image_data = base64.b64decode(base64_data)
+            
+            # Generate unique filename
+            filename = f"{post_id}_{uuid.uuid4().hex[:8]}.{image_format}"
+            file_path = f"generated/{filename}"
+            
+            # Upload to Supabase storage
+            logger.info(f"Uploading base64 image to storage: {file_path}")
+            storage_response = self.supabase.storage.from_("ai-generated-images").upload(
+                file_path,
+                image_data,
+                file_options={"content-type": f"image/{image_format}"}
+            )
+            
+            logger.info(f"Storage response: {storage_response}")
+            
+            # Check if upload was successful
+            if hasattr(storage_response, 'error') and storage_response.error:
+                raise Exception(f"Failed to upload to storage: {storage_response.error}")
+            
+            # Get public URL
+            public_url = self.supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+            logger.info(f"Generated public URL: {public_url}")
+            
+            logger.info(f"Successfully uploaded base64 image to storage: {public_url}")
+            return public_url
+            
+        except Exception as e:
+            logger.error(f"Error uploading base64 image: {str(e)}")
+            raise e
 
     async def _download_and_upload_image(self, image_url: str, post_id: str) -> str:
         """Download image from URL and upload to Supabase storage"""
