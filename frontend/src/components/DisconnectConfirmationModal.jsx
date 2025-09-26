@@ -1,5 +1,5 @@
 import React from 'react'
-import { AlertTriangle, X, Loader2, Facebook, Instagram, Twitter, Linkedin, Youtube, Globe, Mail } from 'lucide-react'
+import { AlertTriangle, X, Loader2, Facebook, Instagram, Linkedin, Youtube, Globe, Mail, Chrome, FileText } from 'lucide-react'
 
 const DisconnectConfirmationModal = ({ 
   isOpen, 
@@ -23,9 +23,9 @@ const DisconnectConfirmationModal = ({
       name: 'Instagram'
     },
     twitter: {
-      color: 'bg-blue-400',
-      icon: Twitter,
-      name: 'Twitter'
+      color: 'bg-black',
+      icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4LjI0NDcgMTkuMzU0OUgxNi4zMTU5TDEyLjQzNzcgMTQuOTQ0M0w4LjU1OTU0IDE5LjM1NDlINi42MzA3M0wxMS4xNjQxIDE0LjI0MDFMNi42MzA3MyA5LjEyNTUzSDguNTU5NTRMMTIuNDM3NyAxMy41MzU5TDE2LjMxNTkgOS4xMjU1M0gxOC4yNDQ3TDEzLjcxMTMgMTQuMjQwMUwxOC4yNDQ3IDE5LjM1NDlaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K',
+      name: 'X (Twitter)'
     },
     linkedin: {
       color: 'bg-blue-700',
@@ -37,16 +37,16 @@ const DisconnectConfirmationModal = ({
       icon: Youtube,
       name: 'YouTube'
     },
-    wordpress: {
-      color: 'bg-gray-600',
-      icon: Globe,
-      name: 'WordPress'
-    },
-    google: {
-      color: 'bg-red-500',
-      icon: Mail,
-      name: 'Google'
-    }
+      wordpress: {
+        color: 'bg-gray-600',
+        icon: 'https://logo.svgcdn.com/d/wordpress-original.svg',
+        name: 'WordPress'
+      },
+      google: {
+        color: 'bg-red-500',
+        icon: 'https://logo.svgcdn.com/d/google-original.svg',
+        name: 'Google'
+      }
   }
 
   const currentPlatform = platformInfo[platform] || {
@@ -55,27 +55,58 @@ const DisconnectConfirmationModal = ({
     name: 'Platform'
   }
 
+  const renderIcon = (icon, name) => {
+    if (typeof icon === 'string') {
+      return (
+        <img 
+          src={icon} 
+          alt={`${name} logo`}
+          className="w-8 h-8"
+          onError={(e) => {
+            e.target.style.display = 'none'
+            e.target.nextSibling.style.display = 'block'
+          }}
+        />
+      )
+    }
+    const IconComponent = icon
+    return <IconComponent className="w-8 h-8" />
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
         {/* Header with platform branding */}
-        <div className={`${currentPlatform.color} px-6 py-8 text-white relative`}>
+        <div className={`${currentPlatform.color} px-6 py-8 ${currentPlatform.color === 'bg-white' ? 'text-gray-900' : 'text-white'} relative`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-                <currentPlatform.icon className="w-8 h-8 text-white" />
+              <div className={`w-16 h-16 ${currentPlatform.color} rounded-2xl flex items-center justify-center ${currentPlatform.color === 'bg-white' ? 'border border-gray-200' : ''}`}>
+                {typeof currentPlatform.icon === 'string' ? (
+                  <img 
+                    src={currentPlatform.icon} 
+                    alt={currentPlatform.name} 
+                    className="w-8 h-8 object-contain"
+                    style={currentPlatform.color === 'bg-white' ? {} : { filter: 'brightness(0) invert(1)' }}
+                  />
+                ) : (
+                  <currentPlatform.icon className={`w-8 h-8 ${currentPlatform.color === 'bg-white' ? 'text-gray-900' : 'text-white'}`} />
+                )}
               </div>
               <div>
                 <h2 className="text-2xl font-bold">Disconnect {currentPlatform.name}</h2>
-                <p className="text-white/80 text-sm">This action cannot be undone</p>
+                <p className={`text-sm ${currentPlatform.color === 'bg-white' ? 'text-gray-600' : 'text-white/80'}`}>This action cannot be undone</p>
               </div>
             </div>
             <button
               onClick={onClose}
               disabled={isLoading}
-              className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors disabled:opacity-50"
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 ${
+                currentPlatform.color === 'bg-white' 
+                  ? 'bg-gray-200 hover:bg-gray-300' 
+                  : 'bg-white/20 backdrop-blur-sm hover:bg-white/30'
+              }`}
             >
-              <X className="w-5 h-5 text-white" />
+              <X className={`w-5 h-5 ${currentPlatform.color === 'bg-white' ? 'text-gray-600' : 'text-white'}`} />
             </button>
           </div>
         </div>
@@ -100,8 +131,12 @@ const DisconnectConfirmationModal = ({
           {/* Account info */}
           <div className="bg-gray-50 rounded-2xl p-4 mb-6">
             <div className="flex items-center space-x-3">
-              <div className={`w-10 h-10 ${currentPlatform.color} rounded-xl flex items-center justify-center`}>
-                <currentPlatform.icon className="w-5 h-5 text-white" />
+              <div className={`w-10 h-10 ${platform === 'google' || platform === 'wordpress' ? 'bg-white' : currentPlatform.color} rounded-xl flex items-center justify-center`}>
+                {typeof currentPlatform.icon === 'string' ? (
+                  <img src={currentPlatform.icon} alt={currentPlatform.name} className="w-5 h-5" />
+                ) : (
+                  <currentPlatform.icon className={`w-5 h-5 ${platform === 'google' || platform === 'wordpress' ? 'text-gray-600' : 'text-white'}`} />
+                )}
               </div>
               <div>
                 <p className="font-semibold text-gray-900">{accountName}</p>

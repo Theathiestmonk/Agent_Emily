@@ -373,12 +373,12 @@ async def publish_blog(
         if not wordpress_site:
             raise HTTPException(status_code=400, detail="WordPress site not found")
         
-        # Decrypt WordPress credentials
+        # Decrypt WordPress app password
         try:
-            password = decrypt_token(wordpress_site['password'])
+            app_password = decrypt_token(wordpress_site['wordpress_app_password_encrypted'])
         except Exception as e:
-            logger.error(f"Error decrypting WordPress password: {e}")
-            raise HTTPException(status_code=500, detail="Failed to decrypt WordPress credentials")
+            logger.error(f"Error decrypting WordPress app password: {e}")
+            raise HTTPException(status_code=500, detail="Failed to decrypt WordPress app password")
         
         # Format blog content for WordPress API
         wordpress_data = {
@@ -395,42 +395,88 @@ async def publish_blog(
             }
         }
         
-        # Post to WordPress using XML-RPC authentication
-        xmlrpc_url = f"{wordpress_site['site_url'].rstrip('/')}/xmlrpc.php"
+        # Post to WordPress using REST API authentication
+        rest_api_url = f"{wordpress_site['wordpress_site_url'].rstrip('/')}/wp-json/wp/v2/posts"
         
-        logger.info(f"Publishing to WordPress using XML-RPC: {xmlrpc_url}")
+        logger.info(f"Publishing to WordPress using REST API: {rest_api_url}")
         
         try:
-            import xmlrpc.client
-            server = xmlrpc.client.ServerProxy(xmlrpc_url)
+            import requests
+            from requests.auth import HTTPBasicAuth
             
-            # Create WordPress post using XML-RPC
+            # Prepare post data for REST API
             post_data = {
-                'post_title': wordpress_data['title'],
-                'post_content': wordpress_data['content'],
-                'post_excerpt': wordpress_data['excerpt'],
-                'post_status': 'publish',
-                'post_type': 'post',
-                'post_format': wordpress_data['format'],
-                'terms_names': {
-                    'category': wordpress_data['categories'],
-                    'post_tag': wordpress_data['tags']
-                },
-                'custom_fields': [
-                    {'key': '_yoast_wpseo_metadesc', 'value': wordpress_data['meta']['description']},
-                    {'key': '_yoast_wpseo_focuskw', 'value': ', '.join(wordpress_data['meta']['keywords'])}
-                ]
+                'title': wordpress_data['title'],
+                'content': wordpress_data['content'],
+                'excerpt': wordpress_data['excerpt'],
+                'status': 'publish',
+                'format': wordpress_data['format'],
+                'meta': {
+                    '_yoast_wpseo_metadesc': wordpress_data['meta']['description'],
+                    '_yoast_wpseo_focuskw': ', '.join(wordpress_data['meta']['keywords'])
+                }
             }
             
-            # Publish the post
-            wordpress_post_id = server.wp.newPost(1, wordpress_site['username'], password, post_data)
-            logger.info(f"Blog published to WordPress via XML-RPC: Post ID {wordpress_post_id}")
+            # Add categories and tags if provided
+            if wordpress_data['categories']:
+                post_data['categories'] = wordpress_data['categories']
+            if wordpress_data['tags']:
+                post_data['tags'] = wordpress_data['tags']
             
-        except Exception as e:
-            logger.error(f"WordPress XML-RPC publishing failed: {e}")
+            # Create a new session to avoid cookie persistence issues
+            session = requests.Session()
+            
+            # Disable automatic cookie handling to prevent multiple cookies issue
+            session.cookies.clear()
+            
+            # Publish the post using REST API
+            response = session.post(
+                rest_api_url,
+                json=post_data,
+                auth=HTTPBasicAuth(wordpress_site['wordpress_username'], app_password),
+                headers={
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Agent-Emily/1.0'
+                },
+                timeout=30,
+                allow_redirects=False  # Prevent redirects that might cause cookie issues
+            )
+            
+            if response.status_code == 201:
+                wordpress_post_id = response.json()['id']
+                logger.info(f"Blog published to WordPress via REST API: Post ID {wordpress_post_id}")
+            elif response.status_code == 401:
+                # Check if it's a cookie-related issue
+                if 'Set-Cookie' in response.headers:
+                    logger.warning(f"WordPress returned cookies in 401 response: {response.headers.get('Set-Cookie', 'None')}")
+                
+                raise HTTPException(
+                    status_code=400,
+                    detail="WordPress authentication failed. Please check your username and app password. Make sure you're using an Application Password, not your regular WordPress password."
+                )
+            elif response.status_code == 403:
+                raise HTTPException(
+                    status_code=400,
+                    detail="WordPress REST API access denied. Please ensure your user has proper permissions."
+                )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"WordPress REST API returned status {response.status_code}. Error: {response.text}"
+                )
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"WordPress REST API publishing failed: {e}")
             raise HTTPException(
                 status_code=400, 
-                detail=f"Failed to publish to WordPress via XML-RPC. Error: {str(e)}"
+                detail=f"Failed to publish to WordPress via REST API. Error: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"WordPress REST API publishing failed: {e}")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Failed to publish to WordPress via REST API. Error: {str(e)}"
             )
         
         # Update blog with WordPress post ID

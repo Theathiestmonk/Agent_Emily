@@ -4676,6 +4676,8 @@ async def create_wordpress_connection(
         print(f"🔗 Creating WordPress connection for user: {current_user.id}")
 
         print(f"📝 Site: {connection_data.site_name} ({connection_data.site_url})")
+        print(f"📝 Username: {connection_data.username}")
+        print(f"📝 Password length: {len(connection_data.password)}")
 
         
         
@@ -4687,30 +4689,59 @@ async def create_wordpress_connection(
         
         
 
-        # Test the connection using WordPress XML-RPC authentication
-        xmlrpc_url = f"{connection_data.site_url.rstrip('/')}/xmlrpc.php"
+        # Test the connection using WordPress REST API authentication
+        rest_url = f"{connection_data.site_url.rstrip('/')}/wp-json/wp/v2/users/me"
         
-        print(f"🔍 Testing WordPress connection with XML-RPC: {xmlrpc_url}")
+        print(f"🔍 Testing WordPress connection with REST API: {rest_url}")
         
         try:
-            import xmlrpc.client
-            server = xmlrpc.client.ServerProxy(xmlrpc_url)
+            import requests
+            session = requests.Session()
+            session.cookies.clear()
             
-            # Test if XML-RPC is enabled
-            methods = server.system.listMethods()
-            print(f"🔍 XML-RPC methods available: {len(methods)}")
+            # Test WordPress REST API authentication
+            response = session.get(
+                rest_url,
+                auth=(connection_data.username, connection_data.password),
+                timeout=30,
+                allow_redirects=False
+            )
             
-            # Try to get user info to test authentication
-            user_info = server.wp.getProfile(1, connection_data.username, connection_data.password)
-            print(f"✅ WordPress XML-RPC authentication successful!")
-            print(f"🔍 User: {user_info.get('display_name', 'Unknown')}")
-            print(f"🔍 Email: {user_info.get('user_email', 'Unknown')}")
+            print(f"🔍 WordPress REST API response: {response.status_code}")
             
-        except Exception as e:
-            print(f"❌ WordPress XML-RPC authentication failed: {e}")
+            if response.status_code == 401:
+                print(f"❌ WordPress REST API authentication failed: 401 Unauthorized")
+                print(f"🔍 Response headers: {dict(response.headers)}")
+                if 'Set-Cookie' in response.headers:
+                    print(f"🔍 Set-Cookie headers: {response.headers.get('Set-Cookie')}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to authenticate with WordPress REST API. Please check your username and App Password. Make sure you're using an Application Password, not your regular password. Generate one in WordPress Admin → Users → Profile → Application Passwords."
+                )
+            elif response.status_code != 200:
+                print(f"❌ WordPress REST API error: {response.status_code}")
+                print(f"🔍 Response content: {response.text[:500]}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"WordPress REST API returned status {response.status_code}. Please check your site URL and ensure the REST API is enabled."
+                )
+            
+            user_info = response.json()
+            print(f"✅ WordPress REST API authentication successful!")
+            print(f"🔍 User: {user_info.get('name', 'Unknown')}")
+            print(f"🔍 Email: {user_info.get('email', 'Unknown')}")
+            
+        except requests.exceptions.RequestException as e:
+            print(f"❌ WordPress REST API request failed: {e}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to authenticate with WordPress. Please check your credentials and ensure XML-RPC is enabled. Error: {str(e)}"
+                detail=f"Failed to connect to WordPress site. Please check your site URL and ensure it's accessible. Error: {str(e)}"
+            )
+        except Exception as e:
+            print(f"❌ WordPress REST API authentication failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to authenticate with WordPress REST API. Please check your credentials and ensure the REST API is enabled. Error: {str(e)}"
             )
         
         # user_info is now available outside the try block
@@ -4740,17 +4771,19 @@ async def create_wordpress_connection(
 
             "metadata": {
 
-                "site_title": user_info.get('display_name', connection_data.site_name),
+                "site_title": user_info.get('name', connection_data.site_name),
 
                 "site_description": user_info.get('description', ''),
 
-                "user_display_name": user_info.get('display_name', connection_data.username),
+                "user_display_name": user_info.get('name', connection_data.username),
 
-                "user_email": user_info.get('user_email', ''),
+                "user_email": user_info.get('email', ''),
 
-                "capabilities": user_info.get('capabilities', {}),
+                "user_id": user_info.get('id', ''),
 
-                "wordpress_version": user_info.get('wordpress_version', 'Unknown')
+                "user_slug": user_info.get('slug', ''),
+
+                "wordpress_version": "REST API v2"
 
             }
 
@@ -5053,15 +5086,8 @@ async def delete_wordpress_connection(
         
         
         
-        # Mark as inactive instead of deleting
-
-        response = supabase_admin.table("wordpress_connections").update({
-
-            "is_active": False,
-
-            "updated_at": datetime.now().isoformat()
-
-        }).eq("id", connection_id).eq("user_id", current_user.id).execute()
+        # For WordPress, completely delete the connection data
+        response = supabase_admin.table("wordpress_connections").delete().eq("id", connection_id).eq("user_id", current_user.id).execute()
 
         
         
@@ -5159,27 +5185,60 @@ async def test_wordpress_connection(
                 detail="Failed to decrypt password"
             )
         
-        # Test the connection using WordPress XML-RPC authentication
-        xmlrpc_url = f"{connection['site_url'].rstrip('/')}/xmlrpc.php"
+        # Test the connection using WordPress REST API authentication
+        rest_url = f"{connection['site_url'].rstrip('/')}/wp-json/wp/v2/users/me"
         
-        print(f"🔍 Testing WordPress connection with XML-RPC: {xmlrpc_url}")
+        print(f"🔍 Testing WordPress connection with REST API: {rest_url}")
         
         try:
-            import xmlrpc.client
-            server = xmlrpc.client.ServerProxy(xmlrpc_url)
+            import requests
+            session = requests.Session()
+            session.cookies.clear()
             
-            # Test if XML-RPC is enabled
-            methods = server.system.listMethods()
-            print(f"🔍 XML-RPC methods available: {len(methods)}")
+            # Test WordPress REST API authentication
+            response = session.get(
+                rest_url,
+                auth=(connection['username'], password),
+                timeout=30,
+                allow_redirects=False
+            )
             
-            # Try to get user info to test authentication
-            user_info = server.wp.getProfile(1, connection['username'], password)
-            print(f"✅ WordPress XML-RPC authentication successful!")
-            print(f"🔍 User: {user_info.get('display_name', 'Unknown')}")
-            print(f"🔍 Email: {user_info.get('user_email', 'Unknown')}")
+            print(f"🔍 WordPress REST API response: {response.status_code}")
             
-        except Exception as e:
-            print(f"❌ WordPress XML-RPC authentication failed: {e}")
+            if response.status_code == 401:
+                print(f"❌ WordPress REST API authentication failed: 401 Unauthorized")
+                print(f"🔍 Response headers: {dict(response.headers)}")
+                if 'Set-Cookie' in response.headers:
+                    print(f"🔍 Set-Cookie headers: {response.headers.get('Set-Cookie')}")
+                # Update last_checked_at even if test failed
+                supabase_admin.table("wordpress_connections").update({
+                    "last_checked_at": datetime.now().isoformat()
+                }).eq("id", connection_id).execute()
+                
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to authenticate with WordPress REST API. Please check your username and App Password. Make sure you're using an Application Password, not your regular password. Generate one in WordPress Admin → Users → Profile → Application Passwords."
+                )
+            elif response.status_code != 200:
+                print(f"❌ WordPress REST API error: {response.status_code}")
+                print(f"🔍 Response content: {response.text[:500]}")
+                # Update last_checked_at even if test failed
+                supabase_admin.table("wordpress_connections").update({
+                    "last_checked_at": datetime.now().isoformat()
+                }).eq("id", connection_id).execute()
+                
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"WordPress REST API returned status {response.status_code}. Please check your site URL and ensure the REST API is enabled."
+                )
+            
+            user_info = response.json()
+            print(f"✅ WordPress REST API authentication successful!")
+            print(f"🔍 User: {user_info.get('name', 'Unknown')}")
+            print(f"🔍 Email: {user_info.get('email', 'Unknown')}")
+            
+        except requests.exceptions.RequestException as e:
+            print(f"❌ WordPress REST API request failed: {e}")
             # Update last_checked_at even if test failed
             supabase_admin.table("wordpress_connections").update({
                 "last_checked_at": datetime.now().isoformat()
@@ -5187,7 +5246,18 @@ async def test_wordpress_connection(
             
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to authenticate with WordPress. Please check your credentials and ensure XML-RPC is enabled. Error: {str(e)}"
+                detail=f"Failed to connect to WordPress site. Please check your site URL and ensure it's accessible. Error: {str(e)}"
+            )
+        except Exception as e:
+            print(f"❌ WordPress REST API authentication failed: {e}")
+            # Update last_checked_at even if test failed
+            supabase_admin.table("wordpress_connections").update({
+                "last_checked_at": datetime.now().isoformat()
+            }).eq("id", connection_id).execute()
+            
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to authenticate with WordPress REST API. Please check your credentials and ensure the REST API is enabled. Error: {str(e)}"
             )
 
         
@@ -5200,17 +5270,17 @@ async def test_wordpress_connection(
 
             "metadata": {
 
-                "site_title": user_info.get('display_name', connection_data.site_name),
+                "site_title": user_info.get('display_name', connection['site_name']),
 
                 "site_description": user_info.get('description', ''),
 
-                "user_display_name": user_info.get('display_name', connection_data.site_name),
+                "user_display_name": user_info.get('display_name', connection['site_name']),
 
                 "user_email": user_info.get('user_email', ''),
 
                 "capabilities": user_info.get('capabilities', {}),
 
-                "wordpress_version": user_info.get('wordpress_version', 'Unknown'),
+            "wordpress_version": user_info.get('wordpress_version', 'Unknown'),
 
                 "last_test_status": "success",
 
@@ -5234,9 +5304,9 @@ async def test_wordpress_connection(
 
                 "site_url": connection['site_url'],
 
-                "site_title": user_info.get('display_name', connection_data.site_name),
+                "site_title": user_info.get('display_name', connection['site_name']),
 
-                "user_display_name": user_info.get('display_name', connection_data.site_name),
+                "user_display_name": user_info.get('display_name', connection['site_name']),
 
                 "user_email": user_info.get('user_email', ''),
 
