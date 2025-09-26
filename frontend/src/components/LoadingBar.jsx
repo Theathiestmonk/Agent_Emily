@@ -32,7 +32,7 @@ const LoadingBar = ({ message = "Loading your content..." }) => {
         </div>
       </div>
       
-      <style jsx>{`
+      <style>{`
         @keyframes loading-gradient {
           0% { background-position: 0% 50%; }
           50% { background-position: 100% 50%; }

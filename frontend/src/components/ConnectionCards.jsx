@@ -50,7 +50,7 @@ const ConnectionCards = ({ compact = false }) => {
     {
       id: 'twitter',
       name: 'X (Twitter)',
-      icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4LjI0NDcgMTkuMzU0OUgxNi4zMTU5TDEyLjQzNzcgMTQuOTQ0M0w4LjU1OTU0IDE5LjM1NDlINi42MzA3M0wxMS4xNjQxIDE0LjI0MDFMNi42MzA3MyA5LjEyNTUzSDguNTU5NTRMMTIuNDM3NyAxMy41MzU5TDE2LjMxNTkgOS4xMjU1M0gxOC4yNDQ3TDEzLjcxMTMgMTQuMjQwMUwxOC4yNDQ3IDE5LjM1NDlaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K',
+      icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4LjI0NDcgMTkuMzU0OUgxNi4zMTU5TDEyLjQzNzcgMTQuOTQ0M0w4LjU1OTU0IDE5LjM1NDlINi42MzA3M0wxMS4xNjQxIDE0LjI0MDFMNi42MzA3MyA5LjEyNTUzSDguNTU5NTRMMTIuNDM3NyAxMy41MzU5TDE2LjMxNTkgOS4xMjU1M0gxOC4yNDQ3TDEzLjcxMTMgMTQuMjQwMUwxOC4yNDQ3IDE5LjM1NDlaIiBmaWxsPSIjMDAwMDAwIi8+Cjwvc3ZnPgo=',
       color: 'bg-black',
       iconColor: 'text-black',
       bgColor: 'bg-gray-50',
@@ -310,6 +310,13 @@ const ConnectionCards = ({ compact = false }) => {
         {platforms.map((platform) => {
         const { connected, status } = getConnectionStatus(platform.id)
         const IconComponent = platform.icon
+        
+        // Debug logging for X (Twitter)
+        if (platform.id === 'twitter') {
+          console.log('Twitter platform data:', platform);
+          console.log('Icon type:', typeof platform.icon);
+          console.log('Icon value:', platform.icon);
+        }
 
           return (
             <div
@@ -326,7 +333,22 @@ const ConnectionCards = ({ compact = false }) => {
                 `}
                 title={`${platform.name} - ${connected ? 'Connected' : 'Not connected'}`}
               >
-                  <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+                  {typeof platform.icon === 'string' ? (
+                    <img 
+                      src={platform.icon} 
+                      alt={platform.name} 
+                      className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`}
+                      onError={(e) => {
+                        console.error('Image load error for', platform.name, ':', e);
+                        console.log('Icon value:', platform.icon);
+                      }}
+                      onLoad={() => {
+                        console.log('Image loaded successfully for', platform.name);
+                      }}
+                    />
+                  ) : (
+                    <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+                  )}
                 </div>
             ) : (
               // Interactive mode for settings/other pages
@@ -343,7 +365,22 @@ const ConnectionCards = ({ compact = false }) => {
                   `}
                   title={`${connected ? 'Disconnect from' : 'Connect to'} ${platform.name}`}
                 >
-                  <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+                  {typeof platform.icon === 'string' ? (
+                    <img 
+                      src={platform.icon} 
+                      alt={platform.name} 
+                      className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`}
+                      onError={(e) => {
+                        console.error('Image load error for', platform.name, ':', e);
+                        console.log('Icon value:', platform.icon);
+                      }}
+                      onLoad={() => {
+                        console.log('Image loaded successfully for', platform.name);
+                      }}
+                    />
+                  ) : (
+                    <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+                  )}
                   
                   
                   {/* Status indicator dot */}
