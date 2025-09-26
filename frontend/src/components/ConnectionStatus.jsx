@@ -49,11 +49,27 @@ const ConnectionStatus = ({ connection, onDisconnect }) => {
         <div className="flex items-center justify-between mb-4">
           <div className={`w-16 h-16 ${platformInfo.color} rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
             {platformInfo.icon ? (
-              <platformInfo.icon className="w-8 h-8 text-white" />
+              typeof platformInfo.icon === 'string' ? (
+                <img 
+                  src={platformInfo.icon} 
+                  alt={`${platformInfo.name} logo`}
+                  className="w-8 h-8 object-contain"
+                  onError={(e) => {
+                    console.log(`${platformInfo.name} icon failed to load:`, platformInfo.icon)
+                    // Hide the broken image and show fallback
+                    e.target.style.display = 'none'
+                  }}
+                  onLoad={() => {
+                    console.log(`${platformInfo.name} icon loaded successfully:`, platformInfo.icon)
+                  }}
+                />
+              ) : (
+                <platformInfo.icon className="w-8 h-8 text-white" />
+              )
             ) : (
-              <span className="text-white font-bold text-xl">
-                {platformInfo.name.charAt(0)}
-              </span>
+              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                <span className="text-white font-bold text-sm">?</span>
+              </div>
             )}
           </div>
           <div className="flex items-center space-x-2">

@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import { Facebook, Instagram, Twitter, Linkedin, Youtube, Globe, Mail } from 'lucide-react'
+import { Facebook, Instagram, Linkedin, Youtube, Globe, Mail, Chrome, FileText } from 'lucide-react'
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 
@@ -447,9 +447,9 @@ class SocialMediaService {
         description: 'Manage pages, post content, run ads'
       },
       twitter: {
-        name: 'Twitter',
-        color: 'bg-blue-400',
-        icon: Twitter,
+        name: 'X (Twitter)',
+        color: 'bg-black',
+        icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4LjI0NDcgMTkuMzU0OUgxNi4zMTU5TDEyLjQzNzcgMTQuOTQ0M0w4LjU1OTU0IDE5LjM1NDlINi42MzA3M0wxMS4xNjQxIDE0LjI0MDFMNi42MzA3MyA5LjEyNTUzSDguNTU5NTRMMTIuNDM3NyAxMy41MzU5TDE2LjMxNTkgOS4xMjU1M0gxOC4yNDQ3TDEzLjcxMTMgMTQuMjQwMUwxOC4yNDQ3IDE5LjM1NDlaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K',
         description: 'Tweet, get analytics, manage campaigns'
       },
       linkedin: {
@@ -466,14 +466,14 @@ class SocialMediaService {
       },
       wordpress: {
         name: 'WordPress',
-        color: 'bg-gray-600',
-        icon: Globe,
+        color: 'bg-white',
+        icon: 'https://logo.svgcdn.com/d/wordpress-original.svg',
         description: 'Automate blog posting and content management'
       },
       google: {
         name: 'Google',
-        color: 'bg-red-500',
-        icon: Mail,
+        color: 'bg-white',
+        icon: 'https://logo.svgcdn.com/d/google-original.svg',
         description: 'Connect Gmail, Drive, Sheets, and Docs'
       }
     }

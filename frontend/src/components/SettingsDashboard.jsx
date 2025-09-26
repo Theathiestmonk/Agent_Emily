@@ -11,13 +11,14 @@ import {
   Loader2,
   Instagram,
   Facebook,
-  Twitter,
   Linkedin,
   Youtube,
   X,
   RefreshCw,
   Globe,
-  Mail
+  Mail,
+  Chrome,
+  FileText
 } from 'lucide-react'
 import { socialMediaService } from '../services/socialMedia'
 import { connectionsAPI } from '../services/connections'
@@ -25,6 +26,7 @@ import ConnectionStatus from './ConnectionStatus'
 import SideNavbar from './SideNavbar'
 import MainContentLoader from './MainContentLoader'
 import DisconnectConfirmationModal from './DisconnectConfirmationModal'
+// Using URL-based approach for logos
 
 const SettingsDashboard = () => {
   const [connections, setConnections] = useState([])
@@ -92,11 +94,11 @@ const SettingsDashboard = () => {
       errors.username = 'Username must be at least 2 characters'
     }
 
-    // Password validation
+    // App Password validation
     if (!wordpressCredentials.password.trim()) {
-      errors.password = 'Password is required'
+      errors.password = 'App Password is required'
     } else if (wordpressCredentials.password.trim().length < 6) {
-      errors.password = 'Password must be at least 6 characters'
+      errors.password = 'App Password must be at least 6 characters'
     }
 
     setWordpressErrors(errors)
@@ -133,9 +135,9 @@ const SettingsDashboard = () => {
     },
     {
       id: 'twitter',
-      name: 'Twitter',
-      icon: Twitter,
-      color: 'bg-blue-400',
+      name: 'X (Twitter)',
+      icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4LjI0NDcgMTkuMzU0OUgxNi4zMTU5TDEyLjQzNzcgMTQuOTQ0M0w4LjU1OTU0IDE5LjM1NDlINi42MzA3M0wxMS4xNjQxIDE0LjI0MDFMNi42MzA3MyA5LjEyNTUzSDguNTU5NTRMMTIuNDM3NyAxMy41MzU5TDE2LjMxNTkgOS4xMjU1M0gxOC4yNDQ3TDEzLjcxMTMgMTQuMjQwMUwxOC4yNDQ3IDE5LjM1NDlaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K',
+      color: 'bg-black',
       description: 'Tweet, get analytics, manage campaigns',
       oauthSupported: true,
       tokenSupported: true,
@@ -164,7 +166,7 @@ const SettingsDashboard = () => {
     {
       id: 'wordpress',
       name: 'WordPress',
-      icon: Globe,
+      icon: 'https://logo.svgcdn.com/d/wordpress-original.svg',
       color: 'bg-gray-600',
       description: 'Automate blog posting and content management',
       oauthSupported: false,
@@ -175,8 +177,8 @@ const SettingsDashboard = () => {
     {
       id: 'google',
       name: 'Google',
-      icon: Mail,
-      color: 'bg-red-500',
+      icon: 'https://logo.svgcdn.com/d/google-original.svg',
+      color: 'bg-white',
       description: 'Connect Gmail, Drive, Sheets, and Docs',
       oauthSupported: true,
       tokenSupported: false,
@@ -257,35 +259,39 @@ const SettingsDashboard = () => {
       let googleConnections = []
       try {
         const authToken = await getAuthToken()
-        const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
-        const baseUrl = API_BASE_URL.replace(/\/+$/, '')
-        
-        const response = await fetch(`${baseUrl}/connections/google/connection-status`, {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(authToken && { 'Authorization': `Bearer ${authToken}` })
-          }
-        })
-        
-        if (response.ok) {
-          const statusData = await response.json()
-          console.log('Google connection status data:', statusData)
-          console.log('Google connection status response:', response.status)
-          
-          // Check if connected (handle different possible response formats)
-          if (statusData.connected === true || statusData.connected === 'true' || statusData.status === 'connected') {
-            googleConnections = [{
-              platform: 'google',
-              connection_status: 'active',
-              page_name: statusData.email || statusData.name || 'Google Account',
-              page_username: statusData.email || statusData.name || 'Google Account'
-            }]
-            console.log('Created Google connection:', googleConnections[0])
-          } else {
-            console.log('Google not connected. Status data:', statusData)
-          }
+        if (!authToken) {
+          console.log('No auth token available for Google connections')
         } else {
-          console.log('Google connection status API error:', response.status, response.statusText)
+          const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+          const baseUrl = API_BASE_URL.replace(/\/+$/, '')
+        
+          const response = await fetch(`${baseUrl}/connections/google/connection-status`, {
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+            }
+          })
+          
+          if (response.ok) {
+            const statusData = await response.json()
+            console.log('Google connection status data:', statusData)
+            console.log('Google connection status response:', response.status)
+            
+            // Check if connected (handle different possible response formats)
+            if (statusData.connected === true || statusData.connected === 'true' || statusData.status === 'connected') {
+              googleConnections = [{
+                platform: 'google',
+                connection_status: 'active',
+                page_name: statusData.email || statusData.name || 'Google Account',
+                page_username: statusData.email || statusData.name || 'Google Account'
+              }]
+              console.log('Created Google connection:', googleConnections[0])
+            } else {
+              console.log('Google not connected. Status data:', statusData)
+            }
+          } else {
+            console.log('Google connection status API error:', response.status, response.statusText)
+          }
         }
       } catch (error) {
         console.log('No Google connection found:', error.message)
@@ -298,14 +304,27 @@ const SettingsDashboard = () => {
         googleConnections = [existingGoogleConnection]
       }
       
-      // Combine all types of connections, filtering out any existing Google connections
+      // Combine all types of connections, filtering out duplicates
       const allConnections = [
-        ...tokenConnections.filter(conn => conn.platform !== 'google'),
-        ...oauthConnections.filter(conn => conn.platform !== 'google'),
+        ...tokenConnections.filter(conn => conn.platform !== 'google' && conn.platform !== 'wordpress'),
+        ...oauthConnections.filter(conn => conn.platform !== 'google' && conn.platform !== 'wordpress'),
         ...wordpressConnections,
         ...googleConnections
       ]
-      setConnections(allConnections)
+      
+      // Remove duplicate WordPress connections based on site URL and user ID
+      const uniqueConnections = allConnections.filter((connection, index, self) => {
+        if (connection.platform === 'wordpress') {
+          return index === self.findIndex(conn => 
+            conn.platform === 'wordpress' && 
+            conn.wordpress_site_url === connection.wordpress_site_url &&
+            conn.wordpress_user_id === connection.wordpress_user_id
+          )
+        }
+        return true
+      })
+      
+      setConnections(uniqueConnections)
       
       console.log('Token connections:', tokenConnections.length)
       console.log('OAuth connections:', oauthConnections.length)
@@ -317,6 +336,8 @@ const SettingsDashboard = () => {
     } catch (error) {
       console.error('Error fetching connections:', error)
       setError('Failed to load connections')
+      // Don't crash the entire dashboard, just show empty connections
+      setConnections([])
     } finally {
       setLoading(false)
     }
@@ -374,14 +395,24 @@ const SettingsDashboard = () => {
 
   const getAuthToken = async () => {
     try {
-      const token = localStorage.getItem('token')
+      // Try multiple token sources
+      const token = localStorage.getItem('authToken') || 
+                    localStorage.getItem('token') || 
+                    localStorage.getItem('access_token')
+      
       if (token) {
         return token
       }
       
       // Try to get token from Supabase session
       const { supabase } = await import('../lib/supabase')
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session }, error } = await supabase.auth.getSession()
+      
+      if (error) {
+        console.error('Error getting Supabase session:', error)
+        return null
+      }
+      
       return session?.access_token || null
     } catch (error) {
       console.error('Error getting auth token:', error)
@@ -542,11 +573,20 @@ const SettingsDashboard = () => {
     }
 
     try {
+      const authToken = await getAuthToken()
+      console.log('🔍 WordPress connection attempt:', {
+        siteName: wordpressCredentials.siteName.trim(),
+        siteUrl: wordpressCredentials.siteUrl.trim(),
+        username: wordpressCredentials.username.trim(),
+        hasPassword: !!wordpressCredentials.password.trim(),
+        hasAuthToken: !!authToken
+      })
+      
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/wordpress`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          ...(authToken && { 'Authorization': `Bearer ${authToken}` })
         },
         body: JSON.stringify({
           site_name: wordpressCredentials.siteName.trim(),
@@ -555,6 +595,8 @@ const SettingsDashboard = () => {
           password: wordpressCredentials.password.trim()
         })
       })
+      
+      console.log('🔍 WordPress response status:', response.status)
 
       let result
       try {
@@ -565,7 +607,35 @@ const SettingsDashboard = () => {
       }
 
       if (!response.ok) {
-        throw new Error(result.detail || result.message || 'Failed to connect to WordPress')
+        // Handle different error response formats
+        let errorMessage = 'Failed to connect to WordPress'
+        
+        if (result.detail) {
+          errorMessage = result.detail
+        } else if (result.message) {
+          errorMessage = result.message
+        } else if (result.error) {
+          errorMessage = result.error
+        } else if (typeof result === 'string') {
+          errorMessage = result
+        } else if (Array.isArray(result)) {
+          errorMessage = result.join(', ')
+        } else if (typeof result === 'object') {
+          // Try to extract meaningful error information
+          const errorKeys = Object.keys(result)
+          if (errorKeys.length > 0) {
+            const firstKey = errorKeys[0]
+            if (Array.isArray(result[firstKey])) {
+              errorMessage = result[firstKey].join(', ')
+            } else if (typeof result[firstKey] === 'string') {
+              errorMessage = result[firstKey]
+            } else {
+              errorMessage = `Error: ${JSON.stringify(result)}`
+            }
+          }
+        }
+        
+        throw new Error(errorMessage)
       }
 
       setSuccess(result.message || 'WordPress connected successfully!')
@@ -578,7 +648,14 @@ const SettingsDashboard = () => {
       })
       setSelectedPlatform('')
       setConnectionMethod('')
-      fetchConnections()
+      
+      // Safely refresh connections after successful WordPress connection
+      try {
+        await fetchConnections()
+      } catch (error) {
+        console.error('Error refreshing connections after WordPress connection:', error)
+        // Don't show error to user since WordPress connection was successful
+      }
       
     } catch (err) {
       console.error('WordPress connection error:', err)
@@ -594,11 +671,12 @@ const SettingsDashboard = () => {
       setError('')
       setSuccess('')
 
+      const authToken = await getAuthToken()
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/wordpress/${connectionId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          ...(authToken && { 'Authorization': `Bearer ${authToken}` })
         }
       })
 
@@ -608,8 +686,19 @@ const SettingsDashboard = () => {
         throw new Error(result.detail || 'Failed to disconnect WordPress')
       }
 
-      setSuccess(result.message)
-      fetchConnections()
+      setSuccess(result.message || 'WordPress account disconnected successfully')
+      
+      // Refresh connections to update the UI
+      await fetchConnections()
+      
+      // Close modal
+      setDisconnectModal({
+        isOpen: false,
+        connectionId: null,
+        platform: '',
+        accountName: '',
+        isLoading: false
+      })
       
     } catch (err) {
       setError(err.message)
@@ -745,44 +834,62 @@ const SettingsDashboard = () => {
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">Add New Connection</h2>
                 
                 {platforms.filter(platform => !connections.some(c => c.platform === platform.id)).length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 justify-items-center items-center">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {platforms
                       .filter(platform => !connections.some(c => c.platform === platform.id))
                       .map((platform) => {
                       const Icon = platform.icon
                       
                       return (
-                        <div key={platform.id} className="group relative bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-gray-200 mx-auto w-full max-w-xs">
+                        <div key={platform.id} className="group relative bg-white rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-gray-200">
                           {/* Card Header */}
-                          <div className="relative p-4 pb-3">
-                            <div className="flex items-center justify-center mb-3">
-                              <div className={`w-12 h-12 ${platform.color} rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                                <Icon className="w-6 h-6 text-white" />
+                          <div className="relative p-6 pb-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <div className={`w-14 h-14 ${platform.id === 'google' || platform.id === 'wordpress' ? 'bg-white' : platform.color} rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                                {typeof Icon === 'string' ? (
+                                  <img src={Icon} alt={platform.name} className="w-7 h-7" />
+                                ) : (
+                                  <Icon className={`w-7 h-7 ${platform.id === 'google' || platform.id === 'wordpress' ? 'text-gray-600' : 'text-white'}`} />
+                                )}
+                              </div>
+                              <div className="flex space-x-1">
+                                <div className="w-2 h-2 bg-gray-300 rounded-full group-hover:bg-gray-400 transition-colors"></div>
+                                <div className="w-2 h-2 bg-gray-300 rounded-full group-hover:bg-gray-400 transition-colors"></div>
+                                <div className="w-2 h-2 bg-gray-300 rounded-full group-hover:bg-gray-400 transition-colors"></div>
                               </div>
                             </div>
-                            <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-gray-700 transition-colors text-center">{platform.name}</h3>
-                            <p className="text-gray-600 text-xs leading-relaxed text-center">{platform.description}</p>
+                            <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-gray-700 transition-colors">{platform.name}</h3>
+                            <p className="text-gray-600 text-sm leading-relaxed">{platform.description}</p>
                           </div>
 
                           {/* Card Body */}
-                          <div className="px-4 pb-4">
-                            <div className="space-y-2">
+                          <div className="px-6 pb-6">
+                            <div className="space-y-3">
                               {platform.oauthSupported && (
                                 <button
                                   onClick={() => platform.id === 'google' ? handleGoogleConnect() : handleOAuthConnect(platform.id)}
-                                  className="w-full px-3 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs font-semibold rounded-lg hover:from-emerald-600 hover:to-emerald-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
+                                  className="w-full px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-sm font-semibold rounded-xl hover:from-emerald-600 hover:to-emerald-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
                                   disabled={loading}
                                 >
-                                  <Shield className="w-3 h-3 mr-1 group-hover/btn:scale-110 transition-transform" />
-                                  {loading ? 'Connecting...' : 'Connect'}
+                                  <Shield className="w-4 h-4 mr-2 group-hover/btn:scale-110 transition-transform" />
+                                  {loading ? 'Connecting...' : 'Connect with OAuth'}
+                                </button>
+                              )}
+                              {platform.tokenSupported && (
+                                <button
+                                  onClick={() => handleConnectionMethod(platform.id, 'token')}
+                                  className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
+                                >
+                                  <Key className="w-4 h-4 mr-2 group-hover/btn:scale-110 transition-transform" />
+                                  Connect with Token
                                 </button>
                               )}
                               {platform.credentialsSupported && (
                                 <button
                                   onClick={() => handleConnectionMethod(platform.id, 'credentials')}
-                                  className="w-full px-3 py-2 bg-gradient-to-r from-violet-500 to-violet-600 text-white text-xs font-semibold rounded-lg hover:from-violet-600 hover:to-violet-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
+                                  className="w-full px-4 py-3 bg-gradient-to-r from-violet-500 to-violet-600 text-white text-sm font-semibold rounded-xl hover:from-violet-600 hover:to-violet-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
                                 >
-                                  <Key className="w-3 h-3 mr-1 group-hover/btn:scale-110 transition-transform" />
+                                  <Key className="w-4 h-4 mr-2 group-hover/btn:scale-110 transition-transform" />
                                   Connect with Credentials
                                 </button>
                               )}
@@ -932,7 +1039,7 @@ const SettingsDashboard = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Password
+                    App Password
                   </label>
                   <input
                     type="password"
@@ -941,7 +1048,7 @@ const SettingsDashboard = () => {
                       setWordpressCredentials(prev => ({ ...prev, password: e.target.value }))
                       clearFieldError('password')
                     }}
-                    placeholder="Enter your WordPress password"
+                    placeholder="Enter your WordPress App Password"
                     className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       wordpressErrors.password ? 'border-red-500' : 'border-gray-300'
                     }`}
@@ -954,7 +1061,7 @@ const SettingsDashboard = () => {
                     </p>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    Enter your WordPress account password for API access.
+                    Enter your WordPress App Password for API access. Generate one in WordPress Admin → Users → Profile → Application Passwords.
                   </p>
                 </div>
 
