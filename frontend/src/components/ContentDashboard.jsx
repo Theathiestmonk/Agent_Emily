@@ -2236,32 +2236,32 @@ const ContentDashboard = () => {
       {/* Image Lightbox Modal */}
       {lightboxImage && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-8"
           onClick={closeLightbox}
         >
-          <div className="relative max-w-7xl max-h-full w-full h-full flex items-center justify-center">
+          <div className="relative max-w-4xl max-h-[80vh] w-full flex items-center justify-center">
             {/* Close button */}
             <button
               onClick={closeLightbox}
-              className="absolute top-4 right-4 z-10 bg-black bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-70 transition-colors"
+              className="absolute -top-2 -right-2 z-10 bg-white text-gray-800 p-2 rounded-full shadow-lg hover:bg-gray-100 transition-colors"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
             
-            {/* Image */}
-            <div className="relative max-w-full max-h-full">
+            {/* Image Container */}
+            <div className="relative w-full h-full max-w-2xl max-h-[70vh] bg-white rounded-lg shadow-2xl overflow-hidden">
               <img
                 src={lightboxImage.url}
                 alt={lightboxImage.title}
-                className="max-w-full max-h-full object-contain rounded-lg"
+                className="w-full h-full object-contain"
                 onClick={(e) => e.stopPropagation()}
               />
               
               {/* Image title */}
               {lightboxImage.title && (
-                <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white p-4 rounded-b-lg">
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent text-white p-4">
                   <h3 className="text-lg font-medium">{lightboxImage.title}</h3>
                 </div>
               )}
