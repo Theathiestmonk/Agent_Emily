@@ -39,8 +39,6 @@ import {
   Share2,
   Download,
   Filter,
-  Grid,
-  List,
   ChevronDown,
   ChevronRight,
   ChevronLeft,
@@ -77,7 +75,6 @@ const ContentDashboard = () => {
   } = useContentCache()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
   const [filterPlatform, setFilterPlatform] = useState('all')
   const [generating, setGenerating] = useState(false)
   const [generationStatus, setGenerationStatus] = useState(null) // 'success', 'error', null
@@ -110,6 +107,7 @@ const ContentDashboard = () => {
   const [uploadingImage, setUploadingImage] = useState(new Set()) // Track which content is uploading image
   const [showUploadModal, setShowUploadModal] = useState(null) // Track which content is showing upload modal
   const [lightboxImage, setLightboxImage] = useState(null) // Track which image to show in lightbox
+  const [showScrollArrow, setShowScrollArrow] = useState(true) // Track if scroll arrow should be visible
   const [selectedFile, setSelectedFile] = useState(null) // Selected file for upload
   const [hoveredButton, setHoveredButton] = useState(null) // Track which button is being hovered
   const [imageLoading, setImageLoading] = useState(new Set()) // Track which images are loading
@@ -1343,6 +1341,18 @@ const ContentDashboard = () => {
     setLightboxImage(null)
   }
 
+  // Handle scroll to show/hide arrow
+  const handleScroll = (e) => {
+    const { scrollLeft, scrollWidth, clientWidth } = e.target
+    const isAtEnd = scrollLeft + clientWidth >= scrollWidth - 10 // 10px tolerance
+    setShowScrollArrow(!isAtEnd)
+  }
+
+  // Reset scroll arrow when content changes
+  useEffect(() => {
+    setShowScrollArrow(true)
+  }, [contentToDisplay])
+
   // Handle keyboard events for lightbox
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -1384,7 +1394,7 @@ const ContentDashboard = () => {
       <SideNavbar />
       
       {/* Main Content */}
-      <div className="ml-64 flex flex-col min-h-screen">
+      <div className={`ml-64 flex flex-col min-h-screen ${availableDates.length > 1 ? 'pb-20' : ''}`}>
         {/* Fixed Header */}
         <div className="fixed top-0 right-0 left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-6 py-4">
@@ -1441,22 +1451,6 @@ const ContentDashboard = () => {
                   </span>
                 </button>
                 
-                
-                {/* View Controls */}
-                <div className="flex items-center space-x-1">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
-                  >
-                    <Grid className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
-                  >
-                    <List className="w-4 h-4" />
-                  </button>
-                </div>
               </div>
             </div>
           </div>
@@ -1530,7 +1524,20 @@ const ContentDashboard = () => {
                 </button>
               </div>
             ) : (
-              <div className={`grid gap-6 items-start ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1'}`}>
+              <div className="relative">
+                {/* Right arrow indicator - only show when there's more content to scroll */}
+                {showScrollArrow && (
+                  <div className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 pointer-events-none">
+                    <div className="bg-white rounded-full p-2 shadow-lg border border-gray-200">
+                      <ChevronRight className="w-5 h-5 text-gray-400" />
+                    </div>
+                  </div>
+                )}
+                
+                <div 
+                  className="flex gap-6 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-12"
+                  onScroll={handleScroll}
+                >
                 {filteredContent.map((content) => {
                   const theme = getPlatformCardTheme(content.platform)
                   console.log('Content platform:', content.platform, 'Theme:', theme)
@@ -1538,7 +1545,7 @@ const ContentDashboard = () => {
                     <div 
                       key={content.id} 
                       onClick={() => handleViewContent(content)}
-                      className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm p-6 hover:shadow-lg transition-all duration-300 hover:scale-[1.02] cursor-pointer self-start`}
+                      className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm p-6 hover:shadow-lg transition-all duration-300 hover:scale-[1.02] cursor-pointer flex-shrink-0 w-80`}
                     >
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center space-x-3">
@@ -1932,6 +1939,7 @@ const ContentDashboard = () => {
                   </div>
                   )
                 })}
+                </div>
               </div>
             )}
           </div>
@@ -1942,7 +1950,7 @@ const ContentDashboard = () => {
 
         {/* Footer Navigation - Only show if there are multiple dates with content */}
         {availableDates.length > 1 && (
-          <div className="bg-white border-t border-gray-200 shadow-lg">
+          <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
             <div className="flex items-center justify-center space-x-4 py-4 px-6">
               <button
                 onClick={navigateToPreviousDate}
