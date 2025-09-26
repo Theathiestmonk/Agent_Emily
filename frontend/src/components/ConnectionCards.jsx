@@ -326,7 +326,15 @@ const ConnectionCards = ({ compact = false }) => {
                 `}
                 title={`${platform.name} - ${connected ? 'Connected' : 'Not connected'}`}
               >
-                  <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+                  {typeof platform.icon === 'string' ? (
+                    <img 
+                      src={platform.icon} 
+                      alt={platform.name} 
+                      className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`}
+                    />
+                  ) : (
+                    <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+                  )}
                 </div>
             ) : (
               // Interactive mode for settings/other pages
@@ -343,7 +351,15 @@ const ConnectionCards = ({ compact = false }) => {
                   `}
                   title={`${connected ? 'Disconnect from' : 'Connect to'} ${platform.name}`}
                 >
-                  <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+                  {typeof platform.icon === 'string' ? (
+                    <img 
+                      src={platform.icon} 
+                      alt={platform.name} 
+                      className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`}
+                    />
+                  ) : (
+                    <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
+                  )}
                   
                   
                   {/* Status indicator dot */}
