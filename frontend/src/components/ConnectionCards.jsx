@@ -310,6 +310,13 @@ const ConnectionCards = ({ compact = false }) => {
         {platforms.map((platform) => {
         const { connected, status } = getConnectionStatus(platform.id)
         const IconComponent = platform.icon
+        
+        // Debug logging for X (Twitter)
+        if (platform.id === 'twitter') {
+          console.log('Twitter platform data:', platform);
+          console.log('Icon type:', typeof platform.icon);
+          console.log('Icon value:', platform.icon);
+        }
 
           return (
             <div
@@ -331,6 +338,13 @@ const ConnectionCards = ({ compact = false }) => {
                       src={platform.icon} 
                       alt={platform.name} 
                       className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`}
+                      onError={(e) => {
+                        console.error('Image load error for', platform.name, ':', e);
+                        console.log('Icon value:', platform.icon);
+                      }}
+                      onLoad={() => {
+                        console.log('Image loaded successfully for', platform.name);
+                      }}
                     />
                   ) : (
                     <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
@@ -356,6 +370,13 @@ const ConnectionCards = ({ compact = false }) => {
                       src={platform.icon} 
                       alt={platform.name} 
                       className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`}
+                      onError={(e) => {
+                        console.error('Image load error for', platform.name, ':', e);
+                        console.log('Icon value:', platform.icon);
+                      }}
+                      onLoad={() => {
+                        console.log('Image loaded successfully for', platform.name);
+                      }}
                     />
                   ) : (
                     <IconComponent className={`w-6 h-6 ${connected ? 'text-white' : platform.iconColor}`} />
