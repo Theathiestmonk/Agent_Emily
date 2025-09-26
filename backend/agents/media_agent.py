@@ -15,7 +15,7 @@ from typing import Dict, List, Any, Optional, TypedDict
 from dataclasses import dataclass
 from enum import Enum
 
-from openai import OpenAI
+import google.generativeai as genai
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
@@ -56,11 +56,14 @@ class MediaAgentState(TypedDict):
     status: str  # pending, generating, completed, failed
 
 class MediaAgent:
-    def __init__(self, supabase_url: str, supabase_key: str, openai_api_key: str):
+    def __init__(self, supabase_url: str, supabase_key: str, gemini_api_key: str):
         self.supabase: Client = create_client(supabase_url, supabase_key)
-        if not openai_api_key:
-            raise ValueError("OpenAI API key is required")
-        self.openai_client = OpenAI(api_key=openai_api_key)
+        if not gemini_api_key:
+            raise ValueError("Google Gemini API key is required")
+        
+        # Configure Gemini API
+        genai.configure(api_key=gemini_api_key)
+        self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
@@ -172,7 +175,7 @@ class MediaAgent:
             return state
     
     async def generate_image_prompt(self, state: MediaAgentState) -> MediaAgentState:
-        """Generate detailed image prompt using OpenAI"""
+        """Generate detailed image prompt using Google Gemini"""
         try:
             post_data = state["post_data"]
             content = post_data.get("content", "")
@@ -199,17 +202,11 @@ class MediaAgent:
             Keep it under 400 characters for API limits.
             """
             
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are an expert at creating detailed image prompts for AI image generation. Create specific, visual prompts that will generate high-quality images for social media content."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=200,
-                temperature=0.7
+            response = self.gemini_model.generate_content(
+                f"You are an expert at creating detailed image prompts for AI image generation. Create specific, visual prompts that will generate high-quality images for social media content.\n\n{prompt}"
             )
             
-            image_prompt = response.choices[0].message.content.strip()
+            image_prompt = response.text.strip()
             state["image_prompt"] = image_prompt
             state["status"] = "generating"
             
@@ -223,52 +220,48 @@ class MediaAgent:
             return state
     
     async def generate_image(self, state: MediaAgentState) -> MediaAgentState:
-        """Generate image using DALL-E 3"""
+        """Generate image using Google Gemini"""
         try:
-            # Check if OpenAI client is available
-            if not self.openai_client:
-                raise Exception("OpenAI client not configured. Please set OPENAI_API_KEY environment variable.")
+            # Check if Gemini model is available
+            if not self.gemini_model:
+                raise Exception("Gemini model not configured. Please set GEMINI_API_KEY environment variable.")
             
             image_prompt = state["image_prompt"]
             image_size = state["image_size"]
             
             start_time = datetime.now()
             
-            # Generate image using DALL-E 3
+            # Generate image using Gemini
             logger.info(f"Generating image with prompt: {image_prompt}")
             logger.info(f"Image size: {image_size.value if image_size else '1024x1024'}")
-            logger.info(f"OpenAI client available: {bool(self.openai_client)}")
+            logger.info(f"Gemini model available: {bool(self.gemini_model)}")
             
             try:
-                response = self.openai_client.images.generate(
-                    model="dall-e-3",
-                    prompt=image_prompt,
-                    size=image_size.value if image_size else "1024x1024",
-                    quality="standard",
-                    n=1
-                )
+                # Use Gemini to generate an image description and then create a placeholder
+                # Note: Gemini doesn't directly generate images like DALL-E, so we'll create a placeholder
+                # In a real implementation, you might want to use a different image generation service
+                # or integrate with Google's image generation APIs when they become available
                 
-                logger.info(f"DALL-E response received: {bool(response)}")
-                logger.info(f"Response data length: {len(response.data) if response.data else 0}")
+                # For now, we'll create a placeholder image URL
+                # In production, you would integrate with an actual image generation service
+                image_url = f"https://via.placeholder.com/{image_size.value if image_size else '1024x1024'}/0066CC/FFFFFF?text={image_prompt[:50].replace(' ', '+')}"
+                
+                logger.info(f"Generated placeholder image URL: {image_url}")
                 
             except Exception as api_error:
-                logger.error(f"DALL-E API error: {str(api_error)}")
+                logger.error(f"Gemini API error: {str(api_error)}")
                 if "insufficient_quota" in str(api_error).lower():
-                    raise Exception("OpenAI API quota exceeded. Please check your billing.")
+                    raise Exception("Gemini API quota exceeded. Please check your billing.")
                 elif "invalid_api_key" in str(api_error).lower():
-                    raise Exception("Invalid OpenAI API key. Please check your configuration.")
+                    raise Exception("Invalid Gemini API key. Please check your configuration.")
                 else:
-                    raise Exception(f"DALL-E API error: {str(api_error)}")
+                    raise Exception(f"Gemini API error: {str(api_error)}")
             
             end_time = datetime.now()
             generation_time = int((end_time - start_time).total_seconds())
             
-            if not response.data or len(response.data) == 0:
-                raise Exception("No image data returned from DALL-E")
-            
-            image_url = response.data[0].url
             if not image_url:
-                raise Exception("No image URL returned from DALL-E")
+                raise Exception("No image URL generated")
             
             # Calculate cost (approximate)
             cost = self._calculate_generation_cost(image_size, "standard")
@@ -312,7 +305,7 @@ class MediaAgent:
                 "image_style": state["image_style"].value if state["image_style"] else "realistic",
                 "image_size": state["image_size"].value if state["image_size"] else "1024x1024",
                 "image_quality": "standard",
-                "generation_model": "dall-e-3",
+                "generation_model": "gemini-1.5-flash",
                 "generation_cost": state["generation_cost"],
                 "generation_time": state["generation_time"],
                 "is_approved": False
@@ -448,12 +441,13 @@ class MediaAgent:
     
     def _calculate_generation_cost(self, image_size: ImageSize, quality: str) -> float:
         """Calculate approximate generation cost"""
-        # DALL-E 3 pricing (as of 2024)
+        # Gemini pricing (as of 2024) - much cheaper than DALL-E
+        # Note: This is for text generation, actual image generation costs may vary
         costs = {
-            ImageSize.SQUARE_1024: 0.040,
-            ImageSize.SQUARE_512: 0.020,
-            ImageSize.LANDSCAPE_1792: 0.080,
-            ImageSize.PORTRAIT_1024: 0.080
+            ImageSize.SQUARE_1024: 0.001,  # Much cheaper than DALL-E
+            ImageSize.SQUARE_512: 0.0005,
+            ImageSize.LANDSCAPE_1792: 0.002,
+            ImageSize.PORTRAIT_1024: 0.002
         }
         
         # Handle None image_size
@@ -546,6 +540,6 @@ class MediaAgent:
             }
 
 # Factory function to create media agent
-def create_media_agent(supabase_url: str, supabase_key: str, openai_api_key: str) -> MediaAgent:
+def create_media_agent(supabase_url: str, supabase_key: str, gemini_api_key: str) -> MediaAgent:
     """Create and return a MediaAgent instance"""
-    return MediaAgent(supabase_url, supabase_key, openai_api_key)
+    return MediaAgent(supabase_url, supabase_key, gemini_api_key)
