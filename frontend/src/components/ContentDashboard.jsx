@@ -150,18 +150,22 @@ const ContentDashboard = () => {
       
       // If current date is not in available dates or has no content, find next available date
       if (currentIndex === -1 || !hasContent) {
-        // Find the next date with content
-        let nextIndex = currentIndex + 1
-        if (currentIndex === -1) {
-          // If current date is not in available dates, find the closest future date
-          const today = new Date().toISOString().split('T')[0]
-          nextIndex = availableDates.findIndex(date => date >= today)
-          if (nextIndex === -1) {
-            // If no future dates, use the last available date
-            nextIndex = availableDates.length - 1
-          }
+        const today = new Date().toISOString().split('T')[0]
+        
+        // First, try to find the next future date from today onwards
+        let nextIndex = availableDates.findIndex(date => date > today)
+        
+        // If no future dates found, try to find today's date
+        if (nextIndex === -1) {
+          nextIndex = availableDates.findIndex(date => date === today)
         }
         
+        // If still no date found, find the next available date after current date
+        if (nextIndex === -1 && currentIndex !== -1) {
+          nextIndex = currentIndex + 1
+        }
+        
+        // Only navigate if we found a valid next date
         if (nextIndex >= 0 && nextIndex < availableDates.length) {
           const nextDate = availableDates[nextIndex]
           console.log('Auto-navigating to next available date:', nextDate)
