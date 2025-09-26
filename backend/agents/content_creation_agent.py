@@ -506,7 +506,8 @@ class ContentCreationAgent:
                         post_index=schedule_item["post_index"],
                         scheduled_date=schedule_item["scheduled_date"],
                         scheduled_time=schedule_item["scheduled_time"]
-                    )
+                )
+                    
                     if post:
                         content_posts.append(post)
                         logger.info(f"Successfully generated post {i+1}")

@@ -36,10 +36,10 @@ if supabase_service_key:
 else:
     supabase_admin = supabase  # Fallback to anon client
 
-# Initialize OpenAI
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if not openai_api_key:
-    logger.warning("OpenAI API key not found in environment variables")
+# Initialize Gemini
+gemini_api_key = os.getenv("GEMINI_API_KEY")
+if not gemini_api_key:
+    logger.warning("Gemini API key not found in environment variables")
 
 class ImageGenerationRequest(BaseModel):
     post_id: str = Field(..., description="ID of the post to generate image for")
@@ -89,10 +89,11 @@ async def generate_image_for_post(
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Create media agent
-        if not openai_api_key:
-            raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            raise HTTPException(status_code=500, detail="Gemini API key not configured")
         
-        media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, openai_api_key)
+        media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, gemini_api_key)
         
         # Generate image
         result = await media_agent.generate_media_for_post(request.post_id)
@@ -123,10 +124,11 @@ async def generate_images_for_posts(
             raise HTTPException(status_code=403, detail="Some posts don't belong to you")
         
         # Create media agent
-        if not openai_api_key:
-            raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            raise HTTPException(status_code=500, detail="Gemini API key not configured")
         
-        media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, openai_api_key)
+        media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, gemini_api_key)
         
         # Generate images for each post
         results = []

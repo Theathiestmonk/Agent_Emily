@@ -109,6 +109,7 @@ const ContentDashboard = () => {
   const [generatedImages, setGeneratedImages] = useState({}) // Store generated images by content ID
   const [uploadingImage, setUploadingImage] = useState(new Set()) // Track which content is uploading image
   const [showUploadModal, setShowUploadModal] = useState(null) // Track which content is showing upload modal
+  const [lightboxImage, setLightboxImage] = useState(null) // Track which image to show in lightbox
   const [selectedFile, setSelectedFile] = useState(null) // Selected file for upload
   const [hoveredButton, setHoveredButton] = useState(null) // Track which button is being hovered
   const [imageLoading, setImageLoading] = useState(new Set()) // Track which images are loading
@@ -1329,6 +1330,41 @@ const ContentDashboard = () => {
     setImageLoading(prev => new Set(prev).add(contentId))
   }
 
+  // Handle image click to open lightbox
+  const handleImageClick = (imageUrl, contentTitle) => {
+    setLightboxImage({
+      url: imageUrl,
+      title: contentTitle
+    })
+  }
+
+  // Close lightbox
+  const closeLightbox = () => {
+    setLightboxImage(null)
+  }
+
+  // Handle keyboard events for lightbox
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && lightboxImage) {
+        closeLightbox()
+      }
+    }
+
+    if (lightboxImage) {
+      document.addEventListener('keydown', handleKeyDown)
+      // Prevent body scroll when lightbox is open
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = 'unset'
+    }
+  }, [lightboxImage])
+
   return (
     <div className="min-h-screen bg-white">
       {/* Content Generation Modal */}
@@ -1549,11 +1585,12 @@ const ContentDashboard = () => {
                               <img 
                                 src={getMediumThumbnailUrl(generatedImages[content.id].image_url)} 
                                 alt="Generated content thumbnail" 
-                                className="w-full h-48 object-cover rounded-lg"
+                                className="w-full h-48 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                                 loading="lazy"
                                 onLoad={() => handleImageLoad(content.id)}
                                 onError={() => handleImageError(content.id)}
                                 onLoadStart={() => startImageLoading(content.id)}
+                                onClick={() => handleImageClick(getFullSizeImageUrl(generatedImages[content.id].image_url), content.title)}
                                 style={{
                                   opacity: imageLoading.has(content.id) ? 0 : 1,
                                   filter: imageLoading.has(content.id) ? 'blur(8px)' : 'blur(0px)',
@@ -1704,8 +1741,9 @@ const ContentDashboard = () => {
                                       <img 
                                         src={thumbnailUrl} 
                                         alt="Content image" 
-                                        className="w-full h-full object-cover rounded"
+                                        className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
                                         loading="eager"
+                                        onClick={() => handleImageClick(getFullSizeImageUrl(generatedImages[content.id].image_url), content.title)}
                                         onLoad={() => {
                                           console.log('✅ Image loaded for content:', content.id)
                                           handleImageLoad(content.id)
@@ -2190,6 +2228,43 @@ const ContentDashboard = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Lightbox Modal */}
+      {lightboxImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
+          onClick={closeLightbox}
+        >
+          <div className="relative max-w-7xl max-h-full w-full h-full flex items-center justify-center">
+            {/* Close button */}
+            <button
+              onClick={closeLightbox}
+              className="absolute top-4 right-4 z-10 bg-black bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-70 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+            {/* Image */}
+            <div className="relative max-w-full max-h-full">
+              <img
+                src={lightboxImage.url}
+                alt={lightboxImage.title}
+                className="max-w-full max-h-full object-contain rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              />
+              
+              {/* Image title */}
+              {lightboxImage.title && (
+                <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white p-4 rounded-b-lg">
+                  <h3 className="text-lg font-medium">{lightboxImage.title}</h3>
+                </div>
+              )}
             </div>
           </div>
         </div>
