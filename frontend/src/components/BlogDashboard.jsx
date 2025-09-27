@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNotifications } from '../contexts/NotificationContext'
 import { 
   FileText, 
   Plus, 
@@ -25,6 +26,7 @@ import MainContentLoader from './MainContentLoader'
 const BlogDashboard = () => {
   console.log('BlogDashboard component rendering...')
   
+  const { showSuccess, showError, showLoading } = useNotifications()
   const [blogs, setBlogs] = useState([])
   const [campaigns, setCampaigns] = useState([])
   const [stats, setStats] = useState({})
@@ -45,6 +47,12 @@ const BlogDashboard = () => {
     tags: ''
   })
   const [saving, setSaving] = useState(false)
+  const [showGenerationModal, setShowGenerationModal] = useState(false)
+  const [generationProgress, setGenerationProgress] = useState({
+    step: '',
+    percentage: 0,
+    message: ''
+  })
   const [selectedBlog, setSelectedBlog] = useState(null)
   const [showBlogModal, setShowBlogModal] = useState(false)
 
@@ -64,6 +72,16 @@ const BlogDashboard = () => {
     console.log('BlogDashboard useEffect triggered')
     fetchData()
   }, [])
+
+  // Update stats when blogs or campaigns change
+  useEffect(() => {
+    // Only log when there's a significant change
+    if (blogs.length > 0 || campaigns.length > 0) {
+      console.log('📊 BlogDashboard state updated:', { blogs: blogs.length, campaigns: campaigns.length, loading })
+    }
+    const newStats = calculateStats()
+    setStats(newStats)
+  }, [blogs, campaigns])
 
   // Refetch data when component becomes visible (e.g., coming back from settings)
   useEffect(() => {
@@ -93,7 +111,15 @@ const BlogDashboard = () => {
       console.log('Blog data fetched successfully')
     } catch (error) {
       console.error('Error fetching data:', error)
-      alert(`Error loading blog data: ${error.message}`)
+      
+      // Handle authentication errors specifically
+      if (error.message.includes('Authentication failed') || error.message.includes('Please log in')) {
+        console.warn('Authentication error detected, user will be redirected to login')
+        // Don't show error notification as user will be redirected
+        return
+      }
+      
+      showError('Error Loading Data', `Failed to load blog data: ${error.message}`)
     } finally {
       setLoading(false)
     }
@@ -109,7 +135,14 @@ const BlogDashboard = () => {
     } catch (error) {
       console.error('Error fetching blogs:', error)
       console.error('Blog fetch error details:', error.message, error.stack)
-      alert(`Error fetching blogs: ${error.message}`)
+      
+      // Only show error if we don't have any blogs already
+      if (blogs.length === 0) {
+        showError('Error Fetching Blogs', `Failed to fetch blogs: ${error.message}`)
+      } else {
+        // If we have blogs, just log the error but don't show notification
+        console.warn('Failed to refresh blogs, but keeping existing data')
+      }
     }
   }
 
@@ -123,7 +156,8 @@ const BlogDashboard = () => {
     } catch (error) {
       console.error('Error fetching campaigns:', error)
       console.error('Campaigns fetch error details:', error.message, error.stack)
-      // Don't show alert for campaigns as it's not critical
+      // Don't show error for campaigns as it's not critical
+      console.warn('Failed to fetch campaigns, continuing without them')
     }
   }
 
@@ -145,6 +179,35 @@ const BlogDashboard = () => {
         scheduled_blogs: 0,
         total_campaigns: 0
       })
+      console.warn('Failed to fetch stats, using default values')
+    }
+  }
+
+  // Calculate stats from actual blog data
+  const calculateStats = () => {
+    const totalBlogs = blogs.length
+    const publishedBlogs = blogs.filter(blog => blog.status === 'published').length
+    const draftBlogs = blogs.filter(blog => blog.status === 'draft').length
+    const scheduledBlogs = blogs.filter(blog => blog.status === 'scheduled').length
+    const totalCampaigns = campaigns.length
+
+    // Only log stats calculation when there are blogs
+    if (totalBlogs > 0) {
+      console.log('📊 Stats calculated:', {
+        totalBlogs,
+        publishedBlogs,
+        draftBlogs,
+        scheduledBlogs,
+        totalCampaigns
+      })
+    }
+
+    return {
+      total_blogs: totalBlogs,
+      published_blogs: publishedBlogs,
+      draft_blogs: draftBlogs,
+      scheduled_blogs: scheduledBlogs,
+      total_campaigns: totalCampaigns
     }
   }
 
@@ -169,17 +232,93 @@ const BlogDashboard = () => {
   const generateBlogs = async () => {
     try {
       setGenerating(true)
+      setShowGenerationModal(true)
+      setGenerationProgress({
+        step: 'Starting',
+        percentage: 10,
+        message: 'Initializing blog generation...'
+      })
+      
+      // Clear console for fresh start
+      console.clear()
+      console.log('🚀 Starting blog generation...')
+      
+      // Simulate progress steps
+      setGenerationProgress({
+        step: 'Generating',
+        percentage: 30,
+        message: 'Creating amazing content for you...'
+      })
+      
       const result = await blogService.generateBlogs()
       
+      setGenerationProgress({
+        step: 'Finalizing',
+        percentage: 80,
+        message: 'Processing your new blogs...'
+      })
+      
       if (result.success) {
-        await fetchData() // Refresh all data
-        alert(`Successfully generated ${result.total_blogs} blog posts!`)
+        console.log(`✅ SUCCESS! Blogs generated successfully!`)
+        console.log('📊 New blogs:', result.blogs?.map(b => b.title) || [])
+        
+        // Refresh all data to show new blogs
+        await fetchData()
+        
+        // Get the actual count from the refreshed data
+        const actualBlogCount = result.total_blogs || 0
+        
+        setGenerationProgress({
+          step: 'Complete',
+          percentage: 100,
+          message: 'Blogs generated successfully!'
+        })
+        
+        // Close modal after a short delay
+        setTimeout(() => {
+          setShowGenerationModal(false)
+          setGenerationProgress({
+            step: '',
+            percentage: 0,
+            message: ''
+          })
+        }, 2000)
+        
       } else {
-        alert(`Error: ${result.error}`)
+        console.error(`❌ Blog generation failed: ${result.error}`)
+        setGenerationProgress({
+          step: 'Error',
+          percentage: 0,
+          message: result.error || 'Something went wrong while generating blogs.'
+        })
+        
+        // Close modal after showing error
+        setTimeout(() => {
+          setShowGenerationModal(false)
+          setGenerationProgress({
+            step: '',
+            percentage: 0,
+            message: ''
+          })
+        }, 3000)
       }
     } catch (error) {
-      console.error('Error generating blogs:', error)
-      alert(`Error generating blogs: ${error.message}`)
+      console.error('❌ Error generating blogs:', error)
+      setGenerationProgress({
+        step: 'Error',
+        percentage: 0,
+        message: error.message || 'An unexpected error occurred.'
+      })
+      
+      // Close modal after showing error
+      setTimeout(() => {
+        setShowGenerationModal(false)
+        setGenerationProgress({
+          step: '',
+          percentage: 0,
+          message: ''
+        })
+      }, 3000)
     } finally {
       setGenerating(false)
     }
@@ -214,7 +353,7 @@ const BlogDashboard = () => {
       setEditForm({ title: '', content: '', excerpt: '', categories: '', tags: '' })
     } catch (error) {
       console.error('Error updating blog:', error)
-      alert(`Error updating blog: ${error.message}`)
+      showError('Error Updating Blog', `Failed to update blog: ${error.message}`)
     } finally {
       setSaving(false)
     }
@@ -239,10 +378,10 @@ const BlogDashboard = () => {
     try {
       await blogService.publishBlog(blogId)
       await fetchBlogs()
-      alert('Blog published successfully!')
+      showSuccess('Blog Published! 🎉', 'Your blog has been published successfully!')
     } catch (error) {
       console.error('Error publishing blog:', error)
-      alert(`Error publishing blog: ${error.message}`)
+      showError('Error Publishing Blog', `Failed to publish blog: ${error.message}`)
     }
   }
 
@@ -254,10 +393,10 @@ const BlogDashboard = () => {
     try {
       await blogService.deleteBlog(blogId)
       await fetchBlogs()
-      alert('Blog deleted successfully!')
+      showSuccess('Blog Deleted! 🗑️', 'Your blog has been deleted successfully!')
     } catch (error) {
       console.error('Error deleting blog:', error)
-      alert(`Error deleting blog: ${error.message}`)
+      showError('Error Deleting Blog', `Failed to delete blog: ${error.message}`)
     }
   }
 
@@ -348,7 +487,7 @@ const BlogDashboard = () => {
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Total Blogs</p>
-                      <p className="text-xl font-semibold text-gray-900">{stats.total_blogs || 0}</p>
+                      <p className="text-xl font-semibold text-gray-900">{calculateStats().total_blogs}</p>
                     </div>
                   </div>
                   
@@ -358,7 +497,7 @@ const BlogDashboard = () => {
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Published</p>
-                      <p className="text-xl font-semibold text-gray-900">{stats.published_blogs || 0}</p>
+                      <p className="text-xl font-semibold text-gray-900">{calculateStats().published_blogs}</p>
                     </div>
                   </div>
                   
@@ -368,13 +507,25 @@ const BlogDashboard = () => {
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Campaigns</p>
-                      <p className="text-xl font-semibold text-gray-900">{stats.total_campaigns || 0}</p>
+                      <p className="text-xl font-semibold text-gray-900">{calculateStats().total_campaigns}</p>
                     </div>
                   </div>
                 </div>
               </div>
               
               <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => {
+                    console.clear()
+                    console.log('🧹 Console cleared for fresh debugging')
+                  }}
+                  className="flex items-center space-x-2 bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600 transition-all duration-300"
+                  title="Clear console for fresh debugging"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Clear Console</span>
+                </button>
+                
                 <button
                   onClick={generateBlogs}
                   disabled={generating}
@@ -499,7 +650,10 @@ const BlogDashboard = () => {
               </button>
             </div>
           ) : (
-            <div className={viewMode === 'grid' ? 'p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'divide-y'}>
+            <div 
+              data-testid="blogs-section"
+              className={viewMode === 'grid' ? 'p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'divide-y'}
+            >
               {filteredBlogs.map(blog => {
                 const StatusIcon = statusIcons[blog.status] || AlertCircle
                 const theme = {
@@ -530,7 +684,7 @@ const BlogDashboard = () => {
                               </span>
                               <span className="flex items-center text-xs text-gray-500">
                                 <Globe className="w-3 h-3 mr-1" />
-                                {blog.wordpress_connections?.site_name || 'Unknown Site'}
+                                {blog.site_name || 'Unknown Site'}
                               </span>
                             </div>
                           </div>
@@ -741,7 +895,7 @@ const BlogDashboard = () => {
                     </span>
                     <span className="flex items-center text-xs text-gray-500">
                       <Globe className="w-3 h-3 mr-1" />
-                      {selectedBlog.wordpress_connections?.site_name || 'Unknown Site'}
+                      {selectedBlog.site_name || 'Unknown Site'}
                     </span>
                   </div>
                 </div>
@@ -845,6 +999,88 @@ const BlogDashboard = () => {
                 <Edit className="w-4 h-4" />
                 <span>Edit Blog</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Blog Generation Modal */}
+      {showGenerationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+            <div className="text-center">
+              <div className="mb-6">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  {generationProgress.step === 'Complete' ? (
+                    <CheckCircle className="w-8 h-8 text-green-500" />
+                  ) : generationProgress.step === 'Error' ? (
+                    <XCircle className="w-8 h-8 text-red-500" />
+                  ) : (
+                    <RefreshCw className={`w-8 h-8 text-blue-500 ${generating ? 'animate-spin' : ''}`} />
+                  )}
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  {generationProgress.step === 'Complete' ? 'Blogs Generated!' : 
+                   generationProgress.step === 'Error' ? 'Generation Failed' : 
+                   'Generating Blogs'}
+                </h3>
+                <p className="text-gray-600 mb-6">{generationProgress.message}</p>
+              </div>
+
+              {/* Progress Bar */}
+              {generationProgress.step !== 'Error' && (
+                <div className="mb-6">
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out"
+                      style={{ width: `${generationProgress.percentage}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2">{generationProgress.percentage}% Complete</p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              {generationProgress.step === 'Complete' && (
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => {
+                      setShowGenerationModal(false)
+                      setGenerationProgress({ step: '', percentage: 0, message: '' })
+                    }}
+                    className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    View Blogs
+                  </button>
+                </div>
+              )}
+
+              {generationProgress.step === 'Error' && (
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => {
+                      setShowGenerationModal(false)
+                      setGenerationProgress({ step: '', percentage: 0, message: '' })
+                    }}
+                    className="flex-1 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={() => generateBlogs()}
+                    className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
+
+              {/* Loading state - no close button */}
+              {generationProgress.step !== 'Complete' && generationProgress.step !== 'Error' && (
+                <div className="text-sm text-gray-500">
+                  Please wait while we generate your content...
+                </div>
+              )}
             </div>
           </div>
         </div>

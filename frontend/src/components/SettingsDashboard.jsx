@@ -211,6 +211,28 @@ const SettingsDashboard = () => {
     }
   }, [])
 
+  // Auto-close success messages after 5 seconds
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess('')
+      }, 5000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [success])
+
+  // Auto-close error messages after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError('')
+      }, 5000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [error])
+
   const fetchConnections = async () => {
     try {
       setLoading(true)
@@ -236,7 +258,7 @@ const SettingsDashboard = () => {
       // Fetch WordPress connections
       let wordpressConnections = []
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/wordpress`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/platform/?platform=wordpress`, {  
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`
           }
@@ -247,8 +269,10 @@ const SettingsDashboard = () => {
             ...conn,
             platform: 'wordpress',
             connection_status: 'active',
-            page_name: conn.site_name,
-            page_username: conn.username
+            page_name: conn.wordpress_site_name || conn.site_name,
+            site_name: conn.wordpress_site_name || conn.site_name,
+            wordpress_site_name: conn.wordpress_site_name || conn.site_name,
+            page_username: conn.wordpress_username || conn.username
           }))
         }
       } catch (error) {
@@ -582,7 +606,7 @@ const SettingsDashboard = () => {
         hasAuthToken: !!authToken
       })
       
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/wordpress`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/platform/wordpress/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -672,7 +696,7 @@ const SettingsDashboard = () => {
       setSuccess('')
 
       const authToken = await getAuthToken()
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/wordpress/${connectionId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/platform/wordpress/delete/${connectionId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -710,7 +734,11 @@ const SettingsDashboard = () => {
   const handleDisconnect = async (connectionId, platform) => {
     // Find the connection to get account name
     const connection = connections.find(conn => conn.id === connectionId)
-    const accountName = connection?.account_name || connection?.page_name || 'Unknown Account'
+    const accountName = connection?.account_name || 
+                       connection?.page_name || 
+                       connection?.site_name || 
+                       connection?.wordpress_site_name ||
+                       'Unknown Account'
     
     // Show confirmation modal
     setDisconnectModal({

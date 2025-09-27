@@ -18,10 +18,11 @@ from routers.content import router as content_router
 from routers.social_media import router as social_media_router
 from routers.social_media_connections import router as social_media_connections_router
 from routers.chatbot import router as chatbot_router
-from routers.media import router as media_router
+# from routers.media import router as media_router  # Temporarily disabled due to import error
 from routers.google_connections import router as google_router
 from routers.ads import router as ads_router
 from routers.blogs import router as blogs_router
+from routers.platform_connections import router as platform_connections_router
 
 # Load environment variables
 load_dotenv()
@@ -57,11 +58,12 @@ app = FastAPI(
 # Include routers (Google router first to handle /auth/google/callback)
 app.include_router(google_router)
 app.include_router(connections_router)
+app.include_router(platform_connections_router)
 app.include_router(content_router)
 app.include_router(social_media_router)
 app.include_router(social_media_connections_router)
 app.include_router(chatbot_router)
-app.include_router(media_router)
+# app.include_router(media_router)  # Temporarily disabled due to import error
 app.include_router(ads_router)
 app.include_router(blogs_router)
 

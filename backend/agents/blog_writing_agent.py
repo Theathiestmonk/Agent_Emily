@@ -130,7 +130,7 @@ class BlogWritingAgent:
             logger.info(f"Fetching WordPress sites for user: {state.user_id}")
             
             supabase_admin = self.get_supabase_admin()
-            response = supabase_admin.table("wordpress_connections").select("*").eq("user_id", state.user_id).eq("is_active", True).execute()
+            response = supabase_admin.table("platform_connections").select("*").eq("user_id", state.user_id).eq("platform", "wordpress").eq("is_active", True).execute()
             
             if response.data:
                 state.wordpress_sites = [site["id"] for site in response.data]
@@ -232,14 +232,14 @@ class BlogWritingAgent:
                     
                     # Get site information
                     supabase_admin = self.get_supabase_admin()
-                    site_response = supabase_admin.table("wordpress_connections").select("*").eq("id", site_id).execute()
+                    site_response = supabase_admin.table("platform_connections").select("*").eq("id", site_id).eq("platform", "wordpress").execute()
                     
                     if not site_response.data:
                         logger.warning(f"Site not found: {site_id}")
                         continue
                     
                     site_info = site_response.data[0]
-                    site_name = site_info.get("site_name", "Unknown Site")
+                    site_name = site_info.get("wordpress_site_name", site_info.get("page_name", "Unknown Site"))
                     
                     # Generate blog content
                     blog = await self._generate_blog_content(state, site_id, site_name)
@@ -400,6 +400,13 @@ class BlogWritingAgent:
             
             for blog in state.blogs:
                 try:
+                    # Get site name from platform_connections
+                    site_name = "Unknown Site"
+                    if blog.wordpress_site_id:
+                        site_response = supabase_admin.table("platform_connections").select("wordpress_site_name").eq("id", blog.wordpress_site_id).eq("platform", "wordpress").execute()
+                        if site_response.data:
+                            site_name = site_response.data[0].get("wordpress_site_name", "Unknown Site")
+                    
                     # Prepare blog data for database
                     blog_data = {
                         "id": blog.id,
@@ -414,6 +421,7 @@ class BlogWritingAgent:
                         "tags": blog.tags,
                         "author_id": blog.author_id,
                         "wordpress_site_id": blog.wordpress_site_id,
+                        "site_name": site_name,  # Add site name for frontend display
                         "scheduled_at": blog.scheduled_at,
                         "published_at": blog.published_at,
                         "wordpress_post_id": blog.wordpress_post_id,
@@ -482,7 +490,11 @@ class BlogWritingAgent:
             # Run the workflow
             result = await self.graph.ainvoke(state)
             
-            # Check for errors
+            # Debug: Log the result structure
+            logger.info(f"Blog generation result type: {type(result)}")
+            logger.info(f"Blog generation result: {result}")
+            
+            # The result is a BlogWritingState object, not a dict
             if hasattr(result, 'error') and result.error:
                 logger.error(f"Blog generation failed: {result.error}")
                 return {
@@ -492,14 +504,46 @@ class BlogWritingAgent:
                     "campaign": None
                 }
             
-            # Return results
-            return {
-                "success": True,
-                "blogs": [blog.dict() for blog in result.blogs],
-                "campaign": result.campaign.dict() if result.campaign else None,
-                "total_blogs": len(result.blogs),
-                "message": f"Successfully generated {len(result.blogs)} blog posts"
-            }
+            # Extract data from BlogWritingState object
+            blogs_list = result.blogs if hasattr(result, 'blogs') else []
+            campaign_obj = result.campaign if hasattr(result, 'campaign') else None
+            
+            # Ensure blogs_list is a list and handle conversion
+            try:
+                if blogs_list and len(blogs_list) > 0:
+                    # Convert to dict if needed
+                    if hasattr(blogs_list[0], 'dict'):
+                        blogs_dict = [blog.dict() for blog in blogs_list]
+                    else:
+                        blogs_dict = blogs_list
+                else:
+                    blogs_dict = []
+                
+                # Handle campaign conversion
+                campaign_dict = None
+                if campaign_obj:
+                    if hasattr(campaign_obj, 'dict'):
+                        campaign_dict = campaign_obj.dict()
+                    else:
+                        campaign_dict = campaign_obj
+                
+                logger.info(f"✅ Blog generation successful: {len(blogs_dict)} blogs created")
+                
+                return {
+                    "success": True,
+                    "blogs": blogs_dict,
+                    "campaign": campaign_dict,
+                    "total_blogs": len(blogs_dict),
+                    "message": f"Successfully generated {len(blogs_dict)} blog posts"
+                }
+            except Exception as e:
+                logger.error(f"Error processing blog results: {e}")
+                return {
+                    "success": False,
+                    "error": f"Error processing results: {str(e)}",
+                    "blogs": [],
+                    "campaign": None
+                }
             
         except Exception as e:
             logger.error(f"Error in generate_blogs_for_user: {e}")

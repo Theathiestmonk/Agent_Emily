@@ -30,12 +30,10 @@ export const NotificationProvider = ({ children }) => {
 
     setNotifications(prev => [newNotification, ...prev])
 
-    // Auto-remove after 10 seconds for non-persistent notifications
-    if (!notification.persistent) {
-      setTimeout(() => {
-        removeNotification(id)
-      }, 10000)
-    }
+    // Auto-remove after 5 seconds for all notifications
+    setTimeout(() => {
+      removeNotification(id)
+    }, 5000)
 
     return id
   }, [])
@@ -75,7 +73,7 @@ export const NotificationProvider = ({ children }) => {
       type: 'error',
       title,
       message,
-      persistent: true, // Errors should be persistent
+      persistent: false, // Errors will auto-close after 5 seconds
       ...options
     })
   }, [addNotification])
@@ -94,7 +92,7 @@ export const NotificationProvider = ({ children }) => {
       type: 'content_generation',
       title,
       message,
-      persistent: true, // Content generation notifications should be persistent
+      persistent: false, // Content generation notifications will auto-close after 5 seconds
       ...options
     })
   }, [addNotification])
@@ -104,7 +102,7 @@ export const NotificationProvider = ({ children }) => {
       type: 'loading',
       title,
       message,
-      persistent: true,
+      persistent: false, // Loading notifications will auto-close after 5 seconds
       ...options
     })
   }, [addNotification])
