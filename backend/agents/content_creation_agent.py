@@ -500,13 +500,13 @@ class ContentCreationAgent:
                         )
                     
                     post = await self.generate_single_post(
-                    platform=platform,
-                    platform_config=platform_config,
-                    business_context=business_context,
+                        platform=platform,
+                        platform_config=platform_config,
+                        business_context=business_context,
                         post_index=schedule_item["post_index"],
                         scheduled_date=schedule_item["scheduled_date"],
                         scheduled_time=schedule_item["scheduled_time"]
-                )
+                    )
                     
                     if post:
                         content_posts.append(post)
