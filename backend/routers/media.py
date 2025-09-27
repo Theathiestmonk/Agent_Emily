@@ -345,6 +345,61 @@ async def get_media_stats(current_user: User = Depends(get_current_user)):
         logger.error(f"Error fetching media stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching stats: {str(e)}")
 
+@router.post("/upload-logo")
+async def upload_logo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload a logo file to Supabase Logo bucket"""
+    try:
+        logger.info(f"Logo upload request received - filename: {file.filename}, user: {current_user.id}")
+        
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+        if file.content_type not in allowed_types:
+            raise HTTPException(status_code=400, detail="Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.")
+        
+        # Validate file size (max 5MB)
+        file_content = await file.read()
+        if len(file_content) > 5 * 1024 * 1024:  # 5MB
+            raise HTTPException(status_code=400, detail="File size too large. Please upload an image smaller than 5MB.")
+        
+        logger.info(f"File content read - size: {len(file_content)} bytes")
+        
+        # Generate filename
+        import uuid
+        file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
+        filename = f"{current_user.id}-{uuid.uuid4().hex[:8]}.{file_ext}"
+        file_path = f"logos/{filename}"
+        logger.info(f"Generated file path: {file_path}")
+        
+        # Upload to Logo bucket using admin client
+        storage_response = supabase_admin.storage.from_("Logo").upload(
+            file_path,
+            file_content,
+            file_options={"content-type": file.content_type}
+        )
+        
+        if hasattr(storage_response, 'error') and storage_response.error:
+            raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_response.error}")
+        
+        # Get public URL
+        public_url = supabase_admin.storage.from_("Logo").get_public_url(file_path)
+        logger.info(f"Logo uploaded successfully: {public_url}")
+        
+        return {
+            "success": True,
+            "url": public_url,
+            "filename": filename,
+            "size": len(file_content)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading logo: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading logo: {str(e)}")
+
 @router.post("/upload-image")
 async def upload_image(
     file: UploadFile = File(...),

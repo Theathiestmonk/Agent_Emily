@@ -1,6 +1,7 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { onboardingAPI } from '../services/onboarding'
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react'
+import LogoUpload from './LogoUpload'
 
 const OnboardingForm = forwardRef(({ 
   initialData = null, 
@@ -20,6 +21,7 @@ const OnboardingForm = forwardRef(({
     business_type: [],
     industry: [],
     business_description: '',
+    logo_url: '',
     target_audience: [],
     unique_value_proposition: '',
     brand_voice: '',
@@ -81,6 +83,19 @@ const OnboardingForm = forwardRef(({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [logoUrl, setLogoUrl] = useState('')
+  const [logoError, setLogoError] = useState('')
+
+  // Logo handling functions
+  const handleLogoUpload = (url) => {
+    setLogoUrl(url)
+    setLogoError('')
+    handleInputChange('logo_url', url)
+  }
+
+  const handleLogoError = (error) => {
+    setLogoError(error)
+  }
   
   // Steps array - must be defined before useEffect hooks
   const steps = [
@@ -243,6 +258,11 @@ const OnboardingForm = forwardRef(({
         
         return updatedData
       })
+      
+      // Set logo URL if it exists in initial data
+      if (initialData.logo_url) {
+        setLogoUrl(initialData.logo_url)
+      }
     }
   }, [initialData])
 
@@ -739,6 +759,20 @@ const OnboardingForm = forwardRef(({
                 placeholder="Describe what your business does..."
               />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Business Logo (Optional)</label>
+              <LogoUpload
+                value={formData.logo_url}
+                onUploadSuccess={handleLogoUpload}
+                onError={handleLogoError}
+                className="max-w-md"
+              />
+              {logoError && (
+                <div className="text-red-600 text-sm mt-2">{logoError}</div>
+              )}
+            </div>
+
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience (Select all that apply) *</label>

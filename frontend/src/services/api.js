@@ -38,5 +38,18 @@ export const authAPI = {
   checkEmail: (email) => api.get(`/auth/check-email?email=${encodeURIComponent(email)}`),
 }
 
+export const mediaAPI = {
+  uploadLogo: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    return api.post('/media/upload-logo', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+}
+
 export default api
 

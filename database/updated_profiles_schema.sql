@@ -15,6 +15,7 @@ CREATE TABLE public.profiles (
   business_type text[] NULL,
   industry text[] NULL,
   business_description text NULL,
+  logo_url text NULL,
   unique_value_proposition text NULL,
   
   -- Target Audience (Step 1 - detailed breakdown)
