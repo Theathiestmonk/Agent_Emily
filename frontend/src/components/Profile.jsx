@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 import EditProfileModal from './EditProfileModal'
-import { User, Mail, Phone, MapPin, Calendar, Edit, Save, X, Loader2, Building2, Globe, Target, BarChart3, Megaphone, Settings } from 'lucide-react'
+import LogoUpload from './LogoUpload'
+import ImageShowcaseModal from './ImageShowcaseModal'
+import { User, Mail, Phone, MapPin, Calendar, Edit, Save, X, Loader2, Building2, Globe, Target, BarChart3, Megaphone, Settings, Image as ImageIcon } from 'lucide-react'
 
 const Profile = () => {
   const [profile, setProfile] = useState(null)
@@ -12,6 +14,9 @@ const Profile = () => {
   const [editForm, setEditForm] = useState({})
   const [error, setError] = useState(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [logoUrl, setLogoUrl] = useState('')
+  const [logoError, setLogoError] = useState('')
+  const [isLogoModalOpen, setIsLogoModalOpen] = useState(false)
 
   useEffect(() => {
     fetchProfile()
@@ -40,6 +45,7 @@ const Profile = () => {
       }
 
       setProfile(data)
+      setLogoUrl(data?.logo_url || '')
       setEditForm({
         // Basic Information
         name: data?.name || '',
@@ -47,6 +53,7 @@ const Profile = () => {
         business_type: data?.business_type || [],
         industry: data?.industry || [],
         business_description: data?.business_description || '',
+        logo_url: data?.logo_url || '',
         target_audience: data?.target_audience || [],
         unique_value_proposition: data?.unique_value_proposition || '',
         
@@ -155,6 +162,15 @@ const Profile = () => {
   const handleModalSuccess = () => {
     setIsEditModalOpen(false)
     fetchProfile() // Refresh the profile data
+  }
+
+  const handleLogoUpload = (url) => {
+    setLogoUrl(url)
+    setLogoError('')
+  }
+
+  const handleLogoError = (error) => {
+    setLogoError(error)
   }
 
 
@@ -287,6 +303,7 @@ const Profile = () => {
         .from('profiles')
         .update({
           ...editForm,
+          logo_url: logoUrl, // Include the logo URL
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id)
@@ -302,6 +319,7 @@ const Profile = () => {
           .upsert({
             id: user.id,
             ...editForm,
+            logo_url: logoUrl, // Include the logo URL
             updated_at: new Date().toISOString()
           })
           .select()
@@ -621,6 +639,53 @@ const Profile = () => {
                 {renderArrayField('Business Type', 'business_type')}
                 {renderArrayField('Industry', 'industry')}
                 {renderTextField('Business Description', 'business_description', null, 'textarea', 'Describe your business...')}
+                
+                {/* Logo Display/Upload */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Business Logo
+                  </label>
+                  {editing ? (
+                    <div className="space-y-4">
+                      <LogoUpload
+                        onUploadSuccess={handleLogoUpload}
+                        onError={handleLogoError}
+                        className="max-w-md"
+                      />
+                      {logoError && (
+                        <div className="text-red-600 text-sm">{logoError}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-4">
+                      {logoUrl ? (
+                        <div className="flex items-center space-x-3">
+                          <img
+                            src={logoUrl}
+                            alt="Business Logo"
+                            className="w-16 h-16 object-contain rounded-lg border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                            onClick={() => setIsLogoModalOpen(true)}
+                          />
+                          <div>
+                            <p className="text-sm text-gray-600">Logo uploaded</p>
+                            <button
+                              onClick={() => setIsLogoModalOpen(true)}
+                              className="text-sm text-purple-600 hover:text-purple-700 hover:underline"
+                            >
+                              View full size
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-2 text-gray-400">
+                          <ImageIcon className="w-5 h-5" />
+                          <span className="text-sm">No logo uploaded</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
                 {renderArrayField('Target Audience', 'target_audience')}
                 {renderTextField('Unique Value Proposition', 'unique_value_proposition', null, 'textarea', 'What makes your business unique?')}
               </div>
@@ -761,6 +826,14 @@ const Profile = () => {
         isOpen={isEditModalOpen}
         onClose={handleModalClose}
         onSuccess={handleModalSuccess}
+      />
+
+      {/* Logo Showcase Modal */}
+      <ImageShowcaseModal
+        isOpen={isLogoModalOpen}
+        onClose={() => setIsLogoModalOpen(false)}
+        imageUrl={logoUrl}
+        imageAlt="Business Logo"
       />
     </div>
   )

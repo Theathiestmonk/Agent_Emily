@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff, CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { authAPI } from '../services/api'
+import PasswordStrengthIndicator from './PasswordStrengthIndicator'
 
 function SignUp() {
   const [formData, setFormData] = useState({
@@ -21,9 +22,51 @@ function SignUp() {
     isValid: null,
     message: ''
   })
+  const [passwordValidation, setPasswordValidation] = useState({
+    isValid: false,
+    errors: []
+  })
+  const [passwordMatch, setPasswordMatch] = useState({
+    isValid: false,
+    message: ''
+  })
   
   const { register, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
+
+  // Password validation function
+  const validatePassword = (password) => {
+    const rules = [
+      { test: (pwd) => pwd.length >= 8, message: 'At least 8 characters' },
+      { test: (pwd) => /[A-Z]/.test(pwd), message: 'One uppercase letter (A-Z)' },
+      { test: (pwd) => /[a-z]/.test(pwd), message: 'One lowercase letter (a-z)' },
+      { test: (pwd) => /\d/.test(pwd), message: 'One number (0-9)' },
+      { test: (pwd) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd), message: 'One special character (!@#$%^&*)' }
+    ]
+
+    const errors = rules.filter(rule => !rule.test(password)).map(rule => rule.message)
+    const isValid = errors.length === 0
+
+    setPasswordValidation({ isValid, errors })
+    return isValid
+  }
+
+  // Password matching validation function
+  const validatePasswordMatch = (password, confirmPassword) => {
+    if (!confirmPassword) {
+      setPasswordMatch({ isValid: false, message: '' })
+      return false
+    }
+
+    if (password === confirmPassword) {
+      setPasswordMatch({ isValid: true, message: 'Passwords match' })
+      return true
+    } else {
+      setPasswordMatch({ isValid: false, message: 'Passwords do not match' })
+      return false
+    }
+  }
+
 
   // Email validation function
   const validateEmail = async (email) => {
@@ -87,6 +130,20 @@ function SignUp() {
     })
     setError('')
     setSuccessMessage('')
+
+    // Validate password when it changes
+    if (e.target.name === 'password') {
+      validatePassword(e.target.value)
+      // Also validate password match if confirm password exists
+      if (formData.confirmPassword) {
+        validatePasswordMatch(e.target.value, formData.confirmPassword)
+      }
+    }
+    
+    // Validate password match when confirm password changes
+    if (e.target.name === 'confirmPassword') {
+      validatePasswordMatch(formData.password, e.target.value)
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -111,16 +168,16 @@ function SignUp() {
 
     // Only validate passwords if email is valid and available
     if (emailValidation.isValid === true) {
-      // Validate password confirmation
-      if (formData.password !== formData.confirmPassword) {
-        setError('Passwords do not match')
+      // Validate password strength
+      if (!passwordValidation.isValid) {
+        setError('Password does not meet all requirements. Please check the requirements below.')
         setLoading(false)
         return
       }
 
-      // Validate password length
-      if (formData.password.length < 6) {
-        setError('Password must be at least 6 characters long')
+      // Validate password match
+      if (!passwordMatch.isValid) {
+        setError('Passwords do not match. Please make sure both passwords are identical.')
         setLoading(false)
         return
       }
@@ -252,7 +309,7 @@ function SignUp() {
             </div>
 
             {/* Password Field */}
-            <div>
+            <div className="relative">
               <label htmlFor="password" className={`block text-sm font-medium mb-2 ${
                 emailValidation.isValid === false || emailValidation.isValidating
                   ? 'text-gray-400'
@@ -306,6 +363,15 @@ function SignUp() {
                   Please use a different email address to continue
                 </p>
               )}
+              
+              {/* Password Strength Indicator */}
+              {emailValidation.isValid === true && formData.password && (
+                <PasswordStrengthIndicator 
+                  password={formData.password} 
+                  confirmPassword={formData.confirmPassword}
+                />
+              )}
+
             </div>
 
             {/* Confirm Password Field */}
@@ -335,6 +401,10 @@ function SignUp() {
                   className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors ${
                     emailValidation.isValid === false || emailValidation.isValidating
                       ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                      : passwordMatch.isValid && formData.confirmPassword
+                      ? 'bg-green-50 border-green-300 focus:ring-green-500'
+                      : passwordMatch.isValid === false && formData.confirmPassword
+                      ? 'bg-red-50 border-red-300 focus:ring-red-500'
                       : 'bg-blue-50 border-gray-200'
                   }`}
                   placeholder={
@@ -345,6 +415,15 @@ function SignUp() {
                       : "Confirm your password"
                   }
                 />
+                <div className="absolute right-10 top-1/2 transform -translate-y-1/2">
+                  {emailValidation.isValid === true && formData.confirmPassword && (
+                    passwordMatch.isValid ? (
+                      <CheckCircle className="w-5 h-5 text-green-500" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-red-500" />
+                    )
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -358,6 +437,15 @@ function SignUp() {
                   {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              
+              {/* Password Match Status Message */}
+              {emailValidation.isValid === true && formData.confirmPassword && passwordMatch.message && (
+                <p className={`mt-2 text-sm ${
+                  passwordMatch.isValid ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {passwordMatch.message}
+                </p>
+              )}
             </div>
 
             {/* Error Message */}
@@ -377,7 +465,7 @@ function SignUp() {
             {/* Sign Up Button */}
             <button
               type="submit"
-              disabled={loading || emailValidation.isValidating || emailValidation.isValid === false}
+              disabled={loading || emailValidation.isValidating || emailValidation.isValid === false || (emailValidation.isValid === true && (!passwordValidation.isValid || !passwordMatch.isValid))}
               className="w-full bg-gradient-to-r from-pink-500 to-pink-600 text-white py-3 px-4 rounded-lg font-semibold hover:from-pink-600 hover:to-pink-700 focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Creating Account...' : 'Create Account'}

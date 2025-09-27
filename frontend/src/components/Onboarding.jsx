@@ -5,6 +5,7 @@ import { onboardingAPI } from '../services/onboarding'
 import OnboardingComplete from './OnboardingComplete'
 import OnboardingConnections from './OnboardingConnections'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
+import LogoUpload from './LogoUpload'
 
 const Onboarding = () => {
   const [currentStep, setCurrentStep] = useState(0)
@@ -15,6 +16,7 @@ const Onboarding = () => {
     business_type: [],
     industry: [],
     business_description: '',
+    logo_url: '',
     target_audience: [],
     unique_value_proposition: '',
     brand_voice: '',
@@ -74,8 +76,21 @@ const Onboarding = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [logoUrl, setLogoUrl] = useState('')
+  const [logoError, setLogoError] = useState('')
   const [showCompletion, setShowCompletion] = useState(false)
   const [showConnections, setShowConnections] = useState(false)
+
+  // Logo handling functions
+  const handleLogoUpload = (url) => {
+    setLogoUrl(url)
+    setLogoError('')
+    handleInputChange('logo_url', url)
+  }
+
+  const handleLogoError = (error) => {
+    setLogoError(error)
+  }
   
   // State for "Other" input fields
   const [otherInputs, setOtherInputs] = useState({
@@ -776,6 +791,20 @@ const Onboarding = () => {
                 placeholder="Describe what your business does..."
               />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Business Logo (Optional)</label>
+              <LogoUpload
+                value={formData.logo_url}
+                onUploadSuccess={handleLogoUpload}
+                onError={handleLogoError}
+                className="max-w-md"
+              />
+              {logoError && (
+                <div className="text-red-600 text-sm mt-2">{logoError}</div>
+              )}
+            </div>
+
 
              <div>
                <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience (Select all that apply) *</label>
