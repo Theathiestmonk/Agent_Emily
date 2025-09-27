@@ -515,18 +515,6 @@ const BlogDashboard = () => {
               
               <div className="flex items-center space-x-4">
                 <button
-                  onClick={() => {
-                    console.clear()
-                    console.log('🧹 Console cleared for fresh debugging')
-                  }}
-                  className="flex items-center space-x-2 bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600 transition-all duration-300"
-                  title="Clear console for fresh debugging"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Clear Console</span>
-                </button>
-                
-                <button
                   onClick={generateBlogs}
                   disabled={generating}
                   className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50"

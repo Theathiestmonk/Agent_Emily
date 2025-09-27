@@ -4711,18 +4711,18 @@ async def create_wordpress_connection(
             for rest_url in rest_urls:
                 print(f"🔍 Trying endpoint: {rest_url}")
                 try:
-            response = session.get(
-                rest_url,
-                auth=(connection_data.username, connection_data.password),
+                    response = session.get(
+                        rest_url,
+                        auth=(connection_data.username, connection_data.password),
                         headers={
                             'Accept': 'application/json',
                             'Content-Type': 'application/json',
                             'User-Agent': 'Agent-Emily/1.0'
                         },
-                timeout=30,
-                allow_redirects=False
-            )
-            
+                        timeout=30,
+                        allow_redirects=False
+                    )
+                    
                     if response.status_code == 200:
                         successful_endpoint = rest_url
                         print(f"✅ Success with endpoint: {rest_url}")
