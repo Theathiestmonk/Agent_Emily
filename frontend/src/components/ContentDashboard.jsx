@@ -11,6 +11,7 @@ import ContentGenerationModal from './ContentGenerationModal'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import SideNavbar from './SideNavbar'
+import CustomContentChatbot from './CustomContentChatbot'
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -113,6 +114,7 @@ const ContentDashboard = () => {
   const [imageLoading, setImageLoading] = useState(new Set()) // Track which images are loading
   const [availableDates, setAvailableDates] = useState([]) // Dates that have content
   const [currentDateIndex, setCurrentDateIndex] = useState(0) // Current position in available dates
+  const [showCustomContentChatbot, setShowCustomContentChatbot] = useState(false) // Custom content chatbot modal
 
 
   useEffect(() => {
@@ -1435,6 +1437,13 @@ const ContentDashboard = () => {
                   <span>View Calendar</span>
                 </button>
                 <button
+                  onClick={() => setShowCustomContentChatbot(true)}
+                  className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-300"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create Custom Content</span>
+                </button>
+                <button
                   onClick={handleGenerateContent}
                   disabled={generating || fetchingFreshData}
                   className="flex items-center space-x-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
@@ -2277,6 +2286,18 @@ const ContentDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Custom Content Chatbot Modal */}
+      <CustomContentChatbot
+        isOpen={showCustomContentChatbot}
+        onClose={() => setShowCustomContentChatbot(false)}
+        onContentCreated={(content) => {
+          console.log('Custom content created:', content);
+          // Refresh the content list
+          fetchContentByDate(selectedDate);
+          setShowCustomContentChatbot(false);
+        }}
+      />
 
     </div>
   )

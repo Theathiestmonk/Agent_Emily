@@ -1284,7 +1284,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # 2. Get post insights (pages_read_engagement, pages_show_list)
         # 3. Get page insights (pages_read_engagement, pages_show_list)
         # 4. Read ads data (ads_read, ads_management, business_management)
-        
+
         # Get Facebook Login for Business config_id from environment
         facebook_config_id = os.getenv('FACEBOOK_CONFIG_ID')
         
@@ -4039,8 +4039,8 @@ async def post_to_youtube(
                     "channel_id": channel_id,
                     "channel_title": channel_title,
                     "note": "YouTube Community Posts are not available through YouTube Data API v3. For actual posting, consider implementing video uploads or using YouTube Studio API."
-                }
-            }
+                        }
+                    }
             
         except HttpError as e:
             error_details = e.error_details if hasattr(e, 'error_details') else str(e)
@@ -5280,7 +5280,7 @@ async def test_wordpress_connection(
 
                 "capabilities": user_info.get('capabilities', {}),
 
-            "wordpress_version": user_info.get('wordpress_version', 'Unknown'),
+                "wordpress_version": user_info.get('wordpress_version', 'Unknown'),
 
                 "last_test_status": "success",
 

@@ -22,6 +22,7 @@ from routers.media import router as media_router
 from routers.google_connections import router as google_router
 from routers.ads import router as ads_router
 from routers.blogs import router as blogs_router
+from routers.custom_content import router as custom_content_router
 
 # Load environment variables
 load_dotenv()
@@ -64,6 +65,7 @@ app.include_router(chatbot_router)
 app.include_router(media_router)
 app.include_router(ads_router)
 app.include_router(blogs_router)
+app.include_router(custom_content_router)
 
 # Health check endpoint
 @app.get("/health")
