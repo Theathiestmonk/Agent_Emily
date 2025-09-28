@@ -24,6 +24,9 @@ import httpx
 import os
 from dotenv import load_dotenv
 
+# Import media agent
+from .media_agent import create_media_agent
+
 # Load environment variables
 load_dotenv()
 
@@ -69,7 +72,6 @@ class ConversationStep(str, Enum):
     VALIDATE_MEDIA = "validate_media"
     CONFIRM_MEDIA = "confirm_media"
     GENERATE_CONTENT = "generate_content"
-    GENERATE_MEDIA = "generate_media"
     CONFIRM_CONTENT = "confirm_content"
     SELECT_SCHEDULE = "select_schedule"
     SAVE_CONTENT = "save_content"
@@ -253,6 +255,17 @@ class CustomContentAgent:
         self.client = openai.OpenAI(api_key=openai_api_key)
         self.supabase = supabase
         
+        # Initialize media agent
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_ANON_KEY")
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        
+        if supabase_url and supabase_key and gemini_api_key:
+            self.media_agent = create_media_agent(supabase_url, supabase_key, gemini_api_key)
+        else:
+            logger.warning("Media agent not initialized - missing environment variables")
+            self.media_agent = None
+        
     def create_graph(self) -> StateGraph:
         """Create the LangGraph workflow with proper conditional edges and state management"""
         graph = StateGraph(CustomContentState)
@@ -266,7 +279,6 @@ class CustomContentAgent:
         graph.add_node("handle_media", self.handle_media)
         graph.add_node("validate_media", self.validate_media)
         graph.add_node("confirm_media", self.confirm_media)
-        graph.add_node("generate_media", self.generate_media)
         graph.add_node("generate_content", self.generate_content)
         graph.add_node("confirm_content", self.confirm_content)
         graph.add_node("select_schedule", self.select_schedule)
@@ -290,7 +302,7 @@ class CustomContentAgent:
             self._should_handle_media,
             {
                 "handle": "handle_media",
-                "generate": "generate_media",
+                "generate": "generate_content",
                 "skip": "generate_content"
             }
         )
@@ -310,8 +322,6 @@ class CustomContentAgent:
             }
         )
         
-        # Media generation flow
-        graph.add_edge("generate_media", "generate_content")
         
         # Content generation flow - skip parse and optimize, go directly to confirm
         graph.add_edge("generate_content", "confirm_content")
@@ -627,8 +637,12 @@ class CustomContentAgent:
             platform = state.get("selected_platform", "")
             content_type = state.get("selected_content_type", "")
             uploaded_media_url = state.get("uploaded_media_url", "")
+            generated_media_url = state.get("generated_media_url", "")
             has_media = state.get("has_media", False)
             media_type = state.get("media_type", "")
+            
+            # Determine which media URL to use (uploaded or generated)
+            media_url = uploaded_media_url or generated_media_url
             
             # Load business context if not already loaded
             business_context = state.get("business_context")
@@ -640,11 +654,11 @@ class CustomContentAgent:
                 else:
                     business_context = {}
             
-            # Analyze image if uploaded
+            # Analyze image if available (uploaded or generated)
             image_analysis = ""
-            if has_media and uploaded_media_url and media_type == "image":
+            if has_media and media_url and media_type == "image":
                 try:
-                    image_analysis = await self._analyze_uploaded_image(uploaded_media_url, user_description, business_context)
+                    image_analysis = await self._analyze_uploaded_image(media_url, user_description, business_context)
                     logger.info("Image analysis completed successfully")
                 except Exception as e:
                     logger.error(f"Image analysis failed: {e}")
@@ -662,12 +676,12 @@ class CustomContentAgent:
             ]
             
             # Add image to messages if available
-            if has_media and uploaded_media_url and media_type == "image":
+            if has_media and media_url and media_type == "image":
                 messages.append({
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Here's the image to incorporate into the content:"},
-                        {"type": "image_url", "image_url": {"url": uploaded_media_url}}
+                        {"type": "image_url", "image_url": {"url": media_url}}
                     ]
                 })
             
@@ -735,6 +749,49 @@ class CustomContentAgent:
             
             logger.info(f"Generated content for {platform} {content_type}")
             
+            # If media generation is needed, generate it now using the created content
+            if state.get("should_generate_media", False) and self.media_agent:
+                logger.info("Generating media based on created content")
+                try:
+                    # Create temporary post for media generation
+                    temp_post_id = await self._create_temp_post_for_media(state)
+                    
+                    if temp_post_id:
+                        # Get the generated content from state
+                        generated_content = state.get("generated_content", {})
+                        # Update the temporary post with the generated content
+                        await self._update_temp_post_with_content(temp_post_id, generated_content, state)
+                        
+                        # Generate media using the content
+                        media_result = await self.media_agent.generate_media_for_post(temp_post_id)
+                        
+                        if media_result["success"] and media_result.get("image_url"):
+                            # Update state with generated media
+                            state["generated_media_url"] = media_result["image_url"]
+                            state["media_type"] = MediaType.IMAGE
+                            state["has_media"] = True
+                            
+                            # Update the content message to include the generated image
+                            state["conversation_messages"][-1]["media_url"] = media_result["image_url"]
+                            state["conversation_messages"][-1]["media_type"] = "image"
+                            
+                            logger.info(f"Media generation completed successfully: {media_result['image_url']}")
+                        else:
+                            logger.warning(f"Media generation failed: {media_result.get('error', 'Unknown error')}")
+                            # Continue without media
+                            state["should_generate_media"] = False
+                            state["has_media"] = False
+                    else:
+                        logger.error("Failed to create temporary post for media generation")
+                        state["should_generate_media"] = False
+                        state["has_media"] = False
+                        
+                except Exception as e:
+                    logger.error(f"Error generating media: {e}")
+                    # Continue without media
+                    state["should_generate_media"] = False
+                    state["has_media"] = False
+            
             # Transition directly to confirm content step
             state["current_step"] = ConversationStep.CONFIRM_CONTENT
             state["progress_percentage"] = 85
@@ -751,41 +808,77 @@ class CustomContentAgent:
 
     # parse_content function removed - content is now displayed directly in chatbot
     
-    async def generate_media(self, state: CustomContentState) -> CustomContentState:
-        """Generate media using the media agent"""
+    
+    async def _create_temp_post_for_media(self, state: CustomContentState) -> Optional[str]:
+        """Create a temporary post in the database for media generation"""
         try:
-            state["current_step"] = ConversationStep.GENERATE_MEDIA
-            state["progress_percentage"] = 85
+            user_id = state["user_id"]
             
-            # Check if media generation is needed
-            if not state.get("should_generate_media", False):
-                message = {
-                    "role": "assistant",
-                    "content": "No media generation needed. Moving to content optimization.",
-                    "timestamp": datetime.now().isoformat()
+            # Get or create campaign for this user
+            campaign_id = await self._get_or_create_custom_content_campaign(user_id)
+            
+            # Create temporary post data
+            post_data = {
+                "campaign_id": campaign_id,
+                "platform": state.get("selected_platform", "social_media"),
+                "post_type": state.get("selected_content_type", "post"),
+                "title": f"Temp post for media generation - {state.get('selected_platform', 'social_media')}",
+                "content": state.get("user_description", "Temporary content for media generation"),
+                "hashtags": [],
+                "scheduled_date": datetime.now().date().isoformat(),
+                "scheduled_time": datetime.now().time().isoformat(),
+                "status": "draft",
+                "metadata": {
+                    "user_id": user_id,
+                    "is_temp": True,
+                    "media_generation": True
                 }
-                state["conversation_messages"].append(message)
-                return state
-            
-            # This would integrate with the media agent
-            # For now, we'll create a placeholder
-            state["generated_media_url"] = "placeholder_media_url"
-            
-            message = {
-                "role": "assistant",
-                "content": "Media generation completed! Your content now includes the generated media.",
-                "timestamp": datetime.now().isoformat()
             }
-            state["conversation_messages"].append(message)
             
-            logger.info("Media generation completed")
+            # Insert temporary post
+            response = self.supabase.table("content_posts").insert(post_data).execute()
             
+            if response.data and len(response.data) > 0:
+                post_id = response.data[0]["id"]
+                logger.info(f"Created temporary post {post_id} for media generation")
+                return post_id
+            else:
+                logger.error("Failed to create temporary post for media generation")
+                return None
+                
         except Exception as e:
-            logger.error(f"Error in generate_media: {e}")
-            state["error_message"] = f"Failed to generate media: {str(e)}"
-            state["current_step"] = ConversationStep.ERROR
+            logger.error(f"Error creating temporary post for media: {e}")
+            return None
+    
+    async def _update_temp_post_with_content(self, post_id: str, generated_content: dict, state: CustomContentState) -> bool:
+        """Update temporary post with generated content for media generation"""
+        try:
+            # Prepare updated post data with generated content
+            update_data = {
+                "title": generated_content.get("title", ""),
+                "content": generated_content.get("content", ""),
+                "hashtags": generated_content.get("hashtags", []),
+                "metadata": {
+                    "user_id": state["user_id"],
+                    "is_temp": True,
+                    "media_generation": True,
+                    "generated_content": generated_content
+                }
+            }
             
-        return state
+            # Update the temporary post
+            response = self.supabase.table("content_posts").update(update_data).eq("id", post_id).execute()
+            
+            if response.data and len(response.data) > 0:
+                logger.info(f"Updated temporary post {post_id} with generated content")
+                return True
+            else:
+                logger.error("Failed to update temporary post with generated content")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error updating temporary post with content: {e}")
+            return False
     
     # optimize_content function removed - content is used as generated by AI
 
@@ -879,9 +972,16 @@ class CustomContentAgent:
             generated_content = state["generated_content"]
             uploaded_media_url = state.get("uploaded_media_url")
             
-            # Upload image to Supabase storage if present
+            # Determine final media URL (uploaded or generated)
             final_media_url = None
-            if uploaded_media_url and uploaded_media_url.startswith("data:"):
+            uploaded_media_url = state.get("uploaded_media_url", "")
+            generated_media_url = state.get("generated_media_url", "")
+            
+            # Use generated media URL if available, otherwise uploaded media URL
+            if generated_media_url:
+                final_media_url = generated_media_url
+                logger.info(f"Using generated media URL: {final_media_url}")
+            elif uploaded_media_url and uploaded_media_url.startswith("data:"):
                 try:
                     final_media_url = await self._upload_base64_image_to_supabase(
                         uploaded_media_url, user_id, platform
@@ -891,6 +991,10 @@ class CustomContentAgent:
                     logger.error(f"Failed to upload image to Supabase: {e}")
                     # Continue without image if upload fails
                     final_media_url = None
+            elif uploaded_media_url:
+                # Already uploaded image URL
+                final_media_url = uploaded_media_url
+                logger.info(f"Using existing uploaded media URL: {final_media_url}")
             
             # Get scheduled time
             scheduled_for = state.get("scheduled_for")
@@ -963,9 +1067,12 @@ class CustomContentAgent:
                         logger.error(f"Failed to save image metadata: {e}")
                         # Continue even if image metadata save fails
                 
+                # Determine if image was uploaded or generated
+                image_source = "generated" if generated_media_url else "uploaded"
+                
                 message = {
                     "role": "assistant",
-                    "content": f"🎉 Perfect! Your {content_type} for {platform} has been saved as a draft post! 📝\n\n✅ Content generated and optimized\n✅ Image uploaded to storage\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard. The post includes your uploaded image and is ready to go!\n\n---\n\n**Do you want to generate another content?**",
+                    "content": f"🎉 Perfect! Your {content_type} for {platform} has been saved as a draft post! 📝\n\n✅ Content generated and optimized\n✅ Image {image_source} and saved to storage\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard. The post includes your {image_source} image and is ready to go!\n\n---\n\n**Do you want to generate another content?**",
                     "timestamp": datetime.now().isoformat()
                 }
                 state["conversation_messages"].append(message)
@@ -1448,31 +1555,38 @@ class CustomContentAgent:
             elif current_step == ConversationStep.ASK_MEDIA:
                 # Parse media choice
                 media_choice = self._parse_media_choice(user_input)
+                logger.info(f"Media choice parsed: '{media_choice}' from input: '{user_input}'")
+                
                 if media_choice == "upload_image":
                     state["has_media"] = True
                     state["media_type"] = MediaType.IMAGE
                     state["should_generate_media"] = False
                     state["current_step"] = ConversationStep.HANDLE_MEDIA
+                    logger.info("Set to HANDLE_MEDIA for upload_image")
                 elif media_choice == "upload_video":
                     state["has_media"] = True
                     state["media_type"] = MediaType.VIDEO
                     state["should_generate_media"] = False
                     state["current_step"] = ConversationStep.HANDLE_MEDIA
+                    logger.info("Set to HANDLE_MEDIA for upload_video")
                 elif media_choice == "generate_image":
                     state["has_media"] = True
                     state["media_type"] = MediaType.IMAGE
                     state["should_generate_media"] = True
-                    state["current_step"] = ConversationStep.GENERATE_MEDIA
+                    state["current_step"] = ConversationStep.GENERATE_CONTENT
+                    logger.info("Set to GENERATE_CONTENT for generate_image")
                 elif media_choice == "generate_video":
                     state["has_media"] = True
                     state["media_type"] = MediaType.VIDEO
                     state["should_generate_media"] = True
-                    state["current_step"] = ConversationStep.GENERATE_MEDIA
+                    state["current_step"] = ConversationStep.GENERATE_CONTENT
+                    logger.info("Set to GENERATE_CONTENT for generate_video")
                 else:  # skip_media
                     state["has_media"] = False
                     state["media_type"] = MediaType.NONE
                     state["should_generate_media"] = False
                     state["current_step"] = ConversationStep.GENERATE_CONTENT
+                    logger.info("Set to GENERATE_CONTENT for skip_media")
                     
             elif current_step == ConversationStep.ASK_ANOTHER_CONTENT:
                 # Handle another content choice
@@ -1730,8 +1844,6 @@ class CustomContentAgent:
                 result = await self.validate_media(state)
             elif current_step == ConversationStep.CONFIRM_MEDIA:
                 result = await self.confirm_media(state)
-            elif current_step == ConversationStep.GENERATE_MEDIA:
-                result = await self.generate_media(state)
             elif current_step == ConversationStep.GENERATE_CONTENT:
                 result = await self.generate_content(state)
             elif current_step == ConversationStep.CONFIRM_CONTENT:

@@ -499,8 +499,9 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       setMediaPreview(null);
       setUploadError(null);
       
-      setInputValue(label);
-      sendMessage(label);
+      // Send the value instead of label for generate/skip options
+      setInputValue(value);
+      sendMessage(value);
     }
   };
 
