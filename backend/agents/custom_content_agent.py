@@ -73,6 +73,7 @@ class ConversationStep(str, Enum):
     CONFIRM_CONTENT = "confirm_content"
     SELECT_SCHEDULE = "select_schedule"
     SAVE_CONTENT = "save_content"
+    ASK_ANOTHER_CONTENT = "ask_another_content"
     DISPLAY_RESULT = "display_result"
     ERROR = "error"
 
@@ -270,6 +271,7 @@ class CustomContentAgent:
         graph.add_node("confirm_content", self.confirm_content)
         graph.add_node("select_schedule", self.select_schedule)
         graph.add_node("save_content", self.save_content)
+        graph.add_node("ask_another_content", self.ask_another_content)
         graph.add_node("display_result", self.display_result)
         graph.add_node("handle_error", self.handle_error)
         
@@ -327,8 +329,8 @@ class CustomContentAgent:
         
         # Final flow
         graph.add_edge("select_schedule", "save_content")
-        graph.add_edge("save_content", "display_result")
-        graph.add_edge("display_result", END)
+        graph.add_edge("save_content", "ask_another_content")
+        graph.add_edge("ask_another_content", END)
         
         # Error handling
         graph.add_edge("handle_error", END)
@@ -597,7 +599,7 @@ class CustomContentAgent:
             # Create a message asking for confirmation
             message = {
                 "role": "assistant",
-                "content": f"Perfect! I've received your {media_type.split('/')[0]} file: **{media_filename}**\n\nIs this the correct media you'd like me to use for your content? Please confirm by typing 'yes' to proceed or 'no' to upload a different file.",
+                "content": f"Perfect! I've received your {media_type.split('/')[0]} file.\n\nIs this the correct media you'd like me to use for your content? Please confirm by typing 'yes' to proceed or 'no' to upload a different file.",
                 "timestamp": datetime.now().isoformat(),
                 "media_url": media_url,
                 "media_type": media_type,
@@ -802,24 +804,22 @@ class CustomContentAgent:
             generated_content = state.get("generated_content", {})
             
             # Create a message asking for content confirmation with the actual content
-            confirmation_message = f"📝 **Content Review**\n\nI've generated your {content_type} for {platform}."
-            if has_media:
-                confirmation_message += " The content includes your uploaded image."
+            confirmation_message = ""
             
             # Include the actual generated content in the confirmation message
             if generated_content:
-                confirmation_message += f"\n\n**{generated_content.get('title', f'{content_type} for {platform}')}**\n\n{generated_content.get('content', '')}"
+                confirmation_message += f"\n\n### {generated_content.get('title', f'{content_type} for {platform}')}\n\n{generated_content.get('content', '')}"
                 
                 # Add hashtags if available
                 if generated_content.get('hashtags'):
                     hashtags = ' '.join([f"#{tag.replace('#', '')}" for tag in generated_content['hashtags']])
-                    confirmation_message += f"\n\n{hashtags}"
+                    confirmation_message += f"\n\n**{hashtags}**"
                 
                 # Add call to action if available
                 if generated_content.get('call_to_action'):
-                    confirmation_message += f"\n\n**Call to Action:** {generated_content['call_to_action']}"
+                    confirmation_message += f"\n\n### Call to Action\n\n{generated_content['call_to_action']}"
             
-            confirmation_message += "\n\n**Please review the content above and let me know:**\n\n✅ Type 'yes' to save this post\n❌ Type 'no' to make changes\n\nWhat would you like to do?"
+            confirmation_message += "\n\n---\n\n**Please review the content above and let me know:**"
             
             message = {
                 "role": "assistant",
@@ -965,11 +965,12 @@ class CustomContentAgent:
                 
                 message = {
                     "role": "assistant",
-                    "content": f"🎉 Perfect! Your {content_type} for {platform} has been saved as a draft post! 📝\n\n✅ Content generated and optimized\n✅ Image uploaded to storage\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard. The post includes your uploaded image and is ready to go!",
+                    "content": f"🎉 Perfect! Your {content_type} for {platform} has been saved as a draft post! 📝\n\n✅ Content generated and optimized\n✅ Image uploaded to storage\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard. The post includes your uploaded image and is ready to go!\n\n---\n\n**Do you want to generate another content?**",
                     "timestamp": datetime.now().isoformat()
                 }
                 state["conversation_messages"].append(message)
-                state["is_complete"] = True
+                state["current_step"] = ConversationStep.ASK_ANOTHER_CONTENT
+                state["progress_percentage"] = 100
             else:
                 raise Exception("Failed to save content to database")
             
@@ -981,6 +982,21 @@ class CustomContentAgent:
             state["current_step"] = ConversationStep.ERROR
             
         return state
+    
+    async def ask_another_content(self, state: CustomContentState) -> CustomContentState:
+        """Ask if user wants to generate another content"""
+        try:
+            logger.info("Asking if user wants to generate another content")
+            
+            # This method is called after the success message is already sent
+            # The user's response will be handled in process_user_input
+            return state
+            
+        except Exception as e:
+            logger.error(f"Error in ask_another_content: {e}")
+            state["error_message"] = f"Failed to ask about another content: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            return state
     
     async def _get_or_create_custom_content_campaign(self, user_id: str) -> str:
         """Get or create a default campaign for custom content"""
@@ -1457,6 +1473,35 @@ class CustomContentAgent:
                     state["media_type"] = MediaType.NONE
                     state["should_generate_media"] = False
                     state["current_step"] = ConversationStep.GENERATE_CONTENT
+                    
+            elif current_step == ConversationStep.ASK_ANOTHER_CONTENT:
+                # Handle another content choice
+                if user_input.lower().strip() in ["yes", "y", "create", "another", "generate"]:
+                    # Reset state for new content generation
+                    state["current_step"] = ConversationStep.ASK_PLATFORM
+                    state["progress_percentage"] = 0
+                    # Clear previous content data
+                    state.pop("selected_platform", None)
+                    state.pop("selected_content_type", None)
+                    state.pop("user_description", None)
+                    state.pop("has_media", None)
+                    state.pop("media_type", None)
+                    state.pop("uploaded_media_url", None)
+                    state.pop("uploaded_media_filename", None)
+                    state.pop("uploaded_media_size", None)
+                    state.pop("uploaded_media_type", None)
+                    state.pop("should_generate_media", None)
+                    state.pop("generated_content", None)
+                    state.pop("final_post", None)
+                    state.pop("scheduled_for", None)
+                    state.pop("content_confirmed", None)
+                    state.pop("media_confirmed", None)
+                    state.pop("is_complete", None)
+                elif user_input.lower().strip() in ["no", "n", "done", "exit", "finish"]:
+                    # Mark as complete to exit
+                    state["is_complete"] = True
+                else:
+                    state["error_message"] = "Please respond with 'yes' to create another content or 'no' to finish."
             
             logger.info(f"Processed user input for step: {current_step}")
             
@@ -1695,6 +1740,8 @@ class CustomContentAgent:
                 result = await self.select_schedule(state)
             elif current_step == ConversationStep.SAVE_CONTENT:
                 result = await self.save_content(state)
+            elif current_step == ConversationStep.ASK_ANOTHER_CONTENT:
+                result = await self.ask_another_content(state)
             elif current_step == ConversationStep.DISPLAY_RESULT:
                 result = await self.display_result(state)
             elif current_step == ConversationStep.ERROR:

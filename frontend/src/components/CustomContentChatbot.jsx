@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Upload, Image, Video, Loader2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -520,6 +521,16 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
     sendMessage(confirmation);
   };
 
+  const handleAnotherContentChoice = (choice) => {
+    if (choice === 'yes') {
+      // Refresh the chatbot to start new content generation
+      refreshConversation();
+    } else {
+      // Exit the chatbot
+      onClose();
+    }
+  };
+
   const handleScheduleSelection = (type) => {
     if (type === 'now') {
       const label = '🚀 Post Now';
@@ -641,22 +652,59 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                     : 'bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200'
                 }`}
               >
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                
-                {/* Show uploaded media in conversation */}
-                {message.media_url && (
-                  <div className="mt-3">
+                {/* Show uploaded media at the top for content review messages */}
+                {message.media_url && message.content && message.content.includes('Content Review') && (
+                  <div className="mb-6">
                     {message.media_type?.startsWith('image') ? (
                       <img 
                         src={message.media_url} 
-                        alt="Uploaded media" 
-                        className="max-w-full h-48 object-cover rounded-lg border border-gray-200"
+                        alt="Content media" 
+                        className="max-w-full h-80 object-cover rounded-xl border border-purple-200 shadow-lg"
                       />
                     ) : message.media_type?.startsWith('video') ? (
                       <video 
                         src={message.media_url} 
                         controls 
-                        className="max-w-full h-48 object-cover rounded-lg border border-gray-200"
+                        className="max-w-full h-80 object-cover rounded-xl border border-purple-200 shadow-lg"
+                      />
+                    ) : null}
+                  </div>
+                )}
+                
+                {/* Render content with markdown support */}
+                <div className={`text-sm prose prose-sm max-w-none ${message.role === 'user' ? 'prose-invert' : ''}`}>
+                  <ReactMarkdown
+                    components={{
+                      h1: ({children}) => <h1 className={`text-lg font-bold mb-3 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h1>,
+                      h2: ({children}) => <h2 className={`text-base font-bold mb-2 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h2>,
+                      h3: ({children}) => <h3 className={`text-sm font-bold mb-2 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h3>,
+                      p: ({children}) => <p className={`mb-3 leading-relaxed ${message.role === 'user' ? 'text-white' : 'text-gray-700'}`}>{children}</p>,
+                      strong: ({children}) => <strong className={`font-semibold ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</strong>,
+                      em: ({children}) => <em className={`italic ${message.role === 'user' ? 'text-white' : 'text-gray-600'}`}>{children}</em>,
+                      ul: ({children}) => <ul className={`list-disc list-inside mb-3 space-y-1 ${message.role === 'user' ? 'text-white' : ''}`}>{children}</ul>,
+                      li: ({children}) => <li className={message.role === 'user' ? 'text-white' : 'text-gray-700'}>{children}</li>,
+                      hr: () => <hr className={`my-4 ${message.role === 'user' ? 'border-white/30' : 'border-gray-300'}`} />,
+                      code: ({children}) => <code className={`px-1 py-0.5 rounded text-xs font-mono ${message.role === 'user' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-800'}`}>{children}</code>,
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                </div>
+                
+                {/* Show uploaded media for other messages (not content review) */}
+                {message.media_url && (!message.content || !message.content.includes('Content Review')) && (
+                  <div className="mt-4">
+                    {message.media_type?.startsWith('image') ? (
+                      <img 
+                        src={message.media_url} 
+                        alt="Uploaded media" 
+                        className="max-w-full h-80 object-cover rounded-xl border border-purple-200 shadow-lg"
+                      />
+                    ) : message.media_type?.startsWith('video') ? (
+                      <video 
+                        src={message.media_url} 
+                        controls 
+                        className="max-w-full h-80 object-cover rounded-xl border border-purple-200 shadow-lg"
                       />
                     ) : null}
                   </div>
@@ -722,20 +770,20 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                       )}
                       
                       {mediaPreview && uploadedFile && !isUploading && (
-                        <div className="space-y-2">
-                          <div className="text-sm font-medium text-blue-900">Preview:</div>
-                          <div className="max-w-xs">
+                        <div className="space-y-3">
+                          <div className="text-sm font-bold text-purple-800">Preview:</div>
+                          <div className="max-w-sm">
                             {mediaType === 'image' ? (
                               <img
                                 src={mediaPreview}
                                 alt="Preview"
-                                className="w-full h-32 object-cover rounded-md border border-gray-200"
+                                className="w-full h-48 object-cover rounded-xl border border-purple-200 shadow-md"
                               />
                             ) : (
                               <video
                                 src={mediaPreview}
                                 controls
-                                className="w-full h-32 object-cover rounded-md border border-gray-200"
+                                className="w-full h-48 object-cover rounded-xl border border-purple-200 shadow-md"
                               />
                             )}
                           </div>
@@ -778,33 +826,53 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                         onClick={() => handleMediaConfirmation('yes')}
                         className="px-6 py-3 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl hover:from-green-500 hover:to-blue-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
                       >
-                        ✅ Yes, proceed
+                        Yes, proceed
                       </button>
                       <button
                         onClick={() => handleMediaConfirmation('no')}
                         className="px-6 py-3 bg-gradient-to-r from-red-400 to-pink-500 text-white rounded-xl hover:from-red-500 hover:to-pink-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
                       >
-                        ❌ No, upload different
+                        No, upload different
                       </button>
                     </div>
                   </div>
                 )}
                 
                 {/* Content Confirmation Options */}
-                {message.role === 'assistant' && message.content && message.content.includes('Please review it above and let me know if you\'d like to save this post') && (
-                  <div className="mt-4">
-                    <div className="flex gap-3">
+                {message.role === 'assistant' && message.content && (message.content.includes('Please review the content above and let me know') || message.content.includes('Please review it above and let me know if you\'d like to save this post')) && (
+                  <div className="mt-6">
+                    <div className="flex gap-4 justify-center">
                       <button
                         onClick={() => handleContentConfirmation('yes')}
-                        className="px-6 py-3 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl hover:from-green-500 hover:to-blue-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
+                        className="px-8 py-4 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl hover:from-green-500 hover:to-blue-600 transition-all duration-200 text-base font-semibold shadow-lg hover:shadow-xl"
                       >
-                        ✅ Yes, save this post
+                        Yes, save this post
                       </button>
                       <button
                         onClick={() => handleContentConfirmation('no')}
-                        className="px-6 py-3 bg-gradient-to-r from-red-400 to-pink-500 text-white rounded-xl hover:from-red-500 hover:to-pink-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
+                        className="px-8 py-4 bg-gradient-to-r from-red-400 to-pink-500 text-white rounded-xl hover:from-red-500 hover:to-pink-600 transition-all duration-200 text-base font-semibold shadow-lg hover:shadow-xl"
                       >
-                        ❌ No, make changes
+                        No, make changes
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Another Content Generation Options */}
+                {message.role === 'assistant' && message.content && message.content.includes('Do you want to generate another content?') && (
+                  <div className="mt-6">
+                    <div className="flex gap-4 justify-center">
+                      <button
+                        onClick={() => handleAnotherContentChoice('yes')}
+                        className="px-8 py-4 bg-gradient-to-r from-purple-400 to-pink-500 text-white rounded-xl hover:from-purple-500 hover:to-pink-600 transition-all duration-200 text-base font-semibold shadow-lg hover:shadow-xl"
+                      >
+                        Yes, create another
+                      </button>
+                      <button
+                        onClick={() => handleAnotherContentChoice('no')}
+                        className="px-8 py-4 bg-gradient-to-r from-gray-400 to-gray-500 text-white rounded-xl hover:from-gray-500 hover:to-gray-600 transition-all duration-200 text-base font-semibold shadow-lg hover:shadow-xl"
+                      >
+                        No, I'm done
                       </button>
                     </div>
                   </div>
