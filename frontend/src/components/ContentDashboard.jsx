@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useContentCache } from '../contexts/ContentCacheContext'
 import { contentAPI } from '../services/content'
+import mediaService from '../services/media'
 import { supabase } from '../lib/supabase'
 import ContentProgress from './ContentProgress'
 import ContentGenerationModal from './ContentGenerationModal'
@@ -114,18 +115,11 @@ const ContentDashboard = () => {
   const [availableDates, setAvailableDates] = useState([]) // Dates that have content
   const [currentDateIndex, setCurrentDateIndex] = useState(0) // Current position in available dates
   const [showCustomContentChatbot, setShowCustomContentChatbot] = useState(false) // Custom content chatbot modal
-  const [fetchingDateContent, setFetchingDateContent] = useState(false) // Track when fetching content for a specific date
-  const currentFetchRef = useRef(null) // Track current fetch operation
-  const [contentLoaded, setContentLoaded] = useState(false) // Track if content has been loaded at least once
 
-  // Ultra-simple content display logic - defined early to avoid hoisting issues
-  const contentToDisplay = (generating || fetchingFreshData) ? [] : dateContent
 
   useEffect(() => {
-    // Initialize with today's content
-    const today = new Date().toISOString().split('T')[0]
-    setSelectedDate(today)
-    fetchContentForDate(today)
+    fetchData()
+    fetchContentByDate(selectedDate)
     getAvailableDates()
   }, [])
 
@@ -133,21 +127,10 @@ const ContentDashboard = () => {
   useEffect(() => {
     const urlDate = searchParams.get('date')
     if (urlDate && urlDate !== selectedDate) {
-      console.log('🔄 URL date changed to:', urlDate)
-      
-      // Validate date format before setting
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/
-      if (dateRegex.test(urlDate)) {
-        console.log('✅ Valid date format, updating selected date')
-        setSelectedDate(urlDate)
-      } else {
-        console.error('❌ Invalid date format in URL:', urlDate)
-        // Redirect to today's date if invalid
-        const today = new Date().toISOString().split('T')[0]
-        navigate(`/content?date=${today}`, { replace: true })
-      }
+      console.log('URL date changed to:', urlDate)
+      setSelectedDate(urlDate)
     }
-  }, [searchParams, selectedDate, navigate])
+  }, [searchParams, selectedDate])
 
   // Update current date index when selectedDate changes
   useEffect(() => {
@@ -157,221 +140,156 @@ const ContentDashboard = () => {
     }
   }, [selectedDate, availableDates])
 
-  // Auto-navigation disabled to prevent content from flashing and disappearing
-  // Users can manually navigate using the date picker or navigation arrows
-  // useEffect(() => {
-  //   // Auto-navigation logic commented out to prevent race conditions
-  // }, [availableDates, contentToDisplay.length, selectedDate, generating, fetchingFreshData, loading, navigate])
+  // Auto-navigate to next available date when current date has no content
+  useEffect(() => {
+    if (availableDates.length > 0 && !generating && !fetchingFreshData) {
+      const currentIndex = availableDates.indexOf(selectedDate)
+      
+      // Check if current date has no content by checking dateContent and scheduledContent
+      const hasContent = dateContent.length > 0 || (selectedDate === new Date().toISOString().split('T')[0] && scheduledContent.length > 0)
+      
+      // If current date is not in available dates or has no content, find next available date
+      if (currentIndex === -1 || !hasContent) {
+        const today = new Date().toISOString().split('T')[0]
+        
+        // First, try to find the next future date from today onwards
+        let nextIndex = availableDates.findIndex(date => date > today)
+        
+        // If no future dates found, try to find today's date
+        if (nextIndex === -1) {
+          nextIndex = availableDates.findIndex(date => date === today)
+        }
+        
+        // If still no date found, find the next available date after current date
+        if (nextIndex === -1 && currentIndex !== -1) {
+          nextIndex = currentIndex + 1
+        }
+        
+        // Only navigate if we found a valid next date
+        if (nextIndex >= 0 && nextIndex < availableDates.length) {
+          const nextDate = availableDates[nextIndex]
+          console.log('Auto-navigating to next available date:', nextDate)
+          setSelectedDate(nextDate)
+          setCurrentDateIndex(nextIndex)
+          navigate(`/content?date=${nextDate}`)
+        }
+      }
+    }
+  }, [availableDates, dateContent.length, scheduledContent.length, selectedDate, generating, fetchingFreshData, navigate])
 
   // Images are now loaded immediately when content is fetched, so this useEffect is no longer needed
 
   useEffect(() => {
-    // Only fetch content if not currently generating
+    // Only fetch content by date if not currently generating
     if (!generating) {
-      // Add a small delay to prevent rapid successive calls
-      const timeoutId = setTimeout(() => {
-        fetchContentForDate(selectedDate)
-      }, 100)
-      
-      return () => clearTimeout(timeoutId)
+      fetchContentByDate(selectedDate)
     }
   }, [selectedDate, generating])
 
-  // Unified function to fetch content for a specific date directly from Supabase
-  const fetchContentForDate = async (date) => {
-    // Validate date format first
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      console.error('❌ Invalid date format for fetching content:', date)
-      setDateContent([])
-      setContentLoaded(true)
-      return
-    }
-    
-    // Prevent multiple simultaneous fetches for the same date
-    if (currentFetchRef.current === date) {
-      console.log('🔄 Already fetching content for date:', date, '- skipping duplicate request')
-      return
-    }
-    
+  const fetchData = async (forceRefresh = false) => {
     try {
-      currentFetchRef.current = date
-      setFetchingDateContent(true)
-      setContentLoaded(false)
-      console.log('🔍 Fetching content for date from Supabase:', date)
+      const result = await fetchScheduledContent(forceRefresh)
       
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        console.error('❌ No authenticated user found')
-        setDateContent([])
-        setContentLoaded(true)
-        return
-      }
+      console.log('Fetched content data:', result)
+      console.log('Cache status:', getCacheStatus())
       
-      // Parse the date
-      const targetDate = new Date(date)
-      const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate())
-      const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1)
-      
-      console.log('📅 Querying Supabase for date range:', startOfDay.toISOString(), 'to', endOfDay.toISOString())
-      
-      // Query Supabase directly for content on the specific date
-      const { data: contentData, error } = await supabase
-        .from('content_posts')
-        .select(`
-          *,
-          content_campaigns!inner(
-            id,
-            user_id,
-            campaign_name
-          )
-        `)
-        .eq('content_campaigns.user_id', user.id)
-        .gte('scheduled_date', startOfDay.toISOString().split('T')[0])
-        .lt('scheduled_date', endOfDay.toISOString().split('T')[0])
-        .order('scheduled_time')
-      
-      if (error) {
-        console.error('❌ Supabase query error:', error)
-        throw error
-      }
-      
-      console.log('📊 Supabase query result:', contentData)
-      
-      if (contentData && contentData.length > 0) {
-        console.log('✅ Found content for date:', date, contentData.length, 'items')
+      if (result.data) {
+        console.log('Content items:', result.data)
+        console.log('Platform values in content:', result.data.map(item => ({ id: item.id, platform: item.platform })))
+        console.log('Data source:', result.fromCache ? 'cache' : 'API')
         
-        // Format the content data to match expected structure
-        const formattedContent = contentData.map(item => ({
-          id: item.id,
-          title: item.title || 'Untitled',
-          content: item.content || '',
-          platform: item.platform || 'unknown',
-          scheduled_at: `${item.scheduled_date}T${item.scheduled_time || '12:00:00'}`,
-          status: item.status || 'draft', // Get status directly from Supabase
-          created_at: item.created_at,
-          media_url: null, // Will be populated from content_images if needed
-          hashtags: item.hashtags || [],
-          post_type: item.post_type || 'text',
-          campaign_id: item.campaign_id,
-          metadata: item.metadata || {}
-        }))
-        
-        console.log('📝 Formatted content with status from Supabase:', formattedContent)
-        setDateContent(formattedContent)
-        setContentLoaded(true)
-        
-        // Load images for all content
-        for (const content of formattedContent) {
+        // Load images immediately for all scheduled content (with error handling)
+        for (const content of result.data) {
           try {
             await fetchPostImages(content.id)
           } catch (error) {
+            // Silently handle image loading errors to prevent console spam
+            console.debug('Image loading failed for content:', content.id)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching scheduled content:', error)
+    }
+  }
+
+  const fetchContentByDate = async (date) => {
+    try {
+      console.log('Fetching content for date:', date)
+      const result = await contentAPI.getContentByDate(date)
+      
+      console.log('Fetched content for date:', date, result)
+      
+      if (result.data) {
+        setDateContent(result.data)
+        console.log('Date content items:', result.data)
+        
+        // Load images immediately for all date content (with error handling)
+        for (const content of result.data) {
+          try {
+            await fetchPostImages(content.id)
+          } catch (error) {
+            // Silently handle image loading errors to prevent console spam
             console.debug('Image loading failed for content:', content.id)
           }
         }
       } else {
-        console.log('❌ No content found for date:', date)
         setDateContent([])
-        setContentLoaded(true)
       }
     } catch (error) {
-      console.error('💥 Error fetching content for date from Supabase:', date, error)
+      console.error('Error fetching content by date:', error)
       setDateContent([])
-      setContentLoaded(true)
-    } finally {
-      setFetchingDateContent(false)
-      currentFetchRef.current = null
     }
   }
 
-  // Get all available dates with content from Supabase
+  // Get all available dates with content
   const getAvailableDates = async () => {
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        console.error('❌ No authenticated user found for available dates')
-        return
-      }
-      
-      // Query Supabase directly for all content to get available dates
-      const { data: contentData, error } = await supabase
-        .from('content_posts')
-        .select(`
-          scheduled_date,
-          content_campaigns!inner(
-            user_id
-          )
-        `)
-        .eq('content_campaigns.user_id', user.id)
-        .not('scheduled_date', 'is', null)
-        .order('scheduled_date', { ascending: true })
-      
-      if (error) {
-        console.error('❌ Supabase query error for available dates:', error)
-        return
-      }
-      
-      if (contentData && contentData.length > 0) {
+      const result = await contentAPI.getAllContent(1000, 0) // Get more content to find all dates
+      if (result.data) {
         // Extract unique dates from content
-        const dates = [...new Set(contentData.map(item => item.scheduled_date))].sort()
+        const dates = [...new Set(result.data.map(content => {
+          const scheduledDate = content.scheduled_at || content.scheduled_date
+          if (scheduledDate) {
+            if (scheduledDate.includes('T')) {
+              return new Date(scheduledDate).toISOString().split('T')[0]
+            }
+            return scheduledDate
+          }
+          return null
+        }).filter(Boolean))].sort()
         
         setAvailableDates(dates)
-        console.log('📅 Available dates with content from Supabase:', dates)
+        console.log('Available dates with content:', dates)
         
         // Find current date index
         const currentIndex = dates.indexOf(selectedDate)
         setCurrentDateIndex(currentIndex >= 0 ? currentIndex : 0)
-      } else {
-        console.log('📅 No content found for available dates')
-        setAvailableDates([])
       }
     } catch (error) {
-      console.error('💥 Error fetching available dates from Supabase:', error)
+      console.error('Error fetching available dates:', error)
     }
   }
 
   // Navigate to previous date with content
   const navigateToPreviousDate = () => {
-    try {
-      if (currentDateIndex > 0 && availableDates.length > 0) {
-        const prevDate = availableDates[currentDateIndex - 1]
-        console.log('⬅️ Navigating to previous date:', prevDate)
-        
-        // Validate date before navigation
-        if (prevDate && /^\d{4}-\d{2}-\d{2}$/.test(prevDate)) {
-          setSelectedDate(prevDate)
-          setCurrentDateIndex(currentDateIndex - 1)
-          // Update URL
-          navigate(`/content?date=${prevDate}`)
-        } else {
-          console.error('❌ Invalid previous date:', prevDate)
-        }
-      }
-    } catch (error) {
-      console.error('💥 Error navigating to previous date:', error)
+    if (currentDateIndex > 0) {
+      const prevDate = availableDates[currentDateIndex - 1]
+      setSelectedDate(prevDate)
+      setCurrentDateIndex(currentDateIndex - 1)
+      // Update URL
+      navigate(`/content?date=${prevDate}`)
     }
   }
 
   // Navigate to next date with content
   const navigateToNextDate = () => {
-    try {
-      if (currentDateIndex < availableDates.length - 1 && availableDates.length > 0) {
-        const nextDate = availableDates[currentDateIndex + 1]
-        console.log('➡️ Navigating to next date:', nextDate)
-        
-        // Validate date before navigation
-        if (nextDate && /^\d{4}-\d{2}-\d{2}$/.test(nextDate)) {
-          setSelectedDate(nextDate)
-          setCurrentDateIndex(currentDateIndex + 1)
-          // Update URL
-          navigate(`/content?date=${nextDate}`)
-        } else {
-          console.error('❌ Invalid next date:', nextDate)
-        }
-      }
-    } catch (error) {
-      console.error('💥 Error navigating to next date:', error)
+    if (currentDateIndex < availableDates.length - 1) {
+      const nextDate = availableDates[currentDateIndex + 1]
+      setSelectedDate(nextDate)
+      setCurrentDateIndex(currentDateIndex + 1)
+      // Update URL
+      navigate(`/content?date=${nextDate}`)
     }
   }
 
@@ -516,6 +434,22 @@ const ContentDashboard = () => {
     setExpandedCampaigns(newExpanded)
   }
 
+  // Use date-specific content if available, otherwise fall back to scheduled content
+  // Only fall back to scheduled content if we're viewing today's date
+  // Hide content during generation and data fetching to prevent showing old/incomplete content
+  const todayStr = (() => {
+    const today = new Date()
+    return today.getFullYear() + '-' + 
+           String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+           String(today.getDate()).padStart(2, '0')
+  })()
+  
+  const contentToDisplay = (generating || fetchingFreshData)
+    ? [] 
+    : selectedDate === todayStr 
+    ? (dateContent.length > 0 ? dateContent : scheduledContent)
+    : dateContent
+  
   // Images are now loaded immediately when content is fetched, so this useEffect is no longer needed
   
   const filteredContent = contentToDisplay.filter(content => {
@@ -742,29 +676,8 @@ const ContentDashboard = () => {
       
       showSuccess(`Successfully posted to Facebook!`)
       
-      // Update the content status to published in Supabase
-      const { error: updateError } = await supabase
-        .from('content_posts')
-        .update({ status: 'published' })
-        .eq('id', content.id)
-      
-      if (updateError) {
-        console.error('❌ Error updating status in Supabase:', updateError)
-      } else {
-        console.log('✅ Status updated to published in Supabase')
-      }
-      
       // Update the content status to published in cache
       updateContentInCache(content.id, { status: 'published' })
-      
-      // Also update dateContent state directly for immediate UI update
-      setDateContent(prev => 
-        prev.map(item => 
-          item.id === content.id 
-            ? { ...item, status: 'published' }
-            : item
-        )
-      )
       
     } catch (error) {
       console.error('Error posting to Facebook:', error)
@@ -810,15 +723,6 @@ const ContentDashboard = () => {
           console.log('✅ Instagram OAuth post successful:', result)
           showSuccess(`Successfully posted to Instagram!`)
           updateContentInCache(content.id, { status: 'published' })
-          
-          // Also update dateContent state directly for immediate UI update
-          setDateContent(prev => 
-            prev.map(item => 
-              item.id === content.id 
-                ? { ...item, status: 'published' }
-                : item
-            )
-          )
           return
         } else {
           const errorText = await response.text()
@@ -849,15 +753,6 @@ const ContentDashboard = () => {
           console.log('✅ Instagram token post successful:', result)
           showSuccess(`Successfully posted to Instagram!`)
           updateContentInCache(content.id, { status: 'published' })
-          
-          // Also update dateContent state directly for immediate UI update
-          setDateContent(prev => 
-            prev.map(item => 
-              item.id === content.id 
-                ? { ...item, status: 'published' }
-                : item
-            )
-          )
           return
         } else {
           const errorText = await response.text()
@@ -922,15 +817,6 @@ const ContentDashboard = () => {
         console.log('✅ LinkedIn post successful:', result)
         showSuccess(`Successfully posted to LinkedIn!`)
         updateContentInCache(content.id, { status: 'published' })
-        
-        // Also update dateContent state directly for immediate UI update
-        setDateContent(prev => 
-          prev.map(item => 
-            item.id === content.id 
-              ? { ...item, status: 'published' }
-              : item
-          )
-        )
       } else {
         const errorText = await response.text()
         console.error('❌ LinkedIn post failed:', response.status, errorText)
@@ -976,15 +862,6 @@ const ContentDashboard = () => {
         console.log('✅ YouTube post successful:', result)
         showSuccess(`Successfully posted to YouTube!`)
         updateContentInCache(content.id, { status: 'published' })
-        
-        // Also update dateContent state directly for immediate UI update
-        setDateContent(prev => 
-          prev.map(item => 
-            item.id === content.id 
-              ? { ...item, status: 'published' }
-              : item
-          )
-        )
       } else {
         const errorText = await response.text()
         console.error('❌ YouTube post failed:', response.status, errorText)
@@ -1096,25 +973,11 @@ const ContentDashboard = () => {
 
   const fetchPostImages = async (postId) => {
     try {
-      console.log('🖼️ Fetching images for post from Supabase:', postId)
+      const result = await mediaService.getPostImages(postId)
       
-      // Query Supabase directly for images
-      const { data: imagesData, error } = await supabase
-        .from('content_images')
-        .select('*')
-        .eq('post_id', postId)
-        .order('created_at', { ascending: false })
-      
-      if (error) {
-        console.error('❌ Supabase images query error:', error)
-        return
-      }
-      
-      console.log('📊 Images found in Supabase:', imagesData)
-      
-      if (imagesData && imagesData.length > 0) {
+      if (result.images && result.images.length > 0) {
         // Store the latest image for this post
-        const latestImage = imagesData[0] // Get the most recent image
+        const latestImage = result.images[0] // Assuming we want the latest one
         
         setGeneratedImages(prev => {
           const newImages = {
@@ -1129,13 +992,12 @@ const ContentDashboard = () => {
           }
           return newImages
         })
-        
-        console.log('✅ Image data stored for post:', postId, latestImage)
-      } else {
-        console.log('📷 No images found for post:', postId)
       }
     } catch (error) {
-      console.error('💥 Error fetching post images from Supabase:', error)
+      // Only log errors that are not 404 (Post not found) to reduce console spam
+      if (!error.message?.includes('404') && !error.message?.includes('Post not found')) {
+        console.error('Error fetching post images:', error)
+      }
     }
   }
 
@@ -1144,33 +1006,7 @@ const ContentDashboard = () => {
       // Add to generating set
       setGeneratingMedia(prev => new Set(prev).add(content.id))
       
-      console.log('🎨 Generating media for content:', content.id)
-      
-      // Get auth token
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        throw new Error('No authentication token found')
-      }
-      
-      // Call the backend media generation API directly
-      const response = await fetch(`${API_BASE_URL}/media/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          post_id: content.id
-        })
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
-      }
-      
-      const result = await response.json()
-      console.log('🎨 Generation result from backend:', result)
+      const result = await mediaService.generateMedia(content.id)
       
       if (result.success) {
         console.log('🎨 Generation successful, fetching images for content:', content.id)
@@ -1192,19 +1028,11 @@ const ContentDashboard = () => {
       
       // Provide more helpful error messages
       let errorMessage = error.message
-      if (error.message?.includes('404')) {
-        errorMessage = 'Media generation service is not available. Please try again later.'
-      } else if (error.message?.includes('500')) {
-        errorMessage = 'Server error during media generation. Please try again.'
-      } else if (error.message?.includes('401')) {
-        errorMessage = 'Authentication error. Please refresh the page and try again.'
-      } else if (error.message?.includes('403')) {
-        errorMessage = 'Access denied. Please check your permissions.'
-      } else if (error.message?.includes('OpenAI API key not configured')) {
+      if (error.message.includes('OpenAI API key not configured')) {
         errorMessage = 'OpenAI API key not configured. Please contact support to set up image generation.'
-      } else if (error.message?.includes('quota exceeded')) {
+      } else if (error.message.includes('quota exceeded')) {
         errorMessage = 'OpenAI API quota exceeded. Please check billing settings.'
-      } else if (error.message?.includes('Invalid OpenAI API key')) {
+      } else if (error.message.includes('Invalid OpenAI API key')) {
         errorMessage = 'Invalid OpenAI API key. Please contact support.'
       }
       
@@ -1221,36 +1049,11 @@ const ContentDashboard = () => {
 
   const handleApproveImage = async (postId) => {
     try {
-      console.log('✅ Approving image for post in Supabase:', postId)
-      
-      // Find the latest image for this post
-      const { data: imagesData, error: fetchError } = await supabase
-        .from('content_images')
-        .select('id')
-        .eq('post_id', postId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-      
-      if (fetchError) {
-        console.error('❌ Error fetching image for approval:', fetchError)
-        throw fetchError
-      }
-      
-      if (imagesData && imagesData.length > 0) {
-        const imageId = imagesData[0].id
-        
-        // Update the image approval status in Supabase
-        const { error: updateError } = await supabase
-          .from('content_images')
-          .update({ is_approved: true })
-          .eq('id', imageId)
-        
-        if (updateError) {
-          console.error('❌ Error updating image approval in Supabase:', updateError)
-          throw updateError
-        }
-        
-        console.log('✅ Image approved in Supabase:', imageId)
+      // Find the image ID for this post
+      const result = await mediaService.getPostImages(postId)
+      if (result.images && result.images.length > 0) {
+        const imageId = result.images[0].id
+        await mediaService.approveImage(imageId)
         
         // Update local state
         setGeneratedImages(prev => ({
@@ -1262,59 +1065,38 @@ const ContentDashboard = () => {
         }))
         
         showSuccess('Image approved successfully!')
-      } else {
-        console.log('❌ No images found for post:', postId)
-        showError('No images found for this post')
       }
     } catch (error) {
-      console.error('💥 Error approving image in Supabase:', error)
+      console.error('Error approving image:', error)
       showError('Failed to approve image', error.message)
     }
   }
 
   const handleApprovePost = async (contentId) => {
     try {
-      console.log('🔄 Approving post in Supabase:', contentId)
+      const result = await contentAPI.updateContentStatus(contentId, 'scheduled')
       
-      // Update status directly in Supabase
-      const { error } = await supabase
-        .from('content_posts')
-        .update({ status: 'scheduled' })
-        .eq('id', contentId)
-      
-      if (error) {
-        console.error('❌ Supabase update error:', error)
-        throw error
+      if (result.success) {
+        // Update local content cache first
+        updateContentInCache(contentId, { status: 'scheduled' })
+        
+        // Close the expanded content
+        setExpandedContent(null)
+        
+        // Show success message immediately
+        showSuccess('Post approved and scheduled successfully!')
+        
+        // Add a small delay to ensure the status update is processed
+        setTimeout(async () => {
+          // Force refresh the content data to get updated status
+          await fetchData(true)
+        }, 500)
+        
+      } else {
+        throw new Error(result.error)
       }
-      
-      console.log('✅ Post status updated in Supabase')
-      
-      // Update local content cache first
-      updateContentInCache(contentId, { status: 'scheduled' })
-      
-      // Also update dateContent state directly for immediate UI update
-      setDateContent(prev => 
-        prev.map(item => 
-          item.id === contentId 
-            ? { ...item, status: 'scheduled' }
-            : item
-        )
-      )
-      
-      // Close the expanded content
-      setExpandedContent(null)
-      
-      // Show success message immediately
-      showSuccess('Post approved and scheduled successfully!')
-      
-      // Add a small delay to ensure the status update is processed
-      setTimeout(async () => {
-        // Refresh content for the current date
-        await fetchContentForDate(selectedDate)
-      }, 500)
-      
     } catch (error) {
-      console.error('💥 Error approving post in Supabase:', error)
+      console.error('Error approving post:', error)
       showError('Failed to approve post', error.message)
     }
   }
@@ -1701,24 +1483,7 @@ const ContentDashboard = () => {
 
           {/* Content Cards - 4 Column Layout */}
           <div className="space-y-6">
-            {fetchingDateContent || !contentLoaded ? (
-              <div className="text-center py-12">
-                <div className="w-24 h-24 bg-gradient-to-r from-pink-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Loader2 className="w-12 h-12 text-pink-500 animate-spin" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Loading content for {new Date(selectedDate).toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}
-                </h3>
-                <p className="text-gray-500">
-                  Please wait while we fetch your content...
-                </p>
-              </div>
-            ) : filteredContent.length === 0 ? (
+            {filteredContent.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-24 h-24 bg-gradient-to-r from-pink-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
                   <Sparkles className="w-12 h-12 text-pink-500" />
@@ -1734,6 +1499,12 @@ const ContentDashboard = () => {
                       })}`
                   }
                 </h3>
+                <p className="text-gray-500 mb-6">
+                  {selectedDate === new Date().toISOString().split('T')[0] 
+                    ? "Generate some amazing content to get started!" 
+                    : "This date doesn't have any scheduled content yet."
+                  }
+                </p>
                 <p className="text-gray-500 mb-6">
                   {generating 
                     ? "Content generation in progress. Please wait..."
