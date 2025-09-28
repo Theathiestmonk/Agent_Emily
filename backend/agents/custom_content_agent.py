@@ -69,9 +69,7 @@ class ConversationStep(str, Enum):
     VALIDATE_MEDIA = "validate_media"
     CONFIRM_MEDIA = "confirm_media"
     GENERATE_CONTENT = "generate_content"
-    PARSE_CONTENT = "parse_content"
     GENERATE_MEDIA = "generate_media"
-    OPTIMIZE_CONTENT = "optimize_content"
     CONFIRM_CONTENT = "confirm_content"
     SELECT_SCHEDULE = "select_schedule"
     SAVE_CONTENT = "save_content"
@@ -255,7 +253,7 @@ class CustomContentAgent:
         self.supabase = supabase
         
     def create_graph(self) -> StateGraph:
-        """Create the LangGraph workflow"""
+        """Create the LangGraph workflow with proper conditional edges and state management"""
         graph = StateGraph(CustomContentState)
         
         # Add nodes
@@ -267,10 +265,8 @@ class CustomContentAgent:
         graph.add_node("handle_media", self.handle_media)
         graph.add_node("validate_media", self.validate_media)
         graph.add_node("confirm_media", self.confirm_media)
-        graph.add_node("generate_content", self.generate_content)
-        graph.add_node("parse_content", self.parse_content)
         graph.add_node("generate_media", self.generate_media)
-        graph.add_node("optimize_content", self.optimize_content)
+        graph.add_node("generate_content", self.generate_content)
         graph.add_node("confirm_content", self.confirm_content)
         graph.add_node("select_schedule", self.select_schedule)
         graph.add_node("save_content", self.save_content)
@@ -280,7 +276,7 @@ class CustomContentAgent:
         # Set entry point
         graph.set_entry_point("greet_user")
         
-        # Add edges
+        # Linear flow for initial steps - each step waits for user input
         graph.add_edge("greet_user", "ask_platform")
         graph.add_edge("ask_platform", "ask_content_type")
         graph.add_edge("ask_content_type", "ask_description")
@@ -292,20 +288,45 @@ class CustomContentAgent:
             self._should_handle_media,
             {
                 "handle": "handle_media",
+                "generate": "generate_media",
                 "skip": "generate_content"
             }
         )
         
+        # Media handling flow
         graph.add_edge("handle_media", "validate_media")
         graph.add_edge("validate_media", "confirm_media")
-        graph.add_edge("confirm_media", "generate_content")
-        graph.add_edge("generate_content", "parse_content")
-        graph.add_edge("parse_content", "optimize_content")
-        graph.add_edge("optimize_content", "confirm_content")
-        graph.add_edge("confirm_content", "select_schedule")
-        graph.add_edge("select_schedule", "save_content")
         
-        graph.add_edge("generate_media", "save_content")
+        # Conditional edge after media confirmation
+        graph.add_conditional_edges(
+            "confirm_media",
+            self._should_proceed_after_media,
+            {
+                "proceed": "generate_content",
+                "retry": "ask_media",
+                "error": "handle_error"
+            }
+        )
+        
+        # Media generation flow
+        graph.add_edge("generate_media", "generate_content")
+        
+        # Content generation flow - skip parse and optimize, go directly to confirm
+        graph.add_edge("generate_content", "confirm_content")
+        
+        # Conditional edge after content confirmation
+        graph.add_conditional_edges(
+            "confirm_content",
+            self._should_proceed_after_content,
+            {
+                "proceed": "select_schedule",
+                "retry": "ask_description",
+                "error": "handle_error"
+            }
+        )
+        
+        # Final flow
+        graph.add_edge("select_schedule", "save_content")
         graph.add_edge("save_content", "display_result")
         graph.add_edge("display_result", END)
         
@@ -674,24 +695,50 @@ class CustomContentAgent:
             
             state["generated_content"] = content_data
             
-            # Create response message - just the content without JSON wrapper
+            # Create response message with the generated content displayed directly
             if has_media and image_analysis:
-                message_content = f"Perfect! I've analyzed your image and generated your {content_type} content. Here's what I created:\n\n{content_data.get('content', '')}"
+                message_content = f"Perfect! I've analyzed your image and generated your {content_type} content. Here's what I created:\n\n**{content_data.get('title', f'{content_type} for {platform}')}**\n\n{content_data.get('content', '')}"
+                
+                # Add hashtags if available
+                if content_data.get('hashtags'):
+                    hashtags = ' '.join([f"#{tag.replace('#', '')}" for tag in content_data['hashtags']])
+                    message_content += f"\n\n{hashtags}"
+                
+                # Add call to action if available
+                if content_data.get('call_to_action'):
+                    message_content += f"\n\n**Call to Action:** {content_data['call_to_action']}"
             else:
-                message_content = f"Great! I've generated your {content_type} content. Here's what I created:\n\n{content_data.get('content', '')}"
+                message_content = f"Great! I've generated your {content_type} content. Here's what I created:\n\n**{content_data.get('title', f'{content_type} for {platform}')}**\n\n{content_data.get('content', '')}"
+                
+                # Add hashtags if available
+                if content_data.get('hashtags'):
+                    hashtags = ' '.join([f"#{tag.replace('#', '')}" for tag in content_data['hashtags']])
+                    message_content += f"\n\n{hashtags}"
+                
+                # Add call to action if available
+                if content_data.get('call_to_action'):
+                    message_content += f"\n\n**Call to Action:** {content_data['call_to_action']}"
             
             message = {
                 "role": "assistant",
                 "content": message_content,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "has_media": has_media,
+                "media_url": uploaded_media_url if has_media else None,
+                "media_type": media_type if has_media else None,
+                # Explicitly set structured_content to null to prevent frontend from creating cards
+                "structured_content": None
             }
             state["conversation_messages"].append(message)
             
             logger.info(f"Generated content for {platform} {content_type}")
             
-            # Transition to parse content step
-            state["current_step"] = ConversationStep.PARSE_CONTENT
-            state["progress_percentage"] = 80
+            # Transition directly to confirm content step
+            state["current_step"] = ConversationStep.CONFIRM_CONTENT
+            state["progress_percentage"] = 85
+            
+            # Automatically call confirm_content to show the confirmation message
+            return await self.confirm_content(state)
             
         except Exception as e:
             logger.error(f"Error in generate_content: {e}")
@@ -700,57 +747,7 @@ class CustomContentAgent:
             
         return state
 
-    async def parse_content(self, state: CustomContentState) -> CustomContentState:
-        """Parse the generated content and create structured response for frontend"""
-        try:
-            state["current_step"] = ConversationStep.PARSE_CONTENT
-            state["progress_percentage"] = 85
-            
-            generated_content = state.get("generated_content", {})
-            platform = state.get("selected_platform", "")
-            content_type = state.get("selected_content_type", "")
-            
-            # Create a structured response that the frontend can parse
-            structured_content = {
-                "content": generated_content.get("content", ""),
-                "title": generated_content.get("title", f"{content_type} for {platform}"),
-                "hashtags": generated_content.get("hashtags", []),
-                "call_to_action": generated_content.get("call_to_action", ""),
-                "engagement_hooks": generated_content.get("engagement_hooks", ""),
-                "image_caption": generated_content.get("image_caption", ""),
-                "visual_elements": generated_content.get("visual_elements", []),
-                "media_url": state.get("uploaded_media_url") or state.get("generated_media_url"),
-                "platform": platform,
-                "content_type": content_type
-            }
-            
-            # Store the structured content for the frontend
-            state["parsed_content"] = structured_content
-            
-            # Create a single message with both content card and confirmation
-            message = {
-                "role": "assistant",
-                "content": "Perfect! I've generated your content. Please review it above and let me know if you'd like to save this post. Type 'yes' to save it or 'no' to make changes.",
-                "timestamp": datetime.now().isoformat(),
-                "structured_content": structured_content
-            }
-            state["conversation_messages"].append(message)
-            
-            logger.info(f"Created message with structured_content: {bool(message.get('structured_content'))}")
-            logger.info(f"Structured content keys: {list(structured_content.keys()) if structured_content else 'None'}")
-            
-            # Transition to confirm content step
-            state["current_step"] = ConversationStep.CONFIRM_CONTENT
-            state["progress_percentage"] = 95
-            
-            logger.info(f"Content parsed and structured for {platform} {content_type}")
-            
-        except Exception as e:
-            logger.error(f"Error in parse_content: {e}")
-            state["error_message"] = f"Failed to parse content: {str(e)}"
-            state["current_step"] = ConversationStep.ERROR
-            
-        return state
+    # parse_content function removed - content is now displayed directly in chatbot
     
     async def generate_media(self, state: CustomContentState) -> CustomContentState:
         """Generate media using the media agent"""
@@ -788,57 +785,55 @@ class CustomContentAgent:
             
         return state
     
-    async def optimize_content(self, state: CustomContentState) -> CustomContentState:
-        """Optimize content for the specific platform"""
-        try:
-            state["current_step"] = ConversationStep.OPTIMIZE_CONTENT
-            state["progress_percentage"] = 90
-            
-            platform = state.get("selected_platform", "")
-            content = state.get("generated_content", {})
-            
-            # Apply platform-specific optimizations
-            optimized_content = self._optimize_for_platform(content, platform)
-            state["generated_content"] = optimized_content
-            
-            message = {
-                "role": "assistant",
-                "content": f"Content optimized for {platform}! I've adjusted the formatting, hashtags, and engagement elements to work best on this platform.",
-                "timestamp": datetime.now().isoformat()
-            }
-            state["conversation_messages"].append(message)
-            
-            logger.info(f"Content optimized for {platform}")
-            
-            # Transition to confirm content
-            state["current_step"] = ConversationStep.CONFIRM_CONTENT
-            state["progress_percentage"] = 95
-            
-        except Exception as e:
-            logger.error(f"Error in optimize_content: {e}")
-            state["error_message"] = f"Failed to optimize content: {str(e)}"
-            state["current_step"] = ConversationStep.ERROR
-            
-        return state
+    # optimize_content function removed - content is used as generated by AI
 
     async def confirm_content(self, state: CustomContentState) -> CustomContentState:
         """Ask user to confirm if the generated content is correct and should be saved"""
         try:
             state["current_step"] = ConversationStep.CONFIRM_CONTENT
-            state["progress_percentage"] = 95
+            state["progress_percentage"] = 90
             
-            # Create a message asking for content confirmation
+            # Get the generated content details
+            platform = state.get("selected_platform", "")
+            content_type = state.get("selected_content_type", "")
+            has_media = state.get("has_media", False)
+            
+            # Get the generated content to include in the confirmation message
+            generated_content = state.get("generated_content", {})
+            
+            # Create a message asking for content confirmation with the actual content
+            confirmation_message = f"📝 **Content Review**\n\nI've generated your {content_type} for {platform}."
+            if has_media:
+                confirmation_message += " The content includes your uploaded image."
+            
+            # Include the actual generated content in the confirmation message
+            if generated_content:
+                confirmation_message += f"\n\n**{generated_content.get('title', f'{content_type} for {platform}')}**\n\n{generated_content.get('content', '')}"
+                
+                # Add hashtags if available
+                if generated_content.get('hashtags'):
+                    hashtags = ' '.join([f"#{tag.replace('#', '')}" for tag in generated_content['hashtags']])
+                    confirmation_message += f"\n\n{hashtags}"
+                
+                # Add call to action if available
+                if generated_content.get('call_to_action'):
+                    confirmation_message += f"\n\n**Call to Action:** {generated_content['call_to_action']}"
+            
+            confirmation_message += "\n\n**Please review the content above and let me know:**\n\n✅ Type 'yes' to save this post\n❌ Type 'no' to make changes\n\nWhat would you like to do?"
+            
             message = {
                 "role": "assistant",
-                "content": "Perfect! I've generated your content. Please review it above and let me know if you'd like to save this post. Type 'yes' to save it or 'no' to make changes.",
-                "timestamp": datetime.now().isoformat()
+                "content": confirmation_message,
+                "timestamp": datetime.now().isoformat(),
+                "has_media": has_media,
+                "media_url": state.get("uploaded_media_url") or state.get("generated_media_url"),
+                "media_type": state.get("media_type"),
+                # Explicitly set structured_content to null to prevent frontend from creating cards
+                "structured_content": None
             }
             state["conversation_messages"].append(message)
             
             logger.info("Asking user to confirm generated content")
-            
-            # Transition to select schedule (this will be handled by user input processing)
-            # The actual transition happens in process_user_input when user responds
             
         except Exception as e:
             logger.error(f"Error in confirm_content: {e}")
@@ -862,6 +857,8 @@ class CustomContentAgent:
             state["conversation_messages"].append(message)
             
             logger.info("Asking user to select post schedule")
+            logger.info(f"Current state step: {state.get('current_step')}")
+            logger.info(f"User input in state: {state.get('user_input')}")
             
         except Exception as e:
             logger.error(f"Error in select_schedule: {e}")
@@ -905,23 +902,27 @@ class CustomContentAgent:
                 scheduled_datetime = datetime.now()
                 status = "draft"
             
-            # Create post data
+            # Get or create a default campaign for custom content
+            campaign_id = await self._get_or_create_custom_content_campaign(user_id)
+            
+            # Create post data for content_posts table
             post_data = {
-                "user_id": user_id,
+                "campaign_id": campaign_id,  # Use the custom content campaign
                 "platform": platform,
-                "content_type": content_type,
-                "content": generated_content.get("content", ""),
+                "post_type": content_type,
                 "title": generated_content.get("title", ""),
+                "content": generated_content.get("content", ""),
                 "hashtags": generated_content.get("hashtags", []),
-                "media_url": final_media_url,
+                "scheduled_date": scheduled_datetime.date().isoformat(),
+                "scheduled_time": scheduled_datetime.time().isoformat(),
                 "status": status,
-                "created_at": datetime.now().isoformat(),
-                "scheduled_for": scheduled_datetime.isoformat(),
                 "metadata": {
                     "generated_by": "custom_content_agent",
                     "conversation_id": state["conversation_id"],
+                    "user_id": user_id,
                     "platform_optimized": True,
                     "has_media": bool(final_media_url),
+                    "media_url": final_media_url,
                     "media_type": state.get("media_type", ""),
                     "original_media_filename": state.get("uploaded_media_filename", ""),
                     "media_size": state.get("uploaded_media_size", 0),
@@ -934,7 +935,7 @@ class CustomContentAgent:
             
             # Save to Supabase
             logger.info(f"Saving post to database: {post_data}")
-            result = self.supabase.table("posts").insert(post_data).execute()
+            result = self.supabase.table("content_posts").insert(post_data).execute()
             
             if result.data:
                 post_id = result.data[0]["id"]
@@ -980,6 +981,44 @@ class CustomContentAgent:
             state["current_step"] = ConversationStep.ERROR
             
         return state
+    
+    async def _get_or_create_custom_content_campaign(self, user_id: str) -> str:
+        """Get or create a default campaign for custom content"""
+        try:
+            # First, try to find an existing custom content campaign for this user
+            response = self.supabase.table("content_campaigns").select("id").eq("user_id", user_id).eq("campaign_name", "Custom Content").execute()
+            
+            if response.data and len(response.data) > 0:
+                # Campaign exists, return its ID
+                return response.data[0]["id"]
+            
+            # Campaign doesn't exist, create it
+            from datetime import datetime, timedelta
+            today = datetime.now().date()
+            week_end = today + timedelta(days=7)
+            
+            campaign_data = {
+                "user_id": user_id,
+                "campaign_name": "Custom Content",
+                "week_start_date": today.isoformat(),
+                "week_end_date": week_end.isoformat(),
+                "status": "active",
+                "total_posts": 0,
+                "generated_posts": 0
+            }
+            
+            result = self.supabase.table("content_campaigns").insert(campaign_data).execute()
+            
+            if result.data and len(result.data) > 0:
+                campaign_id = result.data[0]["id"]
+                logger.info(f"Created custom content campaign for user {user_id}: {campaign_id}")
+                return campaign_id
+            else:
+                raise Exception("Failed to create custom content campaign")
+                
+        except Exception as e:
+            logger.error(f"Error getting/creating custom content campaign: {e}")
+            raise Exception(f"Failed to get or create custom content campaign: {str(e)}")
     
     async def display_result(self, state: CustomContentState) -> CustomContentState:
         """Display the final result to the user"""
@@ -1295,10 +1334,11 @@ class CustomContentAgent:
     async def process_user_input(self, state: CustomContentState, user_input: str, input_type: str = "text") -> CustomContentState:
         """Process user input and update state accordingly"""
         try:
-            current_step = state.get("current_step")
+            # Store user input in state
+            state["user_input"] = user_input
+            state["input_type"] = input_type
             
-            # Don't add user message here - frontend handles it
-            # Just process the input based on current step
+            current_step = state.get("current_step")
             
             # Process based on current step
             if current_step == ConversationStep.ASK_PLATFORM:
@@ -1306,6 +1346,8 @@ class CustomContentAgent:
                 platform = self._parse_platform_selection(user_input, state)
                 if platform:
                     state["selected_platform"] = platform
+                    # Transition to next step
+                    state["current_step"] = ConversationStep.ASK_CONTENT_TYPE
                 else:
                     state["error_message"] = "Invalid platform selection"
                     state["current_step"] = ConversationStep.ERROR
@@ -1315,6 +1357,8 @@ class CustomContentAgent:
                 content_type = self._parse_content_type_selection(user_input, state)
                 if content_type:
                     state["selected_content_type"] = content_type
+                    # Transition to next step
+                    state["current_step"] = ConversationStep.ASK_DESCRIPTION
                 else:
                     state["error_message"] = "Invalid content type selection"
                     state["current_step"] = ConversationStep.ERROR
@@ -1322,6 +1366,8 @@ class CustomContentAgent:
             elif current_step == ConversationStep.ASK_DESCRIPTION:
                 # Store user description
                 state["user_description"] = user_input
+                # Transition to next step
+                state["current_step"] = ConversationStep.ASK_MEDIA
                 
             elif current_step == ConversationStep.CONFIRM_CONTENT:
                 # Handle content confirmation
@@ -1335,21 +1381,37 @@ class CustomContentAgent:
                     state["error_message"] = "Please respond with 'yes' to save the content or 'no' to make changes."
                     
             elif current_step == ConversationStep.SELECT_SCHEDULE:
-                # Handle schedule selection - this will be handled by frontend with datetime picker
-                # For now, just store the input and move to save
+                # Handle schedule selection
                 if user_input.lower().strip() in ["now", "immediately", "asap"]:
                     state["scheduled_for"] = datetime.now().isoformat()
                 else:
                     # Try to parse datetime from input
                     try:
                         from dateutil import parser
-                        parsed_datetime = parser.parse(user_input)
+                        logger.info(f"Attempting to parse datetime: '{user_input}'")
+                        
+                        # Handle both ISO format (2025-09-28T10:37) and other formats
+                        if 'T' in user_input and len(user_input.split('T')) == 2:
+                            # ISO format from frontend
+                            date_part, time_part = user_input.split('T')
+                            if len(time_part) == 5:  # HH:MM format
+                                time_part += ':00'  # Add seconds if missing
+                            parsed_input = f"{date_part}T{time_part}"
+                            logger.info(f"Formatted input: '{parsed_input}'")
+                        else:
+                            parsed_input = user_input
+                        
+                        parsed_datetime = parser.parse(parsed_input)
                         state["scheduled_for"] = parsed_datetime.isoformat()
-                    except:
-                        state["error_message"] = "Please provide a valid date and time, or type 'now' to post immediately."
+                        logger.info(f"Successfully parsed datetime: {parsed_datetime.isoformat()}")
+                    except Exception as e:
+                        logger.error(f"Failed to parse datetime '{user_input}': {e}")
+                        state["error_message"] = f"Please provide a valid date and time, or type 'now' to post immediately. Error: {str(e)}"
                         return state
                 
+                # Transition to save content
                 state["current_step"] = ConversationStep.SAVE_CONTENT
+                logger.info(f"Transitioning to SAVE_CONTENT with scheduled_for: {state.get('scheduled_for')}")
                 
             elif current_step == ConversationStep.CONFIRM_MEDIA:
                 # Handle media confirmation
@@ -1358,12 +1420,12 @@ class CustomContentAgent:
                     state["current_step"] = ConversationStep.GENERATE_CONTENT
                 elif user_input.lower().strip() in ["no", "n", "incorrect", "wrong"]:
                     state["media_confirmed"] = False
-                    state["current_step"] = ConversationStep.ASK_MEDIA
                     # Clear previous media
                     state.pop("uploaded_media_url", None)
                     state.pop("uploaded_media_filename", None)
                     state.pop("uploaded_media_size", None)
                     state.pop("uploaded_media_type", None)
+                    state["current_step"] = ConversationStep.ASK_MEDIA
                 else:
                     state["error_message"] = "Please respond with 'yes' to proceed or 'no' to upload a different file."
                     
@@ -1529,16 +1591,39 @@ class CustomContentAgent:
             return False
     
     def _should_handle_media(self, state: CustomContentState) -> str:
-        """Determine if media should be handled or skipped"""
+        """Determine if media should be handled, generated, or skipped"""
         if state.get("has_media", False):
-            return "handle"
+            if state.get("should_generate_media", False):
+                return "generate"
+            else:
+                return "handle"
         return "skip"
     
-    def _should_generate_media(self, state: CustomContentState) -> str:
-        """Determine if media should be generated or skipped"""
-        if state.get("should_generate_media", False):
-            return "generate"
-        return "skip"
+    def _should_proceed_after_media(self, state: CustomContentState) -> str:
+        """Determine next step after media confirmation"""
+        if state.get("current_step") == ConversationStep.ERROR:
+            return "error"
+        
+        # Check if user confirmed media or if there was an error
+        if state.get("media_confirmed", False):
+            return "proceed"
+        elif state.get("validation_errors"):
+            return "retry"
+        else:
+            return "proceed"  # Default to proceed if no explicit confirmation
+    
+    def _should_proceed_after_content(self, state: CustomContentState) -> str:
+        """Determine next step after content confirmation"""
+        if state.get("current_step") == ConversationStep.ERROR:
+            return "error"
+        
+        # Check if user confirmed content or if there was an error
+        if state.get("content_confirmed", False):
+            return "proceed"
+        elif state.get("content_confirmed") is False:
+            return "retry"
+        else:
+            return "proceed"  # Default to proceed if no explicit confirmation
     
     def get_user_platforms(self, user_id: str) -> List[str]:
         """Get user's connected platforms from their profile"""
@@ -1566,3 +1651,62 @@ class CustomContentAgent:
         except Exception as e:
             logger.error(f"Error loading user profile: {e}")
             return {}
+    
+    async def execute_conversation_step(self, state: CustomContentState, user_input: str = None) -> CustomContentState:
+        """Execute the next step in the conversation using LangGraph"""
+        try:
+            # Process user input if provided
+            if user_input:
+                logger.info(f"Processing user input: '{user_input}'")
+                state = await self.process_user_input(state, user_input, "text")
+                logger.info(f"After processing input, current_step: {state.get('current_step')}")
+            
+            # If there's an error, don't continue with the graph
+            if state.get("current_step") == ConversationStep.ERROR:
+                return state
+            
+            # Execute the current step based on the current_step in state
+            current_step = state.get("current_step")
+            logger.info(f"Executing conversation step: {current_step}")
+            
+            if current_step == ConversationStep.GREET:
+                result = await self.greet_user(state)
+            elif current_step == ConversationStep.ASK_PLATFORM:
+                result = await self.ask_platform(state)
+            elif current_step == ConversationStep.ASK_CONTENT_TYPE:
+                result = await self.ask_content_type(state)
+            elif current_step == ConversationStep.ASK_DESCRIPTION:
+                result = await self.ask_description(state)
+            elif current_step == ConversationStep.ASK_MEDIA:
+                result = await self.ask_media(state)
+            elif current_step == ConversationStep.HANDLE_MEDIA:
+                result = await self.handle_media(state)
+            elif current_step == ConversationStep.VALIDATE_MEDIA:
+                result = await self.validate_media(state)
+            elif current_step == ConversationStep.CONFIRM_MEDIA:
+                result = await self.confirm_media(state)
+            elif current_step == ConversationStep.GENERATE_MEDIA:
+                result = await self.generate_media(state)
+            elif current_step == ConversationStep.GENERATE_CONTENT:
+                result = await self.generate_content(state)
+            elif current_step == ConversationStep.CONFIRM_CONTENT:
+                result = await self.confirm_content(state)
+            elif current_step == ConversationStep.SELECT_SCHEDULE:
+                result = await self.select_schedule(state)
+            elif current_step == ConversationStep.SAVE_CONTENT:
+                result = await self.save_content(state)
+            elif current_step == ConversationStep.DISPLAY_RESULT:
+                result = await self.display_result(state)
+            elif current_step == ConversationStep.ERROR:
+                result = await self.handle_error(state)
+            else:
+                # Default to current state if step is not recognized
+                result = state
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error executing conversation step: {e}")
+            state["error_message"] = f"Failed to execute conversation step: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            return state

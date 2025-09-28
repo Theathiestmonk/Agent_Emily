@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Upload, Image, Video, Loader2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
-import ContentCard from './ContentCard';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -308,34 +307,9 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       console.log('🔍 Current step:', data.current_step);
       console.log('🔍 State data:', data.state);
       
-      // Check if message has structured_content (from parse_content step)
-      if (data.message.structured_content) {
-        console.log('✅ Using structured_content:', data.message.structured_content);
-        setGeneratedContent(data.message.structured_content);
-      } else if (data.message.content && data.state) {
-        console.log('❌ No structured_content, trying text parsing...');
-        // Fallback to parsing from text content
-        const parsedContent = parseGeneratedContent(data.message.content, data.state);
-        if (parsedContent) {
-          console.log('✅ Parsed from text:', parsedContent);
-          setGeneratedContent(parsedContent);
-        } else {
-          console.log('❌ No content found in text parsing, keeping existing content');
-          // Don't clear generated content if no content is found in this message
-          // Only clear if we're in a step that should have content
-          if (data.current_step === 'parse_content' || data.current_step === 'optimize_content') {
-            console.log('❌ Clearing content for content-related step');
-            setGeneratedContent(null);
-          }
-        }
-      } else {
-        console.log('❌ No structured_content and no content/state, keeping existing content');
-        // Don't clear generated content unless we're in a step that should have content
-        if (data.current_step === 'parse_content' || data.current_step === 'optimize_content') {
-          console.log('❌ Clearing content for content-related step');
-          setGeneratedContent(null);
-        }
-      }
+      // Content is now displayed directly in chatbot messages - no more content cards
+      // Clear any existing generated content to prevent card display
+      setGeneratedContent(null);
 
       // Check if we need to show media upload options
       // Show upload UI if user has chosen to upload media OR if we're in handle_media step
@@ -455,25 +429,9 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       console.log('🔍 Upload has structured_content:', !!response.message.structured_content);
       console.log('🔍 Upload current step:', response.current_step);
       
-      // Check if message has structured_content (from parse_content step)
-      if (response.message.structured_content) {
-        console.log('✅ Using structured_content from upload:', response.message.structured_content);
-        setGeneratedContent(response.message.structured_content);
-      } else if (response.message.content && response.state) {
-        console.log('❌ No structured_content in upload, trying text parsing...');
-        // Fallback to parsing from text content
-        const parsedContent = parseGeneratedContent(response.message.content, response.state);
-        if (parsedContent) {
-          console.log('✅ Parsed from upload text:', parsedContent);
-          setGeneratedContent(parsedContent);
-        } else {
-          console.log('❌ No content found in upload, clearing...');
-          setGeneratedContent(null);
-        }
-      } else {
-        console.log('❌ No structured_content and no content/state in upload, clearing...');
-        setGeneratedContent(null);
-      }
+      // Content is now displayed directly in chatbot messages - no more content cards
+      // Clear any existing generated content to prevent card display
+      setGeneratedContent(null);
       
       setShowMediaUpload(false);
       setUploadedFile(null);
@@ -602,18 +560,18 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
 
   const getStepName = (step) => {
     switch (step) {
-      case 'greet': return 'Getting Started';
-      case 'ask_platform': return 'Selecting Platform';
-      case 'ask_content_type': return 'Choosing Content Type';
-      case 'ask_description': return 'Describing Content';
-      case 'ask_media': return 'Adding Media';
-      case 'confirm_media': return 'Confirming Media';
-      case 'generate_content': return 'Generating Content';
-      case 'confirm_content': return 'Confirming Content';
-      case 'select_schedule': return 'Selecting Schedule';
-      case 'save_content': return 'Saving Content';
-      case 'display_result': return 'Complete';
-      default: return 'Processing';
+      case 'greet': return 'Please get started';
+      case 'ask_platform': return 'Please select platform';
+      case 'ask_content_type': return 'Please choose content type';
+      case 'ask_description': return 'Please describe content';
+      case 'ask_media': return 'Please add media';
+      case 'confirm_media': return 'Please confirm media';
+      case 'generate_content': return 'Please wait while generating content';
+      case 'confirm_content': return 'Please confirm content';
+      case 'select_schedule': return 'Please select schedule';
+      case 'save_content': return 'Please wait while saving content';
+      case 'display_result': return 'Content creation complete';
+      default: return 'Please wait';
     }
   };
 
@@ -621,23 +579,20 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl aspect-[4/3] flex flex-col">
+      <div className="bg-gradient-to-br from-white to-purple-50 rounded-2xl shadow-2xl w-full max-w-4xl aspect-[4/3] flex flex-col border border-purple-100">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center">
-              <span className="text-white font-bold text-sm">E</span>
+        <div className="flex items-center justify-between p-6 border-b border-purple-200 bg-gradient-to-r from-pink-50 to-purple-50 rounded-t-2xl">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center shadow-lg">
+              <span className="text-white font-bold text-xl">E</span>
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">Emily - Content Creator</h3>
-              <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <span>{getStepIcon(currentStep)}</span>
-                <span>{getStepName(currentStep)}</span>
-                {progress > 0 && (
-                  <>
-                    <span>•</span>
-                    <span>{progress}%</span>
-                  </>
+              <h3 className="font-bold text-gray-800 text-lg">Emily - Content Creator</h3>
+              <div className="text-sm text-purple-600 font-medium">
+                {progress > 0 ? (
+                  <span>{getStepName(currentStep)} : {progress}%</span>
+                ) : (
+                  <span>{getStepName(currentStep)}</span>
                 )}
               </div>
             </div>
@@ -646,26 +601,26 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
             <button
               onClick={() => setShowRefreshConfirm(true)}
               disabled={isLoading}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50"
+              className="p-2 hover:bg-purple-100 rounded-full transition-colors disabled:opacity-50"
               title="Refresh conversation"
             >
-              <RefreshCw className={`w-5 h-5 text-gray-500 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-5 h-5 text-purple-500 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              className="p-2 hover:bg-pink-100 rounded-full transition-colors"
             >
-              <X className="w-5 h-5 text-gray-500" />
+              <X className="w-5 h-5 text-pink-500" />
             </button>
           </div>
         </div>
 
         {/* Progress Bar */}
         {progress > 0 && (
-          <div className="px-4 py-2 bg-gray-50">
-            <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="px-6 py-3 bg-gradient-to-r from-pink-50 to-purple-50">
+            <div className="w-full bg-purple-200 rounded-full h-3 shadow-inner">
               <div
-                className="bg-pink-500 h-2 rounded-full transition-all duration-300"
+                className="bg-gradient-to-r from-pink-400 to-purple-500 h-3 rounded-full transition-all duration-500 shadow-lg"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -673,17 +628,17 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-white to-purple-25">
           {messages.map((message) => (
             <div
               key={message.id}
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                className={`max-w-[80%] rounded-2xl px-6 py-4 shadow-lg ${
                   message.role === 'user'
-                    ? 'bg-pink-500 text-white'
-                    : 'bg-gray-100 text-gray-900'
+                    ? 'bg-gradient-to-br from-pink-400 to-purple-500 text-white'
+                    : 'bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200'
                 }`}
               >
                 <p className="text-sm whitespace-pre-wrap">{message.content}</p>
@@ -709,13 +664,13 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                 
                 {/* Platform Options */}
                 {message.role === 'assistant' && message.options && message.options.length > 0 && !showMediaUpload && (
-                  <div className="mt-3">
-                    <div className="grid grid-cols-2 gap-2">
+                  <div className="mt-4">
+                    <div className="grid grid-cols-2 gap-3">
                       {message.options.map((option, index) => (
                         <button
                           key={index}
                           onClick={() => handleOptionClick(option.value, option.label)}
-                          className="text-left p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-pink-300 transition-colors text-sm font-medium"
+                          className="text-left p-4 bg-gradient-to-r from-white to-blue-50 border border-purple-200 rounded-xl hover:from-pink-50 hover:to-purple-50 hover:border-pink-300 hover:shadow-md transition-all duration-200 text-sm font-medium text-gray-700"
                         >
                           {option.label}
                         </button>
@@ -727,15 +682,19 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                 
                 {/* File Upload Input */}
                 {message.role === 'assistant' && message.content && message.content.includes('Please upload your') && showMediaUpload && (
-                  <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="space-y-3">
-                      <div className="flex items-center space-x-2">
+                  <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-3">
                         {mediaType === 'image' ? (
-                          <Image className="w-4 h-4 text-blue-600" />
+                          <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center">
+                            <Image className="w-4 h-4 text-white" />
+                          </div>
                         ) : (
-                          <Video className="w-4 h-4 text-blue-600" />
+                          <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
+                            <Video className="w-4 h-4 text-white" />
+                          </div>
                         )}
-                        <span className="text-sm font-medium text-blue-900">
+                        <span className="text-sm font-bold text-purple-800">
                           Upload {mediaType === 'image' ? 'Image' : 'Video'}
                         </span>
                       </div>
@@ -745,10 +704,10 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                         type="file"
                         accept={mediaType === 'image' ? 'image/*' : 'video/*'}
                         onChange={handleFileSelect}
-                        className="w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        className="w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gradient-to-r file:from-pink-400 file:to-purple-500 file:text-white hover:file:from-pink-500 hover:file:to-purple-600 transition-all duration-200"
                       />
                       
-                      <div className="text-xs text-blue-700">
+                      <div className="text-xs text-purple-600 font-medium">
                         {mediaType === 'image' 
                           ? 'Supported formats: JPEG, PNG, GIF, WebP (max 10MB)'
                           : 'Supported formats: MP4, MOV, AVI, MKV, WebM (max 100MB)'
@@ -785,7 +744,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                           </div>
                           <button
                             onClick={confirmUpload}
-                            className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 flex items-center justify-center space-x-1"
+                            className="w-full px-4 py-3 bg-gradient-to-r from-pink-400 to-purple-500 text-white text-sm rounded-xl hover:from-pink-500 hover:to-purple-600 flex items-center justify-center space-x-2 font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
                           >
                             <Upload className="w-4 h-4" />
                             <span>Upload & Continue</span>
@@ -794,14 +753,14 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                       )}
                       
                       {isUploading && (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-sm text-blue-700">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between text-sm text-purple-700 font-medium">
                             <span>Uploading {uploadedFile?.name}...</span>
                             <span>{uploadProgress}%</span>
                           </div>
-                          <div className="w-full bg-blue-200 rounded-full h-2">
+                          <div className="w-full bg-purple-200 rounded-full h-3 shadow-inner">
                             <div
-                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              className="bg-gradient-to-r from-pink-400 to-purple-500 h-3 rounded-full transition-all duration-300 shadow-lg"
                               style={{ width: `${uploadProgress}%` }}
                             />
                           </div>
@@ -813,17 +772,17 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                 
                 {/* Media Confirmation Options */}
                 {message.role === 'assistant' && message.content && message.content.includes('Is this the correct media') && (
-                  <div className="mt-3">
-                    <div className="flex gap-2">
+                  <div className="mt-4">
+                    <div className="flex gap-3">
                       <button
                         onClick={() => handleMediaConfirmation('yes')}
-                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
+                        className="px-6 py-3 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl hover:from-green-500 hover:to-blue-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
                       >
                         ✅ Yes, proceed
                       </button>
                       <button
                         onClick={() => handleMediaConfirmation('no')}
-                        className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+                        className="px-6 py-3 bg-gradient-to-r from-red-400 to-pink-500 text-white rounded-xl hover:from-red-500 hover:to-pink-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
                       >
                         ❌ No, upload different
                       </button>
@@ -833,17 +792,17 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                 
                 {/* Content Confirmation Options */}
                 {message.role === 'assistant' && message.content && message.content.includes('Please review it above and let me know if you\'d like to save this post') && (
-                  <div className="mt-3">
-                    <div className="flex gap-2">
+                  <div className="mt-4">
+                    <div className="flex gap-3">
                       <button
                         onClick={() => handleContentConfirmation('yes')}
-                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
+                        className="px-6 py-3 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl hover:from-green-500 hover:to-blue-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
                       >
                         ✅ Yes, save this post
                       </button>
                       <button
                         onClick={() => handleContentConfirmation('no')}
-                        className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+                        className="px-6 py-3 bg-gradient-to-r from-red-400 to-pink-500 text-white rounded-xl hover:from-red-500 hover:to-pink-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
                       >
                         ❌ No, make changes
                       </button>
@@ -853,35 +812,35 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                 
                 {/* Schedule Selection */}
                 {message.role === 'assistant' && message.content && message.content.includes('Now let\'s schedule your post') && (
-                  <div className="mt-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="space-y-4">
-                      <div className="text-sm font-medium text-blue-900">Select Post Schedule:</div>
+                  <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
+                    <div className="space-y-5">
+                      <div className="text-sm font-bold text-purple-800">Select Post Schedule:</div>
                       
-                      <div className="grid grid-cols-1 gap-3">
+                      <div className="grid grid-cols-1 gap-4">
                         <button
                           onClick={() => handleScheduleSelection('now')}
-                          className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
+                          className="px-6 py-3 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl hover:from-green-500 hover:to-blue-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
                         >
                           🚀 Post Now
                         </button>
                         
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-blue-900">Or schedule for later:</label>
-                          <div className="flex gap-2">
+                        <div className="space-y-3">
+                          <label className="text-sm font-bold text-purple-800">Or schedule for later:</label>
+                          <div className="flex gap-3">
                             <input
                               type="date"
                               ref={dateInputRef}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                              className="flex-1 px-4 py-3 border border-purple-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 text-sm bg-white shadow-sm"
                             />
                             <input
                               type="time"
                               ref={timeInputRef}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                              className="flex-1 px-4 py-3 border border-purple-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 text-sm bg-white shadow-sm"
                             />
                           </div>
                           <button
                             onClick={() => handleScheduleSelection('custom')}
-                            className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+                            className="w-full px-6 py-3 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-xl hover:from-pink-500 hover:to-purple-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
                           >
                             📅 Schedule Post
                           </button>
@@ -900,36 +859,15 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
             </div>
           ))}
           
-          {/* Generated Content Card */}
-          {generatedContent && (
-            <div className="flex justify-start">
-              <div className="w-full max-w-md">
-                <ContentCard
-                  content={generatedContent}
-                  platform={generatedContent.platform}
-                  contentType={generatedContent.content_type}
-                  onEdit={(content) => {
-                    console.log('Edit content:', content);
-                    // TODO: Implement edit functionality
-                  }}
-                  onCopy={(content) => {
-                    console.log('Copy content:', content);
-                    // Copy functionality is handled in ContentCard
-                  }}
-                  onPreview={(content) => {
-                    console.log('Preview content:', content);
-                    // TODO: Implement preview functionality
-                  }}
-                />
-              </div>
-            </div>
-          )}
+          {/* Content cards removed - content is now displayed directly in chatbot messages */}
           
           {isLoading && (
             <div className="flex justify-start">
-              <div className="bg-gray-100 rounded-lg px-4 py-2 flex items-center space-x-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm text-gray-600">
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl px-6 py-4 flex items-center space-x-3 border border-purple-200 shadow-lg">
+                <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                </div>
+                <span className="text-sm text-purple-700 font-medium">
                   {currentStep === 'generate_content' 
                     ? 'Emily is analyzing your image and generating content...' 
                     : 'Emily is thinking...'
@@ -944,8 +882,8 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
 
 
         {/* Input Area */}
-        <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center space-x-2">
+        <div className="p-6 border-t border-purple-200 bg-gradient-to-r from-pink-50 to-purple-50 rounded-b-2xl">
+          <div className="flex items-center space-x-3">
             <input
               type="text"
               value={inputValue}
@@ -953,17 +891,17 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
               onKeyPress={handleKeyPress}
               placeholder="Type your message..."
               disabled={isLoading}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent disabled:opacity-50"
+              className="flex-1 px-4 py-3 border border-purple-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 disabled:opacity-50 bg-white shadow-sm text-gray-700 placeholder-purple-400"
             />
             <button
               onClick={() => sendMessage()}
               disabled={isLoading || !inputValue.trim()}
-              className="p-2 bg-pink-500 text-white rounded-md hover:bg-pink-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-3 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-xl hover:from-pink-500 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all duration-200"
             >
               {isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                <Send className="w-4 h-4" />
+                <Send className="w-5 h-5" />
               )}
             </button>
           </div>
@@ -973,23 +911,23 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       {/* Refresh Confirmation Dialog */}
       {showRefreshConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                <RefreshCw className="w-5 h-5 text-orange-600" />
+          <div className="bg-gradient-to-br from-white to-purple-50 rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 border border-purple-200">
+            <div className="flex items-center space-x-4 mb-6">
+              <div className="w-12 h-12 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center shadow-lg">
+                <RefreshCw className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Refresh Conversation</h3>
-                <p className="text-sm text-gray-500">This will start a new conversation</p>
+                <h3 className="font-bold text-gray-800 text-lg">Refresh Conversation</h3>
+                <p className="text-sm text-purple-600 font-medium">This will start a new conversation</p>
               </div>
             </div>
-            <p className="text-gray-600 mb-6">
+            <p className="text-gray-700 mb-8 leading-relaxed">
               Are you sure you want to refresh the conversation? This will clear all current progress and start over.
             </p>
-            <div className="flex space-x-3">
+            <div className="flex space-x-4">
               <button
                 onClick={() => setShowRefreshConfirm(false)}
-                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                className="flex-1 px-6 py-3 text-gray-700 bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 rounded-xl transition-all duration-200 font-semibold shadow-sm hover:shadow-md"
               >
                 Cancel
               </button>
@@ -998,7 +936,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                   setShowRefreshConfirm(false);
                   refreshConversation();
                 }}
-                className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors"
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white rounded-xl transition-all duration-200 font-semibold shadow-lg hover:shadow-xl"
               >
                 Refresh
               </button>

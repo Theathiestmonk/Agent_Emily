@@ -6,6 +6,7 @@ import os
 import json
 import logging
 from typing import Dict, Any, Optional
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
@@ -100,7 +101,7 @@ async def process_user_input(
     request: UserInputRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Process user input in the conversation"""
+    """Process user input in the conversation using LangGraph"""
     try:
         conversation_id = request.conversation_id
         
@@ -110,125 +111,33 @@ async def process_user_input(
         
         state = conversation_states[conversation_id]
         
-        # Process user input
-        updated_state = await custom_content_agent.process_user_input(
-            state, request.user_input, request.input_type
+        # Execute the conversation step using LangGraph
+        result = await custom_content_agent.execute_conversation_step(
+            state, request.user_input
         )
         
-        # Continue the conversation flow based on current step
-        if updated_state["current_step"] != ConversationStep.ERROR:
-            current_step = updated_state["current_step"]
-            
-            # Run the appropriate next step
-            if current_step == ConversationStep.ASK_PLATFORM:
-                result = await custom_content_agent.ask_platform(updated_state)
-            elif current_step == ConversationStep.ASK_CONTENT_TYPE:
-                result = await custom_content_agent.ask_content_type(updated_state)
-            elif current_step == ConversationStep.ASK_DESCRIPTION:
-                result = await custom_content_agent.ask_description(updated_state)
-            elif current_step == ConversationStep.ASK_MEDIA:
-                result = await custom_content_agent.ask_media(updated_state)
-            elif current_step == ConversationStep.HANDLE_MEDIA:
-                result = await custom_content_agent.handle_media(updated_state)
-            elif current_step == ConversationStep.VALIDATE_MEDIA:
-                result = await custom_content_agent.validate_media(updated_state)
-            elif current_step == ConversationStep.CONFIRM_MEDIA:
-                result = await custom_content_agent.confirm_media(updated_state)
-                # If confirm_media transitions to GENERATE_CONTENT, continue the flow
-                if result["current_step"] == ConversationStep.GENERATE_CONTENT:
-                    logger.info("🔄 Chaining to generate_content")
-                    result = await custom_content_agent.generate_content(result)
-                    logger.info(f"🔄 After generate_content, current_step: {result['current_step']}")
-                    # If generate_content transitions to PARSE_CONTENT, continue the flow
-                    if result["current_step"] == ConversationStep.PARSE_CONTENT:
-                        logger.info("🔄 Chaining to parse_content")
-                        result = await custom_content_agent.parse_content(result)
-                        logger.info(f"🔄 After parse_content, current_step: {result['current_step']}")
-                        # Stop here to let frontend display the content card
-                        # The next steps will be triggered by the next user interaction or automatically
-            elif current_step == ConversationStep.GENERATE_CONTENT:
-                logger.info("🔄 Calling generate_content")
-                result = await custom_content_agent.generate_content(updated_state)
-                logger.info(f"🔄 After generate_content, current_step: {result['current_step']}")
-                # If generate_content transitions to PARSE_CONTENT, continue the flow
-                if result["current_step"] == ConversationStep.PARSE_CONTENT:
-                    logger.info("🔄 Chaining to parse_content")
-                    result = await custom_content_agent.parse_content(result)
-                    logger.info(f"🔄 After parse_content, current_step: {result['current_step']}")
-                    # If parse_content transitions to OPTIMIZE_CONTENT, continue the flow
-                    if result["current_step"] == ConversationStep.OPTIMIZE_CONTENT:
-                        logger.info("🔄 Chaining to optimize_content")
-                        result = await custom_content_agent.optimize_content(result)
-                        logger.info(f"🔄 After optimize_content, current_step: {result['current_step']}")
-                        # If optimize_content transitions to CONFIRM_CONTENT, continue the flow
-                        if result["current_step"] == ConversationStep.CONFIRM_CONTENT:
-                            logger.info("🔄 Chaining to confirm_content")
-                            result = await custom_content_agent.confirm_content(result)
-                            logger.info(f"🔄 After confirm_content, current_step: {result['current_step']}")
-            elif current_step == ConversationStep.PARSE_CONTENT:
-                logger.info("🔄 Calling parse_content")
-                result = await custom_content_agent.parse_content(updated_state)
-                logger.info(f"🔄 After parse_content, current_step: {result['current_step']}")
-                # Stop here to let frontend display the content card
-                # The next steps will be triggered automatically or by user interaction
-            elif current_step == ConversationStep.GENERATE_MEDIA:
-                result = await custom_content_agent.generate_media(updated_state)
-            elif current_step == ConversationStep.OPTIMIZE_CONTENT:
-                result = await custom_content_agent.optimize_content(updated_state)
-                # If optimize_content transitions to CONFIRM_CONTENT, continue the flow
-                if result["current_step"] == ConversationStep.CONFIRM_CONTENT:
-                    result = await custom_content_agent.confirm_content(result)
-            elif current_step == ConversationStep.CONFIRM_CONTENT:
-                result = await custom_content_agent.confirm_content(updated_state)
-                # If confirm_content transitions to SELECT_SCHEDULE, continue the flow
-                if result["current_step"] == ConversationStep.SELECT_SCHEDULE:
-                    result = await custom_content_agent.select_schedule(result)
-            elif current_step == ConversationStep.SELECT_SCHEDULE:
-                result = await custom_content_agent.select_schedule(updated_state)
-            elif current_step == ConversationStep.SAVE_CONTENT:
-                result = await custom_content_agent.save_content(updated_state)
-            elif current_step == ConversationStep.DISPLAY_RESULT:
-                result = await custom_content_agent.display_result(updated_state)
-            else:
-                result = updated_state
-            
-            # After platform selection, automatically move to content type selection
-            if (current_step == ConversationStep.ASK_PLATFORM and 
-                result.get("selected_platform") and 
-                result.get("current_step") != ConversationStep.ERROR):
-                result = await custom_content_agent.ask_content_type(result)
-            
-            # After content type selection, automatically move to description step
-            elif (current_step == ConversationStep.ASK_CONTENT_TYPE and 
-                  result.get("selected_content_type") and 
-                  result.get("current_step") != ConversationStep.ERROR):
-                result = await custom_content_agent.ask_description(result)
-            
-            # After description step, automatically move to media step
-            elif (current_step == ConversationStep.ASK_DESCRIPTION and 
-                  result.get("user_description") and 
-                  result.get("current_step") != ConversationStep.ERROR):
-                result = await custom_content_agent.ask_media(result)
-            
-            conversation_states[conversation_id] = result
-        else:
-            conversation_states[conversation_id] = updated_state
-            result = updated_state
+        # Update conversation state
+        conversation_states[conversation_id] = result
         
         # Return the latest message and state
-        latest_message = result["conversation_messages"][-1]
+        latest_message = result["conversation_messages"][-1] if result["conversation_messages"] else {
+            "role": "assistant",
+            "content": "No message available",
+            "timestamp": datetime.now().isoformat()
+        }
         
         return {
             "conversation_id": conversation_id,
             "message": latest_message,
-            "current_step": result["current_step"] if "result" in locals() else updated_state["current_step"],
-            "progress_percentage": result["progress_percentage"] if "result" in locals() else updated_state["progress_percentage"],
+            "current_step": result["current_step"],
+            "progress_percentage": result.get("progress_percentage", 0),
             "state": {
-                "selected_platform": result.get("selected_platform") if "result" in locals() else updated_state.get("selected_platform"),
-                "selected_content_type": result.get("selected_content_type") if "result" in locals() else updated_state.get("selected_content_type"),
-                "has_media": result.get("has_media") if "result" in locals() else updated_state.get("has_media"),
-                "media_type": result.get("media_type") if "result" in locals() else updated_state.get("media_type"),
-                "is_complete": result.get("is_complete") if "result" in locals() else updated_state.get("is_complete")
+                "selected_platform": result.get("selected_platform"),
+                "selected_content_type": result.get("selected_content_type"),
+                "has_media": result.get("has_media"),
+                "media_type": result.get("media_type"),
+                "is_complete": result.get("is_complete", False),
+                "error_message": result.get("error_message")
             }
         }
         
@@ -242,7 +151,7 @@ async def upload_media(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
-    """Upload media file for the conversation"""
+    """Upload media file for the conversation using LangGraph"""
     try:
         logger.info(f"Upload request received: conversation_id={conversation_id}, filename={file.filename}, content_type={file.content_type}")
         
@@ -258,98 +167,45 @@ async def upload_media(
         file_content = await file.read()
         logger.info(f"Read file content: {len(file_content)} bytes")
         
-        # Upload media
-        logger.info("Starting media upload...")
+        # Upload media using the agent
         updated_state = await custom_content_agent.upload_media(
             state, file_content, file.filename, file.content_type
         )
         logger.info(f"Media upload completed, new step: {updated_state.get('current_step')}")
         
-        # If upload was successful, confirm media
-        if updated_state.get("current_step") == ConversationStep.CONFIRM_MEDIA:
-            logger.info("Asking user to confirm media...")
-            result = await custom_content_agent.confirm_media(updated_state)
-            logger.info(f"After confirm_media, current_step: {result['current_step']}")
-        else:
-            # Continue the conversation flow based on current step
-            current_step = updated_state["current_step"]
-            
-            if current_step == ConversationStep.ASK_PLATFORM:
-                result = await custom_content_agent.ask_platform(updated_state)
-            elif current_step == ConversationStep.ASK_CONTENT_TYPE:
-                result = await custom_content_agent.ask_content_type(updated_state)
-            elif current_step == ConversationStep.ASK_DESCRIPTION:
-                result = await custom_content_agent.ask_description(updated_state)
-            elif current_step == ConversationStep.ASK_MEDIA:
-                result = await custom_content_agent.ask_media(updated_state)
-            elif current_step == ConversationStep.HANDLE_MEDIA:
-                result = await custom_content_agent.handle_media(updated_state)
-            elif current_step == ConversationStep.VALIDATE_MEDIA:
-                result = await custom_content_agent.validate_media(updated_state)
-            elif current_step == ConversationStep.CONFIRM_MEDIA:
-                result = await custom_content_agent.confirm_media(updated_state)
-                # If confirm_media transitions to GENERATE_CONTENT, continue the flow
-                if result["current_step"] == ConversationStep.GENERATE_CONTENT:
-                    logger.info("🔄 Chaining to generate_content")
-                    result = await custom_content_agent.generate_content(result)
-                    logger.info(f"🔄 After generate_content, current_step: {result['current_step']}")
-                    # If generate_content transitions to PARSE_CONTENT, continue the flow
-                    if result["current_step"] == ConversationStep.PARSE_CONTENT:
-                        logger.info("🔄 Chaining to parse_content")
-                        result = await custom_content_agent.parse_content(result)
-                        logger.info(f"🔄 After parse_content, current_step: {result['current_step']}")
-                        # Stop here to let frontend display the content card
-                        # The next steps will be triggered by the next user interaction or automatically
-            elif current_step == ConversationStep.PARSE_CONTENT:
-                logger.info("🔄 Calling parse_content")
-                result = await custom_content_agent.parse_content(updated_state)
-                logger.info(f"🔄 After parse_content, current_step: {result['current_step']}")
-                # Stop here to let frontend display the content card
-                # The next steps will be triggered automatically or by user interaction
-            elif current_step == ConversationStep.GENERATE_MEDIA:
-                result = await custom_content_agent.generate_media(updated_state)
-            elif current_step == ConversationStep.OPTIMIZE_CONTENT:
-                result = await custom_content_agent.optimize_content(updated_state)
-                # If optimize_content transitions to CONFIRM_CONTENT, continue the flow
-                if result["current_step"] == ConversationStep.CONFIRM_CONTENT:
-                    result = await custom_content_agent.confirm_content(result)
-            elif current_step == ConversationStep.CONFIRM_CONTENT:
-                result = await custom_content_agent.confirm_content(updated_state)
-                # If confirm_content transitions to SELECT_SCHEDULE, continue the flow
-                if result["current_step"] == ConversationStep.SELECT_SCHEDULE:
-                    result = await custom_content_agent.select_schedule(result)
-            elif current_step == ConversationStep.SELECT_SCHEDULE:
-                result = await custom_content_agent.select_schedule(updated_state)
-            elif current_step == ConversationStep.SAVE_CONTENT:
-                result = await custom_content_agent.save_content(updated_state)
-            elif current_step == ConversationStep.DISPLAY_RESULT:
-                result = await custom_content_agent.display_result(updated_state)
-            else:
-                result = updated_state
+        # Execute the conversation step using LangGraph
+        result = await custom_content_agent.execute_conversation_step(updated_state)
         
+        # Update conversation state
         conversation_states[conversation_id] = result
         
         # Get the last message
-        last_message = result["conversation_messages"][-1]
-        logger.info(f"Returning message with structured_content: {bool(last_message.get('structured_content'))}")
-        logger.info(f"Message keys: {list(last_message.keys())}")
-        logger.info(f"Current step: {result['current_step']}")
-        logger.info(f"Structured content type: {type(last_message.get('structured_content'))}")
+        last_message = result["conversation_messages"][-1] if result["conversation_messages"] else {
+            "role": "assistant",
+            "content": "Media uploaded successfully",
+            "timestamp": datetime.now().isoformat()
+        }
         
         response_data = {
             "conversation_id": conversation_id,
             "message": last_message,
             "current_step": result["current_step"],
-            "progress_percentage": result["progress_percentage"],
+            "progress_percentage": result.get("progress_percentage", 0),
             "media_url": result.get("uploaded_media_url"),
             "media_filename": result.get("uploaded_media_filename"),
             "media_size": result.get("uploaded_media_size"),
-            "media_type": result.get("uploaded_media_type")
+            "media_type": result.get("uploaded_media_type"),
+            "state": {
+                "selected_platform": result.get("selected_platform"),
+                "selected_content_type": result.get("selected_content_type"),
+                "has_media": result.get("has_media"),
+                "media_type": result.get("media_type"),
+                "is_complete": result.get("is_complete", False),
+                "error_message": result.get("error_message")
+            }
         }
         
-        logger.info(f"Response data keys: {list(response_data.keys())}")
-        logger.info(f"Response message structured_content: {bool(response_data['message'].get('structured_content'))}")
-        
+        logger.info(f"Media upload response prepared: {result['current_step']}")
         return response_data
         
     except Exception as e:
