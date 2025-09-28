@@ -499,9 +499,9 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       setMediaPreview(null);
       setUploadError(null);
       
-      // Send the value instead of label for generate/skip options
-      setInputValue(value);
-      sendMessage(value);
+      // Always send the label (user-friendly text) instead of value
+      setInputValue(label);
+      sendMessage(label);
     }
   };
 
@@ -572,18 +572,18 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
 
   const getStepName = (step) => {
     switch (step) {
-      case 'greet': return 'Please get started';
-      case 'ask_platform': return 'Please select platform';
-      case 'ask_content_type': return 'Please choose content type';
-      case 'ask_description': return 'Please describe content';
-      case 'ask_media': return 'Please add media';
-      case 'confirm_media': return 'Please confirm media';
-      case 'generate_content': return 'Please wait while generating content';
-      case 'confirm_content': return 'Please confirm content';
-      case 'select_schedule': return 'Please select schedule';
-      case 'save_content': return 'Please wait while saving content';
+      case 'greet': return 'Getting started';
+      case 'ask_platform': return 'Select platform';
+      case 'ask_content_type': return 'Choose content type';
+      case 'ask_description': return 'Describe content';
+      case 'ask_media': return 'Add media';
+      case 'confirm_media': return 'Confirm media';
+      case 'generate_content': return 'Generating content';
+      case 'confirm_content': return 'Confirm content';
+      case 'select_schedule': return 'Select schedule';
+      case 'save_content': return 'Saving content';
       case 'display_result': return 'Content creation complete';
-      default: return 'Please wait';
+      default: return 'Processing';
     }
   };
 

@@ -753,12 +753,13 @@ class CustomContentAgent:
             if state.get("should_generate_media", False) and self.media_agent:
                 logger.info("Generating media based on created content")
                 try:
-                    # Create temporary post for media generation
+                    # Get the generated content from state
+                    generated_content = state.get("generated_content", {})
+                    
+                    # Create a minimal temporary post for media generation (will be cleaned up)
                     temp_post_id = await self._create_temp_post_for_media(state)
                     
                     if temp_post_id:
-                        # Get the generated content from state
-                        generated_content = state.get("generated_content", {})
                         # Update the temporary post with the generated content
                         await self._update_temp_post_with_content(temp_post_id, generated_content, state)
                         
@@ -781,6 +782,13 @@ class CustomContentAgent:
                             # Continue without media
                             state["should_generate_media"] = False
                             state["has_media"] = False
+                        
+                        # Clean up the temporary post to avoid duplicates
+                        try:
+                            self.supabase.table("content_posts").delete().eq("id", temp_post_id).execute()
+                            logger.info(f"Cleaned up temporary post {temp_post_id}")
+                        except Exception as cleanup_error:
+                            logger.warning(f"Failed to clean up temporary post {temp_post_id}: {cleanup_error}")
                     else:
                         logger.error("Failed to create temporary post for media generation")
                         state["should_generate_media"] = False
@@ -1525,6 +1533,9 @@ class CustomContentAgent:
                             parsed_input = user_input
                         
                         parsed_datetime = parser.parse(parsed_input)
+                        # Ensure the datetime is timezone-aware
+                        if parsed_datetime.tzinfo is None:
+                            parsed_datetime = parsed_datetime.replace(tzinfo=None)
                         state["scheduled_for"] = parsed_datetime.isoformat()
                         logger.info(f"Successfully parsed datetime: {parsed_datetime.isoformat()}")
                     except Exception as e:
@@ -1535,6 +1546,9 @@ class CustomContentAgent:
                 # Transition to save content
                 state["current_step"] = ConversationStep.SAVE_CONTENT
                 logger.info(f"Transitioning to SAVE_CONTENT with scheduled_for: {state.get('scheduled_for')}")
+                
+                # Execute save_content immediately to avoid looping
+                return await self.save_content(state)
                 
             elif current_step == ConversationStep.CONFIRM_MEDIA:
                 # Handle media confirmation
@@ -1631,7 +1645,7 @@ class CustomContentAgent:
         user_profile = state.get("user_profile", {})
         connected_platforms = user_profile.get("social_media_platforms", [])
         
-        # Try to match by number
+        # Try to match by number first (for backward compatibility)
         try:
             index = int(user_input.strip()) - 1
             if 0 <= index < len(connected_platforms):
@@ -1639,7 +1653,13 @@ class CustomContentAgent:
         except ValueError:
             pass
         
-        # Try to match by name
+        # Try to match by exact name (for button clicks)
+        user_input_stripped = user_input.strip()
+        for platform in connected_platforms:
+            if platform == user_input_stripped:
+                return platform
+        
+        # Try to match by partial name (for text input)
         user_input_lower = user_input.lower().strip()
         for platform in connected_platforms:
             if platform.lower() in user_input_lower or user_input_lower in platform.lower():
@@ -1652,7 +1672,7 @@ class CustomContentAgent:
         platform = state.get("selected_platform", "")
         content_types = PLATFORM_CONTENT_TYPES.get(platform, [])
         
-        # Try to match by number
+        # Try to match by number first (for backward compatibility)
         try:
             index = int(user_input.strip()) - 1
             if 0 <= index < len(content_types):
@@ -1660,7 +1680,13 @@ class CustomContentAgent:
         except ValueError:
             pass
         
-        # Try to match by name
+        # Try to match by exact name (for button clicks)
+        user_input_stripped = user_input.strip()
+        for content_type in content_types:
+            if content_type == user_input_stripped:
+                return content_type
+        
+        # Try to match by partial name (for text input)
         user_input_lower = user_input.lower().strip()
         for content_type in content_types:
             if content_type.lower() in user_input_lower or user_input_lower in content_type.lower():
@@ -1672,11 +1698,23 @@ class CustomContentAgent:
         """Parse media choice from user input"""
         user_input_lower = user_input.lower().strip()
         
-        # Handle direct button values
+        # Handle direct button values (for backward compatibility)
         if user_input_lower in ["upload_image", "upload_video", "generate_image", "generate_video", "skip_media"]:
             return user_input_lower
         
-        # Handle text-based parsing
+        # Handle button labels from frontend
+        if "upload an image" in user_input_lower or "📷" in user_input:
+            return "upload_image"
+        elif "upload a video" in user_input_lower or "🎥" in user_input:
+            return "upload_video"
+        elif "generate an image" in user_input_lower or "🎨" in user_input:
+            return "generate_image"
+        elif "generate a video" in user_input_lower or "🎬" in user_input:
+            return "generate_video"
+        elif "skip media" in user_input_lower or "text-only" in user_input_lower or "📝" in user_input:
+            return "skip_media"
+        
+        # Handle text-based parsing (for manual input)
         if any(word in user_input_lower for word in ["upload", "image", "photo", "picture"]):
             return "upload_image"
         elif any(word in user_input_lower for word in ["upload", "video", "movie", "clip"]):
