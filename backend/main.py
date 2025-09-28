@@ -18,7 +18,7 @@ from routers.content import router as content_router
 from routers.social_media import router as social_media_router
 from routers.social_media_connections import router as social_media_connections_router
 from routers.chatbot import router as chatbot_router
-# from routers.media import router as media_router  # Temporarily disabled due to import error
+from routers.media import router as media_router
 from routers.google_connections import router as google_router
 from routers.ads import router as ads_router
 from routers.blogs import router as blogs_router
@@ -64,7 +64,7 @@ app.include_router(content_router)
 app.include_router(social_media_router)
 app.include_router(social_media_connections_router)
 app.include_router(chatbot_router)
-# app.include_router(media_router)  # Temporarily disabled due to import error
+app.include_router(media_router)
 app.include_router(ads_router)
 app.include_router(blogs_router)
 app.include_router(custom_content_router)
