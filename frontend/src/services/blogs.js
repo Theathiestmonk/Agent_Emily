@@ -3,18 +3,52 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 class BlogService {
   async getAuthToken() {
     // Try multiple token sources
-    const token = localStorage.getItem('authToken') || 
-                  localStorage.getItem('token') || 
-                  localStorage.getItem('access_token')
+    let token = localStorage.getItem('authToken') || 
+                localStorage.getItem('token') || 
+                localStorage.getItem('access_token')
     
     if (!token) {
       // Try to get token from Supabase session
       try {
         const { supabase } = await import('../lib/supabase')
         const { data: { session } } = await supabase.auth.getSession()
-        return session?.access_token || null
+        token = session?.access_token || null
+        
+        // If we got a token from Supabase, store it in localStorage
+        if (token) {
+          localStorage.setItem('authToken', token)
+        }
       } catch (error) {
         console.error('Error getting Supabase token:', error)
+        return null
+      }
+    }
+    
+    // If we still don't have a token, try to refresh the session
+    if (!token) {
+      try {
+        const { supabase } = await import('../lib/supabase')
+        const { data: { session }, error } = await supabase.auth.refreshSession()
+        
+        if (error) {
+          console.error('Error refreshing session:', error)
+          // Clear invalid tokens
+          localStorage.removeItem('authToken')
+          localStorage.removeItem('token')
+          localStorage.removeItem('access_token')
+          return null
+        }
+        
+        token = session?.access_token || null
+        if (token) {
+          localStorage.setItem('authToken', token)
+        }
+      } catch (error) {
+        console.error('Error refreshing session:', error)
+        // Clear all tokens
+        localStorage.removeItem('authToken')
+        localStorage.removeItem('token')
+        localStorage.removeItem('access_token')
         return null
       }
     }
@@ -30,6 +64,13 @@ class BlogService {
     
     if (!token) {
       console.error('No authentication token found')
+      // Clear any invalid tokens and redirect to login
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('token')
+      localStorage.removeItem('access_token')
+      
+      // Redirect to login page
+      window.location.href = '/login'
       throw new Error('Authentication required. Please log in.')
     }
     
@@ -47,6 +88,17 @@ class BlogService {
       if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
         console.error('Blog service error:', error)
+        
+        // Handle authentication errors specifically
+        if (response.status === 401) {
+          console.error('Authentication failed, clearing tokens and redirecting to login')
+          localStorage.removeItem('authToken')
+          localStorage.removeItem('token')
+          localStorage.removeItem('access_token')
+          window.location.href = '/login'
+          throw new Error('Authentication failed. Please log in again.')
+        }
+        
         throw new Error(error.detail || `HTTP ${response.status}`)
       }
 
@@ -108,7 +160,7 @@ class BlogService {
     if (params.status) queryParams.append('status', params.status)
     
     const queryString = queryParams.toString()
-    const endpoint = `/api/blogs/campaigns${queryString ? `?${queryString}` : ''}`
+    const endpoint = `/api/blogs/campaigns/${queryString ? `?${queryString}` : ''}`
     
     return this.makeRequest(endpoint)
   }
@@ -123,12 +175,12 @@ class BlogService {
 
   // Blog Statistics
   async getBlogStats() {
-    return this.makeRequest('/api/blogs/stats')
+    return this.makeRequest('/api/blogs/stats/')
   }
 
   // WordPress Sites (for blog creation)
   async getWordPressSites() {
-    return this.makeRequest('/connections/wordpress')
+    return this.makeRequest('/connections/platform/?platform=wordpress')
   }
 }
 

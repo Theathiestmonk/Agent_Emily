@@ -59,10 +59,14 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     """Get current user from Supabase JWT token"""
     try:
         token = credentials.credentials
+        logger.info(f"Authenticating user with token: {token[:20]}...")
+        
         response = supabase.auth.get_user(token)
+        logger.info(f"Supabase auth response: {response}")
         
         if response and hasattr(response, 'user') and response.user:
             user_data = response.user
+            logger.info(f"User authenticated: {user_data.id}")
             return User(
                 id=user_data.id,
                 email=user_data.email or "unknown@example.com",
@@ -70,10 +74,12 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
                 created_at=user_data.created_at.isoformat() if hasattr(user_data.created_at, 'isoformat') else str(user_data.created_at)
             )
         else:
+            logger.error("Invalid token - no user data in response")
             raise HTTPException(status_code=401, detail="Invalid token")
             
     except Exception as e:
         logger.error(f"Authentication error: {e}")
+        logger.error(f"Error type: {type(e)}")
         raise HTTPException(status_code=401, detail="Authentication failed")
 
 router = APIRouter(prefix="/api/blogs", tags=["blogs"])
@@ -90,7 +96,8 @@ async def get_blogs(
     try:
         logger.info(f"Fetching blogs for user: {current_user.id}")
         
-        query = supabase_admin.table("blog_posts").select("*, wordpress_connections(site_name, site_url)").eq("author_id", current_user.id)
+        # Get blogs without join for now - we'll add the join back after migration
+        query = supabase_admin.table("blog_posts").select("*").eq("author_id", current_user.id)
         
         if status:
             query = query.eq("status", status)
@@ -176,7 +183,7 @@ async def get_campaign_blogs(
             raise HTTPException(status_code=404, detail="Campaign not found")
         
         # Get blogs for this campaign
-        response = supabase_admin.table("blog_posts").select("*, wordpress_connections(site_name, site_url)").eq("campaign_id", campaign_id).eq("author_id", current_user.id).order("created_at", desc=True).execute()
+        response = supabase_admin.table("blog_posts").select("*").eq("campaign_id", campaign_id).eq("author_id", current_user.id).order("created_at", desc=True).execute()
         
         blogs = response.data if response.data else []
         
@@ -242,7 +249,7 @@ async def get_blog(
     try:
         logger.info(f"Fetching blog {blog_id} for user: {current_user.id}")
         
-        response = supabase_admin.table("blog_posts").select("*, wordpress_connections(site_name, site_url)").eq("id", blog_id).eq("author_id", current_user.id).execute()
+        response = supabase_admin.table("blog_posts").select("*").eq("id", blog_id).eq("author_id", current_user.id).execute()
         
         if not response.data:
             raise HTTPException(status_code=404, detail="Blog not found")
@@ -278,12 +285,12 @@ async def generate_blogs(
         # Generate blogs
         result = await blog_agent.generate_blogs_for_user(current_user.id)
         
-        if result["success"]:
-            logger.info(f"Blog generation successful: {result['total_blogs']} blogs created")
+        if result.get("success"):
+            logger.info(f"Blog generation successful: {result.get('total_blogs', 0)} blogs created")
             return result
         else:
-            logger.error(f"Blog generation failed: {result['error']}")
-            raise HTTPException(status_code=500, detail=result["error"])
+            logger.error(f"Blog generation failed: {result.get('error', 'Unknown error')}")
+            raise HTTPException(status_code=500, detail=f"Failed to generate blogs: {result.get('error', 'Unknown error')}")
             
     except Exception as e:
         logger.error(f"Error generating blogs: {e}")
@@ -330,21 +337,67 @@ async def delete_blog(
     blog_id: str,
     current_user: User = Depends(get_current_user)
 ):
-    """Delete a blog post"""
+    """Delete a blog post from both WordPress and Supabase"""
     try:
         logger.info(f"Deleting blog {blog_id} for user: {current_user.id}")
         
-        # Verify blog belongs to user
-        existing_response = supabase_admin.table("blog_posts").select("id").eq("id", blog_id).eq("author_id", current_user.id).execute()
+        # Get blog details including WordPress info
+        blog_response = supabase_admin.table("blog_posts").select("*").eq("id", blog_id).eq("author_id", current_user.id).execute()
         
-        if not existing_response.data:
+        if not blog_response.data:
             raise HTTPException(status_code=404, detail="Blog not found")
         
-        # Delete blog
+        blog = blog_response.data[0]
+        
+        # If blog was published to WordPress, delete it from there too
+        if blog.get('wordpress_post_id') and blog.get('wordpress_site_id'):
+            try:
+                # Get WordPress connection details
+                wordpress_response = supabase_admin.table("platform_connections").select("*").eq("id", blog['wordpress_site_id']).eq("platform", "wordpress").execute()
+                
+                if wordpress_response.data:
+                    wordpress_site = wordpress_response.data[0]
+                    
+                    # Decrypt WordPress app password
+                    try:
+                        app_password = decrypt_token(wordpress_site['wordpress_app_password_encrypted'])
+                    except Exception as e:
+                        logger.error(f"Error decrypting WordPress app password: {e}")
+                        # Continue with Supabase deletion even if WordPress deletion fails
+                    else:
+                        # Delete from WordPress using REST API
+                        import requests
+                        from requests.auth import HTTPBasicAuth
+                        
+                        delete_url = f"{wordpress_site['wordpress_site_url'].rstrip('/')}/wp-json/wp/v2/posts/{blog['wordpress_post_id']}"
+                        
+                        logger.info(f"Deleting from WordPress: {delete_url}")
+                        
+                        response = requests.delete(
+                            delete_url,
+                            auth=HTTPBasicAuth(wordpress_site['wordpress_username'], app_password),
+                            headers={
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                                'User-Agent': 'Agent-Emily/1.0'
+                            },
+                            timeout=30
+                        )
+                        
+                        if response.status_code == 200:
+                            logger.info(f"Blog deleted from WordPress: Post ID {blog['wordpress_post_id']}")
+                        else:
+                            logger.warning(f"Failed to delete from WordPress (status {response.status_code}): {response.text}")
+                            
+            except Exception as e:
+                logger.error(f"Error deleting from WordPress: {e}")
+                # Continue with Supabase deletion even if WordPress deletion fails
+        
+        # Delete from Supabase
         supabase_admin.table("blog_posts").delete().eq("id", blog_id).eq("author_id", current_user.id).execute()
         
-        logger.info(f"Blog deleted: {blog_id}")
-        return {"message": "Blog deleted successfully"}
+        logger.info(f"Blog deleted from Supabase: {blog_id}")
+        return {"message": "Blog deleted successfully from both WordPress and Supabase"}
         
     except HTTPException:
         raise
@@ -362,16 +415,24 @@ async def publish_blog(
         logger.info(f"Publishing blog {blog_id} for user: {current_user.id}")
         
         # Get blog details
-        blog_response = supabase_admin.table("blog_posts").select("*, wordpress_connections(*)").eq("id", blog_id).eq("author_id", current_user.id).execute()
+        blog_response = supabase_admin.table("blog_posts").select("*").eq("id", blog_id).eq("author_id", current_user.id).execute()
         
         if not blog_response.data:
             raise HTTPException(status_code=404, detail="Blog not found")
         
         blog = blog_response.data[0]
-        wordpress_site = blog["wordpress_connections"]
         
-        if not wordpress_site:
+        # Get WordPress connection details
+        if not blog.get('wordpress_site_id'):
+            raise HTTPException(status_code=400, detail="WordPress site not found for this blog")
+        
+        # Get the WordPress connection from platform_connections
+        wordpress_response = supabase_admin.table("platform_connections").select("*").eq("id", blog['wordpress_site_id']).eq("platform", "wordpress").execute()
+        
+        if not wordpress_response.data:
             raise HTTPException(status_code=400, detail="WordPress site not found")
+        
+        wordpress_site = wordpress_response.data[0]
         
         # Decrypt WordPress app password
         try:
@@ -405,9 +466,18 @@ async def publish_blog(
             from requests.auth import HTTPBasicAuth
             
             # Prepare post data for REST API
+            # Add categories and tags to the content for visibility
+            content_with_meta = wordpress_data['content']
+            if wordpress_data['categories'] or wordpress_data['tags']:
+                content_with_meta += "\n\n<!-- Blog Metadata -->\n"
+                if wordpress_data['categories']:
+                    content_with_meta += f"<p><strong>Categories:</strong> {', '.join(wordpress_data['categories'])}</p>\n"
+                if wordpress_data['tags']:
+                    content_with_meta += f"<p><strong>Tags:</strong> {', '.join(wordpress_data['tags'])}</p>\n"
+            
             post_data = {
                 'title': wordpress_data['title'],
-                'content': wordpress_data['content'],
+                'content': content_with_meta,
                 'excerpt': wordpress_data['excerpt'],
                 'status': 'publish',
                 'format': wordpress_data['format'],
@@ -417,11 +487,20 @@ async def publish_blog(
                 }
             }
             
-            # Add categories and tags if provided
+            # Handle categories and tags - WordPress REST API expects integer IDs
+            # For now, we'll skip categories and tags to avoid the type error
+            # In a production system, you'd want to:
+            # 1. Create categories/tags in WordPress first
+            # 2. Get their IDs
+            # 3. Use those IDs here
+            # 
+            # For now, we'll include them in the content or meta instead
             if wordpress_data['categories']:
-                post_data['categories'] = wordpress_data['categories']
+                # Add categories as meta data instead of direct categories
+                post_data['meta']['_blog_categories'] = ', '.join(wordpress_data['categories'])
             if wordpress_data['tags']:
-                post_data['tags'] = wordpress_data['tags']
+                # Add tags as meta data instead of direct tags
+                post_data['meta']['_blog_tags'] = ', '.join(wordpress_data['tags'])
             
             # Create a new session to avoid cookie persistence issues
             session = requests.Session()
@@ -494,7 +573,7 @@ async def publish_blog(
             "message": "Blog published successfully", 
             "blog_id": blog_id,
             "wordpress_post_id": str(wordpress_post_id),
-            "wordpress_url": f"{wordpress_site['site_url'].rstrip('/')}/?p={wordpress_post_id}"
+            "wordpress_url": f"{wordpress_site['wordpress_site_url'].rstrip('/')}/?p={wordpress_post_id}"
         }
         
     except HTTPException:

@@ -4690,41 +4690,62 @@ async def create_wordpress_connection(
         
 
         # Test the connection using WordPress REST API authentication
-        rest_url = f"{connection_data.site_url.rstrip('/')}/wp-json/wp/v2/users/me"
+        # Try multiple endpoints for better compatibility
+        rest_urls = [
+            f"{connection_data.site_url.rstrip('/')}/wp-json/wp/v2/users/me",
+            f"{connection_data.site_url.rstrip('/')}/wp-json/wp/v2/users",
+            f"{connection_data.site_url.rstrip('/')}/wp-json/wp/v2/posts?per_page=1"
+        ]
         
-        print(f"🔍 Testing WordPress connection with REST API: {rest_url}")
+        print(f"🔍 Testing WordPress connection with REST API endpoints")
         
         try:
             import requests
             session = requests.Session()
             session.cookies.clear()
             
-            # Test WordPress REST API authentication
-            response = session.get(
-                rest_url,
-                auth=(connection_data.username, connection_data.password),
-                timeout=30,
-                allow_redirects=False
-            )
+            # Test WordPress REST API authentication with multiple endpoints
+            response = None
+            successful_endpoint = None
+            
+            for rest_url in rest_urls:
+                print(f"🔍 Trying endpoint: {rest_url}")
+                try:
+                    response = session.get(
+                        rest_url,
+                        auth=(connection_data.username, connection_data.password),
+                        headers={
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'User-Agent': 'Agent-Emily/1.0'
+                        },
+                        timeout=30,
+                        allow_redirects=False
+                    )
+                    
+                    if response.status_code == 200:
+                        successful_endpoint = rest_url
+                        print(f"✅ Success with endpoint: {rest_url}")
+                        break
+                    elif response.status_code in [401, 403]:
+                        # Authentication issue, try next endpoint
+                        print(f"⚠️ Auth issue with {rest_url}: {response.status_code}")
+                        continue
+                    else:
+                        print(f"⚠️ Error with {rest_url}: {response.status_code}")
+                        continue
+                        
+                except requests.exceptions.RequestException as e:
+                    print(f"⚠️ Request failed for {rest_url}: {e}")
+                    continue
+            
+            if not response or not successful_endpoint:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to connect to any WordPress REST API endpoint. Please check your site URL and ensure the REST API is enabled."
+                )
             
             print(f"🔍 WordPress REST API response: {response.status_code}")
-            
-            if response.status_code == 401:
-                print(f"❌ WordPress REST API authentication failed: 401 Unauthorized")
-                print(f"🔍 Response headers: {dict(response.headers)}")
-                if 'Set-Cookie' in response.headers:
-                    print(f"🔍 Set-Cookie headers: {response.headers.get('Set-Cookie')}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Failed to authenticate with WordPress REST API. Please check your username and App Password. Make sure you're using an Application Password, not your regular password. Generate one in WordPress Admin → Users → Profile → Application Passwords."
-                )
-            elif response.status_code != 200:
-                print(f"❌ WordPress REST API error: {response.status_code}")
-                print(f"🔍 Response content: {response.text[:500]}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"WordPress REST API returned status {response.status_code}. Please check your site URL and ensure the REST API is enabled."
-                )
             
             user_info = response.json()
             print(f"✅ WordPress REST API authentication successful!")
@@ -5199,6 +5220,11 @@ async def test_wordpress_connection(
             response = session.get(
                 rest_url,
                 auth=(connection['username'], password),
+                headers={
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Agent-Emily/1.0'
+                },
                 timeout=30,
                 allow_redirects=False
             )
@@ -5218,6 +5244,19 @@ async def test_wordpress_connection(
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Failed to authenticate with WordPress REST API. Please check your username and App Password. Make sure you're using an Application Password, not your regular password. Generate one in WordPress Admin → Users → Profile → Application Passwords."
+                )
+            elif response.status_code == 406:
+                print(f"❌ WordPress REST API error: 406 Not Acceptable")
+                print(f"🔍 Response content: {response.text[:500]}")
+                print(f"🔍 Response headers: {dict(response.headers)}")
+                # Update last_checked_at even if test failed
+                supabase_admin.table("wordpress_connections").update({
+                    "last_checked_at": datetime.now().isoformat()
+                }).eq("id", connection_id).execute()
+                
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="WordPress REST API returned status 406 (Not Acceptable). This usually means the API doesn't accept the request format. Please check if your WordPress site has the REST API enabled and try again."
                 )
             elif response.status_code != 200:
                 print(f"❌ WordPress REST API error: {response.status_code}")

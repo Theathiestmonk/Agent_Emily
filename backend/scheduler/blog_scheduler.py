@@ -62,7 +62,7 @@ class BlogScheduler:
             supabase_admin = create_client(self.supabase_url, os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
             
             # Get all users with active WordPress connections
-            response = supabase_admin.table("wordpress_connections").select("user_id").eq("is_active", True).execute()
+            response = supabase_admin.table("platform_connections").select("user_id").eq("platform", "wordpress").eq("is_active", True).execute()
             
             if not response.data:
                 logger.info("No users with WordPress connections found")
