@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useContentCache } from '../contexts/ContentCacheContext'
 import { contentAPI } from '../services/content'
-import mediaService from '../services/media'
 import { supabase } from '../lib/supabase'
 import ContentProgress from './ContentProgress'
 import ContentGenerationModal from './ContentGenerationModal'
@@ -134,10 +133,21 @@ const ContentDashboard = () => {
   useEffect(() => {
     const urlDate = searchParams.get('date')
     if (urlDate && urlDate !== selectedDate) {
-      console.log('URL date changed to:', urlDate)
-      setSelectedDate(urlDate)
+      console.log('🔄 URL date changed to:', urlDate)
+      
+      // Validate date format before setting
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+      if (dateRegex.test(urlDate)) {
+        console.log('✅ Valid date format, updating selected date')
+        setSelectedDate(urlDate)
+      } else {
+        console.error('❌ Invalid date format in URL:', urlDate)
+        // Redirect to today's date if invalid
+        const today = new Date().toISOString().split('T')[0]
+        navigate(`/content?date=${today}`, { replace: true })
+      }
     }
-  }, [searchParams, selectedDate])
+  }, [searchParams, selectedDate, navigate])
 
   // Update current date index when selectedDate changes
   useEffect(() => {
@@ -169,6 +179,14 @@ const ContentDashboard = () => {
 
   // Unified function to fetch content for a specific date directly from Supabase
   const fetchContentForDate = async (date) => {
+    // Validate date format first
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      console.error('❌ Invalid date format for fetching content:', date)
+      setDateContent([])
+      setContentLoaded(true)
+      return
+    }
+    
     // Prevent multiple simultaneous fetches for the same date
     if (currentFetchRef.current === date) {
       console.log('🔄 Already fetching content for date:', date, '- skipping duplicate request')
@@ -315,23 +333,45 @@ const ContentDashboard = () => {
 
   // Navigate to previous date with content
   const navigateToPreviousDate = () => {
-    if (currentDateIndex > 0) {
-      const prevDate = availableDates[currentDateIndex - 1]
-      setSelectedDate(prevDate)
-      setCurrentDateIndex(currentDateIndex - 1)
-      // Update URL
-      navigate(`/content?date=${prevDate}`)
+    try {
+      if (currentDateIndex > 0 && availableDates.length > 0) {
+        const prevDate = availableDates[currentDateIndex - 1]
+        console.log('⬅️ Navigating to previous date:', prevDate)
+        
+        // Validate date before navigation
+        if (prevDate && /^\d{4}-\d{2}-\d{2}$/.test(prevDate)) {
+          setSelectedDate(prevDate)
+          setCurrentDateIndex(currentDateIndex - 1)
+          // Update URL
+          navigate(`/content?date=${prevDate}`)
+        } else {
+          console.error('❌ Invalid previous date:', prevDate)
+        }
+      }
+    } catch (error) {
+      console.error('💥 Error navigating to previous date:', error)
     }
   }
 
   // Navigate to next date with content
   const navigateToNextDate = () => {
-    if (currentDateIndex < availableDates.length - 1) {
-      const nextDate = availableDates[currentDateIndex + 1]
-      setSelectedDate(nextDate)
-      setCurrentDateIndex(currentDateIndex + 1)
-      // Update URL
-      navigate(`/content?date=${nextDate}`)
+    try {
+      if (currentDateIndex < availableDates.length - 1 && availableDates.length > 0) {
+        const nextDate = availableDates[currentDateIndex + 1]
+        console.log('➡️ Navigating to next date:', nextDate)
+        
+        // Validate date before navigation
+        if (nextDate && /^\d{4}-\d{2}-\d{2}$/.test(nextDate)) {
+          setSelectedDate(nextDate)
+          setCurrentDateIndex(currentDateIndex + 1)
+          // Update URL
+          navigate(`/content?date=${nextDate}`)
+        } else {
+          console.error('❌ Invalid next date:', nextDate)
+        }
+      }
+    } catch (error) {
+      console.error('💥 Error navigating to next date:', error)
     }
   }
 
@@ -1056,11 +1096,25 @@ const ContentDashboard = () => {
 
   const fetchPostImages = async (postId) => {
     try {
-      const result = await mediaService.getPostImages(postId)
+      console.log('🖼️ Fetching images for post from Supabase:', postId)
       
-      if (result.images && result.images.length > 0) {
+      // Query Supabase directly for images
+      const { data: imagesData, error } = await supabase
+        .from('content_images')
+        .select('*')
+        .eq('post_id', postId)
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        console.error('❌ Supabase images query error:', error)
+        return
+      }
+      
+      console.log('📊 Images found in Supabase:', imagesData)
+      
+      if (imagesData && imagesData.length > 0) {
         // Store the latest image for this post
-        const latestImage = result.images[0] // Assuming we want the latest one
+        const latestImage = imagesData[0] // Get the most recent image
         
         setGeneratedImages(prev => {
           const newImages = {
@@ -1075,12 +1129,13 @@ const ContentDashboard = () => {
           }
           return newImages
         })
+        
+        console.log('✅ Image data stored for post:', postId, latestImage)
+      } else {
+        console.log('📷 No images found for post:', postId)
       }
     } catch (error) {
-      // Only log errors that are not 404 (Post not found) to reduce console spam
-      if (!error.message?.includes('404') && !error.message?.includes('Post not found')) {
-        console.error('Error fetching post images:', error)
-      }
+      console.error('💥 Error fetching post images from Supabase:', error)
     }
   }
 
@@ -1089,7 +1144,33 @@ const ContentDashboard = () => {
       // Add to generating set
       setGeneratingMedia(prev => new Set(prev).add(content.id))
       
-      const result = await mediaService.generateMedia(content.id)
+      console.log('🎨 Generating media for content:', content.id)
+      
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        throw new Error('No authentication token found')
+      }
+      
+      // Call the backend media generation API directly
+      const response = await fetch(`${API_BASE_URL}/media/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          post_id: content.id
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
+      }
+      
+      const result = await response.json()
+      console.log('🎨 Generation result from backend:', result)
       
       if (result.success) {
         console.log('🎨 Generation successful, fetching images for content:', content.id)
@@ -1111,11 +1192,19 @@ const ContentDashboard = () => {
       
       // Provide more helpful error messages
       let errorMessage = error.message
-      if (error.message.includes('OpenAI API key not configured')) {
+      if (error.message?.includes('404')) {
+        errorMessage = 'Media generation service is not available. Please try again later.'
+      } else if (error.message?.includes('500')) {
+        errorMessage = 'Server error during media generation. Please try again.'
+      } else if (error.message?.includes('401')) {
+        errorMessage = 'Authentication error. Please refresh the page and try again.'
+      } else if (error.message?.includes('403')) {
+        errorMessage = 'Access denied. Please check your permissions.'
+      } else if (error.message?.includes('OpenAI API key not configured')) {
         errorMessage = 'OpenAI API key not configured. Please contact support to set up image generation.'
-      } else if (error.message.includes('quota exceeded')) {
+      } else if (error.message?.includes('quota exceeded')) {
         errorMessage = 'OpenAI API quota exceeded. Please check billing settings.'
-      } else if (error.message.includes('Invalid OpenAI API key')) {
+      } else if (error.message?.includes('Invalid OpenAI API key')) {
         errorMessage = 'Invalid OpenAI API key. Please contact support.'
       }
       
@@ -1132,11 +1221,36 @@ const ContentDashboard = () => {
 
   const handleApproveImage = async (postId) => {
     try {
-      // Find the image ID for this post
-      const result = await mediaService.getPostImages(postId)
-      if (result.images && result.images.length > 0) {
-        const imageId = result.images[0].id
-        await mediaService.approveImage(imageId)
+      console.log('✅ Approving image for post in Supabase:', postId)
+      
+      // Find the latest image for this post
+      const { data: imagesData, error: fetchError } = await supabase
+        .from('content_images')
+        .select('id')
+        .eq('post_id', postId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      
+      if (fetchError) {
+        console.error('❌ Error fetching image for approval:', fetchError)
+        throw fetchError
+      }
+      
+      if (imagesData && imagesData.length > 0) {
+        const imageId = imagesData[0].id
+        
+        // Update the image approval status in Supabase
+        const { error: updateError } = await supabase
+          .from('content_images')
+          .update({ is_approved: true })
+          .eq('id', imageId)
+        
+        if (updateError) {
+          console.error('❌ Error updating image approval in Supabase:', updateError)
+          throw updateError
+        }
+        
+        console.log('✅ Image approved in Supabase:', imageId)
         
         // Update local state
         setGeneratedImages(prev => ({
@@ -1148,9 +1262,12 @@ const ContentDashboard = () => {
         }))
         
         showSuccess('Image approved successfully!')
+      } else {
+        console.log('❌ No images found for post:', postId)
+        showError('No images found for this post')
       }
     } catch (error) {
-      console.error('Error approving image:', error)
+      console.error('💥 Error approving image in Supabase:', error)
       showError('Failed to approve image', error.message)
     }
   }
