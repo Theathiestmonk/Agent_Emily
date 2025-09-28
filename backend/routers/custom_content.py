@@ -6,6 +6,8 @@ import os
 import json
 import logging
 from typing import Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -132,19 +134,43 @@ async def process_user_input(
                 result = await custom_content_agent.validate_media(updated_state)
             elif current_step == ConversationStep.CONFIRM_MEDIA:
                 result = await custom_content_agent.confirm_media(updated_state)
+                # If confirm_media transitions to GENERATE_CONTENT, continue the flow
+                if result["current_step"] == ConversationStep.GENERATE_CONTENT:
+                    logger.info("🔄 Chaining to generate_content")
+                    result = await custom_content_agent.generate_content(result)
+                    logger.info(f"🔄 After generate_content, current_step: {result['current_step']}")
+                    # If generate_content transitions to PARSE_CONTENT, continue the flow
+                    if result["current_step"] == ConversationStep.PARSE_CONTENT:
+                        logger.info("🔄 Chaining to parse_content")
+                        result = await custom_content_agent.parse_content(result)
+                        logger.info(f"🔄 After parse_content, current_step: {result['current_step']}")
+                        # Stop here to let frontend display the content card
+                        # The next steps will be triggered by the next user interaction or automatically
             elif current_step == ConversationStep.GENERATE_CONTENT:
+                logger.info("🔄 Calling generate_content")
                 result = await custom_content_agent.generate_content(updated_state)
+                logger.info(f"🔄 After generate_content, current_step: {result['current_step']}")
                 # If generate_content transitions to PARSE_CONTENT, continue the flow
                 if result["current_step"] == ConversationStep.PARSE_CONTENT:
+                    logger.info("🔄 Chaining to parse_content")
                     result = await custom_content_agent.parse_content(result)
+                    logger.info(f"🔄 After parse_content, current_step: {result['current_step']}")
+                    # If parse_content transitions to OPTIMIZE_CONTENT, continue the flow
+                    if result["current_step"] == ConversationStep.OPTIMIZE_CONTENT:
+                        logger.info("🔄 Chaining to optimize_content")
+                        result = await custom_content_agent.optimize_content(result)
+                        logger.info(f"🔄 After optimize_content, current_step: {result['current_step']}")
+                        # If optimize_content transitions to CONFIRM_CONTENT, continue the flow
+                        if result["current_step"] == ConversationStep.CONFIRM_CONTENT:
+                            logger.info("🔄 Chaining to confirm_content")
+                            result = await custom_content_agent.confirm_content(result)
+                            logger.info(f"🔄 After confirm_content, current_step: {result['current_step']}")
             elif current_step == ConversationStep.PARSE_CONTENT:
+                logger.info("🔄 Calling parse_content")
                 result = await custom_content_agent.parse_content(updated_state)
-                # If parse_content transitions to OPTIMIZE_CONTENT, continue the flow
-                if result["current_step"] == ConversationStep.OPTIMIZE_CONTENT:
-                    result = await custom_content_agent.optimize_content(result)
-                    # If optimize_content transitions to CONFIRM_CONTENT, continue the flow
-                    if result["current_step"] == ConversationStep.CONFIRM_CONTENT:
-                        result = await custom_content_agent.confirm_content(result)
+                logger.info(f"🔄 After parse_content, current_step: {result['current_step']}")
+                # Stop here to let frontend display the content card
+                # The next steps will be triggered automatically or by user interaction
             elif current_step == ConversationStep.GENERATE_MEDIA:
                 result = await custom_content_agent.generate_media(updated_state)
             elif current_step == ConversationStep.OPTIMIZE_CONTENT:
@@ -154,6 +180,9 @@ async def process_user_input(
                     result = await custom_content_agent.confirm_content(result)
             elif current_step == ConversationStep.CONFIRM_CONTENT:
                 result = await custom_content_agent.confirm_content(updated_state)
+                # If confirm_content transitions to SELECT_SCHEDULE, continue the flow
+                if result["current_step"] == ConversationStep.SELECT_SCHEDULE:
+                    result = await custom_content_agent.select_schedule(result)
             elif current_step == ConversationStep.SELECT_SCHEDULE:
                 result = await custom_content_agent.select_schedule(updated_state)
             elif current_step == ConversationStep.SAVE_CONTENT:
@@ -259,14 +288,24 @@ async def upload_media(
                 result = await custom_content_agent.validate_media(updated_state)
             elif current_step == ConversationStep.CONFIRM_MEDIA:
                 result = await custom_content_agent.confirm_media(updated_state)
+                # If confirm_media transitions to GENERATE_CONTENT, continue the flow
+                if result["current_step"] == ConversationStep.GENERATE_CONTENT:
+                    logger.info("🔄 Chaining to generate_content")
+                    result = await custom_content_agent.generate_content(result)
+                    logger.info(f"🔄 After generate_content, current_step: {result['current_step']}")
+                    # If generate_content transitions to PARSE_CONTENT, continue the flow
+                    if result["current_step"] == ConversationStep.PARSE_CONTENT:
+                        logger.info("🔄 Chaining to parse_content")
+                        result = await custom_content_agent.parse_content(result)
+                        logger.info(f"🔄 After parse_content, current_step: {result['current_step']}")
+                        # Stop here to let frontend display the content card
+                        # The next steps will be triggered by the next user interaction or automatically
             elif current_step == ConversationStep.PARSE_CONTENT:
+                logger.info("🔄 Calling parse_content")
                 result = await custom_content_agent.parse_content(updated_state)
-                # If parse_content transitions to OPTIMIZE_CONTENT, continue the flow
-                if result["current_step"] == ConversationStep.OPTIMIZE_CONTENT:
-                    result = await custom_content_agent.optimize_content(result)
-                    # If optimize_content transitions to CONFIRM_CONTENT, continue the flow
-                    if result["current_step"] == ConversationStep.CONFIRM_CONTENT:
-                        result = await custom_content_agent.confirm_content(result)
+                logger.info(f"🔄 After parse_content, current_step: {result['current_step']}")
+                # Stop here to let frontend display the content card
+                # The next steps will be triggered automatically or by user interaction
             elif current_step == ConversationStep.GENERATE_MEDIA:
                 result = await custom_content_agent.generate_media(updated_state)
             elif current_step == ConversationStep.OPTIMIZE_CONTENT:
@@ -276,6 +315,9 @@ async def upload_media(
                     result = await custom_content_agent.confirm_content(result)
             elif current_step == ConversationStep.CONFIRM_CONTENT:
                 result = await custom_content_agent.confirm_content(updated_state)
+                # If confirm_content transitions to SELECT_SCHEDULE, continue the flow
+                if result["current_step"] == ConversationStep.SELECT_SCHEDULE:
+                    result = await custom_content_agent.select_schedule(result)
             elif current_step == ConversationStep.SELECT_SCHEDULE:
                 result = await custom_content_agent.select_schedule(updated_state)
             elif current_step == ConversationStep.SAVE_CONTENT:

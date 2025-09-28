@@ -320,13 +320,21 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
           console.log('✅ Parsed from text:', parsedContent);
           setGeneratedContent(parsedContent);
         } else {
-          console.log('❌ No content found, clearing...');
-          // Clear generated content if no content is found in this message
-          setGeneratedContent(null);
+          console.log('❌ No content found in text parsing, keeping existing content');
+          // Don't clear generated content if no content is found in this message
+          // Only clear if we're in a step that should have content
+          if (data.current_step === 'parse_content' || data.current_step === 'optimize_content') {
+            console.log('❌ Clearing content for content-related step');
+            setGeneratedContent(null);
+          }
         }
       } else {
-        console.log('❌ No structured_content and no content/state, clearing...');
-        setGeneratedContent(null);
+        console.log('❌ No structured_content and no content/state, keeping existing content');
+        // Don't clear generated content unless we're in a step that should have content
+        if (data.current_step === 'parse_content' || data.current_step === 'optimize_content') {
+          console.log('❌ Clearing content for content-related step');
+          setGeneratedContent(null);
+        }
       }
 
       // Check if we need to show media upload options

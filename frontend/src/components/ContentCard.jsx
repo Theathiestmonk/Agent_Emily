@@ -57,7 +57,7 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
   const mediaUrl = content.media_url || content.mediaUrl;
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300">
+    <div className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
       {/* Header */}
       <div className={`bg-gradient-to-r ${getPlatformColor(platform)} p-4 text-white`}>
         <div className="flex items-center justify-between">

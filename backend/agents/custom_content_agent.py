@@ -727,10 +727,10 @@ class CustomContentAgent:
             # Store the structured content for the frontend
             state["parsed_content"] = structured_content
             
-            # Create a simple message that will trigger the frontend to show the card
+            # Create a single message with both content card and confirmation
             message = {
                 "role": "assistant",
-                "content": "Here's your content ready for review!",
+                "content": "Perfect! I've generated your content. Please review it above and let me know if you'd like to save this post. Type 'yes' to save it or 'no' to make changes.",
                 "timestamp": datetime.now().isoformat(),
                 "structured_content": structured_content
             }
@@ -739,9 +739,9 @@ class CustomContentAgent:
             logger.info(f"Created message with structured_content: {bool(message.get('structured_content'))}")
             logger.info(f"Structured content keys: {list(structured_content.keys()) if structured_content else 'None'}")
             
-            # Transition to optimize content
-            state["current_step"] = ConversationStep.OPTIMIZE_CONTENT
-            state["progress_percentage"] = 90
+            # Transition to confirm content step
+            state["current_step"] = ConversationStep.CONFIRM_CONTENT
+            state["progress_percentage"] = 95
             
             logger.info(f"Content parsed and structured for {platform} {content_type}")
             
@@ -836,6 +836,9 @@ class CustomContentAgent:
             state["conversation_messages"].append(message)
             
             logger.info("Asking user to confirm generated content")
+            
+            # Transition to select schedule (this will be handled by user input processing)
+            # The actual transition happens in process_user_input when user responds
             
         except Exception as e:
             logger.error(f"Error in confirm_content: {e}")
