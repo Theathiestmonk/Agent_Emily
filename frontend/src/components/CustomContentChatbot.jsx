@@ -595,7 +595,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-purple-200 bg-gradient-to-r from-pink-50 to-purple-50 rounded-t-2xl">
           <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center shadow-lg">
+            <div className="w-12 h-12 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center shadow-lg animate-pulse">
               <span className="text-white font-bold text-xl">E</span>
             </div>
             <div>
