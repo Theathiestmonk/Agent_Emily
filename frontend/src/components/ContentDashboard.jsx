@@ -30,6 +30,7 @@ const API_BASE_URL = (() => {
 import { 
   Calendar, 
   Image, 
+  Video,
   FileText, 
   Hash, 
   Clock, 
@@ -55,7 +56,8 @@ import {
   Loader2,
   Upload,
   X,
-  CheckCircle
+  CheckCircle,
+  Trash2
 } from 'lucide-react'
 
 const ContentDashboard = () => {
@@ -1105,18 +1107,38 @@ const ContentDashboard = () => {
     const file = event.target.files[0]
     if (file) {
       // Validate file type
-      if (!file.type.startsWith('image/')) {
-        showError('Invalid file type', 'Please select an image file')
+      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+        showError('Invalid file type', 'Please select an image or video file')
         return
       }
       
-      // Validate file size (max 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        showError('File too large', 'Please select an image smaller than 10MB')
+      // Validate file size (max 100MB for videos, 10MB for images)
+      const maxSize = file.type.startsWith('video/') ? 100 * 1024 * 1024 : 10 * 1024 * 1024
+      if (file.size > maxSize) {
+        const maxSizeMB = file.type.startsWith('video/') ? '100MB' : '10MB'
+        showError('File too large', `Please select a file smaller than ${maxSizeMB}`)
         return
       }
       
       setSelectedFile(file)
+    }
+  }
+
+  const handleDeleteUploadedMedia = async (postId) => {
+    try {
+      const result = await mediaService.deleteUploadedMedia(postId)
+      if (result.success) {
+        showSuccess('Media deleted successfully', 'The uploaded media has been removed')
+        // Clear selected file if it was for this post
+        if (editForm.id === postId) {
+          setSelectedFile(null)
+        }
+        // Refresh the content list
+        loadContent()
+      }
+    } catch (error) {
+      console.error('Error deleting uploaded media:', error)
+      showError('Failed to delete media', error.message || 'An error occurred while deleting the media')
     }
   }
 
@@ -1193,6 +1215,7 @@ const ContentDashboard = () => {
       }
       
       // Update local state
+      console.log('🔍 Setting video URL in state:', result.image_url)
       setGeneratedImages(prev => ({
         ...prev,
         [postId]: {
@@ -1208,7 +1231,13 @@ const ContentDashboard = () => {
       setShowUploadModal(null)
       setSelectedFile(null)
       
-      showSuccess('Image uploaded successfully!', 'Your custom image has been added to the post')
+      // Use the message from backend (which correctly identifies video vs image)
+      const successMessage = result.message || 'Media uploaded successfully!'
+      const successDescription = selectedFile?.type.startsWith('video/') 
+        ? 'Your custom video has been added to the post'
+        : 'Your custom image has been added to the post'
+      
+      showSuccess(successMessage, successDescription)
       
     } catch (error) {
       console.error('Error uploading image:', error)
@@ -1247,7 +1276,8 @@ const ContentDashboard = () => {
     
     // If it's a Supabase storage URL from the generated or user-uploads folder, add resize transformation for thumbnail
     if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
-        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/') ||
+        imageUrl.includes('supabase.co/storage/v1/object/public/user-uploads/')) {
       // Check if URL already has query parameters
       const separator = imageUrl.includes('?') ? '&' : '?'
       // Add resize transformation to create a smaller, faster-loading thumbnail
@@ -1282,7 +1312,8 @@ const ContentDashboard = () => {
     
     // If it's a Supabase storage URL from the generated or user-uploads folder, add resize transformation for medium thumbnail
     if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
-        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/') ||
+        imageUrl.includes('supabase.co/storage/v1/object/public/user-uploads/')) {
       // Check if URL already has query parameters
       const separator = imageUrl.includes('?') ? '&' : '?'
       // Using 200x200 with 70% quality for good balance of size and quality
@@ -1291,6 +1322,13 @@ const ContentDashboard = () => {
     
     // For non-generated folder URLs, return null to trigger image generation
     return null
+  }
+
+  // Check if the media file is a video
+  const isVideoFile = (url) => {
+    if (!url) return false
+    const videoExtensions = ['.mp4', '.avi', '.mov', '.wmv', '.webm']
+    return videoExtensions.some(ext => url.toLowerCase().includes(ext))
   }
 
   // Get full-size image URL for detailed viewing
@@ -1332,6 +1370,8 @@ const ContentDashboard = () => {
 
   // Handle image click to open lightbox
   const handleImageClick = (imageUrl, contentTitle) => {
+    console.log('🖼️ Opening lightbox for:', imageUrl)
+    console.log('🖼️ Is video file:', isVideoFile(imageUrl))
     setLightboxImage({
       url: imageUrl,
       title: contentTitle
@@ -1604,6 +1644,21 @@ const ContentDashboard = () => {
                                   <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
                                 </div>
                               )}
+                              
+                              {isVideoFile(generatedImages[content.id].image_url) ? (
+                                <video 
+                                  src={generatedImages[content.id].image_url}
+                                  className="w-full h-48 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                  controls
+                                  preload="metadata"
+                                  onLoadStart={() => startImageLoading(content.id)}
+                                  onLoadedData={() => handleImageLoad(content.id)}
+                                  onError={() => handleImageError(content.id)}
+                                  onClick={() => handleImageClick(generatedImages[content.id].image_url, content.title)}
+                                >
+                                  Your browser does not support the video tag.
+                                </video>
+                              ) : (
                               <img 
                                 src={getMediumThumbnailUrl(generatedImages[content.id].image_url)} 
                                 alt="Generated content thumbnail" 
@@ -1620,6 +1675,7 @@ const ContentDashboard = () => {
                                   transition: 'all 0.6s ease-in-out'
                                 }}
                               />
+                              )}
                             </div>
                             <div className="flex items-center space-x-2">
                               {!generatedImages[content.id].is_approved && (
@@ -1740,6 +1796,51 @@ const ContentDashboard = () => {
                                   (() => {
                                     const thumbnailUrl = getSmallThumbnailUrl(generatedImages[content.id].image_url)
                                     
+                                    // Check if it's a video file
+                                    if (isVideoFile(generatedImages[content.id].image_url)) {
+                                      console.log('🎬 Rendering video for content:', content.id)
+                                      console.log('🎬 Video URL:', generatedImages[content.id].image_url)
+                                      console.log('🎬 Video file extension:', generatedImages[content.id].image_url.split('.').pop())
+                                      return (
+                                        <video 
+                                          src={generatedImages[content.id].image_url}
+                                          className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                          controls
+                                          preload="metadata"
+                                          muted
+                                          playsInline
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            handleImageClick(generatedImages[content.id].image_url, content.title)
+                                          }}
+                                          onLoadStart={() => {
+                                            console.log('🎬 Video loading started for content:', content.id)
+                                            startImageLoading(content.id)
+                                          }}
+                                          onLoadedData={() => {
+                                            console.log('✅ Video loaded for content:', content.id)
+                                            handleImageLoad(content.id)
+                                          }}
+                                          onError={(e) => {
+                                            console.error('❌ Video failed to load for content:', content.id)
+                                            console.error('❌ Failed URL:', generatedImages[content.id].image_url)
+                                            console.error('❌ Error details:', e)
+                                            handleImageError(content.id)
+                                          }}
+                                          onCanPlay={() => {
+                                            console.log('🎬 Video can play for content:', content.id)
+                                          }}
+                                          style={{
+                                            opacity: imageLoading.has(content.id) ? 0 : 1,
+                                            filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
+                                            transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
+                                            transition: 'all 0.5s ease-in-out'
+                                          }}
+                                        >
+                                          Your browser does not support the video tag.
+                                        </video>
+                                      )
+                                    }
                                     
                                     // If thumbnail URL is null (non-generated folder URL), show generate button
                                     if (!thumbnailUrl) {
@@ -1752,7 +1853,7 @@ const ContentDashboard = () => {
                                             }}
                                             className="px-3 py-2 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 transition-colors"
                                           >
-                                            Generate Image with AI
+                                            Generate Media with AI
                                           </button>
                                         </div>
                                       )
@@ -2097,19 +2198,19 @@ const ContentDashboard = () => {
                   </div>
                 </div>
 
-                {/* Image Upload and Status - Two Column Layout */}
+                {/* Media Upload and Status - Two Column Layout */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Image Upload Section */}
+                  {/* Media Upload Section - Supports both images and videos */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Replace Image
+                      Replace Media
                     </label>
                     
-                    {/* Current Image Display */}
+                    {/* Current Media Display */}
                     {generatedImages[editForm.id] && (
                       <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700">Current Image:</span>
+                          <span className="text-sm font-medium text-gray-700">Current Media:</span>
                           <span className="text-xs text-gray-500">
                             {generatedImages[editForm.id].is_approved ? 'Approved' : 'Pending'}
                           </span>
@@ -2120,9 +2221,32 @@ const ContentDashboard = () => {
                               <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                             </div>
                           )}
+                          
+                          {isVideoFile(generatedImages[editForm.id].image_url) ? (
+                            <video 
+                              src={generatedImages[editForm.id].image_url}
+                              className="w-full h-32 object-cover rounded-lg"
+                              controls
+                              preload="metadata"
+                              onLoadStart={() => {
+                                console.log('🔍 Video loading started, URL:', generatedImages[editForm.id].image_url)
+                                startImageLoading(editForm.id)
+                              }}
+                              onLoadedData={() => handleImageLoad(editForm.id)}
+                              onError={() => handleImageError(editForm.id)}
+                              style={{
+                                opacity: imageLoading.has(editForm.id) ? 0 : 1,
+                                filter: imageLoading.has(editForm.id) ? 'blur(8px)' : 'blur(0px)',
+                                transform: imageLoading.has(editForm.id) ? 'scale(1.05)' : 'scale(1)',
+                                transition: 'all 0.6s ease-in-out'
+                              }}
+                            >
+                              Your browser does not support the video tag.
+                            </video>
+                          ) : (
                           <img 
                             src={getMediumThumbnailUrl(generatedImages[editForm.id].image_url)} 
-                            alt="Current content thumbnail" 
+                              alt="Current content media" 
                             className="w-full h-32 object-cover rounded-lg"
                             loading="lazy"
                             onLoad={() => handleImageLoad(editForm.id)}
@@ -2135,6 +2259,7 @@ const ContentDashboard = () => {
                               transition: 'all 0.6s ease-in-out'
                             }}
                           />
+                          )}
                         </div>
                       </div>
                     )}
@@ -2143,19 +2268,23 @@ const ContentDashboard = () => {
                     <div className="space-y-3">
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*,video/mp4,video/avi,video/mov,video/wmv,video/webm"
                         onChange={handleFileSelect}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                       <p className="text-xs text-gray-500">
-                        Supported formats: JPG, PNG, GIF. Max size: 10MB
+                        Supported formats: JPG, PNG, GIF (max 10MB), MP4, AVI, MOV, WMV, WEBM (max 100MB)
                       </p>
                       
                       {/* Selected File Preview */}
                       {selectedFile && (
                         <div className="border border-gray-200 rounded-lg p-3">
                           <div className="flex items-center space-x-3">
+                            {selectedFile.type.startsWith('video/') ? (
+                              <Video className="w-6 h-6 text-purple-500" />
+                            ) : (
                             <Image className="w-6 h-6 text-blue-500" />
+                            )}
                             <div className="flex-1">
                               <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
                               <p className="text-xs text-gray-500">
@@ -2191,7 +2320,7 @@ const ContentDashboard = () => {
                             ) : (
                               <>
                                 <Upload className="w-4 h-4" />
-                                <span>Upload New Image</span>
+                                <span>{selectedFile.type.startsWith('video/') ? 'Upload New Video' : 'Upload New Image'}</span>
                               </>
                             )}
                           </button>
@@ -2256,7 +2385,7 @@ const ContentDashboard = () => {
         </div>
       )}
 
-      {/* Image Lightbox Modal */}
+      {/* Media Lightbox Modal */}
       {lightboxImage && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-8"
@@ -2273,16 +2402,30 @@ const ContentDashboard = () => {
               </svg>
             </button>
             
-            {/* Image Container */}
+            {/* Media Container */}
             <div className="relative w-full h-full max-w-2xl max-h-[70vh] bg-white rounded-lg shadow-2xl overflow-hidden">
+              {isVideoFile(lightboxImage.url) ? (
+                <video
+                  src={lightboxImage.url}
+                  className="w-full h-full object-contain"
+                  controls
+                  autoPlay
+                  muted
+                  playsInline
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Your browser does not support the video tag.
+                </video>
+              ) : (
               <img
                 src={lightboxImage.url}
                 alt={lightboxImage.title}
                 className="w-full h-full object-contain"
                 onClick={(e) => e.stopPropagation()}
               />
+              )}
               
-              {/* Image title */}
+              {/* Media title */}
               {lightboxImage.title && (
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent text-white p-4">
                   <h3 className="text-lg font-medium">{lightboxImage.title}</h3>
