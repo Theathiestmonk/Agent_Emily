@@ -1409,7 +1409,8 @@ const ContentDashboard = () => {
     
     // If it's a Supabase storage URL from the generated or user-uploads folder, add resize transformation for very small thumbnail
     if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
-        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/') ||
+        imageUrl.includes('supabase.co/storage/v1/object/public/user-uploads/')) {
       // Check if URL already has query parameters
       const separator = imageUrl.includes('?') ? '&' : '?'
       // Using 30x30 with 40% quality for ultra fast loading in collapsed cards
@@ -1909,6 +1910,12 @@ const ContentDashboard = () => {
                                 {generatedImages[content.id].image_url ? (
                                   (() => {
                                     const thumbnailUrl = getSmallThumbnailUrl(generatedImages[content.id].image_url)
+                                    console.log('🖼️ Content card image check:', {
+                                      contentId: content.id,
+                                      hasImage: !!generatedImages[content.id].image_url,
+                                      imageUrl: generatedImages[content.id].image_url,
+                                      thumbnailUrl: thumbnailUrl
+                                    })
                                     
                                     // Check if it's a video file
                                     if (isVideoFile(generatedImages[content.id].image_url)) {
@@ -1956,8 +1963,38 @@ const ContentDashboard = () => {
                                       )
                                     }
                                     
-                                    // If thumbnail URL is null (non-generated folder URL), show generate button
+                                    // If thumbnail URL is null (non-generated folder URL), show original image or generate button
                                     if (!thumbnailUrl) {
+                                      // If we have an image URL but no thumbnail, show the original image
+                                      if (generatedImages[content.id].image_url) {
+                                        return (
+                                          <img 
+                                            src={generatedImages[content.id].image_url} 
+                                            alt="Content image" 
+                                            className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                            loading="eager"
+                                            onClick={() => handleImageClick(generatedImages[content.id].image_url, content.title)}
+                                            onLoad={() => {
+                                              console.log('✅ Image loaded for content:', content.id)
+                                              handleImageLoad(content.id)
+                                            }}
+                                            onError={(e) => {
+                                              console.error('❌ Image failed to load for content:', content.id)
+                                              console.error('❌ Failed URL:', generatedImages[content.id].image_url)
+                                              handleImageError(content.id)
+                                            }}
+                                            onLoadStart={() => startImageLoading(content.id)}
+                                            style={{
+                                              opacity: imageLoading.has(content.id) ? 0 : 1,
+                                              filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
+                                              transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
+                                              transition: 'all 0.5s ease-in-out'
+                                            }}
+                                          />
+                                        )
+                                      }
+                                      
+                                      // If no image URL, show generate button
                                       return (
                                         <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100">
                                           <button
