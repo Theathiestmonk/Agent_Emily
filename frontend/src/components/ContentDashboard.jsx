@@ -2297,86 +2297,89 @@ const ContentDashboard = () => {
 
       {/* Edit Modal */}
       {editingContent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-gray-900">Edit Content</h3>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto border border-purple-100">
+            <div className="p-8">
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                    <Edit className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">Edit Content</h3>
+                </div>
                 <button
                   onClick={handleCancelEdit}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <X className="w-4 h-4 text-gray-600" />
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {/* Title */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
                     Title
                   </label>
                   <input
                     type="text"
                     value={editForm.title}
                     onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all duration-200 hover:border-purple-300"
                     placeholder="Enter content title"
                   />
                 </div>
 
                 {/* Content */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
                     Content
                   </label>
                   <textarea
                     value={editForm.content}
                     onChange={(e) => setEditForm(prev => ({ ...prev, content: e.target.value }))}
                     rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all duration-200 hover:border-purple-300 resize-none"
                     placeholder="Enter content text"
                   />
                 </div>
 
                 {/* Hashtags */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
                     Hashtags (comma-separated)
                   </label>
                   <input
                     type="text"
                     value={editForm.hashtags}
                     onChange={(e) => setEditForm(prev => ({ ...prev, hashtags: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all duration-200 hover:border-purple-300"
                     placeholder="Enter hashtags separated by commas"
                   />
                 </div>
 
                 {/* Date and Time */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
                       Scheduled Date
                     </label>
                     <input
                       type="date"
                       value={editForm.scheduled_date}
                       onChange={(e) => setEditForm(prev => ({ ...prev, scheduled_date: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all duration-200 hover:border-purple-300"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
                       Scheduled Time
                     </label>
                     <input
                       type="time"
                       value={editForm.scheduled_time}
                       onChange={(e) => setEditForm(prev => ({ ...prev, scheduled_time: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all duration-200 hover:border-purple-300"
                     />
                   </div>
                 </div>
@@ -2385,16 +2388,20 @@ const ContentDashboard = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Media Upload Section - Supports both images and videos */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
                       Replace Media
                     </label>
                     
                     {/* Current Media Display */}
                     {generatedImages[editForm.id] && (
-                      <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700">Current Media:</span>
-                          <span className="text-xs text-gray-500">
+                      <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-sm font-semibold text-purple-800">Current Media:</span>
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                            generatedImages[editForm.id].is_approved 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}>
                             {generatedImages[editForm.id].is_approved ? 'Approved' : 'Pending'}
                           </span>
                         </div>
@@ -2448,37 +2455,48 @@ const ContentDashboard = () => {
                     )}
                     
                     {/* File Upload */}
-                    <div className="space-y-3">
-                      <input
-                        type="file"
-                        accept="image/*,video/mp4,video/avi,video/mov,video/wmv,video/webm"
-                        onChange={handleFileSelect}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                      <p className="text-xs text-gray-500">
+                    <div className="space-y-4">
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/*,video/mp4,video/avi,video/mov,video/wmv,video/webm"
+                          onChange={handleFileSelect}
+                          className="w-full h-24 border-2 border-dashed border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all duration-200 hover:border-purple-300 cursor-pointer opacity-0 absolute inset-0"
+                        />
+                        <div className="w-full h-24 border-2 border-dashed border-purple-200 rounded-xl flex items-center justify-center hover:border-purple-300 transition-all duration-200">
+                          <div className="text-center">
+                            <Upload className="w-6 h-6 text-purple-400 mx-auto mb-1" />
+                            <p className="text-sm text-purple-600 font-medium">Click to browse files</p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 flex items-center">
+                        <span className="w-1 h-1 bg-purple-400 rounded-full mr-2"></span>
                         Supported formats: JPG, PNG, GIF (max 10MB), MP4, AVI, MOV, WMV, WEBM (max 100MB)
                       </p>
                       
                       {/* Selected File Preview */}
                       {selectedFile && (
-                        <div className="border border-gray-200 rounded-lg p-3">
-                          <div className="flex items-center space-x-3">
-                            {selectedFile.type.startsWith('video/') ? (
-                              <Video className="w-6 h-6 text-purple-500" />
-                            ) : (
-                            <Image className="w-6 h-6 text-blue-500" />
-                            )}
+                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4">
+                          <div className="flex items-center space-x-4">
+                            <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                              {selectedFile.type.startsWith('video/') ? (
+                                <Video className="w-5 h-5 text-white" />
+                              ) : (
+                                <Image className="w-5 h-5 text-white" />
+                              )}
+                            </div>
                             <div className="flex-1">
-                              <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
-                              <p className="text-xs text-gray-500">
-                                {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                              <p className="text-sm font-semibold text-gray-900 truncate">{selectedFile.name}</p>
+                              <p className="text-xs text-purple-600 font-medium">
+                                {(selectedFile.size / 1024 / 1024).toFixed(2)} MB • {selectedFile.type.startsWith('video/') ? 'Video' : 'Image'}
                               </p>
                             </div>
                             <button
                               onClick={() => setSelectedFile(null)}
-                              className="text-gray-400 hover:text-gray-600"
+                              className="w-8 h-8 bg-red-100 hover:bg-red-200 rounded-full flex items-center justify-center transition-colors"
                             >
-                              <X className="w-4 h-4" />
+                              <X className="w-4 h-4 text-red-600" />
                             </button>
                           </div>
                         </div>
@@ -2538,17 +2556,17 @@ const ContentDashboard = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-end space-x-3 mt-6 pt-6 border-t border-gray-200">
+              <div className="flex items-center justify-end space-x-4 mt-8 pt-6 border-t-2 border-gradient-to-r from-purple-200 to-pink-200">
                 <button
                   onClick={handleCancelEdit}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="px-6 py-3 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-all duration-200 font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSaveEdit}
                   disabled={saving}
-                  className="px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                  className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:from-pink-600 hover:to-purple-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2 font-semibold shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
                 >
                   {saving ? (
                     <>
@@ -2814,6 +2832,126 @@ const ContentDashboard = () => {
                   <p className="text-white/80 text-sm">
                     Post published successfully! Check your {postNotification.platform} account.
                   </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Media Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-lg mx-4 border border-purple-100">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                  <Upload className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  Upload Media
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowUploadModal(null)
+                  setSelectedFile(null)
+                }}
+                className="w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4 text-gray-600" />
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* File Input Area */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  Select Media File
+                </label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    onChange={(e) => {
+                      const file = e.target.files[0]
+                      if (file) {
+                        setSelectedFile(file)
+                      }
+                    }}
+                    className="w-full h-32 border-2 border-dashed border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all duration-200 hover:border-purple-300 cursor-pointer opacity-0 absolute inset-0"
+                  />
+                  <div className="w-full h-32 border-2 border-dashed border-purple-200 rounded-xl flex items-center justify-center hover:border-purple-300 transition-all duration-200">
+                    <div className="text-center">
+                      <Upload className="w-8 h-8 text-purple-400 mx-auto mb-2" />
+                      <p className="text-sm text-purple-600 font-medium">Click to browse files</p>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2 flex items-center">
+                  <span className="w-1 h-1 bg-purple-400 rounded-full mr-2"></span>
+                  Supported formats: Images (JPG, PNG, GIF) and Videos (MP4, AVI, MOV)
+                </p>
+              </div>
+              
+              {/* Selected File Preview */}
+              {selectedFile && (
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                      {selectedFile.type.startsWith('video/') ? (
+                        <Video className="w-6 h-6 text-white" />
+                      ) : (
+                        <Image className="w-6 h-6 text-white" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{selectedFile.name}</p>
+                      <p className="text-xs text-purple-600 font-medium">
+                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB • {selectedFile.type.startsWith('video/') ? 'Video' : 'Image'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedFile(null)}
+                      className="w-8 h-8 bg-red-100 hover:bg-red-200 rounded-full flex items-center justify-center transition-colors"
+                    >
+                      <X className="w-4 h-4 text-red-600" />
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Upload Button */}
+              {selectedFile && (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => {
+                      console.log('🔍 Upload button clicked, contentId:', showUploadModal)
+                      handleUploadImage(showUploadModal)
+                    }}
+                    disabled={uploadingImage.has(showUploadModal)}
+                    className="w-full px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:from-pink-600 hover:to-purple-500 transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-3 font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
+                  >
+                    {uploadingImage.has(showUploadModal) ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-5 h-5" />
+                        <span>{selectedFile.type.startsWith('video/') ? 'Upload Video' : 'Upload Image'}</span>
+                      </>
+                    )}
+                  </button>
+                  
+                  {/* Progress indicator */}
+                  {uploadingImage.has(showUploadModal) && (
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full animate-pulse"></div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
