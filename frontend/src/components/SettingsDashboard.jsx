@@ -26,6 +26,7 @@ import ConnectionStatus from './ConnectionStatus'
 import SideNavbar from './SideNavbar'
 import MainContentLoader from './MainContentLoader'
 import DisconnectConfirmationModal from './DisconnectConfirmationModal'
+import WordPressInstructionsModal from './WordPressInstructionsModal'
 // Using URL-based approach for logos
 
 const SettingsDashboard = () => {
@@ -56,6 +57,7 @@ const SettingsDashboard = () => {
     accountName: '',
     isLoading: false
   })
+  const [showWordPressInstructions, setShowWordPressInstructions] = useState(false)
 
   // Validation functions
   const validateWordPressCredentials = () => {
@@ -374,9 +376,15 @@ const SettingsDashboard = () => {
   const handleConnectionMethod = (platform, method) => {
     setSelectedPlatform(platform)
     setConnectionMethod(method)
-    setShowConnectionModal(true)
     setError('')
     setSuccess('')
+    
+    // Show WordPress instructions first if WordPress is selected
+    if (platform === 'wordpress') {
+      setShowWordPressInstructions(true)
+    } else {
+      setShowConnectionModal(true)
+    }
   }
 
   const handleOAuthConnect = async (platform) => {
@@ -631,31 +639,58 @@ const SettingsDashboard = () => {
       }
 
       if (!response.ok) {
-        // Handle different error response formats
+        // Debug: Log the actual response for troubleshooting
+        console.log('🔍 WordPress connection error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          result: result
+        })
+        
+        // Convert technical errors to user-friendly messages
         let errorMessage = 'Failed to connect to WordPress'
         
-        if (result.detail) {
-          errorMessage = result.detail
-        } else if (result.message) {
-          errorMessage = result.message
-        } else if (result.error) {
-          errorMessage = result.error
-        } else if (typeof result === 'string') {
-          errorMessage = result
-        } else if (Array.isArray(result)) {
-          errorMessage = result.join(', ')
-        } else if (typeof result === 'object') {
-          // Try to extract meaningful error information
-          const errorKeys = Object.keys(result)
-          if (errorKeys.length > 0) {
-            const firstKey = errorKeys[0]
-            if (Array.isArray(result[firstKey])) {
-              errorMessage = result[firstKey].join(', ')
-            } else if (typeof result[firstKey] === 'string') {
-              errorMessage = result[firstKey]
-            } else {
-              errorMessage = `Error: ${JSON.stringify(result)}`
-            }
+        if (response.status === 400) {
+          if (result.detail && result.detail.includes('Invalid credentials')) {
+            errorMessage = '❌ Invalid WordPress credentials. Please check your username and app password.'
+          } else if (result.detail && result.detail.includes('Invalid WordPress credentials')) {
+            errorMessage = '❌ Invalid WordPress credentials. Please check your username and app password.'
+          } else if (result.detail && result.detail.includes('Authentication failed')) {
+            errorMessage = '❌ Authentication failed. Please check your WordPress username and app password.'
+          } else if (result.detail && result.detail.includes('REST API')) {
+            errorMessage = '❌ WordPress REST API is blocked. Please check your security plugins and enable REST API access.'
+          } else if (result.detail && result.detail.includes('Application Password')) {
+            errorMessage = '❌ Application Passwords not enabled. Please enable Application Passwords in your WordPress admin.'
+          } else if (result.detail && result.detail.includes('site_url')) {
+            errorMessage = '❌ Invalid site URL. Please check that your WordPress site URL is correct and accessible.'
+          } else if (result.detail && result.detail.includes('credentials')) {
+            errorMessage = '❌ Invalid WordPress credentials. Please check your username and app password.'
+          } else {
+            errorMessage = '❌ WordPress connection failed. Please verify your site URL, username, and app password are correct.'
+          }
+        } else if (response.status === 401) {
+          // Use the specific error message from backend
+          errorMessage = result.detail || '❌ Authentication failed. Please check your WordPress username and app password.'
+        } else if (response.status === 403) {
+          // Use the specific error message from backend
+          errorMessage = result.detail || '❌ Access denied. Your WordPress user may not have sufficient permissions or REST API is blocked.'
+        } else if (response.status === 404) {
+          // Use the specific error message from backend
+          errorMessage = result.detail || '❌ WordPress site not found. Please check that your site URL is correct and your site is accessible.'
+        } else if (response.status === 500) {
+          // Use the specific error message from backend
+          errorMessage = result.detail || '❌ WordPress server error. Please try again later or contact your WordPress administrator.'
+        } else {
+          // Fallback to original error handling for other cases
+          if (result.detail) {
+            errorMessage = `❌ ${result.detail}`
+          } else if (result.message) {
+            errorMessage = `❌ ${result.message}`
+          } else if (result.error) {
+            errorMessage = `❌ ${result.error}`
+          } else if (typeof result === 'string') {
+            errorMessage = `❌ ${result}`
+          } else if (Array.isArray(result)) {
+            errorMessage = `❌ ${result.join(', ')}`
           }
         }
         
@@ -683,7 +718,20 @@ const SettingsDashboard = () => {
       
     } catch (err) {
       console.error('WordPress connection error:', err)
-      setError(err.message || 'Failed to connect WordPress')
+      
+      // Provide user-friendly error messages
+      let userFriendlyError = err.message || 'Failed to connect WordPress'
+      
+      // Handle network/connection errors
+      if (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed to fetch')) {
+        userFriendlyError = '❌ Network error. Please check your internet connection and try again.'
+      } else if (err.message.includes('Server error')) {
+        userFriendlyError = '❌ Server error. Please try again later or contact support if the problem persists.'
+      } else if (err.message.includes('timeout')) {
+        userFriendlyError = '❌ Connection timeout. Your WordPress site may be slow to respond. Please try again.'
+      }
+      
+      setError(userFriendlyError)
     } finally {
       setLoading(false)
     }
@@ -801,6 +849,17 @@ const SettingsDashboard = () => {
     setConnectionMethod('')
     setError('')
     setSuccess('')
+  }
+
+  const handleWordPressInstructionsClose = () => {
+    setShowWordPressInstructions(false)
+    setShowConnectionModal(true)
+    // Don't clear selectedPlatform and connectionMethod - keep them for the credential form
+  }
+
+  const handleWordPressInstructionsProceed = () => {
+    setShowWordPressInstructions(false)
+    setShowConnectionModal(true)
   }
 
   return (
@@ -973,19 +1032,27 @@ const SettingsDashboard = () => {
       {showConnectionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {selectedPlatform === 'wordpress' 
-                  ? `Connect ${getPlatformInfo(selectedPlatform).name} with Credentials`
-                  : `Connect ${getPlatformInfo(selectedPlatform).name} with Access Token`
-                }
-              </h3>
-              <button
-                onClick={closeModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
+            <div className="mb-6">
+              {selectedPlatform === 'wordpress' && (
+                <div className="flex justify-center mb-4">
+                  <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center shadow-xl border border-gray-200 hover:scale-105 transition-transform duration-300">
+                    <img 
+                      src="https://logo.svgcdn.com/d/wordpress-original.svg" 
+                      alt="WordPress" 
+                      className="w-10 h-10" 
+                    />
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex justify-center">
+                <h3 className="text-xl font-bold text-gray-800">
+                  {selectedPlatform === 'wordpress' 
+                    ? 'Connect Your WordPress Site'
+                    : `Connect ${getPlatformInfo(selectedPlatform).name} with Access Token`
+                  }
+                </h3>
+              </div>
             </div>
             
             {selectedPlatform === 'wordpress' ? (
@@ -1002,7 +1069,7 @@ const SettingsDashboard = () => {
                       clearFieldError('siteName')
                     }}
                     placeholder="My WordPress Site"
-                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors ${
                       wordpressErrors.siteName ? 'border-red-500' : 'border-gray-300'
                     }`}
                     required
@@ -1027,7 +1094,7 @@ const SettingsDashboard = () => {
                       clearFieldError('siteUrl')
                     }}
                     placeholder="https://yoursite.com"
-                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors ${
                       wordpressErrors.siteUrl ? 'border-red-500' : 'border-gray-300'
                     }`}
                     required
@@ -1052,7 +1119,7 @@ const SettingsDashboard = () => {
                       clearFieldError('username')
                     }}
                     placeholder="your_username"
-                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors ${
                       wordpressErrors.username ? 'border-red-500' : 'border-gray-300'
                     }`}
                     required
@@ -1077,7 +1144,7 @@ const SettingsDashboard = () => {
                       clearFieldError('password')
                     }}
                     placeholder="Enter your WordPress App Password"
-                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors ${
                       wordpressErrors.password ? 'border-red-500' : 'border-gray-300'
                     }`}
                     required
@@ -1097,14 +1164,14 @@ const SettingsDashboard = () => {
                   <button
                     type="button"
                     onClick={closeModal}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
+                    className="flex-1 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-md hover:from-pink-600 hover:to-purple-700 disabled:opacity-50 flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none disabled:shadow-lg"
                   >
                     {loading ? (
                       <>
@@ -1195,6 +1262,13 @@ const SettingsDashboard = () => {
         platform={disconnectModal.platform}
         accountName={disconnectModal.accountName}
         isLoading={disconnectModal.isLoading}
+      />
+
+      {/* WordPress Instructions Modal */}
+      <WordPressInstructionsModal
+        isOpen={showWordPressInstructions}
+        onClose={handleWordPressInstructionsClose}
+        onProceed={handleWordPressInstructionsProceed}
       />
     </div>
   )

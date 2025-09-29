@@ -297,6 +297,60 @@ async def delete_image(
         logger.error(f"Error deleting image: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error deleting image: {str(e)}")
 
+@router.delete("/uploaded-media/{post_id}")
+async def delete_uploaded_media(
+    post_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Delete uploaded media (image or video) for a specific post"""
+    try:
+        logger.info(f"Delete uploaded media request - post_id: {post_id}, user: {current_user.id}")
+        
+        # Verify post belongs to user
+        post_response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", post_id).execute()
+        
+        if not post_response.data:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        if post_response.data[0]["content_campaigns"]["user_id"] != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get the uploaded media record
+        media_response = supabase_admin.table("content_images").select("*").eq("post_id", post_id).eq("image_style", "user_upload").execute()
+        
+        if not media_response.data:
+            raise HTTPException(status_code=404, detail="No uploaded media found for this post")
+        
+        media_record = media_response.data[0]
+        image_url = media_record["image_url"]
+        
+        # Extract file path from URL
+        # URL format: https://yibrsxythicjzshqhqxf.supabase.co/storage/v1/object/public/user-uploads/filename.mp4
+        if "user-uploads/" in image_url:
+            file_path = image_url.split("user-uploads/")[1]
+            logger.info(f"Extracted file path: {file_path}")
+            
+            # Delete from Supabase storage
+            try:
+                storage_response = supabase_admin.storage.from_("user-uploads").remove([file_path])
+                logger.info(f"Storage delete response: {storage_response}")
+            except Exception as storage_error:
+                logger.warning(f"Storage delete failed (file may not exist): {storage_error}")
+        
+        # Delete from database
+        delete_response = supabase_admin.table("content_images").delete().eq("id", media_record["id"]).execute()
+        
+        if delete_response.data:
+            return {"success": True, "message": "Uploaded media deleted successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to delete media record")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting uploaded media: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting uploaded media: {str(e)}")
+
 @router.get("/styles")
 async def get_available_styles():
     """Get available image styles"""
@@ -418,27 +472,42 @@ async def upload_image(
         import uuid
         file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
         filename = f"{post_id}-{uuid.uuid4().hex[:8]}.{file_ext}"
-        file_path = f"user-uploads/{filename}"
+        file_path = filename
         logger.info(f"Generated file path: {file_path}")
         
+        # Determine content type based on file type
+        if file.content_type and file.content_type.startswith('video/'):
+            content_type = file.content_type
+        elif file_ext.lower() in ['mp4', 'avi', 'mov', 'wmv', 'webm']:
+            content_type = f"video/{file_ext}"
+        else:
+            content_type = f"image/{file_ext}"
+        
+        logger.info(f"Determined content type: {content_type}")
+        
+        # Use user-uploads bucket for all uploads (now public, supports both images and videos)
+        bucket_name = "user-uploads"
+        logger.info(f"Using bucket: {bucket_name} for uploads")
+        
         # Upload using admin client (bypasses RLS)
-        storage_response = supabase_admin.storage.from_("ai-generated-images").upload(
+        storage_response = supabase_admin.storage.from_(bucket_name).upload(
             file_path,
             file_content,
-            file_options={"content-type": f"image/{file_ext}"}
+            file_options={"content-type": content_type}
         )
         
         if hasattr(storage_response, 'error') and storage_response.error:
             raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_response.error}")
         
         # Get public URL
-        public_url = supabase_admin.storage.from_("ai-generated-images").get_public_url(file_path)
+        public_url = supabase_admin.storage.from_(bucket_name).get_public_url(file_path)
         
         # Update database using admin client
-        image_data = {
+        is_video = content_type.startswith('video/')
+        media_data = {
             "post_id": post_id,
-            "image_url": public_url,
-            "image_prompt": "User uploaded image",
+            "image_url": public_url,  # Keep using image_url field for compatibility
+            "image_prompt": "User uploaded video" if is_video else "User uploaded image",
             "image_style": "user_upload",
             "image_size": "custom",
             "image_quality": "custom",
@@ -459,12 +528,12 @@ async def upload_image(
             }).eq("id", existing_images.data[0]["id"]).execute()
         else:
             # Create new image record
-            supabase_admin.table("content_images").insert(image_data).execute()
+            supabase_admin.table("content_images").insert(media_data).execute()
         
         return {
             "success": True,
             "image_url": public_url,
-            "message": "Image uploaded successfully"
+            "message": "Video uploaded successfully" if is_video else "Image uploaded successfully"
         }
         
     except Exception as e:
