@@ -151,9 +151,44 @@ async def create_wordpress_connection(
                     timeout=10
                 )
                 
+                # Debug: Log the response details
+                logger.info(f"WordPress API response for {endpoint}: Status {response.status_code}")
+                logger.info(f"Response headers: {dict(response.headers)}")
+                logger.info(f"Response text: {response.text[:200]}...")
+                logger.info(f"Status code type: {type(response.status_code)}, value: {response.status_code}")
+                
                 if response.status_code == 200:
                     successful_endpoint = endpoint
                     break
+                elif response.status_code == 401 or str(response.status_code) == "401":
+                    # Authentication failed - wrong username/password
+                    logger.error(f"Authentication failed for {endpoint}: {response.text}")
+                    logger.error(f"Raising HTTPException with status 401")
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Invalid WordPress credentials. Please check your username and app password."
+                    )
+                elif response.status_code == 403 or str(response.status_code) == "403":
+                    # Access denied - user doesn't have permission or REST API blocked
+                    logger.error(f"Access denied for {endpoint}: {response.text}")
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Access denied. Please check that your WordPress user has administrator privileges and REST API is not blocked by security plugins."
+                    )
+                elif response.status_code == 404 or str(response.status_code) == "404":
+                    # Site not found
+                    logger.error(f"Site not found for {endpoint}: {response.text}")
+                    raise HTTPException(
+                        status_code=404,
+                        detail="WordPress site not found. Please check that your site URL is correct and your site is accessible."
+                    )
+                elif response.status_code == 500 or str(response.status_code) == "500":
+                    # WordPress server error
+                    logger.error(f"WordPress server error for {endpoint}: {response.text}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail="WordPress server error. Please try again later or contact your WordPress administrator."
+                    )
                 elif response.status_code == 406:
                     logger.warning(f"406 Not Acceptable for {endpoint}, trying next...")
                     continue
@@ -161,14 +196,26 @@ async def create_wordpress_connection(
                     logger.warning(f"Status {response.status_code} for {endpoint}, trying next...")
                     continue
                     
+            except HTTPException:
+                # Re-raise HTTP exceptions (401, 403, 404)
+                raise
             except requests.exceptions.RequestException as e:
                 logger.warning(f"Request failed for {endpoint}: {e}")
+                # Check if this is a domain resolution error
+                error_str = str(e).lower()
+                if 'getaddrinfo failed' in error_str or 'name resolution' in error_str or 'nodename nor servname provided' in error_str:
+                    logger.error(f"Domain resolution failed for {endpoint}: {e}")
+                    raise HTTPException(
+                        status_code=404,
+                        detail="WordPress site not found. Please check that your site URL is correct and your site is accessible."
+                    )
                 continue
         
         if not response or not successful_endpoint:
+            # Check if this was due to domain resolution issues
             raise HTTPException(
-                status_code=400,
-                detail="Failed to connect to any WordPress REST API endpoint. Please check your site URL and ensure the REST API is enabled."
+                status_code=404,
+                detail="WordPress site not found. Please check that your site URL is correct and your site is accessible."
             )
         
         logger.info(f"WordPress REST API response: {response.status_code}")
@@ -234,6 +281,7 @@ async def create_wordpress_connection(
         }
         
     except HTTPException:
+        # Re-raise HTTP exceptions (401, 403, 404) that we specifically created
         raise
     except requests.exceptions.RequestException as e:
         logger.error(f"WordPress REST API request failed: {e}")
@@ -243,10 +291,28 @@ async def create_wordpress_connection(
         )
     except Exception as e:
         logger.error(f"WordPress REST API authentication failed: {e}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to authenticate with WordPress REST API. Please check your credentials and ensure the REST API is enabled. Error: {str(e)}"
-        )
+        # Check if this is an authentication-related error
+        error_str = str(e).lower()
+        if '401' in error_str or 'unauthorized' in error_str or 'authentication' in error_str:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid WordPress credentials. Please check your username and app password."
+            )
+        elif '403' in error_str or 'forbidden' in error_str or 'access denied' in error_str:
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied. Please check that your WordPress user has administrator privileges and REST API is not blocked by security plugins."
+            )
+        elif '404' in error_str or 'not found' in error_str:
+            raise HTTPException(
+                status_code=404,
+                detail="WordPress site not found. Please check that your site URL is correct and your site is accessible."
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to authenticate with WordPress REST API. Please check your credentials and ensure the REST API is enabled. Error: {str(e)}"
+            )
 
 @router.delete("/wordpress/delete/{connection_id}")
 async def delete_wordpress_connection(
