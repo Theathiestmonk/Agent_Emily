@@ -57,7 +57,8 @@ import {
   Upload,
   X,
   CheckCircle,
-  Trash2
+  Trash2,
+  AlertTriangle
 } from 'lucide-react'
 
 const ContentDashboard = () => {
@@ -117,6 +118,9 @@ const ContentDashboard = () => {
   const [availableDates, setAvailableDates] = useState([]) // Dates that have content
   const [currentDateIndex, setCurrentDateIndex] = useState(0) // Current position in available dates
   const [showCustomContentChatbot, setShowCustomContentChatbot] = useState(false) // Custom content chatbot modal
+  const [deleteConfirm, setDeleteConfirm] = useState(null) // Content to delete confirmation
+  const [deletingContent, setDeletingContent] = useState(new Set()) // Track which content is being deleted
+  const [postNotification, setPostNotification] = useState(null) // Post success notification
 
 
   useEffect(() => {
@@ -676,7 +680,8 @@ const ContentDashboard = () => {
       const result = await response.json()
       console.log('Facebook post result:', result)
       
-      showSuccess(`Successfully posted to Facebook!`)
+      // Show beautiful notification with post URL if available
+      showPostNotification('Facebook', result.post_url || result.url)
       
       // Update the content status to published in cache
       updateContentInCache(content.id, { status: 'published' })
@@ -698,6 +703,11 @@ const ContentDashboard = () => {
       if (generatedImages[content.id] && generatedImages[content.id].image_url) {
         imageUrl = generatedImages[content.id].image_url
         console.log('📸 Including image in Instagram post:', imageUrl)
+      }
+      
+      // Instagram requires an image - check if we have one
+      if (!imageUrl) {
+        throw new Error('Instagram requires an image to post content. Please click the "Generate Media" button to create an image for this post first.')
       }
       
       const postData = {
@@ -723,7 +733,8 @@ const ContentDashboard = () => {
         if (response.ok) {
           const result = await response.json()
           console.log('✅ Instagram OAuth post successful:', result)
-          showSuccess(`Successfully posted to Instagram!`)
+          // Show beautiful notification with post URL if available
+          showPostNotification('Instagram', result.post_url || result.url)
           updateContentInCache(content.id, { status: 'published' })
           return
         } else {
@@ -772,7 +783,15 @@ const ContentDashboard = () => {
         
         // If OAuth failed and token method also failed, show appropriate message
         if (oauthError) {
-          throw new Error(`Instagram posting failed. OAuth method: ${oauthError.message}. Token method: ${tokenError.message}`)
+          // Check if it's a connection issue
+          if (oauthError.message.includes('No active Instagram connection found') || 
+              tokenError.message.includes('No active Instagram connection found')) {
+            throw new Error('Instagram account not connected. Please go to Settings > Connections and connect your Instagram account first.')
+          } else if (oauthError.message.includes('image_url is required')) {
+            throw new Error('Instagram requires an image to post content. Please click the "Generate Media" button to create an image for this post first.')
+          } else {
+            throw new Error(`Instagram posting failed: ${oauthError.message}`)
+          }
         } else {
           throw tokenError
         }
@@ -817,7 +836,8 @@ const ContentDashboard = () => {
       if (response.ok) {
         const result = await response.json()
         console.log('✅ LinkedIn post successful:', result)
-        showSuccess(`Successfully posted to LinkedIn!`)
+        // Show beautiful notification with post URL if available
+        showPostNotification('LinkedIn', result.post_url || result.url)
         updateContentInCache(content.id, { status: 'published' })
       } else {
         const errorText = await response.text()
@@ -862,7 +882,8 @@ const ContentDashboard = () => {
       if (response.ok) {
         const result = await response.json()
         console.log('✅ YouTube post successful:', result)
-        showSuccess(`Successfully posted to YouTube!`)
+        // Show beautiful notification with post URL if available
+        showPostNotification('YouTube', result.post_url || result.url)
         updateContentInCache(content.id, { status: 'published' })
       } else {
         const errorText = await response.text()
@@ -1259,6 +1280,99 @@ const ContentDashboard = () => {
       setUploadingImage(prev => {
         const newSet = new Set(prev)
         newSet.delete(postId)
+        return newSet
+      })
+    }
+  }
+
+  // Show post success notification
+  const showPostNotification = (platform, postUrl = null) => {
+    setPostNotification({
+      platform,
+      show: true,
+      timestamp: Date.now(),
+      postUrl
+    })
+    
+    // No auto-close - user must manually close with X button
+  }
+
+  // Handle go to post action
+  const handleGoToPost = () => {
+    if (postNotification?.postUrl) {
+      try {
+        // Validate URL before opening
+        const url = new URL(postNotification.postUrl)
+        window.open(postNotification.postUrl, '_blank', 'noopener,noreferrer')
+      } catch (error) {
+        console.error('Invalid post URL:', postNotification.postUrl)
+        // Show error message to user
+        alert('Sorry, the post URL is not available or invalid.')
+      }
+    }
+  }
+
+  // Handle close notification
+  const handleCloseNotification = () => {
+    console.log('X button clicked, closing notification')
+    setPostNotification(prev => prev ? { ...prev, show: false } : null)
+    setTimeout(() => {
+      setPostNotification(null)
+    }, 500)
+  }
+
+  // Handle content deletion
+  const handleDeleteContent = async (content) => {
+    try {
+      setDeletingContent(prev => new Set(prev).add(content.id))
+      
+      const token = await supabase.auth.getSession()
+      if (!token.data.session) {
+        throw new Error('No authentication token available')
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/content/${content.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token.data.session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to delete content')
+      }
+      
+      const result = await response.json()
+      
+      // Remove from local state
+      setDateContent(prev => prev.filter(c => c.id !== content.id))
+      
+      // Close confirmation dialog
+      setDeleteConfirm(null)
+      
+      showSuccess('Content deleted successfully', `"${content.title || 'Untitled post'}" has been permanently deleted`)
+      
+    } catch (error) {
+      console.error('Error deleting content:', error)
+      
+      let errorMessage = error.message
+      if (error.message.includes('Failed to fetch')) {
+        errorMessage = 'Network error: Unable to connect to server. Please check your internet connection and try again.'
+      } else if (error.message.includes('404')) {
+        errorMessage = 'Content not found or already deleted.'
+      } else if (error.message.includes('500')) {
+        errorMessage = 'Server error. Please try again later or contact support.'
+      } else if (error.message.includes('401') || error.message.includes('403')) {
+        errorMessage = 'Authentication error. Please refresh the page and try again.'
+      }
+      
+      showError('Failed to delete content', errorMessage)
+    } finally {
+      setDeletingContent(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(content.id)
         return newSet
       })
     }
@@ -2050,6 +2164,35 @@ const ContentDashboard = () => {
                             </div>
                           )}
                         </div>
+                        
+                        <div className="relative">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteConfirm(content)
+                            }}
+                            onMouseEnter={() => setHoveredButton(`${content.id}-delete`)}
+                            onMouseLeave={() => setHoveredButton(null)}
+                            disabled={deletingContent.has(content.id)}
+                            className={`p-2 rounded-lg transition-all duration-200 ${
+                              deletingContent.has(content.id)
+                                ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                : 'bg-red-500 text-white hover:bg-red-600'
+                            }`}
+                          >
+                            {deletingContent.has(content.id) ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                          {hoveredButton === `${content.id}-delete` && (
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                              {deletingContent.has(content.id) ? 'Deleting...' : 'Delete Post'}
+                              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2447,6 +2590,196 @@ const ContentDashboard = () => {
           setShowCustomContentChatbot(false);
         }}
       />
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 border border-gray-200">
+            <div className="p-6">
+              <div className="flex items-center space-x-4 mb-6">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-800 text-lg">Delete Post</h3>
+                  <p className="text-sm text-gray-600">This action cannot be undone</p>
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-gray-700 mb-2">
+                  Are you sure you want to delete this post?
+                </p>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <p className="font-medium text-gray-800">
+                    {deleteConfirm.title || 'Untitled Post'}
+                  </p>
+                  <p className="text-sm text-gray-600 capitalize">
+                    {deleteConfirm.platform} • {deleteConfirm.status}
+                  </p>
+                </div>
+                <p className="text-sm text-red-600 mt-2">
+                  This will permanently delete the post and any associated images.
+                </p>
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  disabled={deletingContent.has(deleteConfirm.id)}
+                  className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteContent(deleteConfirm)}
+                  disabled={deletingContent.has(deleteConfirm.id)}
+                  className="flex-1 px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center justify-center space-x-2"
+                >
+                  {deletingContent.has(deleteConfirm.id) ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete Post</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Post Success Notification */}
+      {postNotification && (
+        <div 
+          className={`fixed inset-0 flex items-center justify-center z-50 transition-all duration-500 ${
+            postNotification.show 
+              ? 'opacity-100 scale-100' 
+              : 'opacity-0 scale-95 pointer-events-none'
+          }`}
+          onClick={(e) => {
+            // Close notification when clicking backdrop
+            if (e.target === e.currentTarget) {
+              console.log('Backdrop clicked, closing notification')
+              handleCloseNotification()
+            }
+          }}
+        >
+          <div 
+            className={`bg-white rounded-3xl shadow-2xl border-2 p-8 max-w-sm mx-4 transform transition-all duration-500 relative ${
+              postNotification.show 
+                ? 'translate-y-0 scale-100' 
+                : 'translate-y-4 scale-95'
+            }`} 
+            style={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              border: '2px solid rgba(255, 255, 255, 0.2)',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                console.log('X button clicked')
+                handleCloseNotification()
+              }}
+              className="absolute top-4 right-4 w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm z-50 cursor-pointer"
+              style={{ zIndex: 9999 }}
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
+            
+            <div className="text-center">
+              
+              {/* Platform Icon */}
+              <div className="mb-4">
+                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto backdrop-blur-sm">
+                  {postNotification.platform === 'Facebook' && (
+                    <Facebook className="w-8 h-8 text-white" />
+                  )}
+                  {postNotification.platform === 'Instagram' && (
+                    <Instagram className="w-8 h-8 text-white" />
+                  )}
+                  {postNotification.platform === 'LinkedIn' && (
+                    <Linkedin className="w-8 h-8 text-white" />
+                  )}
+                  {postNotification.platform === 'YouTube' && (
+                    <Youtube className="w-8 h-8 text-white" />
+                  )}
+                </div>
+              </div>
+              
+              {/* Success Message */}
+              <h3 className="text-2xl font-bold text-white mb-2 animate-pulse">
+                🎉 Woohoo!
+              </h3>
+              
+              {/* Party Popper Animation */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                {/* Confetti pieces */}
+                <div className="absolute top-0 left-1/4 w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{animationDelay: '0s', animationDuration: '1s'}}></div>
+                <div className="absolute top-0 right-1/4 w-2 h-2 bg-pink-400 rounded-full animate-bounce" style={{animationDelay: '0.2s', animationDuration: '1.2s'}}></div>
+                <div className="absolute top-0 left-1/2 w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.4s', animationDuration: '1.1s'}}></div>
+                <div className="absolute top-0 right-1/3 w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{animationDelay: '0.6s', animationDuration: '1.3s'}}></div>
+                <div className="absolute top-0 left-1/3 w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{animationDelay: '0.8s', animationDuration: '1.4s'}}></div>
+                
+                {/* More confetti */}
+                <div className="absolute top-2 left-1/5 w-1.5 h-1.5 bg-red-400 rounded-full animate-bounce" style={{animationDelay: '1s', animationDuration: '1.5s'}}></div>
+                <div className="absolute top-2 right-1/5 w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce" style={{animationDelay: '1.2s', animationDuration: '1.6s'}}></div>
+                <div className="absolute top-2 left-2/3 w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{animationDelay: '1.4s', animationDuration: '1.7s'}}></div>
+                <div className="absolute top-2 right-2/3 w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{animationDelay: '1.6s', animationDuration: '1.8s'}}></div>
+                
+                {/* Side confetti */}
+                <div className="absolute top-1/4 left-0 w-1 h-1 bg-yellow-300 rounded-full animate-bounce" style={{animationDelay: '0.5s', animationDuration: '1.2s'}}></div>
+                <div className="absolute top-1/3 right-0 w-1 h-1 bg-pink-300 rounded-full animate-bounce" style={{animationDelay: '0.7s', animationDuration: '1.4s'}}></div>
+                <div className="absolute top-1/2 left-0 w-1 h-1 bg-blue-300 rounded-full animate-bounce" style={{animationDelay: '0.9s', animationDuration: '1.6s'}}></div>
+                <div className="absolute top-2/3 right-0 w-1 h-1 bg-green-300 rounded-full animate-bounce" style={{animationDelay: '1.1s', animationDuration: '1.8s'}}></div>
+              </div>
+              <p className="text-white/90 text-lg font-medium mb-1">
+                Emily just posted your content to
+              </p>
+              <p className="text-white font-bold text-xl capitalize mb-6">
+                {postNotification.platform}
+              </p>
+              
+              {/* Success Checkmark */}
+              <div className="mb-6 flex justify-center">
+                <div className="w-8 h-8 bg-green-400 rounded-full flex items-center justify-center animate-pulse">
+                  <CheckCircle className="w-5 h-5 text-white" />
+                </div>
+              </div>
+              
+              {/* Action Buttons */}
+              {postNotification.postUrl ? (
+                <div className="flex justify-center">
+                  <button
+                    onClick={handleGoToPost}
+                    className="px-6 py-3 bg-white/20 hover:bg-white/30 text-white font-medium rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center space-x-2"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    <span>Go to Post</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-white/80 text-sm">
+                    Post published successfully! Check your {postNotification.platform} account.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )
