@@ -400,3 +400,87 @@ async def update_content_status(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update content status: {str(e)}"
         )
+
+@router.delete("/{content_id}")
+async def delete_content(
+    content_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Delete content post and associated images"""
+    try:
+        print(f"🗑️ Deleting content {content_id} for user: {current_user.id}")
+        
+        # First verify the content belongs to the user
+        content_response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", content_id).eq("content_campaigns.user_id", current_user.id).execute()
+        
+        if not content_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Content not found or access denied"
+            )
+        
+        content = content_response.data[0]
+        
+        # Delete associated images first
+        try:
+            # Get all images associated with this content
+            images_response = supabase_admin.table("content_images").select("*").eq("post_id", content_id).execute()
+            
+            if images_response.data:
+                print(f"🗑️ Found {len(images_response.data)} associated images to delete")
+                
+                # Delete images from Supabase storage if they exist
+                for image in images_response.data:
+                    if image.get("image_url"):
+                        try:
+                            # Extract file path from URL for storage deletion
+                            image_url = image["image_url"]
+                            if "ai-generated-images" in image_url:
+                                # Extract file path from Supabase storage URL
+                                file_path = image_url.split("ai-generated-images/")[-1]
+                                if file_path:
+                                    # Delete from Supabase storage
+                                    supabase_admin.storage.from_("ai-generated-images").remove([file_path])
+                                    print(f"🗑️ Deleted image from storage: {file_path}")
+                        except Exception as storage_error:
+                            print(f"⚠️ Warning: Could not delete image from storage: {storage_error}")
+                            # Continue even if storage deletion fails
+                
+                # Delete image records from database
+                supabase_admin.table("content_images").delete().eq("post_id", content_id).execute()
+                print(f"✅ Deleted {len(images_response.data)} image records from database")
+                
+        except Exception as image_error:
+            print(f"⚠️ Warning: Error deleting associated images: {image_error}")
+            # Continue with content deletion even if image deletion fails
+        
+        # Delete the content post
+        delete_response = supabase_admin.table("content_posts").delete().eq("id", content_id).execute()
+        
+        if not delete_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete content"
+            )
+        
+        print(f"✅ Successfully deleted content {content_id}")
+        
+        return {
+            "success": True,
+            "message": "Content and associated images deleted successfully",
+            "deleted_content": {
+                "id": content_id,
+                "title": content.get("title", ""),
+                "platform": content.get("platform", ""),
+                "deleted_at": datetime.now().isoformat()
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error deleting content: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete content: {str(e)}"
+        )

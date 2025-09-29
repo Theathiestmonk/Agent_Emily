@@ -4031,7 +4031,10 @@ async def post_to_youtube(
             
             return {
                 "success": True,
+                "platform": "youtube",
+                "post_id": None,
                 "message": f"YouTube connection successful! Channel: {channel_title}. Note: Community posts are not supported by YouTube Data API v3. Consider using video uploads instead.",
+                "url": f"https://www.youtube.com/channel/{channel_id}" if channel_id else None,
                 "post_data": {
                     "title": title,
                     "description": description,
@@ -4563,7 +4566,7 @@ async def post_to_instagram(
 
             "message": "Content posted to Instagram successfully!",
 
-            "url": f"https://instagram.com/p/{post_id}" if post_id else None
+            "url": f"https://www.instagram.com/p/{post_id}/" if post_id else None
 
         }
         
