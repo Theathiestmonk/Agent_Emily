@@ -1080,7 +1080,7 @@ class CustomContentAgent:
                 
                 message = {
                     "role": "assistant",
-                    "content": f"🎉 Perfect! Your {content_type} for {platform} has been saved as a draft post! 📝\n\n✅ Content generated and optimized\n✅ Image {image_source} and saved to storage\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard. The post includes your {image_source} image and is ready to go!\n\n---\n\n**Do you want to generate another content?**",
+                    "content": f"🎉 Perfect! Your {content_type} for {platform} has been saved as a draft post! 📝\n\n✅ Content generated and optimized\n✅ Image {image_source} and saved to storage\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard. The post includes your {image_source} image and is ready to go!",
                     "timestamp": datetime.now().isoformat()
                 }
                 state["conversation_messages"].append(message)
@@ -1103,8 +1103,14 @@ class CustomContentAgent:
         try:
             logger.info("Asking if user wants to generate another content")
             
-            # This method is called after the success message is already sent
-            # The user's response will be handled in process_user_input
+            # Add the question message
+            message = {
+                "role": "assistant",
+                "content": "Would you like to create another piece of content? Just let me know!",
+                "timestamp": datetime.now().isoformat()
+            }
+            state["conversation_messages"].append(message)
+            
             return state
             
         except Exception as e:
@@ -1547,8 +1553,8 @@ class CustomContentAgent:
                 state["current_step"] = ConversationStep.SAVE_CONTENT
                 logger.info(f"Transitioning to SAVE_CONTENT with scheduled_for: {state.get('scheduled_for')}")
                 
-                # Execute save_content immediately to avoid looping
-                return await self.save_content(state)
+                # Don't execute save_content directly - let the graph handle the transition
+                # The graph will automatically call save_content based on the state transition
                 
             elif current_step == ConversationStep.CONFIRM_MEDIA:
                 # Handle media confirmation
