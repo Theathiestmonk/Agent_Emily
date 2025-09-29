@@ -704,6 +704,11 @@ const ContentDashboard = () => {
         console.log('📸 Including image in Instagram post:', imageUrl)
       }
       
+      // Instagram requires an image - check if we have one
+      if (!imageUrl) {
+        throw new Error('Instagram requires an image to post content. Please click the "Generate Media" button to create an image for this post first.')
+      }
+      
       const postData = {
         message: content.content,
         title: content.title,
@@ -777,7 +782,15 @@ const ContentDashboard = () => {
         
         // If OAuth failed and token method also failed, show appropriate message
         if (oauthError) {
-          throw new Error(`Instagram posting failed. OAuth method: ${oauthError.message}. Token method: ${tokenError.message}`)
+          // Check if it's a connection issue
+          if (oauthError.message.includes('No active Instagram connection found') || 
+              tokenError.message.includes('No active Instagram connection found')) {
+            throw new Error('Instagram account not connected. Please go to Settings > Connections and connect your Instagram account first.')
+          } else if (oauthError.message.includes('image_url is required')) {
+            throw new Error('Instagram requires an image to post content. Please click the "Generate Media" button to create an image for this post first.')
+          } else {
+            throw new Error(`Instagram posting failed: ${oauthError.message}`)
+          }
         } else {
           throw tokenError
         }
