@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { onboardingAPI } from '../services/onboarding'
 import OnboardingForm from './OnboardingForm'
-import { X, ChevronDown, Navigation, Save, RotateCcw, CheckCircle, HelpCircle, Keyboard } from 'lucide-react'
+import { X, ChevronDown, Navigation, Save, RotateCcw, CheckCircle } from 'lucide-react'
 
 const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
   const [profileData, setProfileData] = useState(null)
@@ -11,8 +11,6 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
   const [currentStep, setCurrentStep] = useState(0)
   const [showSaveIndicator, setShowSaveIndicator] = useState(false)
   const [completedSteps, setCompletedSteps] = useState(new Set())
-  const [showHelpTooltip, setShowHelpTooltip] = useState(false)
-  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false)
   const onboardingFormRef = useRef(null)
 
   const steps = [
@@ -49,46 +47,6 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
     }
   }, [showStepNavigation])
 
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (!isOpen) return
-
-      // Close modal with Escape
-      if (event.key === 'Escape') {
-        if (showStepNavigation) {
-          setShowStepNavigation(false)
-        } else {
-          onClose()
-        }
-      }
-
-      // Step navigation with arrow keys
-      if (event.ctrlKey || event.metaKey) {
-        if (event.key === 'ArrowLeft' && currentStep > 0) {
-          event.preventDefault()
-          handleStepChange(currentStep - 1)
-        } else if (event.key === 'ArrowRight' && currentStep < steps.length - 1) {
-          event.preventDefault()
-          handleStepChange(currentStep + 1)
-        }
-      }
-
-      // Quick step navigation with number keys (1-9)
-      if (event.key >= '1' && event.key <= '9') {
-        const stepNumber = parseInt(event.key) - 1
-        if (stepNumber < steps.length) {
-          event.preventDefault()
-          handleStepChange(stepNumber)
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isOpen, currentStep, showStepNavigation, onClose])
 
   const fetchProfileData = async () => {
     try {
@@ -159,33 +117,6 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
 
           {/* Step Navigation */}
           <div className="flex items-center space-x-4">
-            {/* Help Button */}
-            <div className="relative">
-              <button
-                onMouseEnter={() => setShowHelpTooltip(true)}
-                onMouseLeave={() => setShowHelpTooltip(false)}
-                onClick={() => setShowKeyboardHelp(true)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Navigation Help"
-              >
-                <HelpCircle className="w-4 h-4" />
-              </button>
-              
-              {/* Help Tooltip */}
-              {showHelpTooltip && (
-                <div className="absolute right-0 top-full mt-2 w-64 bg-gray-900 text-white text-xs rounded-lg p-3 z-20">
-                  <div className="font-semibold mb-2">Quick Navigation:</div>
-                  <div className="space-y-1">
-                    <div>• Click step dropdown to jump to any step</div>
-                    <div>• Press 1-9 keys for quick access</div>
-                    <div>• Use Ctrl+Arrow keys to navigate</div>
-                    <div>• Press Escape to close</div>
-                  </div>
-                  <div className="absolute -top-1 right-4 w-2 h-2 bg-gray-900 rotate-45"></div>
-                </div>
-              )}
-            </div>
-
             <div className="relative step-navigation">
               <button
                 onClick={() => setShowStepNavigation(!showStepNavigation)}
@@ -206,10 +137,6 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
                     <div className="flex items-center justify-between mb-3">
                       <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                         Jump to Step
-                      </div>
-                      <div className="flex items-center space-x-1 text-xs text-gray-400">
-                        <Keyboard className="w-3 h-3" />
-                        <span>Press 1-9</span>
                       </div>
                     </div>
                     <div className="space-y-1">
@@ -241,11 +168,6 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
                             </div>
                             <span className="flex-1">{step}</span>
                             <div className="flex items-center space-x-2">
-                              {index < 9 && (
-                                <div className="px-1.5 py-0.5 bg-gray-100 text-gray-500 text-xs rounded group-hover:bg-gray-200 transition-colors">
-                                  {index + 1}
-                                </div>
-                              )}
                               {index === currentStep && (
                                 <div className="w-2 h-2 bg-pink-600 rounded-full"></div>
                               )}
@@ -312,73 +234,6 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
         </div>
       </div>
 
-      {/* Keyboard Shortcuts Help Modal */}
-      {showKeyboardHelp && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                <Keyboard className="w-5 h-5 mr-2 text-pink-600" />
-                Keyboard Shortcuts
-              </h3>
-              <button
-                onClick={() => setShowKeyboardHelp(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-sm text-gray-700">Navigate to specific step</span>
-                <div className="flex space-x-1">
-                  {[1,2,3,4,5,6,7,8,9].map(num => (
-                    <kbd key={num} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
-                      {num}
-                    </kbd>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-sm text-gray-700">Previous step</span>
-                <kbd className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
-                  Ctrl + ←
-                </kbd>
-              </div>
-              
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-sm text-gray-700">Next step</span>
-                <kbd className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
-                  Ctrl + →
-                </kbd>
-              </div>
-              
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-sm text-gray-700">Close modal/dropdown</span>
-                <kbd className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
-                  Esc
-                </kbd>
-              </div>
-              
-              <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-gray-700">Show this help</span>
-                <div className="flex items-center space-x-1">
-                  <HelpCircle className="w-3 h-3 text-gray-400" />
-                  <span className="text-xs text-gray-500">Hover over help icon</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-              <p className="text-xs text-blue-700">
-                💡 <strong>Pro tip:</strong> You can also click the step dropdown button to see all available steps and jump to any one instantly!
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
