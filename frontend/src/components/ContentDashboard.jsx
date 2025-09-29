@@ -1461,6 +1461,14 @@ const ContentDashboard = () => {
     return null
   }
 
+  // Helper function to clean content by removing hashtags
+  const cleanContentText = (content) => {
+    if (!content) return content
+    
+    // Remove hashtags from the content text (hashtags that start with #)
+    return content.replace(/#\w+/g, '').trim()
+  }
+
   // Handle image load events
   const handleImageLoad = (contentId) => {
     setImageLoading(prev => {
@@ -1796,15 +1804,16 @@ const ContentDashboard = () => {
                               {!generatedImages[content.id].is_approved && (
                                 <button
                                   onClick={() => handleApproveImage(content.id)}
-                                  className="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition-colors"
+                                  className="text-xs bg-gradient-to-r from-purple-500 to-pink-600 text-white px-3 py-1 rounded hover:from-pink-600 hover:to-purple-500 transition-all duration-300 flex items-center space-x-1"
                                 >
-                                  Approve Image
+                                  <CheckCircle className="w-3 h-3" />
+                                  <span>Approve Image</span>
                                 </button>
                               )}
                               <button
                                 onClick={() => handleGenerateMedia(content)}
                                 disabled={generatingMedia.has(content.id)}
-                                className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1 rounded hover:opacity-90 transition-colors disabled:opacity-50 flex items-center space-x-1"
+                                className="text-xs bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-3 py-1 rounded hover:from-indigo-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-1"
                               >
                                 {generatingMedia.has(content.id) ? (
                                   <>
@@ -1822,18 +1831,21 @@ const ContentDashboard = () => {
                           </div>
                         )}
                         
-                        <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">{content.content}</p>
+                        <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">{cleanContentText(content.content)}</p>
                         
-                        {/* Approve Post Button - only show for draft status in expanded view */}
-                        {content.status === 'draft' && (
+                        {/* Hashtags - Only in expanded view */}
+                        {content.hashtags && content.hashtags.length > 0 && (
                           <div className="mb-4">
-                            <button
-                              onClick={() => handleApprovePost(content.id)}
-                              className="flex items-center space-x-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                              <span>Approve Post</span>
-                            </button>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium text-gray-600">Hashtags</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {content.hashtags.map((tag, index) => (
+                                <span key={index} className={`text-xs ${theme.accent} ${theme.text} px-2 py-1 rounded-lg`}>
+                                  #{tag}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         )}
                         
@@ -1859,21 +1871,26 @@ const ContentDashboard = () => {
                           </div>
                         </div>
                         
-                        {/* Hashtags - Only in expanded view */}
-                    {content.hashtags && content.hashtags.length > 0 && (
-                          <div className="mb-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium text-gray-600">Hashtags</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                        {content.hashtags.map((tag, index) => (
-                          <span key={index} className={`text-xs ${theme.accent} ${theme.text} px-2 py-1 rounded-lg`}>
-                            #{tag}
-                          </span>
-                        ))}
-                            </div>
-                      </div>
-                    )}
+                        {/* Action Buttons - only show for draft status in expanded view */}
+                        {content.status === 'draft' && (
+                          <div className="mb-4 flex gap-2">
+                            <button
+                              onClick={() => handleApprovePost(content.id)}
+                              className="flex items-center space-x-1 bg-gradient-to-r from-purple-500 to-pink-600 text-white px-3 py-2 rounded-lg hover:from-pink-600 hover:to-purple-500 transition-all duration-300 text-sm"
+                            >
+                              <CheckCircle className="w-3 h-3" />
+                              <span>Approve Post</span>
+                            </button>
+                            
+                            <button
+                              onClick={() => handleEditContent(content)}
+                              className="flex items-center space-x-1 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-3 py-2 rounded-lg hover:from-indigo-600 hover:to-blue-500 transition-all duration-300 text-sm"
+                            >
+                              <Edit className="w-3 h-3" />
+                              <span>Edit Post</span>
+                            </button>
+                          </div>
+                        )}
                         
                         <button
                           onClick={() => setExpandedContent(null)}
@@ -1884,202 +1901,188 @@ const ContentDashboard = () => {
                       </div>
                     ) : (
                       <div>
-                        {/* Media Placeholder - Always Show (Above Content) */}
-                        <div className="mb-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center space-x-1">
-                              <span className="text-xs font-medium text-purple-800">Media</span>
-                              {generatedImages[content.id] && (
-                                generatedImages[content.id].is_approved ? (
+                        {/* Media Display - Only show if content has media */}
+                        {generatedImages[content.id] && generatedImages[content.id].image_url && (
+                          <div className="mb-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center space-x-1">
+                                <span className="text-xs font-medium text-purple-800">Media</span>
+                                {generatedImages[content.id].is_approved ? (
                                   <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">✓</span>
                                 ) : (
                                   <span className="text-xs bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded">Pending</span>
-                                )
+                                )}
+                              </div>
+                            </div>
+                            <div className="relative w-full aspect-square bg-gray-200 rounded overflow-hidden">
+                              {/* Show placeholder while loading */}
+                              {imageLoading.has(content.id) && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                                  <div className="w-8 h-8 bg-gray-300 rounded animate-pulse"></div>
+                                </div>
                               )}
+                              {(() => {
+                                const thumbnailUrl = getSmallThumbnailUrl(generatedImages[content.id].image_url)
+                                console.log('🖼️ Content card image check:', {
+                                  contentId: content.id,
+                                  hasImage: !!generatedImages[content.id].image_url,
+                                  imageUrl: generatedImages[content.id].image_url,
+                                  thumbnailUrl: thumbnailUrl
+                                })
+                                
+                                // Check if it's a video file
+                                if (isVideoFile(generatedImages[content.id].image_url)) {
+                                  console.log('🎬 Rendering video for content:', content.id)
+                                  console.log('🎬 Video URL:', generatedImages[content.id].image_url)
+                                  console.log('🎬 Video file extension:', generatedImages[content.id].image_url.split('.').pop())
+                                  return (
+                                    <video 
+                                      src={generatedImages[content.id].image_url}
+                                      className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                      controls
+                                      preload="metadata"
+                                      muted
+                                      playsInline
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleImageClick(generatedImages[content.id].image_url, content.title)
+                                      }}
+                                      onLoadStart={() => {
+                                        console.log('🎬 Video loading started for content:', content.id)
+                                        startImageLoading(content.id)
+                                      }}
+                                      onLoadedData={() => {
+                                        console.log('✅ Video loaded for content:', content.id)
+                                        handleImageLoad(content.id)
+                                      }}
+                                      onError={(e) => {
+                                        console.error('❌ Video failed to load for content:', content.id)
+                                        console.error('❌ Failed URL:', generatedImages[content.id].image_url)
+                                        console.error('❌ Error details:', e)
+                                        handleImageError(content.id)
+                                      }}
+                                      onCanPlay={() => {
+                                        console.log('🎬 Video can play for content:', content.id)
+                                      }}
+                                      style={{
+                                        opacity: imageLoading.has(content.id) ? 0 : 1,
+                                        filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
+                                        transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
+                                        transition: 'all 0.5s ease-in-out'
+                                      }}
+                                    >
+                                      Your browser does not support the video tag.
+                                    </video>
+                                  )
+                                }
+                                
+                                // If thumbnail URL is null (non-generated folder URL), show original image
+                                if (!thumbnailUrl) {
+                                  return (
+                                    <img 
+                                      src={generatedImages[content.id].image_url} 
+                                      alt="Content image" 
+                                      className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                      loading="eager"
+                                      onClick={() => handleImageClick(generatedImages[content.id].image_url, content.title)}
+                                      onLoad={() => {
+                                        console.log('✅ Image loaded for content:', content.id)
+                                        handleImageLoad(content.id)
+                                      }}
+                                      onError={(e) => {
+                                        console.error('❌ Image failed to load for content:', content.id)
+                                        console.error('❌ Failed URL:', generatedImages[content.id].image_url)
+                                        handleImageError(content.id)
+                                      }}
+                                      onLoadStart={() => startImageLoading(content.id)}
+                                      style={{
+                                        opacity: imageLoading.has(content.id) ? 0 : 1,
+                                        filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
+                                        transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
+                                        transition: 'all 0.5s ease-in-out'
+                                      }}
+                                    />
+                                  )
+                                }
+                                
+                                // Show image if we have a valid Supabase thumbnail URL
+                                return (
+                                  <img 
+                                    src={thumbnailUrl} 
+                                    alt="Content image" 
+                                    className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                    loading="eager"
+                                    onClick={() => handleImageClick(getFullSizeImageUrl(generatedImages[content.id].image_url), content.title)}
+                                    onLoad={() => {
+                                      console.log('✅ Image loaded for content:', content.id)
+                                      handleImageLoad(content.id)
+                                    }}
+                                    onError={(e) => {
+                                      console.error('❌ Image failed to load for content:', content.id)
+                                      console.error('❌ Failed URL:', thumbnailUrl)
+                                      handleImageError(content.id)
+                                    }}
+                                    onLoadStart={() => startImageLoading(content.id)}
+                                    style={{
+                                      opacity: imageLoading.has(content.id) ? 0 : 1,
+                                      filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
+                                      transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
+                                      transition: 'all 0.5s ease-in-out'
+                                    }}
+                                  />
+                                )
+                              })()}
                             </div>
                           </div>
-                          <div className="relative w-full aspect-square bg-gray-200 rounded overflow-hidden">
-                            {generatedImages[content.id] ? (
-                              <>
-                                {/* Show placeholder while loading */}
-                                {imageLoading.has(content.id) && (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                                    <div className="w-8 h-8 bg-gray-300 rounded animate-pulse"></div>
-                                  </div>
-                                )}
-                                {generatedImages[content.id].image_url ? (
-                                  (() => {
-                                    const thumbnailUrl = getSmallThumbnailUrl(generatedImages[content.id].image_url)
-                                    console.log('🖼️ Content card image check:', {
-                                      contentId: content.id,
-                                      hasImage: !!generatedImages[content.id].image_url,
-                                      imageUrl: generatedImages[content.id].image_url,
-                                      thumbnailUrl: thumbnailUrl
-                                    })
-                                    
-                                    // Check if it's a video file
-                                    if (isVideoFile(generatedImages[content.id].image_url)) {
-                                      console.log('🎬 Rendering video for content:', content.id)
-                                      console.log('🎬 Video URL:', generatedImages[content.id].image_url)
-                                      console.log('🎬 Video file extension:', generatedImages[content.id].image_url.split('.').pop())
-                                      return (
-                                        <video 
-                                          src={generatedImages[content.id].image_url}
-                                          className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
-                                          controls
-                                          preload="metadata"
-                                          muted
-                                          playsInline
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            handleImageClick(generatedImages[content.id].image_url, content.title)
-                                          }}
-                                          onLoadStart={() => {
-                                            console.log('🎬 Video loading started for content:', content.id)
-                                            startImageLoading(content.id)
-                                          }}
-                                          onLoadedData={() => {
-                                            console.log('✅ Video loaded for content:', content.id)
-                                            handleImageLoad(content.id)
-                                          }}
-                                          onError={(e) => {
-                                            console.error('❌ Video failed to load for content:', content.id)
-                                            console.error('❌ Failed URL:', generatedImages[content.id].image_url)
-                                            console.error('❌ Error details:', e)
-                                            handleImageError(content.id)
-                                          }}
-                                          onCanPlay={() => {
-                                            console.log('🎬 Video can play for content:', content.id)
-                                          }}
-                                          style={{
-                                            opacity: imageLoading.has(content.id) ? 0 : 1,
-                                            filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
-                                            transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
-                                            transition: 'all 0.5s ease-in-out'
-                                          }}
-                                        >
-                                          Your browser does not support the video tag.
-                                        </video>
-                                      )
-                                    }
-                                    
-                                    // If thumbnail URL is null (non-generated folder URL), show original image or generate button
-                                    if (!thumbnailUrl) {
-                                      // If we have an image URL but no thumbnail, show the original image
-                                      if (generatedImages[content.id].image_url) {
-                                        return (
-                                          <img 
-                                            src={generatedImages[content.id].image_url} 
-                                            alt="Content image" 
-                                            className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
-                                            loading="eager"
-                                            onClick={() => handleImageClick(generatedImages[content.id].image_url, content.title)}
-                                            onLoad={() => {
-                                              console.log('✅ Image loaded for content:', content.id)
-                                              handleImageLoad(content.id)
-                                            }}
-                                            onError={(e) => {
-                                              console.error('❌ Image failed to load for content:', content.id)
-                                              console.error('❌ Failed URL:', generatedImages[content.id].image_url)
-                                              handleImageError(content.id)
-                                            }}
-                                            onLoadStart={() => startImageLoading(content.id)}
-                                            style={{
-                                              opacity: imageLoading.has(content.id) ? 0 : 1,
-                                              filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
-                                              transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
-                                              transition: 'all 0.5s ease-in-out'
-                                            }}
-                                          />
-                                        )
-                                      }
-                                      
-                                      // If no image URL, show generate button
-                                      return (
-                                        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100">
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              handleGenerateMedia(content.id)
-                                            }}
-                                            className="px-3 py-2 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 transition-colors"
-                                          >
-                                            Generate Media with AI
-                                          </button>
-                                        </div>
-                                      )
-                                    }
-                                    
-                                    // Show image if we have a valid Supabase thumbnail URL
-                                    return (
-                                      <img 
-                                        src={thumbnailUrl} 
-                                        alt="Content image" 
-                                        className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
-                                        loading="eager"
-                                        onClick={() => handleImageClick(getFullSizeImageUrl(generatedImages[content.id].image_url), content.title)}
-                                        onLoad={() => {
-                                          console.log('✅ Image loaded for content:', content.id)
-                                          handleImageLoad(content.id)
-                                        }}
-                                        onError={(e) => {
-                                          console.error('❌ Image failed to load for content:', content.id)
-                                          console.error('❌ Failed URL:', thumbnailUrl)
-                                          handleImageError(content.id)
-                                        }}
-                                        onLoadStart={() => startImageLoading(content.id)}
-                                        style={{
-                                          opacity: imageLoading.has(content.id) ? 0 : 1,
-                                          filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
-                                          transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
-                                          transition: 'all 0.5s ease-in-out'
-                                        }}
-                                      />
-                                    )
-                                  })()
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-500 text-xs">
-                                    No image URL
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              /* Generate Image Button */
-                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleGenerateMedia(content)
-                                  }}
-                                  disabled={generatingMedia.has(content.id)}
-                                  className="flex flex-col items-center space-y-2 p-4 text-gray-600 hover:text-purple-600 transition-colors disabled:opacity-50"
-                                >
-                                  {generatingMedia.has(content.id) ? (
-                                    <>
-                                      <Loader2 className="w-8 h-8 animate-spin" />
-                                      <span className="text-xs font-medium">Generating...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Wand2 className="w-8 h-8" />
-                                      <span className="text-xs font-medium">Generate Image with AI</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        )}
                         
-                        <p className="text-gray-700 text-sm mb-4 line-clamp-3">{content.content}</p>
+                        <p className="text-gray-700 text-sm mb-4 line-clamp-3">{cleanContentText(content.content)}</p>
                         
-                        {content.content.length > 150 && (
+                        {cleanContentText(content.content).length > 150 && (
                           <button
                             onClick={() => handleViewContent(content)}
                             className="text-xs text-purple-600 hover:text-purple-800 font-medium"
                           >
                             Read more
                           </button>
+                        )}
+                        
+                        {/* Media Action Buttons */}
+                        {(!generatedImages[content.id] || !generatedImages[content.id].image_url) && (
+                          <div className="flex gap-2 mt-4 mb-6">
+                             <button
+                               onClick={(e) => {
+                                 e.stopPropagation()
+                                 handleGenerateMedia(content)
+                               }}
+                               disabled={generatingMedia.has(content.id)}
+                               className="flex-1 px-3 py-2 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center space-x-1"
+                             >
+                              {generatingMedia.has(content.id) ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  <span>Generating...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Wand2 className="w-3 h-3" />
+                                  <span>Generate Media</span>
+                                </>
+                              )}
+                            </button>
+                            
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setShowUploadModal(content.id)
+                                setSelectedFile(null)
+                              }}
+                              className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-1"
+                            >
+                              <Upload className="w-3 h-3" />
+                              <span>Upload Media</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     )}
