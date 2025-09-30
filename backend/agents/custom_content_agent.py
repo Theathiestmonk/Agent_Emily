@@ -1536,8 +1536,11 @@ class CustomContentAgent:
                     
             elif current_step == ConversationStep.SELECT_SCHEDULE:
                 # Handle schedule selection
+                logger.info(f"Processing schedule selection with input: '{user_input}'")
+                
                 if user_input.lower().strip() in ["now", "immediately", "asap"]:
                     state["scheduled_for"] = datetime.now().isoformat()
+                    logger.info(f"Set scheduled_for to now: {state['scheduled_for']}")
                 else:
                     # Try to parse datetime from input
                     try:
@@ -1569,6 +1572,7 @@ class CustomContentAgent:
                 # Transition to save content
                 state["current_step"] = ConversationStep.SAVE_CONTENT
                 logger.info(f"Transitioning to SAVE_CONTENT with scheduled_for: {state.get('scheduled_for')}")
+                logger.info(f"Current step after transition: {state.get('current_step')}")
                 
                 # Don't execute save_content directly - let the graph handle the transition
                 # The graph will automatically call save_content based on the state transition
@@ -1915,10 +1919,15 @@ class CustomContentAgent:
                 last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
                 schedule_message_content = "Great! Now let's schedule your post. Please select the date and time when you'd like this content to be published. You can choose to post immediately or schedule it for later."
                 
+                logger.info(f"SELECT_SCHEDULE step - last_message: {last_message}")
+                logger.info(f"SELECT_SCHEDULE step - checking for message content")
+                
                 if not last_message or schedule_message_content not in last_message.get("content", ""):
+                    logger.info("Calling select_schedule method")
                     result = await self.select_schedule(state)
                 else:
                     # Already asked for schedule, just return current state
+                    logger.info("Schedule message already present, returning current state")
                     result = state
             elif current_step == ConversationStep.SAVE_CONTENT:
                 result = await self.save_content(state)
