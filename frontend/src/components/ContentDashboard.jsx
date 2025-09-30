@@ -140,6 +140,8 @@ const ContentDashboard = () => {
     if (urlDate && urlDate !== selectedDate) {
       console.log('URL date changed to:', urlDate)
       setSelectedDate(urlDate)
+      // Explicitly fetch content for the new date from URL
+      fetchContentByDate(urlDate)
     }
   }, [searchParams, selectedDate])
 
@@ -183,6 +185,8 @@ const ContentDashboard = () => {
           setSelectedDate(nextDate)
           setCurrentDateIndex(nextIndex)
           navigate(`/content?date=${nextDate}`)
+          // Explicitly fetch content for the new date
+          fetchContentByDate(nextDate)
         }
       }
     }
@@ -290,6 +294,8 @@ const ContentDashboard = () => {
       setCurrentDateIndex(currentDateIndex - 1)
       // Update URL
       navigate(`/content?date=${prevDate}`)
+      // Explicitly fetch content for the new date
+      fetchContentByDate(prevDate)
     }
   }
 
@@ -301,6 +307,8 @@ const ContentDashboard = () => {
       setCurrentDateIndex(currentDateIndex + 1)
       // Update URL
       navigate(`/content?date=${nextDate}`)
+      // Explicitly fetch content for the new date
+      fetchContentByDate(nextDate)
     }
   }
 
@@ -1621,15 +1629,12 @@ const ContentDashboard = () => {
                     </div>
                     <div>
                       <h1 className="text-xl font-bold text-gray-900">
-                        {selectedDate === new Date().toISOString().split('T')[0] 
-                          ? "Today's Content" 
-                          : new Date(selectedDate).toLocaleDateString('en-US', { 
-                              weekday: 'long', 
-                              year: 'numeric', 
-                              month: 'long', 
-                              day: 'numeric' 
-                            })
-                        }
+                        {new Date(selectedDate).toLocaleDateString('en-US', { 
+                          weekday: 'long', 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
                       </h1>
                       <p className="text-sm text-gray-600">
                         {contentToDisplay.length} {contentToDisplay.length === 1 ? 'post' : 'posts'}
