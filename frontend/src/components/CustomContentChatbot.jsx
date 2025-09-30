@@ -860,7 +860,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                 )}
 
                 {/* Another Content Generation Options */}
-                {message.role === 'assistant' && message.content && message.content.includes('Do you want to generate another content?') && (
+                {message.role === 'assistant' && message.content && message.content.includes('create another piece of content') && (
                   <div className="mt-6">
                     <div className="flex gap-4 justify-center">
                       <button
@@ -880,7 +880,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                 )}
                 
                 {/* Schedule Selection */}
-                {message.role === 'assistant' && message.content && message.content.includes('Now let\'s schedule your post') && (
+                {message.role === 'assistant' && message.content && message.content.includes('schedule your post') && (
                   <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
                     <div className="space-y-5">
                       <div className="text-sm font-bold text-purple-800">Select Post Schedule:</div>

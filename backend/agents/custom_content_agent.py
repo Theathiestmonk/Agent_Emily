@@ -949,15 +949,23 @@ class CustomContentAgent:
             state["current_step"] = ConversationStep.SELECT_SCHEDULE
             state["progress_percentage"] = 98
             
-            # Create a message asking for schedule selection
-            message = {
-                "role": "assistant",
-                "content": "Great! Now let's schedule your post. Please select the date and time when you'd like this content to be published. You can choose to post immediately or schedule it for later.",
-                "timestamp": datetime.now().isoformat()
-            }
-            state["conversation_messages"].append(message)
+            # Only add the message if we haven't already asked for schedule selection
+            # Check if the last message is already asking for schedule selection
+            last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
+            schedule_message_content = "Great! Now let's schedule your post. Please select the date and time when you'd like this content to be published. You can choose to post immediately or schedule it for later."
             
-            logger.info("Asking user to select post schedule")
+            if not last_message or schedule_message_content not in last_message.get("content", ""):
+                # Create a message asking for schedule selection
+                message = {
+                    "role": "assistant",
+                    "content": schedule_message_content,
+                    "timestamp": datetime.now().isoformat()
+                }
+                state["conversation_messages"].append(message)
+                logger.info("Asking user to select post schedule")
+            else:
+                logger.info("Schedule selection message already present, skipping duplicate")
+            
             logger.info(f"Current state step: {state.get('current_step')}")
             logger.info(f"User input in state: {state.get('user_input')}")
             
@@ -1080,7 +1088,7 @@ class CustomContentAgent:
                 
                 message = {
                     "role": "assistant",
-                    "content": f"🎉 Perfect! Your {content_type} for {platform} has been saved as a draft post! 📝\n\n✅ Content generated and optimized\n✅ Image {image_source} and saved to storage\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard. The post includes your {image_source} image and is ready to go!\n\n---\n\n**Do you want to generate another content?**",
+                    "content": f"🎉 Perfect! Your {content_type} for {platform} has been saved as a draft post! 📝\n\n✅ Content generated and optimized\n✅ Image {image_source} and saved to storage\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard. The post includes your {image_source} image and is ready to go!",
                     "timestamp": datetime.now().isoformat()
                 }
                 state["conversation_messages"].append(message)
@@ -1103,8 +1111,23 @@ class CustomContentAgent:
         try:
             logger.info("Asking if user wants to generate another content")
             
-            # This method is called after the success message is already sent
-            # The user's response will be handled in process_user_input
+            # Only add the message if we haven't already asked about another content
+            # Check if the last message is already asking about another content
+            last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
+            another_content_message = "Would you like to create another piece of content? Just let me know!"
+            
+            if not last_message or another_content_message not in last_message.get("content", ""):
+                # Add the question message
+                message = {
+                    "role": "assistant",
+                    "content": another_content_message,
+                    "timestamp": datetime.now().isoformat()
+                }
+                state["conversation_messages"].append(message)
+                logger.info("Added ask another content message")
+            else:
+                logger.info("Ask another content message already present, skipping duplicate")
+            
             return state
             
         except Exception as e:
@@ -1513,12 +1536,23 @@ class CustomContentAgent:
                     
             elif current_step == ConversationStep.SELECT_SCHEDULE:
                 # Handle schedule selection
+                logger.info(f"Processing schedule selection with input: '{user_input}'")
+                
                 if user_input.lower().strip() in ["now", "immediately", "asap"]:
                     state["scheduled_for"] = datetime.now().isoformat()
+                    logger.info(f"Set scheduled_for to now: {state['scheduled_for']}")
                 else:
                     # Try to parse datetime from input
                     try:
-                        from dateutil import parser
+                        # Try to import dateutil, fallback to datetime if not available
+                        try:
+                            from dateutil import parser
+                            use_dateutil = True
+                        except ImportError:
+                            logger.warning("dateutil not available, using datetime fallback")
+                            from datetime import datetime as dt
+                            use_dateutil = False
+                        
                         logger.info(f"Attempting to parse datetime: '{user_input}'")
                         
                         # Handle both ISO format (2025-09-28T10:37) and other formats
@@ -1532,7 +1566,12 @@ class CustomContentAgent:
                         else:
                             parsed_input = user_input
                         
-                        parsed_datetime = parser.parse(parsed_input)
+                        if use_dateutil:
+                            parsed_datetime = parser.parse(parsed_input)
+                        else:
+                            # Fallback to datetime parsing
+                            parsed_datetime = dt.fromisoformat(parsed_input)
+                        
                         # Ensure the datetime is timezone-aware
                         if parsed_datetime.tzinfo is None:
                             parsed_datetime = parsed_datetime.replace(tzinfo=None)
@@ -1546,9 +1585,10 @@ class CustomContentAgent:
                 # Transition to save content
                 state["current_step"] = ConversationStep.SAVE_CONTENT
                 logger.info(f"Transitioning to SAVE_CONTENT with scheduled_for: {state.get('scheduled_for')}")
+                logger.info(f"Current step after transition: {state.get('current_step')}")
                 
-                # Execute save_content immediately to avoid looping
-                return await self.save_content(state)
+                # Don't execute save_content directly - let the graph handle the transition
+                # The graph will automatically call save_content based on the state transition
                 
             elif current_step == ConversationStep.CONFIRM_MEDIA:
                 # Handle media confirmation
@@ -1887,11 +1927,37 @@ class CustomContentAgent:
             elif current_step == ConversationStep.CONFIRM_CONTENT:
                 result = await self.confirm_content(state)
             elif current_step == ConversationStep.SELECT_SCHEDULE:
-                result = await self.select_schedule(state)
+                # Only call select_schedule if we haven't already asked for schedule
+                # Check if we already have a schedule selection message
+                last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
+                schedule_message_content = "Great! Now let's schedule your post. Please select the date and time when you'd like this content to be published. You can choose to post immediately or schedule it for later."
+                
+                logger.info(f"SELECT_SCHEDULE step - last_message: {last_message}")
+                logger.info(f"SELECT_SCHEDULE step - checking for message content")
+                
+                if not last_message or schedule_message_content not in last_message.get("content", ""):
+                    logger.info("Calling select_schedule method")
+                    result = await self.select_schedule(state)
+                else:
+                    # Already asked for schedule, just return current state
+                    logger.info("Schedule message already present, returning current state")
+                    result = state
             elif current_step == ConversationStep.SAVE_CONTENT:
                 result = await self.save_content(state)
+                # After saving content, automatically transition to ask_another_content
+                if result.get("current_step") == ConversationStep.ASK_ANOTHER_CONTENT:
+                    result = await self.ask_another_content(result)
             elif current_step == ConversationStep.ASK_ANOTHER_CONTENT:
-                result = await self.ask_another_content(state)
+                # Only call ask_another_content if we haven't already asked
+                # Check if we already have an ask another content message
+                last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
+                another_content_message = "Would you like to create another piece of content? Just let me know!"
+                
+                if not last_message or another_content_message not in last_message.get("content", ""):
+                    result = await self.ask_another_content(state)
+                else:
+                    # Already asked about another content, just return current state
+                    result = state
             elif current_step == ConversationStep.DISPLAY_RESULT:
                 result = await self.display_result(state)
             elif current_step == ConversationStep.ERROR:
