@@ -217,7 +217,7 @@ class ImageEditorService:
     async def _download_image(self, image_url: str) -> bytes:
         """Download image from URL"""
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
                 response = await client.get(image_url)
                 response.raise_for_status()
                 return response.content
@@ -369,15 +369,28 @@ MANDATORY: The logo must be placed as a transparent overlay with absolutely no b
     async def _generate_manual_edit(self, input_image_data: bytes, content: str, instructions: str) -> bytes:
         """Generate edited image with manual instructions using Gemini"""
         try:
+            logger.info(f"Generating manual edit with instructions: {instructions}")
+            
+            # Create a more detailed and specific prompt
             prompt = f"""You are a professional image editor. Apply the following editing instructions to the image:
 
-Post content: {content}
-Instructions: {instructions}
+POST CONTENT: {content}
 
-Generate a high-quality edited image that follows the instructions while maintaining the original image's quality and aesthetic."""
+USER INSTRUCTIONS: {instructions}
+
+REQUIREMENTS:
+- Follow the user's instructions exactly
+- Maintain high image quality and resolution
+- Keep the image professional and suitable for social media
+- Ensure the edited image looks natural and well-integrated
+- Do not add any watermarks or text unless specifically requested
+- Preserve the original image's composition unless changes are requested
+
+Generate a high-quality edited image that follows the instructions while maintaining professional standards."""
             
+            # Prepare contents for Gemini API
             contents = [
-                {"text": prompt},
+                prompt,
                 {
                     "inline_data": {
                         "mime_type": "image/jpeg",
@@ -386,16 +399,27 @@ Generate a high-quality edited image that follows the instructions while maintai
                 }
             ]
             
-            response = self.gemini_model.generate_content(contents)
+            # Use the correct Gemini model for image generation
+            response = self.gemini_client.models.generate_content(
+                model=self.gemini_image_model,
+                contents=contents
+            )
+            
+            logger.info(f"Gemini response received for manual edit")
             
             # Extract image data from response
-            for part in response.candidates[0].content.parts:
-                if part.inline_data is not None:
-                    image_data = part.inline_data.data
-                    if isinstance(image_data, bytes):
-                        return image_data
-                    else:
-                        return base64.b64decode(image_data)
+            if response.candidates and len(response.candidates) > 0:
+                candidate = response.candidates[0]
+                if candidate.content and candidate.content.parts:
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'inline_data') and part.inline_data:
+                            image_data = part.inline_data.data
+                            logger.info(f"Image data extracted: {len(image_data) if image_data else 0} bytes")
+                            
+                            if isinstance(image_data, bytes):
+                                return image_data
+                            else:
+                                return base64.b64decode(image_data)
             
             raise Exception("No image data returned from Gemini")
             

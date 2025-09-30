@@ -253,10 +253,22 @@ What would you like to do next?`,
       `Awesome! I love getting creative with images. Tell me what you'd like me to do with your image! 
 
 Here are some ideas to get you started:
+
 • "Make it more colorful and vibrant"
-• "Add a beautiful sunset background" 
+
+• "Add a beautiful sunset background"
+
 • "Crop it to a square format"
+
 • "Add some text overlay"
+
+• "Convert to black and white with selective color"
+
+• "Add a vintage film effect"
+
+• "Create a dramatic lighting effect"
+
+• "Add a professional blur to the background"
 
 What's your vision for this image?`
     );
