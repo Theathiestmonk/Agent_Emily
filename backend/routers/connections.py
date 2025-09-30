@@ -234,11 +234,11 @@ if not ENCRYPTION_KEY:
 
     ENCRYPTION_KEY = Fernet.generate_key().decode()
 
-    print(f"🔑 Generated encryption key: {ENCRYPTION_KEY}")
+    print(f"Generated encryption key: {ENCRYPTION_KEY}")
 
 else:
 
-    print(f"🔑 Using provided encryption key: {ENCRYPTION_KEY[:20]}...")
+    print(f"Using provided encryption key: {ENCRYPTION_KEY[:20]}...")
 
 
 

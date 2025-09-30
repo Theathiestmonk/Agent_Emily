@@ -7,6 +7,7 @@ from supabase import create_client
 from pydantic import BaseModel
 import logging
 from cryptography.fernet import Fernet
+import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -58,6 +59,13 @@ class User(BaseModel):
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Get current user from Supabase JWT token"""
     try:
+        if not credentials or not credentials.credentials:
+            logger.warning("No credentials provided")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authorization credentials required"
+            )
+            
         token = credentials.credentials
         logger.info(f"Authenticating user with token: {token[:20]}...")
         
@@ -74,13 +82,20 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
                 created_at=user_data.created_at.isoformat() if hasattr(user_data.created_at, 'isoformat') else str(user_data.created_at)
             )
         else:
-            logger.error("Invalid token - no user data in response")
-            raise HTTPException(status_code=401, detail="Invalid token")
+            logger.warning("No user found in response")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token or user not found"
+            )
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Authentication error: {e}")
-        logger.error(f"Error type: {type(e)}")
-        raise HTTPException(status_code=401, detail="Authentication failed")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
+        )
 
 router = APIRouter(prefix="/api/blogs", tags=["blogs"])
 
@@ -295,6 +310,7 @@ async def generate_blogs(
     except Exception as e:
         logger.error(f"Error generating blogs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate blogs: {str(e)}")
+
 
 @router.put("/{blog_id}")
 async def update_blog(
@@ -558,12 +574,33 @@ async def publish_blog(
                 detail=f"Failed to publish to WordPress via REST API. Error: {str(e)}"
             )
         
-        # Update blog with WordPress post ID
+        # Get the published post details to get the proper permalink
+        try:
+            # Try to get the post details to extract the permalink
+            post_response = requests.get(
+                f"{wordpress_site['wordpress_site_url'].rstrip('/')}/wp-json/wp/v2/posts/{wordpress_post_id}",
+                auth=(wordpress_site['wordpress_username'], app_password),
+                timeout=30
+            )
+            
+            if post_response.status_code == 200:
+                post_data = post_response.json()
+                blog_url = post_data.get('link', f"{wordpress_site['wordpress_site_url'].rstrip('/')}/?p={wordpress_post_id}")
+            else:
+                # Fallback to post ID format
+                blog_url = f"{wordpress_site['wordpress_site_url'].rstrip('/')}/?p={wordpress_post_id}"
+        except Exception as e:
+            logger.warning(f"Could not fetch post permalink, using fallback: {e}")
+            # Fallback to post ID format
+            blog_url = f"{wordpress_site['wordpress_site_url'].rstrip('/')}/?p={wordpress_post_id}"
+        
+        # Update blog with WordPress post ID and blog URL
         update_data = {
             "status": "published",
             "published_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
-            "wordpress_post_id": wordpress_post_id
+            "wordpress_post_id": wordpress_post_id,
+            "blog_url": blog_url
         }
         
         supabase_admin.table("blog_posts").update(update_data).eq("id", blog_id).execute()

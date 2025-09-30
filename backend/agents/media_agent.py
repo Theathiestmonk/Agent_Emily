@@ -15,7 +15,7 @@ from typing import Dict, List, Any, Optional, TypedDict
 from dataclasses import dataclass
 from enum import Enum
 
-from google import genai
+import google.generativeai as genai
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
@@ -67,10 +67,10 @@ class MediaAgent:
         if not gemini_api_key:
             raise ValueError("Google Gemini API key is required")
         
-        # Configure Gemini API with latest library
-        self.gemini_client = genai.Client(api_key=gemini_api_key)
-        self.gemini_model = 'gemini-2.0-flash-exp'  # Latest model for text generation
-        self.gemini_image_model = 'gemini-2.5-flash-image-preview'  # For image generation (Nano Banana)
+        # Configure Gemini API
+        genai.configure(api_key=gemini_api_key)
+        self.gemini_model = 'gemini-1.5-flash'  # Use stable model for text generation
+        self.gemini_image_model = 'gemini-1.5-flash'  # Use stable model for image generation
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
@@ -238,8 +238,7 @@ class MediaAgent:
             """
             
             try:
-                response = self.gemini_client.models.generate_content(
-                    model='gemini-2.0-flash-exp',
+                response = genai.GenerativeModel('gemini-1.5-flash').generate_content(
                     contents=f"""You are an expert at creating detailed image prompts for AI image generation. Create specific, visual prompts that will generate high-quality images for social media content.
 
 IMPORTANT: When a business logo is available, you MUST include specific instructions about logo placement and integration in your generated prompt. The logo should be:
@@ -365,8 +364,7 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                         # Continue without logo if there's an error
                 
                 # Use Gemini's native image generation capability
-                response = self.gemini_client.models.generate_content(
-                    model=self.gemini_image_model,
+                response = genai.GenerativeModel(self.gemini_image_model).generate_content(
                     contents=contents,
                 )
                 

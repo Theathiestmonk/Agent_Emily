@@ -55,6 +55,9 @@ const BlogDashboard = () => {
   })
   const [selectedBlog, setSelectedBlog] = useState(null)
   const [showBlogModal, setShowBlogModal] = useState(false)
+  const [showBlogPreview, setShowBlogPreview] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [blogsPerPage] = useState(6)
 
   const statusColors = {
     draft: 'bg-yellow-100 text-yellow-800',
@@ -374,6 +377,33 @@ const BlogDashboard = () => {
     setShowBlogModal(false)
   }
 
+  const handleReadMore = (blog) => {
+    // Only for published blogs - redirect to actual blog URL
+    let blogUrl = blog.blog_url || blog.website_url
+    
+    // If no specific blog URL, try to construct it
+    if (!blogUrl || blogUrl === blog.website_url) {
+      if (blog.wordpress_post_id) {
+        // Use post ID format
+        blogUrl = `${blog.website_url || `https://${blog.site_name}.wordpress.com`}/?p=${blog.wordpress_post_id}`
+      } else {
+        // Fallback to site URL
+        blogUrl = blog.website_url || `https://${blog.site_name}.wordpress.com`
+      }
+    }
+    
+    if (blogUrl && blogUrl !== '#') {
+      window.open(blogUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
+    } else {
+      console.warn('No blog URL found for published blog:', blog)
+    }
+  }
+
+  const handleCloseBlogPreview = () => {
+    setSelectedBlog(null)
+    setShowBlogPreview(false)
+  }
+
   const handlePublishBlog = async (blogId) => {
     try {
       await blogService.publishBlog(blogId)
@@ -410,6 +440,22 @@ const BlogDashboard = () => {
     
     return matchesStatus && matchesCampaign && matchesSearch
   })
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredBlogs.length / blogsPerPage)
+  const startIndex = (currentPage - 1) * blogsPerPage
+  const endIndex = startIndex + blogsPerPage
+  const currentBlogs = filteredBlogs.slice(startIndex, endIndex)
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedStatus, selectedCampaign, searchTerm])
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -468,46 +514,46 @@ const BlogDashboard = () => {
   })
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50">
       {/* Side Navbar */}
       <SideNavbar />
 
       {/* Main Content */}
       <div className="ml-64 p-6">
         {/* Header */}
-        <div className="fixed top-0 right-0 left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+        <div className="fixed top-0 right-0 left-64 bg-gradient-to-r from-pink-50 to-purple-50 shadow-lg border-b border-pink-200 z-30" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center space-x-8">
                 {/* Stats Cards in Header */}
                 <div className="flex items-center space-x-6">
-                  <div className="flex items-center space-x-2">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <FileText className="w-5 h-5 text-blue-600" />
+                  <div className="flex items-center space-x-3 bg-white/80 backdrop-blur-sm rounded-xl p-3 shadow-sm">
+                    <div className="p-2 bg-gradient-to-r from-pink-500 to-purple-600 rounded-lg">
+                      <FileText className="w-5 h-5 text-white" />
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Total Blogs</p>
-                      <p className="text-xl font-semibold text-gray-900">{calculateStats().total_blogs}</p>
+                      <p className="text-xl font-bold text-gray-900">{calculateStats().total_blogs}</p>
                     </div>
                   </div>
                   
-                  <div className="flex items-center space-x-2">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
+                  <div className="flex items-center space-x-3 bg-white/80 backdrop-blur-sm rounded-xl p-3 shadow-sm">
+                    <div className="p-2 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg">
+                      <CheckCircle className="w-5 h-5 text-white" />
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Published</p>
-                      <p className="text-xl font-semibold text-gray-900">{calculateStats().published_blogs}</p>
+                      <p className="text-xl font-bold text-gray-900">{calculateStats().published_blogs}</p>
                     </div>
                   </div>
                   
-                  <div className="flex items-center space-x-2">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <Target className="w-5 h-5 text-purple-600" />
+                  <div className="flex items-center space-x-3 bg-white/80 backdrop-blur-sm rounded-xl p-3 shadow-sm">
+                    <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg">
+                      <Target className="w-5 h-5 text-white" />
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Campaigns</p>
-                      <p className="text-xl font-semibold text-gray-900">{calculateStats().total_campaigns}</p>
+                      <p className="text-xl font-bold text-gray-900">{calculateStats().total_campaigns}</p>
                     </div>
                   </div>
                 </div>
@@ -517,7 +563,7 @@ const BlogDashboard = () => {
                 <button
                   onClick={generateBlogs}
                   disabled={generating}
-                  className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50"
+                  className="flex items-center space-x-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 shadow-lg hover:shadow-xl"
                 >
                   {generating ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
@@ -533,7 +579,7 @@ const BlogDashboard = () => {
                   <select
                     value={selectedStatus}
                     onChange={(e) => setSelectedStatus(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="px-4 py-2 border border-pink-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm"
                   >
                     <option value="all">All Status</option>
                     <option value="draft">Draft</option>
@@ -545,7 +591,7 @@ const BlogDashboard = () => {
                   <select
                     value={selectedCampaign}
                     onChange={(e) => setSelectedCampaign(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="px-4 py-2 border border-pink-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm"
                   >
                     <option value="all">All Campaigns</option>
                     {campaigns.map(campaign => (
@@ -557,27 +603,27 @@ const BlogDashboard = () => {
                   
                   {/* Search */}
                   <div className="relative">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-pink-400" />
                     <input
                       type="text"
                       placeholder="Search blogs..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="pl-10 pr-4 py-2 border border-pink-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm"
                     />
                   </div>
                   
                   {/* View Mode Toggle */}
-                  <div className="flex border border-gray-300 rounded-lg">
+                  <div className="flex border border-pink-200 rounded-xl overflow-hidden bg-white/80 backdrop-blur-sm shadow-sm">
                     <button
                       onClick={() => setViewMode('grid')}
-                      className={`p-2 ${viewMode === 'grid' ? 'bg-blue-500 text-white' : 'text-gray-600'}`}
+                      className={`p-3 ${viewMode === 'grid' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white' : 'text-gray-600 hover:bg-pink-50'}`}
                     >
                       <BarChart3 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setViewMode('list')}
-                      className={`p-2 ${viewMode === 'list' ? 'bg-blue-500 text-white' : 'text-gray-600'}`}
+                      className={`p-3 ${viewMode === 'list' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white' : 'text-gray-600 hover:bg-pink-50'}`}
                     >
                       <BookOpen className="w-4 h-4" />
                     </button>
@@ -640,134 +686,225 @@ const BlogDashboard = () => {
           ) : (
             <div 
               data-testid="blogs-section"
-              className={viewMode === 'grid' ? 'p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'divide-y'}
+              className={viewMode === 'grid' ? 'p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-8' : 'divide-y'}
             >
-              {filteredBlogs.map(blog => {
+              {currentBlogs.map(blog => {
                 const StatusIcon = statusIcons[blog.status] || AlertCircle
-                const theme = {
-                  primary: 'bg-gradient-to-r from-blue-500 to-purple-500',
-                  secondary: 'bg-gradient-to-r from-green-500 to-blue-500',
-                  accent: 'bg-blue-100 text-blue-800',
-                  text: 'text-blue-800'
-                }
                 
                 return (
-                  <div key={blog.id} className={`${viewMode === 'grid' ? 'bg-white rounded-lg shadow-sm border hover:shadow-md transition-all duration-200' : 'bg-white'} p-6`}>
-                    {/* Clickable area for blog content */}
-                    <div 
-                      className="cursor-pointer hover:bg-gray-50 rounded-lg p-2 -m-2 transition-colors"
-                      onClick={() => handleBlogClick(blog)}
-                    >
-                      <div className="flex items-center justify-between mb-4">
+                  <div 
+                    key={blog.id} 
+                    className={`${viewMode === 'grid' ? 'bg-white rounded-xl shadow-lg border border-gray-100 hover:shadow-xl hover:scale-105 transition-all duration-300 overflow-hidden cursor-pointer' : 'bg-white'} p-0`}
+                    onClick={() => {
+                      if (blog.status === 'published') {
+                        // For published blogs, open the actual blog URL
+                        let blogUrl = blog.blog_url || blog.website_url
+                        
+                        // If no specific blog URL, try to construct it
+                        if (!blogUrl || blogUrl === blog.website_url) {
+                          if (blog.wordpress_post_id) {
+                            // Use post ID format
+                            blogUrl = `${blog.website_url || `https://${blog.site_name}.wordpress.com`}/?p=${blog.wordpress_post_id}`
+                          } else {
+                            // Fallback to site URL
+                            blogUrl = blog.website_url || `https://${blog.site_name}.wordpress.com`
+                          }
+                        }
+                        
+                        if (blogUrl && blogUrl !== '#') {
+                          window.open(blogUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
+                        } else {
+                          console.warn('No blog URL found for published blog:', blog)
+                        }
+                      } else {
+                        setSelectedBlog(blog)
+                        setShowBlogPreview(true)
+                      }
+                    }}
+                  >
+                    {/* Blog Image Header */}
+                    <div className="relative h-64 bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 overflow-hidden">
+                      <img 
+                        src={`https://images.unsplash.com/photo-${Math.random().toString(36).substr(2, 9)}?w=400&h=300&fit=crop&crop=face`}
+                        alt="Blog post image" 
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-br from-pink-500/80 via-purple-500/80 to-blue-500/80"></div>
+                      <div className="absolute top-4 left-4">
+                        <span className={`px-3 py-1 text-xs rounded-full ${statusColors[blog.status]} flex items-center space-x-1 backdrop-blur-sm`}>
+                          <StatusIcon className="w-3 h-3" />
+                          <span className="capitalize font-medium">{blog.status}</span>
+                        </span>
+                      </div>
+                      <div className="absolute bottom-4 left-4 right-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2 text-white/90">
+                            <Globe className="w-4 h-4" />
+                            <span className="text-sm font-medium">{blog.site_name || 'Unknown Site'}</span>
+                          </div>
+                          {blog.status === 'published' && (
+                            <div className="flex items-center space-x-1 bg-green-500/80 backdrop-blur-sm px-2 py-1 rounded-full">
+                              <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse"></div>
+                              <span className="text-xs font-medium text-white">LIVE</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Content */}
+                    <div className="p-8">
+                      {/* Author and Meta Info */}
+                      <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center space-x-3">
-                          <div className="p-2 bg-blue-100 rounded-lg">
-                            <FileText className="w-5 h-5 text-blue-600" />
+                          <div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                            A
                           </div>
                           <div>
-                            <h3 className="font-semibold text-gray-900 line-clamp-2">{blog.title}</h3>
-                            <div className="flex items-center space-x-2 mt-1">
-                              <span className={`px-2 py-1 text-xs rounded-full ${statusColors[blog.status]} flex items-center space-x-1`}>
-                                <StatusIcon className="w-3 h-3" />
-                                <span className="capitalize">{blog.status}</span>
-                              </span>
-                              <span className="flex items-center text-xs text-gray-500">
-                                <Globe className="w-3 h-3 mr-1" />
-                                {blog.site_name || 'Unknown Site'}
-                              </span>
+                            <div className="text-base font-semibold text-gray-900">Admin</div>
+                            <div className="text-sm text-gray-500">
+                              {blog.published_at ? formatDate(blog.published_at) : formatDate(blog.scheduled_at)}
                             </div>
                           </div>
                         </div>
-                      </div>
-                      
-                      {/* Blog Content Preview */}
-                      <div className="mb-4">
-                        <p className="text-gray-700 text-sm leading-relaxed line-clamp-3">{blog.excerpt || blog.content.substring(0, 200) + '...'}</p>
-                      </div>
-                      
-                      {/* Blog Details */}
-                      <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                        <div className="grid grid-cols-2 gap-3 text-xs">
-                          <div>
-                            <span className="font-medium text-gray-600">Scheduled:</span>
-                            <p className="text-gray-800">{formatDate(blog.scheduled_at)} at {formatTime(blog.scheduled_at)}</p>
+                        <div className="flex items-center space-x-2">
+                          <div className="text-sm bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
+                            {blog.reading_time || 5} min read
                           </div>
-                          <div>
-                            <span className="font-medium text-gray-600">Reading Time:</span>
-                            <p className="text-gray-800">{blog.reading_time} min</p>
-                          </div>
-                          <div>
-                            <span className="font-medium text-gray-600">Word Count:</span>
-                            <p className="text-gray-800">{blog.word_count}</p>
-                          </div>
-                          <div>
-                            <span className="font-medium text-gray-600">SEO Score:</span>
-                            <p className="text-gray-800">{blog.seo_score}/100</p>
+                          <div className="text-gray-400 cursor-pointer hover:text-gray-600">
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path>
+                            </svg>
                           </div>
                         </div>
+                      </div>
+                      
+                      {/* Blog Title */}
+                      <h3 className="font-bold text-gray-900 text-2xl mb-4 line-clamp-2 leading-tight">{blog.title}</h3>
+                      
+                      {/* Blog Content Preview */}
+                      <div className="mb-6">
+                        <p className="text-gray-600 text-base leading-relaxed line-clamp-3">
+                          {blog.excerpt || blog.meta_description || blog.content.substring(0, 150) + '...'}
+                        </p>
                       </div>
                       
                       {/* Categories and Tags */}
-                      <div className="mb-4">
-                        {blog.categories && blog.categories.length > 0 && (
-                          <div className="mb-2">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm font-medium text-gray-600">Categories</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {blog.categories.map((category, index) => (
-                                <span key={index} className={`text-xs ${theme.accent} px-2 py-1 rounded-lg`}>
-                                  {category}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {blog.tags && blog.tags.length > 0 && (
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm font-medium text-gray-600">Tags</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {blog.tags.map((tag, index) => (
-                                <span key={index} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-lg">
-                                  #{tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                      <div className="mb-6">
+                        <div className="flex flex-wrap gap-3">
+                          {blog.categories && blog.categories.map((category, index) => (
+                            <span key={index} className="text-sm bg-gradient-to-r from-pink-100 to-purple-100 text-pink-800 px-4 py-2 rounded-full font-medium">
+                              {category}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                    
-                    {/* Action buttons outside clickable area */}
-                    <div className="flex items-center space-x-2 mt-4">
-                      <button
-                        onClick={() => handleEditBlog(blog)}
-                        className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      {blog.status === 'draft' && (
-                        <button
-                          onClick={() => handlePublishBlog(blog.id)}
-                          className="p-2 text-green-500 hover:text-green-700 hover:bg-green-100 rounded-md"
-                        >
-                          <Send className="w-4 h-4" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleDeleteBlog(blog.id)}
-                        className="p-2 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-md"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+
+                      {/* Card Footer with Stats and Actions */}
+                      <div className="flex items-center justify-between pt-6 border-t border-gray-100">
+                        {blog.status === 'published' ? (
+                          <div className="flex items-center space-x-4">
+                            <div className="flex items-center space-x-2 text-gray-500">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                              <span className="text-base font-medium">{Math.floor(Math.random() * 5000) + 1000} views</span>
+                            </div>
+                            <div className="flex items-center space-x-2 text-gray-500">
+                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                              </svg>
+                              <span className="text-base font-medium">{Math.floor(Math.random() * 100) + 10}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div></div>
+                        )}
+                        <div className="flex items-center space-x-3">
+                          {/* Only show edit/publish buttons for non-published blogs */}
+                          {blog.status !== 'published' && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleEditBlog(blog)
+                                }}
+                                className="p-3 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition-colors"
+                                title="Edit blog"
+                              >
+                                <Edit className="w-5 h-5" />
+                              </button>
+                              {blog.status === 'draft' && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handlePublishBlog(blog.id)
+                                  }}
+                                  className="p-3 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                  title="Publish blog"
+                                >
+                                  <Send className="w-5 h-5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteBlog(blog.id)
+                            }}
+                            className="p-3 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete blog"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )
               })}
             </div>
           )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center space-x-2 mt-8 mb-6">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-4 py-2 bg-white/80 backdrop-blur-sm border border-pink-200 rounded-xl text-gray-700 hover:bg-pink-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-sm"
+              >
+                ← Previous
+              </button>
+              
+              <div className="flex space-x-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
+                      currentPage === page
+                        ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
+                        : 'bg-white/80 backdrop-blur-sm border border-pink-200 text-gray-700 hover:bg-pink-50 shadow-sm'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+        </div>
+              
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 bg-white/80 backdrop-blur-sm border border-pink-200 rounded-xl text-gray-700 hover:bg-pink-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-sm"
+              >
+                Next →
+              </button>
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -1069,6 +1206,160 @@ const BlogDashboard = () => {
                   Please wait while we generate your content...
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Blog Preview Popup - Card Style */}
+      {showBlogPreview && selectedBlog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl">
+            {/* Popup Header */}
+            <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold mb-2">Blog Preview</h2>
+                  <p className="text-white/90 text-sm">Preview your blog content before publishing</p>
+                </div>
+                <button
+                  onClick={handleCloseBlogPreview}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Popup Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+              {/* Blog Card Preview */}
+              <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden mb-6">
+                {/* Preview Header */}
+                <div className="relative h-32 bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-pink-500/80 via-purple-500/80 to-blue-500/80"></div>
+                  <div className="absolute top-4 left-4">
+                    <span className="px-3 py-1 text-xs rounded-full bg-white/90 text-gray-800 font-medium">
+                      {selectedBlog.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <div className="flex items-center space-x-2 text-white/90">
+                      <Globe className="w-4 h-4" />
+                      <span className="text-sm font-medium">{selectedBlog.site_name || 'Unknown Site'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview Content */}
+                <div className="p-6">
+                  <h3 className="font-bold text-gray-900 text-lg mb-3">{selectedBlog.title}</h3>
+                  
+                  <div className="mb-4">
+                    <p className="text-gray-600 text-sm leading-relaxed line-clamp-3">
+                      {selectedBlog.excerpt || selectedBlog.content.substring(0, 200) + '...'}
+                    </p>
+                  </div>
+                  
+                  {/* Blog Stats */}
+                  <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-pink-600">{selectedBlog.reading_time}</div>
+                      <div className="text-xs text-gray-600">min read</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-purple-600">{selectedBlog.word_count}</div>
+                      <div className="text-xs text-gray-600">words</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-blue-600">{selectedBlog.seo_score}</div>
+                      <div className="text-xs text-gray-600">SEO score</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-gray-600">{formatDate(selectedBlog.scheduled_at)}</div>
+                      <div className="text-xs text-gray-600">scheduled</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Full Content Preview */}
+              <div className="bg-gray-50 rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Full Content Preview</h3>
+                <div 
+                  className="text-gray-700 leading-relaxed whitespace-pre-wrap text-sm max-h-96 overflow-y-auto"
+                  dangerouslySetInnerHTML={{ __html: selectedBlog.content.replace(/\n/g, '<br>') }}
+                />
+              </div>
+
+              {/* Categories and Tags */}
+              {(selectedBlog.categories?.length > 0 || selectedBlog.tags?.length > 0) && (
+                <div className="mt-6">
+                  {selectedBlog.categories?.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Categories</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedBlog.categories.map((category, index) => (
+                          <span key={index} className="px-3 py-1 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-800 rounded-full text-xs font-medium">
+                            {category}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedBlog.tags?.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Tags</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedBlog.tags.map((tag, index) => (
+                          <span key={index} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Popup Footer */}
+            <div className="flex items-center justify-between p-6 bg-gray-50 border-t">
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">Status:</span> {selectedBlog.status} • 
+                <span className="font-medium ml-2">Scheduled:</span> {formatDate(selectedBlog.scheduled_at)} at {formatTime(selectedBlog.scheduled_at)}
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => {
+                    handleCloseBlogPreview()
+                    handleEditBlog(selectedBlog)
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all duration-300 flex items-center space-x-2"
+                >
+                  <Edit className="w-4 h-4" />
+                  <span>Edit Blog</span>
+                </button>
+                {selectedBlog.status === 'draft' && (
+                  <button
+                    onClick={() => {
+                      handlePublishBlog(selectedBlog.id)
+                      handleCloseBlogPreview()
+                    }}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>Publish</span>
+                  </button>
+                )}
+                <button
+                  onClick={handleCloseBlogPreview}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
