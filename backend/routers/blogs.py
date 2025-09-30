@@ -7,6 +7,7 @@ from supabase import create_client
 from pydantic import BaseModel
 import logging
 from cryptography.fernet import Fernet
+import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -573,12 +574,33 @@ async def publish_blog(
                 detail=f"Failed to publish to WordPress via REST API. Error: {str(e)}"
             )
         
-        # Update blog with WordPress post ID
+        # Get the published post details to get the proper permalink
+        try:
+            # Try to get the post details to extract the permalink
+            post_response = requests.get(
+                f"{wordpress_site['wordpress_site_url'].rstrip('/')}/wp-json/wp/v2/posts/{wordpress_post_id}",
+                auth=(wordpress_site['wordpress_username'], app_password),
+                timeout=30
+            )
+            
+            if post_response.status_code == 200:
+                post_data = post_response.json()
+                blog_url = post_data.get('link', f"{wordpress_site['wordpress_site_url'].rstrip('/')}/?p={wordpress_post_id}")
+            else:
+                # Fallback to post ID format
+                blog_url = f"{wordpress_site['wordpress_site_url'].rstrip('/')}/?p={wordpress_post_id}"
+        except Exception as e:
+            logger.warning(f"Could not fetch post permalink, using fallback: {e}")
+            # Fallback to post ID format
+            blog_url = f"{wordpress_site['wordpress_site_url'].rstrip('/')}/?p={wordpress_post_id}"
+        
+        # Update blog with WordPress post ID and blog URL
         update_data = {
             "status": "published",
             "published_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
-            "wordpress_post_id": wordpress_post_id
+            "wordpress_post_id": wordpress_post_id,
+            "blog_url": blog_url
         }
         
         supabase_admin.table("blog_posts").update(update_data).eq("id", blog_id).execute()
