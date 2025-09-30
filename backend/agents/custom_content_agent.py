@@ -1544,7 +1544,15 @@ class CustomContentAgent:
                 else:
                     # Try to parse datetime from input
                     try:
-                        from dateutil import parser
+                        # Try to import dateutil, fallback to datetime if not available
+                        try:
+                            from dateutil import parser
+                            use_dateutil = True
+                        except ImportError:
+                            logger.warning("dateutil not available, using datetime fallback")
+                            from datetime import datetime as dt
+                            use_dateutil = False
+                        
                         logger.info(f"Attempting to parse datetime: '{user_input}'")
                         
                         # Handle both ISO format (2025-09-28T10:37) and other formats
@@ -1558,7 +1566,12 @@ class CustomContentAgent:
                         else:
                             parsed_input = user_input
                         
-                        parsed_datetime = parser.parse(parsed_input)
+                        if use_dateutil:
+                            parsed_datetime = parser.parse(parsed_input)
+                        else:
+                            # Fallback to datetime parsing
+                            parsed_datetime = dt.fromisoformat(parsed_input)
+                        
                         # Ensure the datetime is timezone-aware
                         if parsed_datetime.tzinfo is None:
                             parsed_datetime = parsed_datetime.replace(tzinfo=None)
