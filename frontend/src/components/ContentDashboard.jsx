@@ -12,6 +12,7 @@ import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import SideNavbar from './SideNavbar'
 import CustomContentChatbot from './CustomContentChatbot'
+import ChatbotImageEditor from './ChatbotImageEditor'
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -38,6 +39,7 @@ import {
   Plus,
   RefreshCw,
   Edit,
+  Edit3,
   Share2,
   Download,
   Filter,
@@ -112,6 +114,8 @@ const ContentDashboard = () => {
   const [showUploadModal, setShowUploadModal] = useState(null) // Track which content is showing upload modal
   const [lightboxImage, setLightboxImage] = useState(null) // Track which image to show in lightbox
   const [showScrollArrow, setShowScrollArrow] = useState(true) // Track if scroll arrow should be visible
+  const [showImageEditor, setShowImageEditor] = useState(false) // Track if image editor is open
+  const [imageEditorData, setImageEditorData] = useState(null) // Data for image editor
   const [selectedFile, setSelectedFile] = useState(null) // Selected file for upload
   const [hoveredButton, setHoveredButton] = useState(null) // Track which button is being hovered
   const [imageLoading, setImageLoading] = useState(new Set()) // Track which images are loading
@@ -1889,8 +1893,8 @@ const ContentDashboard = () => {
                               <Edit className="w-3 h-3" />
                               <span>Edit Post</span>
                             </button>
-                          </div>
-                        )}
+                      </div>
+                    )}
                         
                         <button
                           onClick={() => setExpandedContent(null)}
@@ -1903,26 +1907,26 @@ const ContentDashboard = () => {
                       <div>
                         {/* Media Display - Only show if content has media */}
                         {generatedImages[content.id] && generatedImages[content.id].image_url && (
-                          <div className="mb-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center space-x-1">
-                                <span className="text-xs font-medium text-purple-800">Media</span>
+                        <div className="mb-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center space-x-1">
+                              <span className="text-xs font-medium text-purple-800">Media</span>
                                 {generatedImages[content.id].is_approved ? (
                                   <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">✓</span>
                                 ) : (
                                   <span className="text-xs bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded">Pending</span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="relative w-full aspect-square bg-gray-200 rounded overflow-hidden">
-                              {/* Show placeholder while loading */}
-                              {imageLoading.has(content.id) && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                                  <div className="w-8 h-8 bg-gray-300 rounded animate-pulse"></div>
-                                </div>
                               )}
+                            </div>
+                          </div>
+                          <div className="relative w-full aspect-square bg-gray-200 rounded overflow-hidden">
+                                {/* Show placeholder while loading */}
+                                {imageLoading.has(content.id) && (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                                    <div className="w-8 h-8 bg-gray-300 rounded animate-pulse"></div>
+                                  </div>
+                                )}
                               {(() => {
-                                const thumbnailUrl = getSmallThumbnailUrl(generatedImages[content.id].image_url)
+                                    const thumbnailUrl = getSmallThumbnailUrl(generatedImages[content.id].image_url)
                                 console.log('🖼️ Content card image check:', {
                                   contentId: content.id,
                                   hasImage: !!generatedImages[content.id].image_url,
@@ -1935,7 +1939,7 @@ const ContentDashboard = () => {
                                   console.log('🎬 Rendering video for content:', content.id)
                                   console.log('🎬 Video URL:', generatedImages[content.id].image_url)
                                   console.log('🎬 Video file extension:', generatedImages[content.id].image_url.split('.').pop())
-                                  return (
+                                      return (
                                     <video 
                                       src={generatedImages[content.id].image_url}
                                       className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
@@ -1943,8 +1947,8 @@ const ContentDashboard = () => {
                                       preload="metadata"
                                       muted
                                       playsInline
-                                      onClick={(e) => {
-                                        e.stopPropagation()
+                                            onClick={(e) => {
+                                              e.stopPropagation()
                                         handleImageClick(generatedImages[content.id].image_url, content.title)
                                       }}
                                       onLoadStart={() => {
@@ -2002,39 +2006,57 @@ const ContentDashboard = () => {
                                         transition: 'all 0.5s ease-in-out'
                                       }}
                                     />
-                                  )
-                                }
-                                
-                                // Show image if we have a valid Supabase thumbnail URL
-                                return (
-                                  <img 
-                                    src={thumbnailUrl} 
-                                    alt="Content image" 
-                                    className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
-                                    loading="eager"
-                                    onClick={() => handleImageClick(getFullSizeImageUrl(generatedImages[content.id].image_url), content.title)}
-                                    onLoad={() => {
-                                      console.log('✅ Image loaded for content:', content.id)
-                                      handleImageLoad(content.id)
-                                    }}
-                                    onError={(e) => {
-                                      console.error('❌ Image failed to load for content:', content.id)
-                                      console.error('❌ Failed URL:', thumbnailUrl)
-                                      handleImageError(content.id)
-                                    }}
-                                    onLoadStart={() => startImageLoading(content.id)}
-                                    style={{
-                                      opacity: imageLoading.has(content.id) ? 0 : 1,
-                                      filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
-                                      transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
-                                      transition: 'all 0.5s ease-in-out'
-                                    }}
-                                  />
-                                )
+                                      )
+                                    }
+                                    
+                                    // Show image if we have a valid Supabase thumbnail URL
+                                    return (
+                                      <img 
+                                        src={thumbnailUrl} 
+                                        alt="Content image" 
+                                        className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                        loading="eager"
+                                        onClick={() => handleImageClick(getFullSizeImageUrl(generatedImages[content.id].image_url), content.title)}
+                                        onLoad={() => {
+                                          console.log('✅ Image loaded for content:', content.id)
+                                          handleImageLoad(content.id)
+                                        }}
+                                        onError={(e) => {
+                                          console.error('❌ Image failed to load for content:', content.id)
+                                          console.error('❌ Failed URL:', thumbnailUrl)
+                                          handleImageError(content.id)
+                                        }}
+                                        onLoadStart={() => startImageLoading(content.id)}
+                                        style={{
+                                          opacity: imageLoading.has(content.id) ? 0 : 1,
+                                          filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
+                                          transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
+                                          transition: 'all 0.5s ease-in-out'
+                                        }}
+                                      />
+                                    )
                               })()}
                             </div>
-                          </div>
-                        )}
+                            
+                            {/* Edit Image Button */}
+                            <div className="mt-2 flex justify-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setImageEditorData({
+                                    postContent: content.content,
+                                    inputImageUrl: generatedImages[content.id].image_url
+                                  })
+                                  setShowImageEditor(true)
+                                }}
+                                className="px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                <span>Edit Image</span>
+                              </button>
+                            </div>
+                                  </div>
+                                )}
                         
                         <p className="text-gray-700 text-sm mb-4 line-clamp-3">{cleanContentText(content.content)}</p>
                         
@@ -2050,28 +2072,28 @@ const ContentDashboard = () => {
                         {/* Media Action Buttons */}
                         {(!generatedImages[content.id] || !generatedImages[content.id].image_url) && (
                           <div className="flex gap-2 mt-4 mb-6">
-                             <button
-                               onClick={(e) => {
-                                 e.stopPropagation()
-                                 handleGenerateMedia(content)
-                               }}
-                               disabled={generatingMedia.has(content.id)}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleGenerateMedia(content)
+                                  }}
+                                  disabled={generatingMedia.has(content.id)}
                                className="flex-1 px-3 py-2 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center space-x-1"
-                             >
-                              {generatingMedia.has(content.id) ? (
-                                <>
+                                >
+                                  {generatingMedia.has(content.id) ? (
+                                    <>
                                   <Loader2 className="w-3 h-3 animate-spin" />
                                   <span>Generating...</span>
-                                </>
-                              ) : (
-                                <>
+                                    </>
+                                  ) : (
+                                    <>
                                   <Wand2 className="w-3 h-3" />
                                   <span>Generate Media</span>
-                                </>
-                              )}
-                            </button>
-                            
-                            <button
+                                    </>
+                                  )}
+                                </button>
+                        
+                          <button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setShowUploadModal(content.id)
@@ -2081,7 +2103,7 @@ const ContentDashboard = () => {
                             >
                               <Upload className="w-3 h-3" />
                               <span>Upload Media</span>
-                            </button>
+                          </button>
                           </div>
                         )}
                       </div>
@@ -2457,10 +2479,10 @@ const ContentDashboard = () => {
                     {/* File Upload */}
                     <div className="space-y-4">
                       <div className="relative">
-                        <input
-                          type="file"
+                      <input
+                        type="file"
                           accept="image/*,video/mp4,video/avi,video/mov,video/wmv,video/webm"
-                          onChange={handleFileSelect}
+                        onChange={handleFileSelect}
                           className="w-full h-24 border-2 border-dashed border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all duration-200 hover:border-purple-300 cursor-pointer opacity-0 absolute inset-0"
                         />
                         <div className="w-full h-24 border-2 border-dashed border-purple-200 rounded-xl flex items-center justify-center hover:border-purple-300 transition-all duration-200">
@@ -2657,7 +2679,7 @@ const ContentDashboard = () => {
               <div className="flex items-center space-x-4 mb-6">
                 <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
                   <AlertTriangle className="w-6 h-6 text-red-600" />
-                </div>
+    </div>
                 <div>
                   <h3 className="font-bold text-gray-800 text-lg">Delete Post</h3>
                   <p className="text-sm text-gray-600">This action cannot be undone</p>
@@ -2957,6 +2979,39 @@ const ContentDashboard = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Chatbot Image Editor Modal */}
+      {showImageEditor && imageEditorData && (
+        <ChatbotImageEditor
+          isOpen={showImageEditor}
+          onClose={() => {
+            setShowImageEditor(false)
+            setImageEditorData(null)
+          }}
+          postContent={imageEditorData.postContent}
+          inputImageUrl={imageEditorData.inputImageUrl}
+          onImageSaved={(newImageUrl) => {
+            // Update the generated image URL in the state
+            if (imageEditorData.inputImageUrl) {
+              // Find the content that has this image URL and update it
+              const contentId = Object.keys(generatedImages).find(id => 
+                generatedImages[id]?.image_url === imageEditorData.inputImageUrl
+              )
+              if (contentId) {
+                setGeneratedImages(prev => ({
+                  ...prev,
+                  [contentId]: {
+                    ...prev[contentId],
+                    image_url: newImageUrl
+                  }
+                }))
+              }
+            }
+            setShowImageEditor(false)
+            setImageEditorData(null)
+          }}
+        />
       )}
 
     </div>

@@ -29,10 +29,14 @@ class User(BaseModel):
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         token = credentials.credentials
+        print(f"🔍 Auth - Received token: {token[:20]}...")
         
         # Verify token with Supabase
         response = supabase.auth.get_user(token)
+        print(f"🔍 Auth - Supabase response: {response}")
+        
         if not response.user:
+            print(f"🔍 Auth - No user found in response: {response}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token"
@@ -52,6 +56,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             created_at=created_at_str
         )
     except Exception as e:
+        print(f"🔍 Auth - Exception occurred: {e}")
+        print(f"🔍 Auth - Exception type: {type(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"
