@@ -38,7 +38,6 @@ class ImageEditorService:
     async def add_logo_to_image(self, user_id: str, input_image_url: str, content: str, position: str = "bottom_right") -> Dict[str, Any]:
         """Add logo to image using Gemini AI"""
         try:
-            logger.info(f"Adding logo to image for user {user_id}")
             
             # Get user profile and logo
             user_profile = self._get_user_profile(user_id)
@@ -80,7 +79,6 @@ class ImageEditorService:
     async def apply_template(self, user_id: str, input_image_url: str, content: str, template_name: str) -> Dict[str, Any]:
         """Apply template to image"""
         try:
-            logger.info(f"Applying template {template_name} for user {user_id}")
             
             # For now, return a placeholder - templates can be implemented later
             return {
@@ -99,7 +97,6 @@ class ImageEditorService:
     async def apply_manual_instructions(self, user_id: str, input_image_url: str, content: str, instructions: str) -> Dict[str, Any]:
         """Apply manual instructions to image"""
         try:
-            logger.info(f"Applying manual instructions for user {user_id}")
             
             # Download input image
             input_image_data = await self._download_image(input_image_url)
@@ -130,7 +127,6 @@ class ImageEditorService:
     async def save_edited_image(self, user_id: str, original_image_url: str, edited_image_url: str) -> Dict[str, Any]:
         """Save edited image by replacing the original in storage and updating database"""
         try:
-            logger.info(f"Saving edited image for user {user_id}")
             
             # 1. Download the edited image
             edited_image_data = await self._download_image(edited_image_url)
@@ -141,15 +137,10 @@ class ImageEditorService:
             full_path = original_image_url.split('/storage/v1/object/public/')[-1].split('?')[0]
             # The path should be: generated/filename.png (without the bucket name)
             original_path = full_path.replace('ai-generated-images/', '')
-            logger.info(f"Full path from URL: {full_path}")
-            logger.info(f"Extracted path for storage: {original_path}")
             
             # 3. Delete the original image first to avoid duplicate error
             try:
-                logger.info(f"Attempting to delete original image at path: {original_path}")
                 delete_result = self.supabase.storage.from_('ai-generated-images').remove([original_path])
-                logger.info(f"Delete result: {delete_result}")
-                logger.info(f"Successfully deleted original image: {original_path}")
             except Exception as e:
                 logger.warning(f"Could not delete original image (may not exist): {e}")
             
@@ -163,17 +154,12 @@ class ImageEditorService:
             if hasattr(upload_result, 'error') and upload_result.error:
                 raise Exception(f"Failed to upload edited image: {upload_result.error}")
             
-            logger.info(f"Successfully replaced image at path: {original_path}")
-            logger.info(f"Original image has been overwritten with edited version at: {original_path}")
             
             # 5. Delete the temporary edited image from the edited/ folder
             try:
                 edited_path = edited_image_url.split('/storage/v1/object/public/')[-1].split('?')[0]
                 edited_storage_path = edited_path.replace('ai-generated-images/', '')
-                logger.info(f"Attempting to delete temporary edited image at path: {edited_storage_path}")
                 delete_edited_result = self.supabase.storage.from_('ai-generated-images').remove([edited_storage_path])
-                logger.info(f"Delete edited result: {delete_edited_result}")
-                logger.info(f"Successfully deleted temporary edited image: {edited_storage_path}")
             except Exception as e:
                 logger.error(f"Failed to delete temporary edited image: {e}")
                 # Don't fail the entire operation if delete fails, just log it
@@ -184,7 +170,6 @@ class ImageEditorService:
             }).eq('image_url', original_image_url).execute()
             
             if result.data:
-                logger.info(f"Successfully updated {len(result.data)} image record(s) in content_images")
                 return {
                     "success": True,
                     "message": "Image saved successfully! The original image has been replaced with your edited version."
@@ -284,8 +269,6 @@ MANDATORY: The logo must be placed as a transparent overlay with absolutely no b
     async def _generate_edited_image(self, input_image_data: bytes, prompt: str, reference_data: bytes = None) -> bytes:
         """Generate edited image using Gemini with two-step approach"""
         try:
-            logger.info(f"Generating edited image with Gemini (two-step approach)")
-            logger.info(f"Prompt: {prompt[:100]}...")
             
             if not self.gemini_client:
                 logger.warning("Gemini client not available, using fallback")
@@ -319,8 +302,6 @@ MANDATORY: The logo must be placed as a transparent overlay with absolutely no b
                 contents=contents,
             )
             
-            logger.info(f"Gemini response type: {type(response)}")
-            logger.info(f"Gemini response: {response}")
             
             # Check if response has candidates
             if not hasattr(response, 'candidates') or not response.candidates:
@@ -369,7 +350,6 @@ MANDATORY: The logo must be placed as a transparent overlay with absolutely no b
     async def _generate_manual_edit(self, input_image_data: bytes, content: str, instructions: str) -> bytes:
         """Generate edited image with manual instructions using Gemini"""
         try:
-            logger.info(f"Generating manual edit with instructions: {instructions}")
             
             # Create a more detailed and specific prompt
             prompt = f"""You are a professional image editor. Apply the following editing instructions to the image:
@@ -405,7 +385,6 @@ Generate a high-quality edited image that follows the instructions while maintai
                 contents=contents
             )
             
-            logger.info(f"Gemini response received for manual edit")
             
             # Extract image data from response
             if response.candidates and len(response.candidates) > 0:
@@ -414,7 +393,6 @@ Generate a high-quality edited image that follows the instructions while maintai
                     for part in candidate.content.parts:
                         if hasattr(part, 'inline_data') and part.inline_data:
                             image_data = part.inline_data.data
-                            logger.info(f"Image data extracted: {len(image_data) if image_data else 0} bytes")
                             
                             if isinstance(image_data, bytes):
                                 return image_data

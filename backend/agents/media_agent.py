@@ -109,12 +109,7 @@ class MediaAgent:
                 return state
             
             # Fetch post data with campaign info
-            logger.info(f"Media agent querying post {post_id}")
             response = self.supabase.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", post_id).execute()
-            
-            logger.info(f"Media agent query response: {response}")
-            logger.info(f"Response data: {response.data}")
-            logger.info(f"Response count: {response.count}")
             
             if not response.data:
                 logger.error(f"No data found for post {post_id}")
@@ -127,7 +122,6 @@ class MediaAgent:
             state["user_id"] = post_data["content_campaigns"]["user_id"]
             state["status"] = "analyzing"
             
-            logger.info(f"Loaded post data for post {post_id}")
             return state
             
         except Exception as e:
@@ -175,8 +169,6 @@ class MediaAgent:
             state["image_size"] = image_size
             state["status"] = "prompt_generation"
             
-            logger.info(f"Analyzed content for post {post_data['id']}, style: {image_style}, size: {image_size}")
-            logger.info(f"Style type: {type(image_style)}, Size type: {type(image_size)}")
             return state
             
         except Exception as e:
@@ -255,7 +247,6 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                     state["image_prompt"] = image_prompt
                     state["status"] = "generating"
                     
-                    logger.info(f"Generated image prompt: {image_prompt}")
                     return state
                 else:
                     raise Exception("Empty response from Gemini model")
@@ -331,10 +322,6 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             logo_url = user_profile.get('logo_url', '')
             
             # Generate image using Gemini 2.5 Flash Image Preview
-            logger.info(f"Generating image with Gemini 2.5 Flash Image Preview")
-            logger.info(f"Prompt: {image_prompt}")
-            logger.info(f"Image size: {image_size.value if hasattr(image_size, 'value') else str(image_size) if image_size else '1024x1024'}")
-            logger.info(f"Logo URL: {logo_url if logo_url else 'No logo available'}")
             
             try:
                 # Prepare contents for Gemini API call
@@ -358,7 +345,6 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                                     "data": logo_image_data
                                 }
                             })
-                            logger.info("Added logo image to Gemini API call")
                     except Exception as logo_error:
                         logger.warning(f"Failed to include logo in image generation: {logo_error}")
                         # Continue without logo if there's an error
@@ -388,7 +374,6 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 # Upload the image to Supabase storage
                 image_url = await self._upload_base64_image(image_bytes, state["post_id"])
                 
-                logger.info(f"Successfully generated image with Gemini: {image_url}")
                 
             except Exception as api_error:
                 logger.error(f"Error generating image with Gemini: {str(api_error)}")
@@ -410,18 +395,14 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             cost = self._calculate_generation_cost(image_size, "standard")
             
             # Handle image upload to Supabase storage
-            logger.info(f"Processing image for upload to Supabase storage...")
-            logger.info(f"Post ID: {state['post_id']}")
             
             try:
                 if image_url.startswith('data:image/'):
                     # Handle base64 data URL from Gemini
                     storage_url = await self._upload_base64_image(image_url, state["post_id"])
-                    logger.info(f"Successfully uploaded base64 image to storage: {storage_url}")
                 else:
                     # Handle regular URL (placeholder)
                     storage_url = await self._download_and_upload_image(image_url, state["post_id"])
-                    logger.info(f"Successfully uploaded URL image to storage: {storage_url}")
             except Exception as upload_error:
                 logger.error(f"Failed to upload image to storage: {str(upload_error)}")
                 # Fallback to using the original URL if upload fails
@@ -433,7 +414,6 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             state["generation_time"] = generation_time
             state["status"] = "saving"
             
-            logger.info(f"Generated image in {generation_time}s, cost: ${cost}, stored at: {storage_url}")
             return state
             
         except Exception as e:
@@ -473,22 +453,18 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 "is_approved": False
             }
             
-            logger.info(f"Saving image data: {image_data}")
             
             if existing_images.data and len(existing_images.data) > 0:
                 # Update existing image
                 image_id = existing_images.data[0]["id"]
-                logger.info(f"Updating existing image with ID: {image_id}")
                 response = self.supabase.table("content_images").update(image_data).eq("id", image_id).execute()
             else:
                 # Create new image record
                 image_data["post_id"] = post_data["id"]
-                logger.info("Creating new image record")
                 response = self.supabase.table("content_images").insert(image_data).execute()
             
             if response.data:
                 state["status"] = "completed"
-                logger.info(f"Saved image data for post {post_data['id']}")
             else:
                 state["error_message"] = "Failed to save image data"
                 state["status"] = "failed"
@@ -634,14 +610,11 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             image_data = image_bytes
             
             # Upload to Supabase storage
-            logger.info(f"Uploading base64 image to storage: {file_path}")
             storage_response = self.supabase.storage.from_("ai-generated-images").upload(
                 file_path,
                 image_data,
                 file_options={"content-type": "image/png"}
             )
-            
-            logger.info(f"Storage response: {storage_response}")
             
             # Check if upload was successful
             if hasattr(storage_response, 'error') and storage_response.error:
@@ -649,9 +622,6 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             
             # Get public URL
             public_url = self.supabase.storage.from_("ai-generated-images").get_public_url(file_path)
-            logger.info(f"Generated public URL: {public_url}")
-            
-            logger.info(f"Successfully uploaded base64 image to storage: {public_url}")
             return public_url
             
         except Exception as e:
@@ -672,7 +642,6 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             
             # Convert to base64
             base64_data = base64.b64encode(image_data).decode('utf-8')
-            logger.info(f"Successfully downloaded and encoded logo image: {len(base64_data)} characters")
             return base64_data
             
         except Exception as e:

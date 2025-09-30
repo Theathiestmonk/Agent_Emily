@@ -253,7 +253,6 @@ class ContentCreationAgent:
         """Load user profile from Supabase"""
         try:
             user_id = state.user_profile.get('user_id')
-            logger.info(f"Loading profile for user: {user_id}")
             
             # Update progress
             await self.update_progress(
@@ -271,7 +270,6 @@ class ContentCreationAgent:
                 # Keep the user_id for compatibility
                 profile_data['user_id'] = profile_data['id']
                 state.user_profile = profile_data
-                logger.info(f"Loaded profile for: {state.user_profile.get('business_name')}")
             else:
                 raise Exception("User profile not found")
                 
@@ -306,8 +304,6 @@ class ContentCreationAgent:
             # Set platforms from user profile
             state.platforms = profile.get("social_media_platforms", [])
             
-            logger.info(f"Extracted business context for: {state.business_context['business_name']}")
-            logger.info(f"Platforms to generate content for: {state.platforms}")
             
         except Exception as e:
             logger.error(f"Error extracting business context: {e}")
@@ -318,32 +314,25 @@ class ContentCreationAgent:
     async def cleanup_existing_content(self, user_id: str) -> None:
         """Delete all existing content for the user before generating new content"""
         try:
-            logger.info(f"Cleaning up existing content for user: {user_id}")
             
             # Get all campaigns for the user
             campaigns_response = self.supabase.table("content_campaigns").select("id").eq("user_id", user_id).execute()
             
             if campaigns_response.data:
                 campaign_ids = [campaign["id"] for campaign in campaigns_response.data]
-                logger.info(f"Found {len(campaign_ids)} existing campaigns to delete")
                 
                 # Delete all posts for these campaigns
                 for campaign_id in campaign_ids:
                     posts_response = self.supabase.table("content_posts").delete().eq("campaign_id", campaign_id).execute()
-                    logger.info(f"Deleted posts for campaign {campaign_id}")
                 
                 # Delete all campaigns
                 campaigns_delete_response = self.supabase.table("content_campaigns").delete().eq("user_id", user_id).execute()
-                logger.info(f"Deleted {len(campaign_ids)} campaigns for user {user_id}")
                 
                 # Delete any associated images
                 for campaign_id in campaign_ids:
                     images_response = self.supabase.table("content_images").delete().in_("post_id", 
                         self.supabase.table("content_posts").select("id").eq("campaign_id", campaign_id).execute().data or []
                     ).execute()
-                    logger.info(f"Deleted images for campaign {campaign_id}")
-            
-            logger.info(f"Content cleanup completed for user: {user_id}")
             
         except Exception as e:
             logger.error(f"Error cleaning up existing content: {e}")
@@ -391,7 +380,6 @@ class ContentCreationAgent:
             if campaign_response.data:
                 campaign_data = campaign_response.data[0]
                 state.campaign = ContentCampaign(**campaign_data)
-                logger.info(f"Created campaign: {state.campaign.campaign_name} with ID: {state.campaign.id}")
                 
                 # Update progress with campaign ID
                 await self.update_progress(
@@ -415,7 +403,6 @@ class ContentCreationAgent:
     
     def should_continue_platforms(self, state: ContentState) -> str:
         """Check if there are more platforms to process"""
-        logger.info(f"Checking platforms: index={state.current_platform_index}, total={len(state.platforms)}, completed={state.completed_platforms}")
         if state.current_platform_index < len(state.platforms):
             return "continue"
         return "complete"
@@ -426,15 +413,13 @@ class ContentCreationAgent:
             state.current_platform = state.platforms[state.current_platform_index]
             state.current_platform_retries = 0
             state.platform_content = []  # Clear previous platform content
-            logger.info(f"Processing platform: {state.current_platform}")
         return state
     
     async def load_platform_specific_context(self, state: ContentState) -> ContentState:
         """Load platform-specific context and preferences"""
         try:
-                
-            logger.info(f"Loaded platform context for: {state.current_platform}")
-            
+            # Platform-specific context loading can be implemented here if needed
+            pass
         except Exception as e:
             logger.error(f"Error loading platform context: {e}")
             state.error_message = f"Failed to load platform context: {str(e)}"
@@ -462,7 +447,6 @@ class ContentCreationAgent:
             
             business_context = state.business_context
             
-            logger.info(f"Generating content for {platform}")
             
             # Update progress
             user_id = state.user_profile.get('user_id')
@@ -477,17 +461,13 @@ class ContentCreationAgent:
             
             # Calculate posting schedule based on user preference
             posting_frequency = business_context.get("posting_frequency", "daily")
-            logger.info(f"User posting frequency from business context: '{posting_frequency}'")
             posting_schedule = self.calculate_posting_schedule(posting_frequency)
-            
-            logger.info(f"Generating {len(posting_schedule)} posts for {platform} with {posting_frequency} frequency")
             
             # Generate content for each scheduled post
             content_posts = []
             
             for i, schedule_item in enumerate(posting_schedule):
                 try:
-                    logger.info(f"Generating post {i+1}/{len(posting_schedule)} for {platform}")
                     
                     # Update progress for individual post generation - only show platform name, not post count
                     if self.progress_callback:
@@ -510,7 +490,6 @@ class ContentCreationAgent:
                     
                     if post:
                         content_posts.append(post)
-                        logger.info(f"Successfully generated post {i+1}")
                         
                         # Update progress after successful post generation - only update percentage
                         if self.progress_callback:
