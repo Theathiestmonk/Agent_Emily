@@ -949,15 +949,23 @@ class CustomContentAgent:
             state["current_step"] = ConversationStep.SELECT_SCHEDULE
             state["progress_percentage"] = 98
             
-            # Create a message asking for schedule selection
-            message = {
-                "role": "assistant",
-                "content": "Great! Now let's schedule your post. Please select the date and time when you'd like this content to be published. You can choose to post immediately or schedule it for later.",
-                "timestamp": datetime.now().isoformat()
-            }
-            state["conversation_messages"].append(message)
+            # Only add the message if we haven't already asked for schedule selection
+            # Check if the last message is already asking for schedule selection
+            last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
+            schedule_message_content = "Great! Now let's schedule your post. Please select the date and time when you'd like this content to be published. You can choose to post immediately or schedule it for later."
             
-            logger.info("Asking user to select post schedule")
+            if not last_message or schedule_message_content not in last_message.get("content", ""):
+                # Create a message asking for schedule selection
+                message = {
+                    "role": "assistant",
+                    "content": schedule_message_content,
+                    "timestamp": datetime.now().isoformat()
+                }
+                state["conversation_messages"].append(message)
+                logger.info("Asking user to select post schedule")
+            else:
+                logger.info("Schedule selection message already present, skipping duplicate")
+            
             logger.info(f"Current state step: {state.get('current_step')}")
             logger.info(f"User input in state: {state.get('user_input')}")
             
@@ -1103,13 +1111,22 @@ class CustomContentAgent:
         try:
             logger.info("Asking if user wants to generate another content")
             
-            # Add the question message
-            message = {
-                "role": "assistant",
-                "content": "Would you like to create another piece of content? Just let me know!",
-                "timestamp": datetime.now().isoformat()
-            }
-            state["conversation_messages"].append(message)
+            # Only add the message if we haven't already asked about another content
+            # Check if the last message is already asking about another content
+            last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
+            another_content_message = "Would you like to create another piece of content? Just let me know!"
+            
+            if not last_message or another_content_message not in last_message.get("content", ""):
+                # Add the question message
+                message = {
+                    "role": "assistant",
+                    "content": another_content_message,
+                    "timestamp": datetime.now().isoformat()
+                }
+                state["conversation_messages"].append(message)
+                logger.info("Added ask another content message")
+            else:
+                logger.info("Ask another content message already present, skipping duplicate")
             
             return state
             
@@ -1893,14 +1910,32 @@ class CustomContentAgent:
             elif current_step == ConversationStep.CONFIRM_CONTENT:
                 result = await self.confirm_content(state)
             elif current_step == ConversationStep.SELECT_SCHEDULE:
-                result = await self.select_schedule(state)
+                # Only call select_schedule if we haven't already asked for schedule
+                # Check if we already have a schedule selection message
+                last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
+                schedule_message_content = "Great! Now let's schedule your post. Please select the date and time when you'd like this content to be published. You can choose to post immediately or schedule it for later."
+                
+                if not last_message or schedule_message_content not in last_message.get("content", ""):
+                    result = await self.select_schedule(state)
+                else:
+                    # Already asked for schedule, just return current state
+                    result = state
             elif current_step == ConversationStep.SAVE_CONTENT:
                 result = await self.save_content(state)
                 # After saving content, automatically transition to ask_another_content
                 if result.get("current_step") == ConversationStep.ASK_ANOTHER_CONTENT:
                     result = await self.ask_another_content(result)
             elif current_step == ConversationStep.ASK_ANOTHER_CONTENT:
-                result = await self.ask_another_content(state)
+                # Only call ask_another_content if we haven't already asked
+                # Check if we already have an ask another content message
+                last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
+                another_content_message = "Would you like to create another piece of content? Just let me know!"
+                
+                if not last_message or another_content_message not in last_message.get("content", ""):
+                    result = await self.ask_another_content(state)
+                else:
+                    # Already asked about another content, just return current state
+                    result = state
             elif current_step == ConversationStep.DISPLAY_RESULT:
                 result = await self.display_result(state)
             elif current_step == ConversationStep.ERROR:
