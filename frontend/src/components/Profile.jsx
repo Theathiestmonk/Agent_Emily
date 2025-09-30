@@ -367,8 +367,8 @@ const Profile = () => {
   const renderArrayField = (label, field, icon) => {
     const value = Array.isArray(editForm[field]) ? editForm[field].join(', ') : editForm[field]
     return (
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+      <div className="group">
+        <label className="block text-sm font-semibold text-gray-800 mb-3">
           {label}
         </label>
         {editing ? (
@@ -376,7 +376,7 @@ const Profile = () => {
             type="text"
             value={value}
             onChange={(e) => handleArrayInputChange(field, e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md"
             placeholder="Enter values separated by commas"
           />
         ) : (
@@ -385,13 +385,15 @@ const Profile = () => {
               profile[field].map((item, index) => (
                 <span
                   key={index}
-                  className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
+                  className="px-4 py-2 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-700 rounded-full text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 border border-pink-200"
                 >
                   {item}
                 </span>
               ))
             ) : (
-              <p className="text-gray-500">Not specified</p>
+              <div className="bg-gradient-to-r from-gray-50 to-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                <p className="text-gray-500 font-medium">Not specified</p>
+              </div>
             )}
           </div>
         )}
@@ -480,8 +482,8 @@ const Profile = () => {
 
   const renderTextField = (label, field, icon, type = 'text', placeholder = '') => {
     return (
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+      <div className="group">
+        <label className="block text-sm font-semibold text-gray-800 mb-3">
           {label}
         </label>
         {editing ? (
@@ -490,7 +492,7 @@ const Profile = () => {
               value={editForm[field]}
               onChange={(e) => handleInputChange(field, e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md"
               placeholder={placeholder}
             />
           ) : (
@@ -498,15 +500,17 @@ const Profile = () => {
               type={type}
               value={editForm[field]}
               onChange={(e) => handleInputChange(field, e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md"
               placeholder={placeholder}
             />
           )
         ) : (
-          <p className="text-gray-900 py-2 flex items-center">
-            {icon && <span className="mr-2">{icon}</span>}
-            {profile?.[field] || 'Not provided'}
-          </p>
+          <div className="bg-gradient-to-r from-gray-50 to-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200">
+            <p className="text-gray-800 flex items-center font-medium">
+              {icon && <span className="mr-3 text-gray-400">{icon}</span>}
+              {profile?.[field] || 'Not provided'}
+            </p>
+          </div>
         )}
       </div>
     )
@@ -514,12 +518,19 @@ const Profile = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex">
         <SideNavbar />
         <div className="flex-1 ml-64 flex items-center justify-center">
-          <div className="flex items-center space-x-2">
-            <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
-            <span className="text-gray-600">Loading profile...</span>
+          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Loading Profile</h3>
+                <p className="text-gray-600">Please wait while we fetch your information...</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -528,16 +539,20 @@ const Profile = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex">
         <SideNavbar />
         <div className="flex-1 ml-64 flex items-center justify-center">
-          <div className="text-center">
-            <div className="text-red-500 text-xl mb-4">⚠️</div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Profile</h2>
-            <p className="text-gray-600 mb-4">{error}</p>
+          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 text-center max-w-md">
+            <div className="w-16 h-16 bg-gradient-to-r from-red-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Error Loading Profile</h2>
+            <p className="text-gray-600 mb-6">{error}</p>
             <button
               onClick={fetchProfile}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              className="px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 font-medium"
             >
               Try Again
             </button>
@@ -548,54 +563,74 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex">
       {/* Sidebar */}
       <SideNavbar />
       
       {/* Main Content */}
       <div className="flex-1 ml-64">
         {/* Header */}
-        <div className="bg-white shadow-sm border-b">
+        <div className="bg-white/80 backdrop-blur-sm shadow-lg border-b border-gray-200/50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-6">
-              <div className="flex items-center space-x-4">
-                <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full flex items-center justify-center">
-                  <User className="w-6 h-6 text-white" />
+            <div className="flex justify-between items-center py-8">
+              <div className="flex items-center space-x-6">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg overflow-hidden">
+                  {profile?.logo_url ? (
+                    <img 
+                      src={profile.logo_url} 
+                      alt="Profile" 
+                      className="w-16 h-16 object-cover rounded-2xl"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center">
+                      <User className="w-8 h-8 text-white" />
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Profile</h1>
-                  <p className="text-gray-600">Manage your account information and preferences</p>
+                  <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                    {profile?.name || 'Your Profile'}
+                  </h1>
+                  <p className="text-gray-600 text-lg">Manage your account and business information</p>
+                  <div className="flex items-center space-x-4 mt-2">
+                    <span className="px-3 py-1 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-700 rounded-full text-sm font-medium">
+                      {profile?.business_name || 'Business Account'}
+                    </span>
+                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                      Active
+                    </span>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center space-x-3">
                 {!editing ? (
                   <button
                     onClick={handleEdit}
-                    className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                    className="group flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                   >
-                    <Edit className="w-4 h-4" />
-                    <span>Edit Profile</span>
+                    <Edit className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                    <span className="font-medium">Edit Profile</span>
                   </button>
                 ) : (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-3">
                     <button
                       onClick={handleCancel}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                      className="flex items-center space-x-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-all duration-200 border border-gray-200"
                     >
-                      <X className="w-4 h-4" />
-                      <span>Cancel</span>
+                      <X className="w-5 h-5" />
+                      <span className="font-medium">Cancel</span>
                     </button>
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                      className="group flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none"
                     >
                       {saving ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="w-5 h-5 animate-spin" />
                       ) : (
-                        <Save className="w-4 h-4" />
+                        <Save className="w-5 h-5 group-hover:scale-110 transition-transform" />
                       )}
-                      <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                      <span className="font-medium">{saving ? 'Saving...' : 'Save Changes'}</span>
                     </button>
                   </div>
                 )}
@@ -608,16 +643,18 @@ const Profile = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Error Message */}
           {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="mb-8 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-2xl p-6 shadow-sm">
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
+                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                    <svg className="h-6 w-6 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
                 </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">Error</h3>
-                  <div className="mt-2 text-sm text-red-700">
+                <div className="ml-4">
+                  <h3 className="text-lg font-semibold text-red-800">Error</h3>
+                  <div className="mt-2 text-red-700">
                     <p>{error}</p>
                   </div>
                 </div>
@@ -627,11 +664,16 @@ const Profile = () => {
           
           <div className="space-y-8">
             {/* Basic Business Information */}
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                <Building2 className="w-5 h-5 mr-2 text-purple-600" />
-                Basic Business Information
-              </h2>
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-8">
+                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Building2 className="w-6 h-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h2 className="text-2xl font-bold text-gray-900">Basic Business Information</h2>
+                  <p className="text-gray-600">Your core business details and branding</p>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {renderTextField('Name', 'name', <User className="w-4 h-4 text-gray-400" />)}
@@ -692,11 +734,16 @@ const Profile = () => {
             </div>
 
             {/* Brand & Contact Information */}
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                <Globe className="w-5 h-5 mr-2 text-blue-600" />
-                Brand & Contact Information
-              </h2>
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-8">
+                <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Globe className="w-6 h-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h2 className="text-2xl font-bold text-gray-900">Brand & Contact Information</h2>
+                  <p className="text-gray-600">Your brand voice and contact details</p>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {renderTextField('Brand Voice', 'brand_voice', null, 'textarea', 'How does your brand communicate?')}
@@ -712,11 +759,16 @@ const Profile = () => {
             </div>
 
             {/* Social Media & Goals */}
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                <Target className="w-5 h-5 mr-2 text-green-600" />
-                Social Media & Goals
-              </h2>
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-8">
+                <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Target className="w-6 h-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h2 className="text-2xl font-bold text-gray-900">Social Media & Goals</h2>
+                  <p className="text-gray-600">Your social presence and objectives</p>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {renderArrayField('Social Media Platforms', 'social_media_platforms')}
@@ -726,11 +778,16 @@ const Profile = () => {
             </div>
 
             {/* Content Strategy */}
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                <BarChart3 className="w-5 h-5 mr-2 text-orange-600" />
-                Content Strategy
-              </h2>
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-8">
+                <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <BarChart3 className="w-6 h-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h2 className="text-2xl font-bold text-gray-900">Content Strategy</h2>
+                  <p className="text-gray-600">Your content planning and preferences</p>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {renderTextField('Monthly Budget Range', 'monthly_budget_range', null, 'text', 'e.g., $500-$1000')}
@@ -741,11 +798,16 @@ const Profile = () => {
             </div>
 
             {/* Market & Competition */}
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                <Target className="w-5 h-5 mr-2 text-red-600" />
-                Market & Competition
-              </h2>
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-8">
+                <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Target className="w-6 h-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h2 className="text-2xl font-bold text-gray-900">Market & Competition</h2>
+                  <p className="text-gray-600">Your market position and competitors</p>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {renderTextField('Main Competitors', 'main_competitors', null, 'textarea', 'List your main competitors')}
@@ -755,11 +817,16 @@ const Profile = () => {
             </div>
 
             {/* Campaign Planning */}
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                <Calendar className="w-5 h-5 mr-2 text-indigo-600" />
-                Campaign Planning
-              </h2>
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-8">
+                <div className="w-12 h-12 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Calendar className="w-6 h-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h2 className="text-2xl font-bold text-gray-900">Campaign Planning</h2>
+                  <p className="text-gray-600">Your campaign strategy and timing</p>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {renderTextField('Important Launch Dates', 'important_launch_dates', null, 'textarea', 'Key dates for your business')}
@@ -770,11 +837,16 @@ const Profile = () => {
             </div>
 
             {/* Performance & Customer */}
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                <BarChart3 className="w-5 h-5 mr-2 text-pink-600" />
-                Performance & Customer
-              </h2>
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-8">
+                <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-rose-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <BarChart3 className="w-6 h-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h2 className="text-2xl font-bold text-gray-900">Performance & Customer</h2>
+                  <p className="text-gray-600">Your success metrics and customer insights</p>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {renderTextField('Successful Campaigns', 'successful_campaigns', null, 'textarea', 'Describe your successful campaigns')}
@@ -785,11 +857,16 @@ const Profile = () => {
             </div>
 
             {/* Automation & Platform */}
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                <Settings className="w-5 h-5 mr-2 text-teal-600" />
-                Automation & Platform
-              </h2>
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-8">
+                <div className="w-12 h-12 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Settings className="w-6 h-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h2 className="text-2xl font-bold text-gray-900">Automation & Platform</h2>
+                  <p className="text-gray-600">Your automation preferences and platform settings</p>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {renderTextField('Automation Level', 'automation_level', null, 'text', 'e.g., Beginner, Intermediate, Advanced')}
@@ -799,11 +876,16 @@ const Profile = () => {
             </div>
 
             {/* Platform Links */}
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                <Megaphone className="w-5 h-5 mr-2 text-purple-600" />
-                Platform Links & Accounts
-              </h2>
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-8">
+                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Megaphone className="w-6 h-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h2 className="text-2xl font-bold text-gray-900">Platform Links & Accounts</h2>
+                  <p className="text-gray-600">Your social media and platform connections</p>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {renderTextField('Facebook Page Name', 'facebook_page_name', null, 'text')}

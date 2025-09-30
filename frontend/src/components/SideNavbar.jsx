@@ -1,12 +1,12 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 import { 
   Home, 
   FileText, 
   Settings, 
   LogOut, 
-  User, 
   Menu, 
   X,
   Sparkles,
@@ -21,6 +21,56 @@ const SideNavbar = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [profile, setProfile] = useState(null)
+  const [profileFetched, setProfileFetched] = useState(false)
+
+  // Cache key for localStorage
+  const getCacheKey = (userId) => `profile_${userId}`
+
+  // Load profile from cache or fetch from API
+  const loadProfile = useCallback(async () => {
+    try {
+      if (!user) return
+
+      const cacheKey = getCacheKey(user.id)
+      
+      // Try to load from cache first
+      const cachedProfile = localStorage.getItem(cacheKey)
+      if (cachedProfile) {
+        const parsedProfile = JSON.parse(cachedProfile)
+        setProfile(parsedProfile)
+        setProfileFetched(true)
+        return
+      }
+
+      // If not in cache, fetch from API
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('logo_url, business_name, name')
+        .eq('id', user.id)
+        .single()
+
+      if (error) {
+        console.error('Error fetching profile:', error)
+        setProfileFetched(true)
+        return
+      }
+
+      // Cache the profile data
+      localStorage.setItem(cacheKey, JSON.stringify(data))
+      setProfile(data)
+      setProfileFetched(true)
+    } catch (error) {
+      console.error('Error loading profile:', error)
+      setProfileFetched(true)
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (user && !profileFetched) {
+      loadProfile()
+    }
+  }, [user, profileFetched, loadProfile])
 
   const navigationItems = [
     {
@@ -68,6 +118,11 @@ const SideNavbar = () => {
   ]
 
   const handleLogout = () => {
+    // Clear profile cache on logout
+    if (user) {
+      const cacheKey = getCacheKey(user.id)
+      localStorage.removeItem(cacheKey)
+    }
     logout()
     navigate('/login')
   }
@@ -75,6 +130,24 @@ const SideNavbar = () => {
   const isActive = (href) => {
     return location.pathname === href
   }
+
+  const displayName = useMemo(() => {
+    return profile?.name || user?.user_metadata?.name || user?.email || 'User'
+  }, [profile, user])
+
+  const profileTitle = useMemo(() => {
+    return profile?.name || user?.user_metadata?.name || "Profile"
+  }, [profile, user])
+
+  // Function to refresh profile cache (can be called from other components)
+  const refreshProfileCache = useCallback(() => {
+    if (user) {
+      const cacheKey = getCacheKey(user.id)
+      localStorage.removeItem(cacheKey)
+      setProfileFetched(false)
+      setProfile(null)
+    }
+  }, [user])
 
   return (
     <div className={`bg-white shadow-lg transition-all duration-300 fixed left-0 top-0 h-screen z-50 ${
@@ -143,12 +216,18 @@ const SideNavbar = () => {
               onClick={() => navigate('/profile')}
               className="w-full flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
             >
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mr-3">
-                <User className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mr-3 overflow-hidden">
+                {profile?.logo_url && (
+                  <img 
+                    src={profile.logo_url} 
+                    alt="Profile Logo" 
+                    className="w-full h-full object-cover rounded-full"
+                  />
+                )}
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {user?.user_metadata?.name || user?.email}
+                  {displayName}
                 </p>
                 <p className="text-xs text-gray-500">Click to view profile</p>
               </div>
@@ -167,10 +246,16 @@ const SideNavbar = () => {
             <button
               onClick={() => navigate('/profile')}
               className="w-full flex items-center justify-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-              title="Profile"
+              title={profileTitle}
             >
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
-                <User className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center overflow-hidden">
+                {profile?.logo_url && (
+                  <img 
+                    src={profile.logo_url} 
+                    alt="Profile Logo" 
+                    className="w-full h-full object-cover rounded-full"
+                  />
+                )}
               </div>
             </button>
             <button
