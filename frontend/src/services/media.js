@@ -202,6 +202,34 @@ class MediaService {
   }
 
   /**
+   * Delete uploaded media (image or video) for a specific post
+   * @param {string} postId - The ID of the post
+   * @returns {Promise<Object>} Deletion result
+   */
+  async deleteUploadedMedia(postId) {
+    try {
+      const token = await this.getAuthToken()
+      
+      const response = await fetch(`${API_BASE_URL}/media/uploaded-media/${postId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Error deleting uploaded media:', error)
+      throw error
+    }
+  }
+
+  /**
    * Get available image styles and sizes
    * @returns {Promise<Object>} Available styles and sizes
    */
