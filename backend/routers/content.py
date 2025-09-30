@@ -52,12 +52,10 @@ def get_current_user(authorization: str = Header(None)):
         print(f"Authorization header: {authorization}")
         
         if not authorization or not authorization.startswith("Bearer "):
-            print("No valid authorization header, using mock user")
-            return User(
-                id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
-                email="test@example.com", 
-                name="Test User",
-                created_at="2025-01-01T00:00:00Z"
+            print("No valid authorization header provided")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authorization header required"
             )
         
         # Extract token
@@ -80,33 +78,29 @@ def get_current_user(authorization: str = Header(None)):
                     created_at=user_data.created_at.isoformat() if hasattr(user_data.created_at, 'isoformat') else str(user_data.created_at)
                 )
             else:
-                print("❌ No user found in response, using mock user")
-                return User(
-                    id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
-                    email="test@example.com", 
-                    name="Test User",
-                    created_at="2025-01-01T00:00:00Z"
+                print("❌ No user found in response")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token or user not found"
                 )
                 
+        except HTTPException:
+            raise
         except Exception as e:
             print(f"❌ Supabase auth error: {e}")
             print(f"Error type: {type(e).__name__}")
-            # Fallback to mock for now
-            return User(
-                id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
-                email="test@example.com", 
-                name="Test User",
-                created_at="2025-01-01T00:00:00Z"
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed"
             )
             
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Authentication error: {e}")
-        # Fallback to mock for now
-        return User(
-            id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
-            email="test@example.com", 
-            name="Test User",
-            created_at="2025-01-01T00:00:00Z"
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
         )
 
 router = APIRouter(prefix="/content", tags=["content"])

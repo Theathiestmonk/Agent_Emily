@@ -58,6 +58,13 @@ class User(BaseModel):
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Get current user from Supabase JWT token"""
     try:
+        if not credentials or not credentials.credentials:
+            logger.warning("No credentials provided")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authorization credentials required"
+            )
+            
         token = credentials.credentials
         logger.info(f"Authenticating user with token: {token[:20]}...")
         
@@ -74,13 +81,20 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
                 created_at=user_data.created_at.isoformat() if hasattr(user_data.created_at, 'isoformat') else str(user_data.created_at)
             )
         else:
-            logger.error("Invalid token - no user data in response")
-            raise HTTPException(status_code=401, detail="Invalid token")
+            logger.warning("No user found in response")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token or user not found"
+            )
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Authentication error: {e}")
-        logger.error(f"Error type: {type(e)}")
-        raise HTTPException(status_code=401, detail="Authentication failed")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
+        )
 
 router = APIRouter(prefix="/api/blogs", tags=["blogs"])
 
@@ -295,6 +309,7 @@ async def generate_blogs(
     except Exception as e:
         logger.error(f"Error generating blogs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate blogs: {str(e)}")
+
 
 @router.put("/{blog_id}")
 async def update_blog(

@@ -561,7 +561,7 @@ class ContentCreationAgent:
                 industry=", ".join(business_context["industry"]),
                 brand_voice=business_context["brand_voice"],
                 brand_tone=business_context["brand_tone"],
-                topic=self.get_topic_for_day(post_index)
+                topic=self.get_topic_for_day(post_index, business_context)
             )
             
             # Create the full prompt for content generation
@@ -587,7 +587,7 @@ class ContentCreationAgent:
             - Post Index: {post_index}
             - Scheduled Date: {scheduled_date}
             
-            Content Theme for this post: {self.get_content_theme_for_day(post_index, business_context['content_themes'])}
+            Content Theme for this post: {self.get_content_theme_for_day(post_index, business_context['content_themes'], business_context)}
             
             Please generate content that:
             1. Matches the brand voice and tone
@@ -939,28 +939,42 @@ class ContentCreationAgent:
         return state
     
     # Helper methods
-    def get_topic_for_day(self, post_index: int) -> str:
+    def get_topic_for_day(self, post_index: int, business_context: dict = None) -> str:
         """Get topic for specific post index"""
+        # Use business context to get more specific topics
+        if not business_context:
+            business_context = getattr(self, 'current_business_context', {})
+        
+        business_name = business_context.get('business_name', 'Your Business')
+        industry = business_context.get('industry', ['Business'])
+        industry_str = ', '.join(industry) if isinstance(industry, list) else industry
+        
+        # Create business-specific topics
         topics = [
-            "motivation and inspiration",
-            "tips and insights",
-            "wisdom and knowledge",
-            "thoughts and perspectives",
-            "features and highlights",
-            "weekend content",
-            "reflection and growth",
-            "industry insights",
-            "behind the scenes",
-            "customer success",
-            "trending topics",
-            "educational content"
+            f"insights about {industry_str} industry",
+            f"tips for {business_name} customers",
+            f"trends in {industry_str}",
+            f"behind the scenes at {business_name}",
+            f"success stories from {business_name}",
+            f"educational content about {industry_str}",
+            f"expertise in {industry_str}",
+            f"innovation in {industry_str}",
+            f"best practices for {industry_str}",
+            f"customer success with {business_name}",
+            f"industry updates and news",
+            f"professional insights from {business_name}"
         ]
         return topics[post_index % len(topics)]
     
-    def get_content_theme_for_day(self, post_index: int, content_themes: list) -> str:
+    def get_content_theme_for_day(self, post_index: int, content_themes: list, business_context: dict = None) -> str:
         """Get content theme for specific post, cycling through available themes"""
         if not content_themes:
-            return "general business content"
+            # Use business context to get more specific themes
+            if not business_context:
+                business_context = getattr(self, 'current_business_context', {})
+            business_name = business_context.get('business_name', 'Your Business')
+            industry = business_context.get('industry', ['Business'])
+            return f"content relevant to {business_name} in the {', '.join(industry) if isinstance(industry, list) else industry} industry"
         
         # Cycle through themes based on post index
         theme_index = post_index % len(content_themes)

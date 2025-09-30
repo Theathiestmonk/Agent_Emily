@@ -84,19 +84,17 @@ class BlogWritingAgent:
         """Build the LangGraph workflow for blog writing"""
         workflow = StateGraph(BlogWritingState)
         
-        # Add nodes
+        # Add nodes - removed campaign dependency
         workflow.add_node("fetch_profile", self._fetch_profile)
         workflow.add_node("fetch_wordpress_sites", self._fetch_wordpress_sites)
-        workflow.add_node("create_campaign", self._create_campaign)
         workflow.add_node("generate_blog", self._generate_blog)
         workflow.add_node("save_blog", self._save_blog)
         workflow.add_node("update_progress", self._update_progress)
         
-        # Add edges
+        # Add edges - direct flow without campaign
         workflow.set_entry_point("fetch_profile")
         workflow.add_edge("fetch_profile", "fetch_wordpress_sites")
-        workflow.add_edge("fetch_wordpress_sites", "create_campaign")
-        workflow.add_edge("create_campaign", "generate_blog")
+        workflow.add_edge("fetch_wordpress_sites", "generate_blog")
         workflow.add_edge("generate_blog", "save_blog")
         workflow.add_edge("save_blog", "update_progress")
         workflow.add_edge("update_progress", END)
@@ -113,9 +111,45 @@ class BlogWritingAgent:
             
             if response.data:
                 state.profile = response.data[0]
-                logger.info(f"Profile fetched: {state.profile.get('name', 'Unknown')}")
+                print("=" * 80)
+                print("📊 PROFILE DATA LOADED FROM DATABASE:")
+                print("=" * 80)
+                print(f"👤 User ID: {state.user_id}")
+                print(f"📝 Name: {state.profile.get('name', 'Unknown')}")
+                print(f"🏢 Business Name: {state.profile.get('business_name', 'Not specified')}")
+                print(f"🏭 Industry: {state.profile.get('industry', 'Not specified')}")
+                print(f"👥 Target Audience: {state.profile.get('target_audience', 'Not specified')}")
+                print(f"🎨 Content Themes: {state.profile.get('content_themes', 'Not specified')}")
+                print(f"📄 Business Description: {state.profile.get('business_description', 'Not specified')}")
+                print(f"💎 Unique Value Proposition: {state.profile.get('unique_value_proposition', 'Not specified')}")
+                print(f"🛍️ Products/Services: {state.profile.get('products_or_services', 'Not specified')}")
+                print(f"🎤 Brand Voice: {state.profile.get('brand_voice', 'Not specified')}")
+                print(f"🎭 Brand Tone: {state.profile.get('brand_tone', 'Not specified')}")
+                print("=" * 80)
+                
+                logger.info(f"Profile fetched successfully for user {state.user_id}:")
+                logger.info(f"  - Name: {state.profile.get('name', 'Unknown')}")
+                logger.info(f"  - Business Name: {state.profile.get('business_name', 'Not specified')}")
+                logger.info(f"  - Industry: {state.profile.get('industry', 'Not specified')}")
+                logger.info(f"  - Target Audience: {state.profile.get('target_audience', 'Not specified')}")
+                logger.info(f"  - Content Themes: {state.profile.get('content_themes', 'Not specified')}")
+                logger.info(f"  - Business Description: {state.profile.get('business_description', 'Not specified')[:100]}...")
+                logger.info(f"  - Unique Value Proposition: {state.profile.get('unique_value_proposition', 'Not specified')[:100]}...")
+                logger.info(f"  - Products/Services: {state.profile.get('products_or_services', 'Not specified')[:100]}...")
+                
+                # Validate critical fields
+                if not state.profile.get('business_name'):
+                    print("❌ CRITICAL: No business_name in profile data!")
+                    logger.error("CRITICAL: No business_name in profile data!")
+                if not state.profile.get('industry'):
+                    print("❌ CRITICAL: No industry in profile data!")
+                    logger.error("CRITICAL: No industry in profile data!")
+                if not state.profile.get('target_audience'):
+                    print("❌ CRITICAL: No target_audience in profile data!")
+                    logger.error("CRITICAL: No target_audience in profile data!")
             else:
-                logger.warning(f"No profile found for user: {state.user_id}")
+                print("❌ CRITICAL: No profile found for user:", state.user_id)
+                logger.error(f"CRITICAL: No profile found for user: {state.user_id}")
                 state.profile = {"name": "Unknown User", "bio": ""}
             
             return state
@@ -135,8 +169,18 @@ class BlogWritingAgent:
             if response.data:
                 state.wordpress_sites = [site["id"] for site in response.data]
                 state.total_sites = len(state.wordpress_sites)
+                print("=" * 80)
+                print("🌐 WORDPRESS SITES LOADED:")
+                print("=" * 80)
+                for i, site in enumerate(response.data):
+                    print(f"Site {i+1}: {site.get('wordpress_site_name', site.get('page_name', 'Unknown'))} (ID: {site['id']})")
+                    print(f"  - URL: {site.get('wordpress_url', 'Not specified')}")
+                    print(f"  - Active: {site.get('is_active', False)}")
+                print(f"Total sites: {len(state.wordpress_sites)}")
+                print("=" * 80)
                 logger.info(f"Found {len(state.wordpress_sites)} WordPress sites")
             else:
+                print("⚠️ No WordPress sites found for user")
                 logger.warning("No WordPress sites found")
                 state.wordpress_sites = []
                 state.total_sites = 0
@@ -161,13 +205,30 @@ class BlogWritingAgent:
             # Calculate end date (30 days from now)
             end_date = now + timedelta(days=30)
             
+            # Get profile data with proper fallbacks
+            profile_name = state.profile.get('name', 'User')
+            target_audience = state.profile.get('target_audience', [])
+            content_themes = state.profile.get('content_themes', [])
+            
+            # Convert lists to strings if needed for campaign
+            target_audience_str = ', '.join(target_audience) if isinstance(target_audience, list) else str(target_audience)
+            content_themes_list = content_themes if isinstance(content_themes, list) else [str(content_themes)] if content_themes else []
+            
+            # Log profile data for debugging
+            logger.info(f"Profile data for campaign creation:")
+            logger.info(f"  - Name: {profile_name}")
+            logger.info(f"  - Target Audience: {target_audience_str}")
+            logger.info(f"  - Content Themes: {content_themes_list}")
+            logger.info(f"  - Business Name: {state.profile.get('business_name', 'Not specified')}")
+            logger.info(f"  - Industry: {state.profile.get('industry', 'Not specified')}")
+            
             campaign = BlogCampaign(
                 id=campaign_id,
                 user_id=state.user_id,
                 campaign_name=campaign_name,
-                campaign_description=f"Automated blog campaign for {state.profile.get('name', 'User')}",
-                target_audience=state.profile.get('target_audience', 'General audience'),
-                content_themes=state.profile.get('content_themes', ['Technology', 'Business', 'Lifestyle']),
+                campaign_description=f"Automated blog campaign for {profile_name}",
+                target_audience=target_audience_str,
+                content_themes=content_themes_list,
                 posting_frequency="weekly",
                 wordpress_sites=state.wordpress_sites or [],
                 start_date=now.isoformat(),
@@ -179,8 +240,10 @@ class BlogWritingAgent:
                 updated_at=now.isoformat(),
                 metadata={
                     "generated_by": "blog_writing_agent",
-                    "profile_name": state.profile.get('name', 'Unknown'),
-                    "sites_count": len(state.wordpress_sites or [])
+                    "profile_name": profile_name,
+                    "sites_count": len(state.wordpress_sites or []),
+                    "business_name": state.profile.get('business_name', 'Unknown'),
+                    "industry": state.profile.get('industry', 'Unknown')
                 }
             )
             
@@ -226,6 +289,7 @@ class BlogWritingAgent:
                 return state
             
             # Generate blogs for each site
+            successful_blogs = 0
             for site_id in state.wordpress_sites:
                 try:
                     logger.info(f"Generating blog for site: {site_id}")
@@ -243,13 +307,29 @@ class BlogWritingAgent:
                     
                     # Generate blog content
                     blog = await self._generate_blog_content(state, site_id, site_name)
-                    if blog:
+                    print(f"🔍 Blog generation result: {blog}")
+                    if blog == "API_QUOTA_ERROR":
+                        # API quota error detected
+                        state.error = "OpenAI API quota exceeded. Please check your billing details."
+                        logger.error("❌ API quota exceeded - stopping blog generation")
+                        print("❌ API QUOTA EXCEEDED - Please check your billing details")
+                        break  # Stop trying to generate more blogs
+                    elif blog:
                         state.blogs.append(blog)
+                        successful_blogs += 1
                         logger.info(f"Blog generated: {blog.title}")
+                    else:
+                        logger.warning(f"Failed to generate blog for site {site_id}")
                     
                 except Exception as e:
                     logger.error(f"Error generating blog for site {site_id}: {e}")
                     continue
+            
+            # Check if no blogs were generated and set error if needed
+            if successful_blogs == 0 and len(state.wordpress_sites) > 0:
+                if not state.error:  # Only set error if not already set
+                    state.error = "Failed to generate any blogs. Please check your OpenAI API quota and billing details."
+                    print("❌ NO BLOGS GENERATED - Check OpenAI API quota")
             
             return state
         except Exception as e:
@@ -260,32 +340,92 @@ class BlogWritingAgent:
     async def _generate_blog_content(self, state: BlogWritingState, site_id: str, site_name: str) -> Optional[BlogPost]:
         """Generate individual blog content"""
         try:
-            # Prepare context for blog generation
+            # Prepare context for blog generation using actual user profile
             profile_name = state.profile.get('name', 'Unknown User')
-            target_audience = state.campaign.target_audience if state.campaign else 'General audience'
-            content_themes = state.campaign.content_themes if state.campaign else ['Technology', 'Business']
+            business_name = state.profile.get('business_name', '')
+            business_description = state.profile.get('business_description', '')
+            industry = state.profile.get('industry', [])
+            target_audience = state.profile.get('target_audience', [])
+            content_themes = state.profile.get('content_themes', [])
+            unique_value_proposition = state.profile.get('unique_value_proposition', '')
+            brand_voice = state.profile.get('brand_voice', 'Professional')
+            brand_tone = state.profile.get('brand_tone', 'Formal')
+            products_or_services = state.profile.get('products_or_services', '')
             
-            # Create blog generation prompt
+            # Use ONLY profile data - no campaign dependency
+            # Convert lists to proper format if needed
+            if isinstance(target_audience, list):
+                target_audience = ', '.join(target_audience) if target_audience else 'General audience'
+            if isinstance(content_themes, list):
+                content_themes = content_themes if content_themes else ['General business topics']
+            if isinstance(industry, list):
+                industry = ', '.join(industry) if industry else 'Business'
+            
+            # Log the final values being used for blog generation
+            print("=" * 80)
+            print("🎯 BLOG GENERATION CONTEXT - PROFILE DATA BEING USED:")
+            print("=" * 80)
+            print(f"📝 Author: {profile_name}")
+            print(f"🏢 Business Name: {business_name}")
+            print(f"🏭 Industry: {industry}")
+            print(f"👥 Target Audience: {target_audience}")
+            print(f"🎨 Content Themes: {content_themes}")
+            print(f"📄 Business Description: {business_description}")
+            print(f"🛍️ Products/Services: {products_or_services}")
+            print(f"💎 Unique Value Proposition: {unique_value_proposition}")
+            print(f"🎤 Brand Voice: {brand_voice}")
+            print(f"🎭 Brand Tone: {brand_tone}")
+            print(f"🌐 WordPress Site: {site_name}")
+            print("=" * 80)
+            
+            logger.info(f"Final blog generation context (using PROFILE DATA ONLY):")
+            logger.info(f"  - Business Name: {business_name}")
+            logger.info(f"  - Industry: {industry}")
+            logger.info(f"  - Target Audience: {target_audience}")
+            logger.info(f"  - Content Themes: {content_themes}")
+            logger.info(f"  - Business Description: {business_description[:100]}...")
+            logger.info(f"  - Products/Services: {products_or_services[:100]}...")
+            logger.info(f"  - Unique Value Proposition: {unique_value_proposition[:100]}...")
+            
+            # Validate that we have essential business data
+            if not business_name or business_name.strip() == '':
+                logger.error("No business name found in profile data")
+                return None
+            
+            if not industry or (isinstance(industry, list) and len(industry) == 0):
+                logger.error("No industry information found in profile data")
+                return None
+            
+            # Create blog generation prompt with detailed business context
             prompt = f"""
             You are an expert blog writer creating content for WordPress. Generate a comprehensive blog post with the following requirements:
 
-            CONTEXT:
+            BUSINESS CONTEXT:
             - Author: {profile_name}
+            - Business Name: {business_name}
             - Site: {site_name}
+            - Industry: {industry}
+            - Business Description: {business_description}
             - Target Audience: {target_audience}
-            - Content Themes: {', '.join(content_themes)}
+            - Content Themes: {', '.join(content_themes) if isinstance(content_themes, list) else content_themes}
+            - Unique Value Proposition: {unique_value_proposition}
+            - Brand Voice: {brand_voice}
+            - Brand Tone: {brand_tone}
+            - Products/Services: {products_or_services}
             
             REQUIREMENTS:
-            1. Create an engaging, SEO-optimized blog title
-            2. Write comprehensive blog content (1000-2000 words)
-            3. Create a compelling excerpt (150-160 characters)
+            1. Create an engaging, SEO-optimized blog title that reflects the business and industry
+            2. Write comprehensive blog content (1000-2000 words) that is SPECIFICALLY relevant to {business_name} and their {industry} industry
+            3. Create a compelling excerpt (150-160 characters) that highlights the business value
             4. Generate a URL-friendly slug
-            5. Suggest relevant categories (2-3)
-            6. Suggest relevant tags (5-8)
-            7. Create meta description (150-160 characters)
-            8. Suggest meta keywords (5-10)
+            5. Suggest relevant categories (2-3) that match the business industry and content themes
+            6. Suggest relevant tags (5-8) that are specific to the business and industry
+            7. Create meta description (150-160 characters) that includes business-relevant keywords
+            8. Suggest meta keywords (5-10) that are specific to the business, industry, and target audience
             9. Calculate reading time and word count
             10. Provide SEO score (1-100)
+            
+            IMPORTANT: The content must be highly relevant to {business_name}'s business, industry, and target audience. Avoid generic topics and focus on content that would genuinely interest and provide value to their specific customers and prospects.
             
             OUTPUT FORMAT (JSON):
             {{
@@ -347,6 +487,23 @@ class BlogWritingAgent:
                     "seo_score": 70
                 }
             
+            # Log the generated blog content
+            print("=" * 80)
+            print("📝 GENERATED BLOG CONTENT:")
+            print("=" * 80)
+            print(f"📰 Title: {blog_data.get('title', 'No title')}")
+            print(f"📄 Excerpt: {blog_data.get('excerpt', 'No excerpt')}")
+            print(f"🔗 Slug: {blog_data.get('slug', 'No slug')}")
+            print(f"📂 Categories: {blog_data.get('categories', [])}")
+            print(f"🏷️ Tags: {blog_data.get('tags', [])}")
+            print(f"🔍 Meta Description: {blog_data.get('meta_description', 'No meta description')}")
+            print(f"🔑 Meta Keywords: {blog_data.get('meta_keywords', [])}")
+            print(f"⏱️ Reading Time: {blog_data.get('reading_time', 0)} minutes")
+            print(f"📊 Word Count: {blog_data.get('word_count', 0)} words")
+            print(f"⭐ SEO Score: {blog_data.get('seo_score', 0)}/100")
+            print(f"📝 Content Preview: {blog_data.get('content', 'No content')[:200]}...")
+            print("=" * 80)
+            
             # Create blog post
             blog_id = str(uuid.uuid4())
             now = datetime.now()
@@ -386,6 +543,13 @@ class BlogWritingAgent:
             
         except Exception as e:
             logger.error(f"Error generating blog content: {e}")
+            print(f"❌ ERROR generating blog content: {e}")
+            # Check if it's an API quota error
+            error_str = str(e)
+            if "quota" in error_str.lower() or "429" in error_str or "insufficient_quota" in error_str:
+                print("💳 OPENAI API QUOTA EXCEEDED - Please check your billing details")
+                # Return a special error indicator
+                return "API_QUOTA_ERROR"
             return None
 
     async def _save_blog(self, state: BlogWritingState) -> BlogWritingState:
@@ -494,19 +658,31 @@ class BlogWritingAgent:
             logger.info(f"Blog generation result type: {type(result)}")
             logger.info(f"Blog generation result: {result}")
             
-            # The result is a BlogWritingState object, not a dict
-            if hasattr(result, 'error') and result.error:
-                logger.error(f"Blog generation failed: {result.error}")
-                return {
-                    "success": False,
-                    "error": result.error,
-                    "blogs": [],
-                    "campaign": None
-                }
-            
-            # Extract data from BlogWritingState object
-            blogs_list = result.blogs if hasattr(result, 'blogs') else []
-            campaign_obj = result.campaign if hasattr(result, 'campaign') else None
+            # Check if result is a dict or BlogWritingState object
+            if isinstance(result, dict):
+                # Result is a dict
+                if result.get('error'):
+                    logger.error(f"Blog generation failed: {result['error']}")
+                    return {
+                        "success": False,
+                        "error": result['error'],
+                        "blogs": [],
+                        "campaign": None
+                    }
+                blogs_list = result.get('blogs', [])
+                campaign_obj = result.get('campaign')
+            else:
+                # Result is a BlogWritingState object
+                if hasattr(result, 'error') and result.error:
+                    logger.error(f"Blog generation failed: {result.error}")
+                    return {
+                        "success": False,
+                        "error": result.error,
+                        "blogs": [],
+                        "campaign": None
+                    }
+                blogs_list = result.blogs if hasattr(result, 'blogs') else []
+                campaign_obj = result.campaign if hasattr(result, 'campaign') else None
             
             # Ensure blogs_list is a list and handle conversion
             try:
@@ -526,6 +702,33 @@ class BlogWritingAgent:
                         campaign_dict = campaign_obj.dict()
                     else:
                         campaign_dict = campaign_obj
+                
+                # Check if no blogs were generated and there was an error
+                if len(blogs_dict) == 0 and hasattr(result, 'error') and result.error:
+                    logger.error(f"❌ No blogs generated due to error: {result.error}")
+                    print(f"❌ BLOG GENERATION FAILED: {result.error}")
+                    return {
+                        "success": False,
+                        "error": result.error,
+                        "blogs": [],
+                        "campaign": campaign_dict,
+                        "total_blogs": 0,
+                        "message": f"Blog generation failed: {result.error}"
+                    }
+                
+                # Also check if no blogs were generated (regardless of error state)
+                if len(blogs_dict) == 0:
+                    error_msg = "No blogs were generated. This could be due to OpenAI API quota exceeded or other issues."
+                    logger.warning(f"⚠️ {error_msg}")
+                    print(f"⚠️ {error_msg}")
+                    return {
+                        "success": False,
+                        "error": error_msg,
+                        "blogs": [],
+                        "campaign": campaign_dict,
+                        "total_blogs": 0,
+                        "message": error_msg
+                    }
                 
                 logger.info(f"✅ Blog generation successful: {len(blogs_dict)} blogs created")
                 
