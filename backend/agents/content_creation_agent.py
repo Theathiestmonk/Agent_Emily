@@ -489,13 +489,13 @@ class ContentCreationAgent:
                 try:
                     logger.info(f"Generating post {i+1}/{len(posting_schedule)} for {platform}")
                     
-                    # Update progress for individual post generation
+                    # Update progress for individual post generation - only show platform name, not post count
                     if self.progress_callback:
                         await self.progress_callback(
                             user_id,
                             "generating_content",
                             int(20 + (i / len(posting_schedule)) * 60),  # 20-80% range
-                            f"Generating post {i+1}/{len(posting_schedule)} for {platform}",
+                            f"Generating content for {platform}",
                             platform
                         )
                     
@@ -512,13 +512,13 @@ class ContentCreationAgent:
                         content_posts.append(post)
                         logger.info(f"Successfully generated post {i+1}")
                         
-                        # Update progress after successful post generation
+                        # Update progress after successful post generation - only update percentage
                         if self.progress_callback:
                             await self.progress_callback(
                                 user_id,
                                 "generating_content",
                                 int(20 + ((i + 1) / len(posting_schedule)) * 60),
-                                f"Generated {i+1}/{len(posting_schedule)} posts for {platform}",
+                                None,  # Don't send duplicate message
                                 platform
                             )
                     else:

@@ -69,8 +69,8 @@ class MediaAgent:
         
         # Configure Gemini API
         genai.configure(api_key=gemini_api_key)
-        self.gemini_model = 'gemini-1.5-flash'  # Use stable model for text generation
-        self.gemini_image_model = 'gemini-1.5-flash'  # Use stable model for image generation
+        self.gemini_model = 'gemini-2.5-flash'  # Use stable model for text generation
+        self.gemini_image_model = 'gemini-2.5-flash-image-preview'  # Use image preview model for image generation
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
@@ -238,7 +238,7 @@ class MediaAgent:
             """
             
             try:
-                response = genai.GenerativeModel('gemini-1.5-flash').generate_content(
+                response = genai.GenerativeModel(self.gemini_model).generate_content(
                     contents=f"""You are an expert at creating detailed image prompts for AI image generation. Create specific, visual prompts that will generate high-quality images for social media content.
 
 IMPORTANT: When a business logo is available, you MUST include specific instructions about logo placement and integration in your generated prompt. The logo should be:
@@ -723,10 +723,10 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             logger.warning(f"Falling back to original URL: {image_url}")
             return image_url
     
-    async def generate_media_for_post(self, post_id: str) -> Dict[str, Any]:
+    async def generate_media_for_post(self, post_id: str, user_id: str = None) -> Dict[str, Any]:
         """Main entry point for generating media for a post"""
         initial_state = MediaAgentState(
-            user_id="",
+            user_id=user_id or "",
             post_id=post_id,
             post_data=None,
             image_prompt=None,

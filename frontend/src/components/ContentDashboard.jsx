@@ -87,6 +87,7 @@ const ContentDashboard = () => {
   const [generationMessage, setGenerationMessage] = useState('')
   const [showProgress, setShowProgress] = useState(false)
   const [showGenerationModal, setShowGenerationModal] = useState(false)
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false)
   const [fetchingFreshData, setFetchingFreshData] = useState(false)
   const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
   const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
@@ -343,7 +344,13 @@ const ContentDashboard = () => {
     }
   }
 
-  const handleGenerateContent = async () => {
+  const handleGenerateContent = () => {
+    setShowConfirmationModal(true)
+  }
+
+  const handleConfirmGeneration = async () => {
+    setShowConfirmationModal(false)
+    
     try {
       setGenerating(true)
       setGenerationStatus(null)
@@ -1558,6 +1565,43 @@ const ContentDashboard = () => {
         }}
         onComplete={handleProgressComplete}
       />
+
+      {/* Confirmation Modal */}
+      {showConfirmationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-orange-100 mb-4">
+                <svg className="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Generate Fresh Content
+              </h3>
+              <p className="text-sm text-gray-600 mb-6">
+                This will delete your old content and create fresh content for all platforms. 
+                Are you sure you want to proceed?
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowConfirmationModal(false)}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmGeneration}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-pink-500 to-purple-600 rounded-lg hover:from-pink-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                >
+                  Proceed
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Side Navbar */}
       <SideNavbar />

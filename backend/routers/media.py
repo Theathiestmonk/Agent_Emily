@@ -96,7 +96,7 @@ async def generate_image_for_post(
         media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, gemini_api_key)
         
         # Generate image
-        result = await media_agent.generate_media_for_post(request.post_id)
+        result = await media_agent.generate_media_for_post(request.post_id, current_user.id)
         
         return ImageGenerationResponse(**result)
         

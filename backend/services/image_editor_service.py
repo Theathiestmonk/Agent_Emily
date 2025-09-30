@@ -261,16 +261,25 @@ class ImageEditorService:
         
         return f"""Add the logo from the second image to the first image at the {position_desc}.
 
-STRICT INSTRUCTIONS:
-- Extract ONLY the logo from the second image
-- Remove ALL backgrounds from the logo
+CRITICAL BACKGROUND REMOVAL INSTRUCTIONS:
+- Extract ONLY the logo elements from the second image
+- REMOVE ALL WHITE BACKGROUNDS from the logo
+- REMOVE ALL COLORED BACKGROUNDS from the logo
+- REMOVE ALL SOLID BACKGROUNDS from the logo
+- The logo must be COMPLETELY TRANSPARENT except for the actual logo elements
+- NO white rectangles, circles, or shapes should be visible
+- NO background colors should remain
+- The logo should have ZERO background
+
+STRICT PLACEMENT INSTRUCTIONS:
 - Place the logo at the {position_desc} of the first image
 - Do NOT add any text, effects, or creative elements
 - Do NOT modify the original image content
 - Do NOT add shadows, borders, or styling
-- Just add the logo, nothing else
+- Do NOT add any background to the logo
+- Just add the transparent logo, nothing else
 
-The result should be the original image with only the logo added at the specified position."""
+MANDATORY: The logo must be placed as a transparent overlay with absolutely no background color or shape."""
     
     async def _generate_edited_image(self, input_image_data: bytes, prompt: str, reference_data: bytes = None) -> bytes:
         """Generate edited image using Gemini with two-step approach"""
