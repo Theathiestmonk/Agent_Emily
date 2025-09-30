@@ -1896,6 +1896,9 @@ class CustomContentAgent:
                 result = await self.select_schedule(state)
             elif current_step == ConversationStep.SAVE_CONTENT:
                 result = await self.save_content(state)
+                # After saving content, automatically transition to ask_another_content
+                if result.get("current_step") == ConversationStep.ASK_ANOTHER_CONTENT:
+                    result = await self.ask_another_content(result)
             elif current_step == ConversationStep.ASK_ANOTHER_CONTENT:
                 result = await self.ask_another_content(state)
             elif current_step == ConversationStep.DISPLAY_RESULT:

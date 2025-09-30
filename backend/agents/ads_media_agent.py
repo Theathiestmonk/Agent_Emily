@@ -129,6 +129,31 @@ class AdsMediaAgent:
         """Generate image prompt based on ad data"""
         try:
             ad_data = state["ad_data"]
+            user_id = state["user_id"]
+            
+            # Get user profile for logo context
+            user_profile = self._get_user_profile(user_id)
+            logo_url = user_profile.get('logo_url', '')
+            business_name = user_profile.get('business_name', 'Unknown')
+            
+            # Create logo context for the prompt
+            logo_context = ""
+            if logo_url:
+                # For DALL-E, we need to describe the logo in the prompt since it doesn't support reference images
+                logo_context = f"""
+IMPORTANT: This business has a logo that should be prominently featured in the advertisement.
+Business logo URL: {logo_url}
+The logo should be strategically placed - either as a watermark in the corner, 
+integrated into the design, or as a central element depending on the ad content.
+Make sure the logo is clearly visible and well-positioned for brand recognition.
+Since DALL-E cannot process reference images, create a professional logo design that would be appropriate for {business_name} in the {', '.join(user_profile.get('industry', ['business']))} industry.
+"""
+            else:
+                logo_context = f"""
+Note: This business ({business_name}) does not have a logo uploaded yet.
+The advertisement should still be professional and branded for {business_name}.
+Create a professional logo design that would be appropriate for {business_name} in the {', '.join(user_profile.get('industry', ['business']))} industry.
+"""
             
             # Create image prompt based on ad content
             prompt = f"""
@@ -139,12 +164,16 @@ Ad Copy: {ad_data.get('ad_copy', '')}
 Call to Action: {ad_data.get('call_to_action', '')}
 Target Audience: {ad_data.get('target_audience', 'general')}
 Campaign Objective: {ad_data.get('campaign_objective', 'brand awareness')}
+Business: {business_name}
+
+{logo_context}
 
 Style: Clean, modern, professional, high-quality
 Format: Square for social media
 Colors: Brand-appropriate, vibrant but not overwhelming
 Text: Minimal text overlay, focus on visual impact
 Mood: Engaging, trustworthy, conversion-focused
+If a logo is available, ensure it's prominently and tastefully integrated into the design.
 """
             
             state["image_prompt"] = prompt.strip()
@@ -285,6 +314,18 @@ Mood: Engaging, trustworthy, conversion-focused
             logger.error(f"Error updating ad media: {e}")
             state["error"] = str(e)
             return state
+    
+    def _get_user_profile(self, user_id: str) -> Dict[str, Any]:
+        """Get user profile for context"""
+        try:
+            supabase_admin = self.get_supabase_admin()
+            response = supabase_admin.table("profiles").select("*").eq("id", user_id).execute()
+            if response.data:
+                return response.data[0]
+            return {}
+        except Exception as e:
+            logger.error(f"Error fetching user profile: {str(e)}")
+            return {}
     
     async def _error_handler(self, state: AdsMediaAgentState) -> AdsMediaAgentState:
         """Handle errors in the workflow"""

@@ -197,30 +197,58 @@ class MediaAgent:
             platform = post_data.get("platform", "")
             image_style = state["image_style"]
             
-            # Get user profile for context
+            # Get user profile for context including logo
             user_profile = self._get_user_profile(state["user_id"])
+            logo_url = user_profile.get('logo_url', '')
+            business_name = user_profile.get('business_name', 'Unknown')
             
-            # Create prompt for image generation
+            # Create prompt for image generation with logo integration
+            logo_context = ""
+            if logo_url:
+                logo_context = f"""
+            IMPORTANT: This business has a logo that should be prominently featured in the image.
+            Business logo URL: {logo_url}
+            The logo should be placed strategically in the image - either as a watermark in the corner, 
+            integrated into the design, or as a central element depending on the content.
+            Make sure the logo is clearly visible and well-positioned for brand recognition.
+            """
+            else:
+                logo_context = f"""
+            Note: This business ({business_name}) does not have a logo uploaded yet.
+            The image should still be professional and branded for {business_name}.
+            """
+            
             prompt = f"""
             Create a detailed image prompt for a social media post on {platform}.
             
             Post content: {content}
             Platform: {platform}
             Image style: {image_style}
-            Business: {user_profile.get('business_name', 'Unknown')}
+            Business: {business_name}
             Industry: {', '.join(user_profile.get('industry', []))}
             Brand voice: {user_profile.get('brand_voice', 'Professional')}
+            
+            {logo_context}
             
             Generate a detailed, specific prompt that will create an engaging image for this social media post.
             The prompt should be optimized for {image_style} style and suitable for {platform} audience.
             Include specific visual elements, composition, lighting, and mood.
-            Keep it under 400 characters for API limits.
+            If a logo is available, ensure it's prominently and tastefully integrated into the design.
+            Keep it under 500 characters for API limits.
             """
             
             try:
                 response = self.gemini_client.models.generate_content(
                     model='gemini-2.0-flash-exp',
-                    contents=f"You are an expert at creating detailed image prompts for AI image generation. Create specific, visual prompts that will generate high-quality images for social media content.\n\n{prompt}"
+                    contents=f"""You are an expert at creating detailed image prompts for AI image generation. Create specific, visual prompts that will generate high-quality images for social media content.
+
+IMPORTANT: When a business logo is available, you MUST include specific instructions about logo placement and integration in your generated prompt. The logo should be:
+1. Clearly visible and readable
+2. Strategically positioned (corner watermark, integrated into design, or central element)
+3. Appropriately sized for the image dimensions
+4. Consistent with the overall design aesthetic
+
+{prompt}"""
                 )
                 
                 if response and hasattr(response, 'text') and response.text:
@@ -241,7 +269,17 @@ class MediaAgent:
                 platform = post_data.get("platform", "social media")
                 image_style = state["image_style"]
                 
-                fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image featuring: {content[:100]}"
+                # Get user profile for fallback prompt
+                user_profile = self._get_user_profile(state["user_id"])
+                logo_url = user_profile.get('logo_url', '')
+                business_name = user_profile.get('business_name', 'Unknown')
+                
+                # Create fallback prompt with logo context
+                if logo_url:
+                    fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image for {business_name} featuring: {content[:100]}. Include the business logo prominently positioned in the image."
+                else:
+                    fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image for {business_name} featuring: {content[:100]}"
+                
                 state["image_prompt"] = fallback_prompt
                 state["status"] = "generating"
                 
@@ -271,23 +309,65 @@ class MediaAgent:
                     return state
                 content = post_data.get("content", "Social media post")
                 platform = post_data.get("platform", "social media")
-                image_prompt = f"Professional {platform} post image for: {content[:100]}"
+                
+                # Get user profile for fallback prompt
+                user_profile = self._get_user_profile(state["user_id"])
+                logo_url = user_profile.get('logo_url', '')
+                business_name = user_profile.get('business_name', 'Unknown')
+                
+                # Create fallback prompt with logo context
+                if logo_url:
+                    image_prompt = f"Professional {platform} post image for {business_name} featuring: {content[:100]}. Include the business logo prominently positioned in the image."
+                else:
+                    image_prompt = f"Professional {platform} post image for {business_name} featuring: {content[:100]}"
+                
                 logger.warning(f"Using fallback image prompt: {image_prompt}")
             
             image_size = state["image_size"]
             
             start_time = datetime.now()
             
+            # Get user profile and logo for image generation
+            user_profile = self._get_user_profile(state["user_id"])
+            logo_url = user_profile.get('logo_url', '')
+            
             # Generate image using Gemini 2.5 Flash Image Preview
             logger.info(f"Generating image with Gemini 2.5 Flash Image Preview")
             logger.info(f"Prompt: {image_prompt}")
             logger.info(f"Image size: {image_size.value if hasattr(image_size, 'value') else str(image_size) if image_size else '1024x1024'}")
+            logger.info(f"Logo URL: {logo_url if logo_url else 'No logo available'}")
             
             try:
+                # Prepare contents for Gemini API call
+                contents = []
+                
+                # Add text prompt
+                contents.append(image_prompt)
+                
+                # Add logo image if available
+                if logo_url:
+                    try:
+                        logo_image_data = await self._download_logo_image(logo_url)
+                        if logo_image_data:
+                            # Add logo as reference image
+                            contents.append({
+                                "text": "Use this business logo as a reference and integrate it prominently into the generated image. Place it strategically - either as a watermark in the corner, integrated into the design, or as a central element depending on the content. Make sure the logo is clearly visible and well-positioned for brand recognition."
+                            })
+                            contents.append({
+                                "inline_data": {
+                                    "mime_type": "image/png",
+                                    "data": logo_image_data
+                                }
+                            })
+                            logger.info("Added logo image to Gemini API call")
+                    except Exception as logo_error:
+                        logger.warning(f"Failed to include logo in image generation: {logo_error}")
+                        # Continue without logo if there's an error
+                
                 # Use Gemini's native image generation capability
                 response = self.gemini_client.models.generate_content(
                     model=self.gemini_image_model,
-                    contents=[image_prompt],
+                    contents=contents,
                 )
                 
                 # Extract the generated image from the response
@@ -579,6 +659,27 @@ class MediaAgent:
         except Exception as e:
             logger.error(f"Error uploading base64 image: {str(e)}")
             raise e
+
+    async def _download_logo_image(self, logo_url: str) -> str:
+        """Download logo image and convert to base64 for Gemini API"""
+        try:
+            import base64
+            import httpx
+            
+            # Download logo image
+            async with httpx.AsyncClient() as client:
+                response = await client.get(logo_url)
+                response.raise_for_status()
+                image_data = response.content
+            
+            # Convert to base64
+            base64_data = base64.b64encode(image_data).decode('utf-8')
+            logger.info(f"Successfully downloaded and encoded logo image: {len(base64_data)} characters")
+            return base64_data
+            
+        except Exception as e:
+            logger.error(f"Error downloading logo image: {str(e)}")
+            return None
 
     async def _download_and_upload_image(self, image_url: str, post_id: str) -> str:
         """Download image from URL and upload to Supabase storage"""
