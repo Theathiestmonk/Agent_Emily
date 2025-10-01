@@ -18,12 +18,18 @@ import { supabase } from '../lib/supabase';
 import ReactMarkdown from 'react-markdown';
 
 const API_BASE_URL = (() => {
-  const hostname = window.location.hostname;
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:8000';
-  } else {
-    return 'https://api.emilyai.co';
+  // Check for environment variable first
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/+$/, '') // Remove all trailing slashes
   }
+  
+  // Fallback to production URL
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return 'https://agent-emily.onrender.com'
+  }
+  
+  // Local development fallback
+  return (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 })();
 
 const ChatbotImageEditor = ({ 
