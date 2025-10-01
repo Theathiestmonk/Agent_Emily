@@ -1673,7 +1673,8 @@ const ContentDashboard = () => {
     
     // If it's a Supabase storage URL, return the original URL for full quality
     if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
-        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/')) {
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/') ||
+        imageUrl.includes('supabase.co/storage/v1/object/public/user-uploads/')) {
       // Return original URL without transformations for full quality
       return imageUrl
     }
@@ -2078,7 +2079,7 @@ const ContentDashboard = () => {
                     {expandedContent?.id === content.id ? (
                       <div className="mb-4">
                         {/* Media Display - Above Content (Social Media Style) */}
-                        {generatedImages[content.id] && (
+                        {((generatedImages[content.id] && generatedImages[content.id].image_url) || content.image_url) && (
                           <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center space-x-2">
@@ -2097,29 +2098,36 @@ const ContentDashboard = () => {
                                 </div>
                               )}
                               
-                              {isVideoFile(generatedImages[content.id].image_url) ? (
-                                <video 
-                                  src={generatedImages[content.id].image_url}
-                                  className="w-full h-48 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                                  controls
-                                  preload="metadata"
-                                  onLoadStart={() => startImageLoading(content.id)}
-                                  onLoadedData={() => handleImageLoad(content.id)}
-                                  onError={() => handleImageError(content.id)}
-                                  onClick={() => handleImageClick(generatedImages[content.id].image_url, content.title)}
-                                >
-                                  Your browser does not support the video tag.
-                                </video>
-                              ) : (
-                              <img 
-                                src={getSmallThumbnailUrl(generatedImages[content.id].image_url)} 
-                                alt="Generated content thumbnail" 
+                              {(() => {
+                                // Use generated image if available, otherwise use content's image_url
+                                const imageUrl = (generatedImages[content.id] && generatedImages[content.id].image_url) || content.image_url
+                                
+                                if (isVideoFile(imageUrl)) {
+                                  return (
+                                    <video 
+                                      src={imageUrl}
+                                      className="w-full h-48 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                      controls
+                                      preload="metadata"
+                                      onLoadStart={() => startImageLoading(content.id)}
+                                      onLoadedData={() => handleImageLoad(content.id)}
+                                      onError={() => handleImageError(content.id)}
+                                      onClick={() => handleImageClick(imageUrl, content.title)}
+                                    >
+                                      Your browser does not support the video tag.
+                                    </video>
+                                  )
+                                } else {
+                                  return (
+                                    <img 
+                                      src={getSmallThumbnailUrl(imageUrl)} 
+                                      alt="Content thumbnail" 
                                 className="w-full h-48 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                                 loading="lazy"
                                 onLoad={() => handleImageLoad(content.id)}
                                 onError={() => handleImageError(content.id)}
                                 onLoadStart={() => startImageLoading(content.id)}
-                                onClick={() => handleImageClick(getFullSizeImageUrl(generatedImages[content.id].image_url), content.title)}
+                                      onClick={() => handleImageClick(getFullSizeImageUrl(imageUrl), content.title)}
                                 style={{
                                   opacity: imageLoading.has(content.id) ? 0 : 1,
                                   filter: imageLoading.has(content.id) ? 'blur(8px)' : 'blur(0px)',
@@ -2127,7 +2135,9 @@ const ContentDashboard = () => {
                                   transition: 'all 0.6s ease-in-out'
                                 }}
                               />
-                              )}
+                                  )
+                                }
+                              })()}
                             </div>
                             <div className="flex items-center space-x-2">
                               {!generatedImages[content.id].is_approved && (
@@ -2231,7 +2241,7 @@ const ContentDashboard = () => {
                     ) : (
                       <div>
                         {/* Media Display - Only show if content has media */}
-                        {generatedImages[content.id] && generatedImages[content.id].image_url && (
+                        {((generatedImages[content.id] && generatedImages[content.id].image_url) || content.image_url) && (
                         <div className="mb-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center space-x-1">
@@ -2251,22 +2261,25 @@ const ContentDashboard = () => {
                                   </div>
                                 )}
                               {(() => {
-                                    const thumbnailUrl = getUltraSmallThumbnailUrl(generatedImages[content.id].image_url)
+                                    // Use generated image if available, otherwise use content's image_url
+                                    const imageUrl = (generatedImages[content.id] && generatedImages[content.id].image_url) || content.image_url
+                                    const thumbnailUrl = getUltraSmallThumbnailUrl(imageUrl)
                                 console.log('🖼️ Content card image check:', {
                                   contentId: content.id,
-                                  hasImage: !!generatedImages[content.id].image_url,
-                                  imageUrl: generatedImages[content.id].image_url,
+                                  hasGeneratedImage: !!(generatedImages[content.id] && generatedImages[content.id].image_url),
+                                  hasContentImage: !!content.image_url,
+                                  imageUrl: imageUrl,
                                   thumbnailUrl: thumbnailUrl
                                 })
                                 
                                 // Check if it's a video file
-                                if (isVideoFile(generatedImages[content.id].image_url)) {
+                                if (isVideoFile(imageUrl)) {
                                   console.log('🎬 Rendering video for content:', content.id)
-                                  console.log('🎬 Video URL:', generatedImages[content.id].image_url)
-                                  console.log('🎬 Video file extension:', generatedImages[content.id].image_url.split('.').pop())
+                                  console.log('🎬 Video URL:', imageUrl)
+                                  console.log('🎬 Video file extension:', imageUrl.split('.').pop())
                                       return (
                                     <video 
-                                      src={generatedImages[content.id].image_url}
+                                      src={imageUrl}
                                       className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
                                       controls
                                       preload="metadata"
@@ -2274,7 +2287,7 @@ const ContentDashboard = () => {
                                       playsInline
                                             onClick={(e) => {
                                               e.stopPropagation()
-                                        handleImageClick(generatedImages[content.id].image_url, content.title)
+                                        handleImageClick(imageUrl, content.title)
                                       }}
                                       onLoadStart={() => {
                                         console.log('🎬 Video loading started for content:', content.id)
@@ -2286,7 +2299,7 @@ const ContentDashboard = () => {
                                       }}
                                       onError={(e) => {
                                         console.error('❌ Video failed to load for content:', content.id)
-                                        console.error('❌ Failed URL:', generatedImages[content.id].image_url)
+                                        console.error('❌ Failed URL:', imageUrl)
                                         console.error('❌ Error details:', e)
                                         handleImageError(content.id)
                                       }}
@@ -2309,18 +2322,18 @@ const ContentDashboard = () => {
                                 if (!thumbnailUrl) {
                                   return (
                                     <img 
-                                      src={generatedImages[content.id].image_url} 
+                                      src={imageUrl} 
                                       alt="Content image" 
                                       className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
                                       loading="eager"
-                                      onClick={() => handleImageClick(generatedImages[content.id].image_url, content.title)}
+                                      onClick={() => handleImageClick(imageUrl, content.title)}
                                       onLoad={() => {
                                         console.log('✅ Image loaded for content:', content.id)
                                         handleImageLoad(content.id)
                                       }}
                                       onError={(e) => {
                                         console.error('❌ Image failed to load for content:', content.id)
-                                        console.error('❌ Failed URL:', generatedImages[content.id].image_url)
+                                        console.error('❌ Failed URL:', imageUrl)
                                         handleImageError(content.id)
                                       }}
                                       onLoadStart={() => startImageLoading(content.id)}
@@ -2341,7 +2354,7 @@ const ContentDashboard = () => {
                                         alt="Content image" 
                                         className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
                                         loading="eager"
-                                        onClick={() => handleImageClick(getFullSizeImageUrl(generatedImages[content.id].image_url), content.title)}
+                                      onClick={() => handleImageClick(getFullSizeImageUrl(imageUrl), content.title)}
                                         onLoad={() => {
                                           console.log('✅ Image loaded for content:', content.id)
                                           handleImageLoad(content.id)
@@ -2936,64 +2949,71 @@ const ContentDashboard = () => {
       {/* Media Lightbox Modal */}
       {lightboxImage && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6"
           onClick={closeLightbox}
         >
-          <div className="relative w-full h-full flex items-center justify-center">
             {/* Close button */}
             <button
               onClick={closeLightbox}
-              className="absolute top-4 right-4 z-10 bg-black bg-opacity-50 text-white p-3 rounded-full shadow-lg hover:bg-opacity-70 transition-all duration-200"
+            className="absolute top-6 right-6 z-10 bg-white bg-opacity-10 backdrop-blur-md text-white p-3 rounded-full shadow-xl hover:bg-opacity-20 transition-all duration-300 border border-white border-opacity-20"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
             
-            {/* Media Container - 70% of screen size */}
-            <div className="relative w-[70vw] h-[70vh] flex items-center justify-center">
-              {/* Loading spinner */}
-              {lightboxLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
-                  <div className="flex flex-col items-center space-y-4">
-                    <RefreshCw className="w-8 h-8 text-white animate-spin" />
-                    <p className="text-white text-sm">Loading image...</p>
+          {/* Media title - positioned above the image */}
+          {lightboxImage.title && (
+            <div className="mb-6 text-center">
+              <h3 className="text-2xl font-bold text-white mb-2 drop-shadow-lg">{lightboxImage.title}</h3>
+              <div className="w-16 h-1 bg-gradient-to-r from-purple-500 to-pink-500 mx-auto rounded-full"></div>
+            </div>
+          )}
+          
+          {/* Media Container - 70% of screen size */}
+          <div className="relative w-[70vw] h-[70vh] flex items-center justify-center">
+            {/* Loading spinner */}
+            {lightboxLoading && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex flex-col items-center space-y-4">
+                  <div className="relative">
+                    <RefreshCw className="w-12 h-12 text-white animate-spin" />
+                    <div className="absolute inset-0 w-12 h-12 border-2 border-purple-500 border-opacity-30 rounded-full"></div>
                   </div>
+                  <p className="text-white text-lg font-medium">Loading image...</p>
                 </div>
-              )}
-              
-              {isVideoFile(lightboxImage.url) ? (
-                <video
-                  src={lightboxImage.url}
-                  className="w-full h-full object-contain rounded-lg shadow-2xl"
-                  controls
-                  autoPlay
-                  muted
-                  playsInline
-                  onClick={(e) => e.stopPropagation()}
-                  onLoadedData={() => setLightboxLoading(false)}
-                  onError={() => setLightboxLoading(false)}
-                >
-                  Your browser does not support the video tag.
-                </video>
-              ) : (
+              </div>
+            )}
+            
+            {isVideoFile(lightboxImage.url) ? (
+              <video
+                src={lightboxImage.url}
+                className="w-full h-full object-contain rounded-2xl shadow-2xl border border-white border-opacity-20"
+                controls
+                autoPlay
+                muted
+                playsInline
+                onClick={(e) => e.stopPropagation()}
+                onLoadedData={() => setLightboxLoading(false)}
+                onError={() => setLightboxLoading(false)}
+              >
+                Your browser does not support the video tag.
+              </video>
+            ) : (
               <img
                 src={lightboxImage.url}
                 alt={lightboxImage.title}
-                  className="w-full h-full object-contain rounded-lg shadow-2xl"
+                className="w-full h-full object-contain rounded-2xl shadow-2xl border border-white border-opacity-20"
                 onClick={(e) => e.stopPropagation()}
-                  onLoad={() => setLightboxLoading(false)}
-                  onError={() => setLightboxLoading(false)}
+                onLoad={() => setLightboxLoading(false)}
+                onError={() => setLightboxLoading(false)}
               />
               )}
             </div>
-              
-            {/* Media title - positioned at bottom of screen */}
-              {lightboxImage.title && (
-              <div className="absolute bottom-4 left-4 right-4 bg-black bg-opacity-50 text-white p-4 rounded-lg backdrop-blur-sm">
-                <h3 className="text-lg font-medium text-center">{lightboxImage.title}</h3>
-                </div>
-              )}
+          
+          {/* Additional info at bottom */}
+          <div className="mt-6 text-center">
+            <p className="text-gray-300 text-sm">Click outside or press ESC to close</p>
           </div>
         </div>
       )}
