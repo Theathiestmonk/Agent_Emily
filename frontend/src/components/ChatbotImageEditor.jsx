@@ -45,6 +45,7 @@ const ChatbotImageEditor = ({
   const [editedImageUrl, setEditedImageUrl] = useState(null);
   const [currentStep, setCurrentStep] = useState('initial');
   const [fullImageModal, setFullImageModal] = useState({ isOpen: false, imageUrl: '', title: '' });
+  const [currentWorkingImageUrl, setCurrentWorkingImageUrl] = useState(null);
   
   const messagesEndRef = useRef(null);
 
@@ -61,6 +62,13 @@ const ChatbotImageEditor = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Update working image when edited image changes
+  useEffect(() => {
+    if (editedImageUrl && currentStep === 'preview') {
+      setCurrentWorkingImageUrl(editedImageUrl);
+    }
+  }, [editedImageUrl, currentStep]);
 
   const getAuthToken = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -86,6 +94,7 @@ What would you like to do with your image today?`,
     setMessages([initialMessage]);
     setCurrentStep('initial');
     setEditedImageUrl(null);
+    setCurrentWorkingImageUrl(inputImageUrl);
   };
 
   const addMessage = (role, content, imageUrl = null, buttons = null) => {
@@ -288,6 +297,16 @@ What's your vision for this image?`
       const authToken = await getAuthToken();
       const { data: { user } } = await supabase.auth.getUser();
 
+      // Use current working image (either original or previously edited)
+      const imageToEdit = currentWorkingImageUrl || inputImageUrl;
+      
+      console.log('Image editing debug:', {
+        currentWorkingImageUrl,
+        inputImageUrl,
+        imageToEdit,
+        instructions
+      });
+
       const response = await fetch(`${API_BASE_URL}/simple-image-editor/manual-edit`, {
         method: 'POST',
         headers: {
@@ -296,16 +315,22 @@ What's your vision for this image?`
         },
         body: JSON.stringify({
           user_id: user?.id,
-          input_image_url: inputImageUrl,
+          input_image_url: imageToEdit,
           content: postContent,
           instructions: instructions
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json();
+      console.log('Manual edit response:', data);
 
       if (data.success) {
         setEditedImageUrl(data.edited_image_url);
+        setCurrentWorkingImageUrl(data.edited_image_url); // Update working image
         addMessage('assistant', 
           `Fantastic! I've applied your creative vision to the image. Take a look at what I came up with!
 
@@ -313,7 +338,8 @@ What would you like to do next?`,
           data.edited_image_url,
           [
             { text: 'Save This Image', value: 'save', type: 'action', icon: 'CheckCircle' },
-            { text: 'Try Something Else', value: 'continue', type: 'action', icon: 'RotateCcw' }
+            { text: 'Make More Changes', value: 'continue_editing', type: 'action', icon: 'Edit3' },
+            { text: 'Start Over', value: 'restart', type: 'action', icon: 'RotateCcw' }
           ]
         );
         setCurrentStep('preview');
@@ -321,6 +347,7 @@ What would you like to do next?`,
         throw new Error(data.error || 'Failed to apply instructions');
       }
     } catch (error) {
+      console.error('Manual instructions error:', error);
       addMessage('assistant', `Hmm, I had trouble with that request: ${error.message}`);
     }
   };
@@ -330,11 +357,64 @@ What would you like to do next?`,
     
     if (lowerInput.includes('save') || lowerInput.includes('yes') || lowerInput.includes('accept')) {
       await saveImage();
-    } else if (lowerInput.includes('more') || lowerInput.includes('change') || lowerInput.includes('continue')) {
-      initializeChat();
+    } else if (lowerInput.includes('continue_editing') || lowerInput.includes('make more changes')) {
+      continueEditing();
+    } else if (lowerInput.includes('restart') || lowerInput.includes('start over')) {
+      restartEditing();
     } else {
-      addMessage('assistant', 'I need a bit more clarity! Would you like to:\n\n✅ **Save this image** - Keep this version\n🔄 **Try something else** - Make different changes');
+      addMessage('assistant', 'I need a bit more clarity! Would you like to:\n\n✅ **Save this image** - Keep this version\n✏️ **Make More Changes** - Continue editing\n🔄 **Start Over** - Begin fresh');
     }
+  };
+
+  const continueEditing = () => {
+    console.log('Continue editing - before update:', {
+      currentWorkingImageUrl,
+      editedImageUrl
+    });
+    
+    // Update the working image to the latest edited version
+    if (editedImageUrl) {
+      setCurrentWorkingImageUrl(editedImageUrl);
+      console.log('Updated currentWorkingImageUrl to:', editedImageUrl);
+    }
+    
+    addMessage('assistant', 
+      `Perfect! I'm ready to make more changes to your image. What would you like me to do next?
+
+Here are some ideas:
+• "Make it more colorful and vibrant"
+• "Add a beautiful sunset background" 
+• "Crop it to a square format"
+• "Add some text overlay"
+• "Convert to black and white with selective color"
+• "Add a vintage film effect"
+• "Create a dramatic lighting effect"
+• "Add a professional blur to the background"
+
+What's your next creative vision?`
+    );
+    setCurrentStep('manual_input');
+  };
+
+  const restartEditing = () => {
+    setCurrentWorkingImageUrl(inputImageUrl);
+    setEditedImageUrl(null);
+    addMessage('assistant', 
+      `No problem! Let's start fresh with your original image. What would you like me to do with it?
+
+Here are some ideas to get you started:
+• "Make it more colorful and vibrant"
+• "Add a beautiful sunset background"
+• "Crop it to a square format" 
+• "Add some text overlay"
+• "Convert to black and white with selective color"
+• "Add a vintage film effect"
+• "Create a dramatic lighting effect"
+• "Add a professional blur to the background"
+
+What's your vision for this image?`
+    );
+    setCurrentStep('manual_input');
   };
 
   const saveImage = async () => {
@@ -451,35 +531,38 @@ What would you like to do next?`,
               <h3 className="text-base font-semibold text-gray-800 mb-3">Original Image</h3>
               <img
                 src={inputImageUrl}
-                alt="Original"
+                alt="Original image"
                 className="w-full h-48 object-contain rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => handleImageClick(inputImageUrl, 'Original Image')}
               />
+              <div className="absolute top-2 right-2 bg-gray-500 text-white px-2 py-1 rounded-full text-xs font-medium">
+                Original
+              </div>
             </div>
             
             <div className="p-2 bg-white rounded-lg shadow-lg">
-              <h3 className="text-base font-semibold text-gray-800 mb-3">Edited Preview</h3>
+              <h3 className="text-base font-semibold text-gray-800 mb-3">Updated Image</h3>
               <div className="relative">
-                {editedImageUrl ? (
+                {currentWorkingImageUrl && currentWorkingImageUrl !== inputImageUrl ? (
                   <>
                     <img
-                      src={editedImageUrl}
-                      alt="Edited preview"
+                      src={currentWorkingImageUrl}
+                      alt="Current working image"
                       className="w-full h-48 object-contain rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => handleImageClick(editedImageUrl, 'Edited Image')}
+                      onClick={() => handleImageClick(currentWorkingImageUrl, 'Current Working Image')}
                     />
-                    <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-medium">
-                      Edited
+                    <div className="absolute top-2 right-2 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-medium">
+                      Working
                     </div>
                   </>
                 ) : (
                   <div className="w-full h-48 bg-gray-100 rounded-lg flex flex-col items-center justify-center border-2 border-dashed border-gray-300">
                     <ImageIcon className="w-12 h-12 text-gray-400 mb-2" />
                     <p className="text-sm text-gray-500 text-center">
-                      No edited image yet
+                      No edits yet
                     </p>
                     <p className="text-xs text-gray-400 text-center mt-1">
-                      Start editing to see preview
+                      Start editing to see changes
                     </p>
                   </div>
                 )}

@@ -2150,21 +2150,18 @@ const ContentDashboard = () => {
                                 </button>
                               )}
                               <button
-                                onClick={() => handleGenerateMedia(content)}
-                                disabled={generatingMedia.has(content.id)}
-                                className="text-xs bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-3 py-1 rounded hover:from-indigo-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-1"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setImageEditorData({
+                                    postContent: content.content,
+                                    inputImageUrl: generatedImages[content.id].image_url
+                                  })
+                                  setShowImageEditor(true)
+                                }}
+                                className="text-xs bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-3 py-1 rounded hover:from-indigo-600 hover:to-purple-700 transition-all duration-300 flex items-center space-x-1"
                               >
-                                {generatingMedia.has(content.id) ? (
-                                  <>
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    <span>Regenerating...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Wand2 className="w-3 h-3" />
-                                    <span>Regenerate</span>
-                                  </>
-                                )}
+                                <Edit3 className="w-3 h-3" />
+                                <span>Edit Image</span>
                               </button>
                             </div>
                           </div>
@@ -3356,6 +3353,16 @@ const ContentDashboard = () => {
           onClose={() => {
             setShowImageEditor(false)
             setImageEditorData(null)
+            
+            // Refresh the content dashboard after modal closes (with a small delay)
+            setTimeout(async () => {
+              try {
+                await fetchData(true)
+                await fetchContentByDate(selectedDate)
+              } catch (error) {
+                console.error('Error refreshing content after modal close:', error)
+              }
+            }, 100) // Small delay to ensure modal is fully closed
           }}
           postContent={imageEditorData.postContent}
           inputImageUrl={imageEditorData.inputImageUrl}
