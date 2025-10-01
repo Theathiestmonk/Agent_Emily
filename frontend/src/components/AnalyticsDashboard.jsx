@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useSocialMediaCache } from '../contexts/SocialMediaCacheContext'
@@ -36,6 +36,8 @@ const AnalyticsDashboard = () => {
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [insightsData, setInsightsData] = useState({})
+  const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: null })
+  const tooltipRef = useRef(null)
 
   useEffect(() => {
     fetchData()
@@ -125,6 +127,44 @@ const AnalyticsDashboard = () => {
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`
     return count?.toString() || '0'
+  }
+
+  const showTooltip = (event, content) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setTooltip({
+      visible: true,
+      x: rect.left + rect.width / 2,
+      y: rect.top - 10,
+      content
+    })
+  }
+
+  const hideTooltip = () => {
+    setTooltip({ visible: false, x: 0, y: 0, content: null })
+  }
+
+  // Tooltip Component
+  const Tooltip = () => {
+    if (!tooltip.visible || !tooltip.content) return null
+
+    return (
+      <div
+        ref={tooltipRef}
+        className="fixed z-50 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg pointer-events-none transform -translate-x-1/2 -translate-y-full"
+        style={{
+          left: tooltip.x,
+          top: tooltip.y,
+        }}
+      >
+        <div className="space-y-1">
+          <div className="font-semibold">{tooltip.content.metric}</div>
+          <div className="text-gray-300">{tooltip.content.value}</div>
+          <div className="text-xs text-gray-400">{tooltip.content.post}</div>
+        </div>
+        {/* Arrow */}
+        <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+      </div>
+    )
   }
 
   const calculatePlatformInsights = (platform, posts) => {
@@ -219,6 +259,9 @@ const AnalyticsDashboard = () => {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Tooltip */}
+      <Tooltip />
+      
       {/* Side Navbar */}
       <SideNavbar />
       
@@ -323,13 +366,19 @@ const AnalyticsDashboard = () => {
                                           {data.metrics.map((metric, metricIndex) => {
                                             const value = metric.data[postIndex] || 0
                                             const height = maxValue > 0 ? (value / maxValue) * 100 : 0
+                                            const postTitle = (post.message || post.text || 'Untitled').substring(0, 20) + '...'
                                             
                                             return (
                                               <div
                                                 key={metricIndex}
-                                                className={`${colors[metricIndex]} rounded-t-sm flex-1 min-h-[2px] transition-all duration-300 hover:opacity-80`}
+                                                className={`${colors[metricIndex]} rounded-t-sm flex-1 min-h-[2px] transition-all duration-300 hover:opacity-80 cursor-pointer`}
                                                 style={{ height: `${Math.max(height, 2)}%` }}
-                                                title={`${metric.name}: ${formatEngagement(value)}`}
+                                                onMouseEnter={(e) => showTooltip(e, {
+                                                  metric: metric.name,
+                                                  value: formatEngagement(value),
+                                                  post: postTitle
+                                                })}
+                                                onMouseLeave={hideTooltip}
                                               />
                                             )
                                           })}
@@ -338,16 +387,18 @@ const AnalyticsDashboard = () => {
                                         {/* Post Date Label */}
                                         <div className="text-xs text-gray-400 text-center">
                                           {(() => {
-                                            const postDate = post.created_at || post.published_at || post.scheduled_date || post.date || post.timestamp
+                                            const postDate = post.created_time || post.created_at || post.published_at || post.scheduled_date || post.date || post.timestamp
                                             
                                             if (postDate) {
                                               try {
-                                                return new Date(postDate).toLocaleDateString('en-US', { 
+                                                const date = new Date(postDate)
+                                                return date.toLocaleDateString('en-US', { 
                                                   month: 'short', 
-                                                  day: 'numeric' 
+                                                  day: 'numeric'
                                                 })
                                               } catch (error) {
                                                 console.log('Date parsing error:', error, 'for post:', post)
+                                                return `Post ${postIndex + 1}`
                                               }
                                             }
                                             

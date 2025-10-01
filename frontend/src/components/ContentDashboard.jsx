@@ -1925,22 +1925,21 @@ const ContentDashboard = () => {
                       })}`
                   }
                 </h3>
-                <p className="text-gray-500 mb-6">
-                  {selectedDate === new Date().toISOString().split('T')[0] 
-                    ? "Generate some amazing content to get started!" 
-                    : "This date doesn't have any scheduled content yet."
-                  }
-                </p>
-                <p className="text-gray-500 mb-6">
+                <div className="text-gray-500 mb-6">
                   {generating 
                     ? "Content generation in progress. Please wait..."
                     : fetchingFreshData
                     ? "Loading your new content..."
                     : selectedDate === new Date().toISOString().split('T')[0] 
-                    ? "Generate content to see it displayed here" 
+                    ? (
+                        <>
+                          <p className="mb-2">Generate some amazing content to get started!</p>
+                          <p>Or see the next scheduled content</p>
+                        </>
+                      )
                     : "This date has no content. Use the navigation arrows to find dates with content."
                   }
-                </p>
+                </div>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
                   onClick={handleGenerateContent}
@@ -1977,21 +1976,20 @@ const ContentDashboard = () => {
                       className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
                     >
                       <RefreshCw className="w-5 h-5" />
-                      <span>Refresh Today's Content</span>
+                      <span>Refresh</span>
                     </button>
                   )}
                   
                   <button
-                    onClick={async () => {
-                      console.log('Manually refreshing available dates...')
-                      await getAvailableDates()
-                      console.log('Available dates refreshed:', availableDates)
+                    onClick={() => {
+                      console.log('Navigating to next available content...')
+                      navigateToNextDate()
                     }}
-                    disabled={generating || fetchingFreshData}
+                    disabled={generating || fetchingFreshData || currentDateIndex === availableDates.length - 1}
                     className="bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 rounded-lg hover:from-green-600 hover:to-green-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2 text-sm"
                   >
-                    <RefreshCw className="w-4 h-4" />
-                    <span>Refresh Dates</span>
+                    <ChevronRight className="w-4 h-4" />
+                    <span>Next Content</span>
                 </button>
                 </div>
               </div>
