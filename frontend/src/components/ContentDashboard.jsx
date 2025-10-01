@@ -115,6 +115,7 @@ const ContentDashboard = () => {
   const [uploadingImage, setUploadingImage] = useState(new Set()) // Track which content is uploading image
   const [showUploadModal, setShowUploadModal] = useState(null) // Track which content is showing upload modal
   const [lightboxImage, setLightboxImage] = useState(null) // Track which image to show in lightbox
+  const [lightboxLoading, setLightboxLoading] = useState(false) // Track lightbox image loading state
   const [showScrollArrow, setShowScrollArrow] = useState(true) // Track if scroll arrow should be visible
   const [showImageEditor, setShowImageEditor] = useState(false) // Track if image editor is open
   const [imageEditorData, setImageEditorData] = useState(null) // Data for image editor
@@ -324,16 +325,16 @@ const ContentDashboard = () => {
       
       // Convert to sorted array
       const dates = Array.from(allDates).sort()
-      
-      setAvailableDates(dates)
-      console.log('Available dates with content:', dates)
+        
+        setAvailableDates(dates)
+        console.log('Available dates with content:', dates)
       console.log('Scheduled content length:', scheduledContent.length)
       console.log('Date content length:', dateContent.length)
       console.log('Total unique dates found:', dates.length)
-      
-      // Find current date index
-      const currentIndex = dates.indexOf(selectedDate)
-      setCurrentDateIndex(currentIndex >= 0 ? currentIndex : 0)
+        
+        // Find current date index
+        const currentIndex = dates.indexOf(selectedDate)
+        setCurrentDateIndex(currentIndex >= 0 ? currentIndex : 0)
     } catch (error) {
       console.error('Error fetching available dates:', error)
     }
@@ -1715,6 +1716,7 @@ const ContentDashboard = () => {
   const handleImageClick = (imageUrl, contentTitle) => {
     console.log('🖼️ Opening lightbox for:', imageUrl)
     console.log('🖼️ Is video file:', isVideoFile(imageUrl))
+    setLightboxLoading(true)
     setLightboxImage({
       url: imageUrl,
       title: contentTitle
@@ -1724,6 +1726,7 @@ const ContentDashboard = () => {
   // Close lightbox
   const closeLightbox = () => {
     setLightboxImage(null)
+    setLightboxLoading(false)
   }
 
   // Handle scroll to show/hide arrow
@@ -1741,8 +1744,13 @@ const ContentDashboard = () => {
   // Handle keyboard events for lightbox
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && lightboxImage) {
+      if (lightboxImage) {
+        if (event.key === 'Escape') {
         closeLightbox()
+        } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === ' ') {
+          // Prevent default behavior for arrow keys and space
+          event.preventDefault()
+        }
       }
     }
 
@@ -1831,10 +1839,10 @@ const ContentDashboard = () => {
                     <div>
                       <h1 className="text-xl font-bold text-gray-900">
                         {new Date(selectedDate).toLocaleDateString('en-US', { 
-                          weekday: 'long', 
-                          year: 'numeric', 
-                          month: 'long', 
-                          day: 'numeric' 
+                              weekday: 'long', 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric' 
                         })}
                       </h1>
                       <p className="text-sm text-gray-600">
@@ -1933,28 +1941,28 @@ const ContentDashboard = () => {
                   }
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <button
-                    onClick={handleGenerateContent}
-                    disabled={generating || fetchingFreshData}
+                <button
+                  onClick={handleGenerateContent}
+                  disabled={generating || fetchingFreshData}
                     className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
-                  >
-                    {generating ? (
-                      <>
-                        <RefreshCw className="w-5 h-5 animate-spin" />
-                        <span>Generating Content...</span>
-                      </>
-                    ) : fetchingFreshData ? (
-                      <>
-                        <RefreshCw className="w-5 h-5 animate-spin" />
-                        <span>Loading Content...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-5 h-5" />
-                        <span>Generate Content</span>
-                      </>
-                    )}
-                  </button>
+                >
+                  {generating ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Generating Content...</span>
+                    </>
+                  ) : fetchingFreshData ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Loading Content...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5" />
+                      <span>Generate Content</span>
+                    </>
+                  )}
+                </button>
                   
                   {selectedDate === new Date().toISOString().split('T')[0] && (
                     <button
@@ -1983,7 +1991,7 @@ const ContentDashboard = () => {
                   >
                     <RefreshCw className="w-4 h-4" />
                     <span>Refresh Dates</span>
-                  </button>
+                </button>
                 </div>
               </div>
             ) : (
@@ -2928,31 +2936,43 @@ const ContentDashboard = () => {
       {/* Media Lightbox Modal */}
       {lightboxImage && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-8"
+          className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
           onClick={closeLightbox}
         >
-          <div className="relative max-w-4xl max-h-[80vh] w-full flex items-center justify-center">
+          <div className="relative w-full h-full flex items-center justify-center">
             {/* Close button */}
             <button
               onClick={closeLightbox}
-              className="absolute -top-2 -right-2 z-10 bg-white text-gray-800 p-2 rounded-full shadow-lg hover:bg-gray-100 transition-colors"
+              className="absolute top-4 right-4 z-10 bg-black bg-opacity-50 text-white p-3 rounded-full shadow-lg hover:bg-opacity-70 transition-all duration-200"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
             
-            {/* Media Container */}
-            <div className="relative w-full h-full max-w-2xl max-h-[70vh] bg-white rounded-lg shadow-2xl overflow-hidden">
+            {/* Media Container - 70% of screen size */}
+            <div className="relative w-[70vw] h-[70vh] flex items-center justify-center">
+              {/* Loading spinner */}
+              {lightboxLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+                  <div className="flex flex-col items-center space-y-4">
+                    <RefreshCw className="w-8 h-8 text-white animate-spin" />
+                    <p className="text-white text-sm">Loading image...</p>
+                  </div>
+                </div>
+              )}
+              
               {isVideoFile(lightboxImage.url) ? (
                 <video
                   src={lightboxImage.url}
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-contain rounded-lg shadow-2xl"
                   controls
                   autoPlay
                   muted
                   playsInline
                   onClick={(e) => e.stopPropagation()}
+                  onLoadedData={() => setLightboxLoading(false)}
+                  onError={() => setLightboxLoading(false)}
                 >
                   Your browser does not support the video tag.
                 </video>
@@ -2960,18 +2980,20 @@ const ContentDashboard = () => {
               <img
                 src={lightboxImage.url}
                 alt={lightboxImage.title}
-                className="w-full h-full object-contain"
+                  className="w-full h-full object-contain rounded-lg shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
+                  onLoad={() => setLightboxLoading(false)}
+                  onError={() => setLightboxLoading(false)}
               />
               )}
+            </div>
               
-              {/* Media title */}
+            {/* Media title - positioned at bottom of screen */}
               {lightboxImage.title && (
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent text-white p-4">
-                  <h3 className="text-lg font-medium">{lightboxImage.title}</h3>
+              <div className="absolute bottom-4 left-4 right-4 bg-black bg-opacity-50 text-white p-4 rounded-lg backdrop-blur-sm">
+                <h3 className="text-lg font-medium text-center">{lightboxImage.title}</h3>
                 </div>
               )}
-            </div>
           </div>
         </div>
       )}
