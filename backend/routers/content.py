@@ -49,10 +49,7 @@ class ContentStatusUpdate(BaseModel):
 def get_current_user(authorization: str = Header(None)):
     """Get current user from Supabase JWT token"""
     try:
-        print(f"Authorization header: {authorization}")
-        
         if not authorization or not authorization.startswith("Bearer "):
-            print("No valid authorization header provided")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authorization header required"
@@ -60,17 +57,13 @@ def get_current_user(authorization: str = Header(None)):
         
         # Extract token
         token = authorization.split(" ")[1]
-        print(f"Token received: {token[:20]}...")
         
         # Try to get user info from Supabase using the token
         try:
-            print(f"Attempting to authenticate with Supabase...")
             user_response = supabase.auth.get_user(token)
-            print(f"Supabase user response: {user_response}")
             
             if user_response and hasattr(user_response, 'user') and user_response.user:
                 user_data = user_response.user
-                print(f"✅ Authenticated user: {user_data.id} - {user_data.email}")
                 return User(
                     id=user_data.id,
                     email=user_data.email or "unknown@example.com",
@@ -78,7 +71,6 @@ def get_current_user(authorization: str = Header(None)):
                     created_at=user_data.created_at.isoformat() if hasattr(user_data.created_at, 'isoformat') else str(user_data.created_at)
                 )
             else:
-                print("❌ No user found in response")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid token or user not found"
@@ -87,8 +79,6 @@ def get_current_user(authorization: str = Header(None)):
         except HTTPException:
             raise
         except Exception as e:
-            print(f"❌ Supabase auth error: {e}")
-            print(f"Error type: {type(e).__name__}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication failed"
@@ -97,7 +87,6 @@ def get_current_user(authorization: str = Header(None)):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Authentication error: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication failed"
@@ -116,26 +105,20 @@ async def get_scheduled_content(
 ):
     """Get scheduled content for the current day"""
     try:
-        print(f"📅 Fetching scheduled content for user: {current_user.id}")
-        
         # Get today's date
         today = datetime.now()
         today_start = today.replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = today.replace(hour=23, minute=59, second=59, microsecond=999999)
         
-        print(f"📅 Looking for content between {today_start} and {today_end}")
-        
         # Query Supabase for scheduled content from content_posts table
         response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).gte("scheduled_date", today_start.date().isoformat()).lte("scheduled_date", today_end.date().isoformat()).order("scheduled_date").execute()
         
         content_items = response.data if response.data else []
-        print(f"📊 Found {len(content_items)} scheduled content items for today")
         
         # Format response
         formatted_content = []
         for item in content_items:
             platform_value = item.get("platform", "unknown")
-            print(f"📱 Content item {item['id']} platform: '{platform_value}' (type: {type(platform_value)})")
             
             formatted_item = {
                 "id": item["id"],
@@ -160,7 +143,6 @@ async def get_scheduled_content(
         }
         
     except Exception as e:
-        print(f"❌ Error fetching scheduled content: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch scheduled content: {str(e)}"
@@ -174,13 +156,10 @@ async def get_all_content(
 ):
     """Get all content for the user"""
     try:
-        print(f"📄 Fetching all content for user: {current_user.id}")
-        
         # Query Supabase for all content from content_posts table
         response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).order("scheduled_date", desc=True).range(offset, offset + limit - 1).execute()
         
         content_items = response.data if response.data else []
-        print(f"📊 Found {len(content_items)} total content items")
         
         # Format response
         formatted_content = []
@@ -209,7 +188,6 @@ async def get_all_content(
         }
         
     except Exception as e:
-        print(f"❌ Error fetching all content: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch content: {str(e)}"
@@ -222,8 +200,6 @@ async def get_content_by_date(
 ):
     """Get content for a specific date"""
     try:
-        print(f"📅 Fetching content for date: {date} for user: {current_user.id}")
-        
         # Parse the date
         try:
             target_date = datetime.fromisoformat(date).date()
@@ -233,19 +209,15 @@ async def get_content_by_date(
                 detail="Invalid date format. Use YYYY-MM-DD format."
             )
         
-        print(f"📅 Looking for content on {target_date}")
-        
         # Query Supabase for content on the specific date
         response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).eq("scheduled_date", target_date.isoformat()).order("scheduled_time").execute()
         
         content_items = response.data if response.data else []
-        print(f"📊 Found {len(content_items)} content items for {target_date}")
         
         # Format response
         formatted_content = []
         for item in content_items:
             platform_value = item.get("platform", "unknown")
-            print(f"📱 Content item {item['id']} platform: '{platform_value}' (type: {type(platform_value)})")
             
             formatted_item = {
                 "id": item["id"],
@@ -272,7 +244,6 @@ async def get_content_by_date(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error fetching content by date: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch content for date {date}: {str(e)}"
@@ -286,8 +257,6 @@ async def update_content(
 ):
     """Update content by ID"""
     try:
-        print(f"📝 Updating content {content_id} for user: {current_user.id}")
-        
         # Convert Pydantic model to dict
         update_dict = update_data.dict()
         
@@ -317,7 +286,6 @@ async def update_content(
             )
         
         updated_content = update_response.data[0]
-        print(f"✅ Successfully updated content {content_id}")
         
         return {
             "success": True,
@@ -337,7 +305,6 @@ async def update_content(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error updating content: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update content: {str(e)}"
@@ -351,8 +318,6 @@ async def update_content_status(
 ):
     """Update content status by ID"""
     try:
-        print(f"📝 Updating content status {content_id} to {status_data.status} for user: {current_user.id}")
-        
         # First verify the content belongs to the user
         content_response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", content_id).eq("content_campaigns.user_id", current_user.id).execute()
         
@@ -374,7 +339,6 @@ async def update_content_status(
             )
         
         updated_content = update_response.data[0]
-        print(f"✅ Successfully updated content status {content_id} to {status_data.status}")
         
         return {
             "success": True,
@@ -389,7 +353,6 @@ async def update_content_status(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error updating content status: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update content status: {str(e)}"
@@ -402,8 +365,6 @@ async def delete_content(
 ):
     """Delete content post and associated images"""
     try:
-        print(f"🗑️ Deleting content {content_id} for user: {current_user.id}")
-        
         # First verify the content belongs to the user
         content_response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", content_id).eq("content_campaigns.user_id", current_user.id).execute()
         
@@ -421,8 +382,6 @@ async def delete_content(
             images_response = supabase_admin.table("content_images").select("*").eq("post_id", content_id).execute()
             
             if images_response.data:
-                print(f"🗑️ Found {len(images_response.data)} associated images to delete")
-                
                 # Delete images from Supabase storage if they exist
                 for image in images_response.data:
                     if image.get("image_url"):
@@ -435,18 +394,16 @@ async def delete_content(
                                 if file_path:
                                     # Delete from Supabase storage
                                     supabase_admin.storage.from_("ai-generated-images").remove([file_path])
-                                    print(f"🗑️ Deleted image from storage: {file_path}")
                         except Exception as storage_error:
-                            print(f"⚠️ Warning: Could not delete image from storage: {storage_error}")
                             # Continue even if storage deletion fails
+                            pass
                 
                 # Delete image records from database
                 supabase_admin.table("content_images").delete().eq("post_id", content_id).execute()
-                print(f"✅ Deleted {len(images_response.data)} image records from database")
                 
         except Exception as image_error:
-            print(f"⚠️ Warning: Error deleting associated images: {image_error}")
             # Continue with content deletion even if image deletion fails
+            pass
         
         # Delete the content post
         delete_response = supabase_admin.table("content_posts").delete().eq("id", content_id).execute()
@@ -456,8 +413,6 @@ async def delete_content(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to delete content"
             )
-        
-        print(f"✅ Successfully deleted content {content_id}")
         
         return {
             "success": True,
@@ -473,7 +428,6 @@ async def delete_content(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error deleting content: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete content: {str(e)}"

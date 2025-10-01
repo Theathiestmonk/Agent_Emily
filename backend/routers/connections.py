@@ -895,63 +895,213 @@ async def handle_oauth_callback(
         frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
 
         return f"""
-
         <!DOCTYPE html>
-
-        <html>
-
+        <html lang="en">
         <head>
-
-            <title>Connection Successful</title>
-
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Connection Successful - Emily</title>
+            <style>
+                * {{
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }}
+                
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                }}
+                
+                .success-container {{
+                    background: white;
+                    border-radius: 20px;
+                    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+                    padding: 40px;
+                    text-align: center;
+                    max-width: 500px;
+                    width: 100%;
+                    animation: slideUp 0.6s ease-out;
+                }}
+                
+                @keyframes slideUp {{
+                    from {{
+                        opacity: 0;
+                        transform: translateY(30px);
+                    }}
+                    to {{
+                        opacity: 1;
+                        transform: translateY(0);
+                    }}
+                }}
+                
+                .success-icon {{
+                    width: 80px;
+                    height: 80px;
+                    background: linear-gradient(135deg, #4CAF50, #45a049);
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto 30px;
+                    animation: pulse 2s infinite;
+                }}
+                
+                @keyframes pulse {{
+                    0% {{
+                        transform: scale(1);
+                    }}
+                    50% {{
+                        transform: scale(1.05);
+                    }}
+                    100% {{
+                        transform: scale(1);
+                    }}
+                }}
+                
+                .checkmark {{
+                    color: white;
+                    font-size: 40px;
+                    font-weight: bold;
+                }}
+                
+                .success-title {{
+                    font-size: 28px;
+                    font-weight: 700;
+                    color: #2d3748;
+                    margin-bottom: 15px;
+                }}
+                
+                .success-subtitle {{
+                    font-size: 18px;
+                    color: #4a5568;
+                    margin-bottom: 30px;
+                }}
+                
+                .platform-info {{
+                    background: #f7fafc;
+                    border-radius: 12px;
+                    padding: 20px;
+                    margin: 20px 0;
+                    border-left: 4px solid #4CAF50;
+                }}
+                
+                .platform-name {{
+                    font-size: 20px;
+                    font-weight: 600;
+                    color: #2d3748;
+                    margin-bottom: 8px;
+                }}
+                
+                .account-name {{
+                    font-size: 16px;
+                    color: #4a5568;
+                }}
+                
+                .follower-count {{
+                    font-size: 14px;
+                    color: #718096;
+                    margin-top: 5px;
+                }}
+                
+                .close-button {{
+                    background: linear-gradient(135deg, #667eea, #764ba2);
+                    color: white;
+                    border: none;
+                    padding: 15px 30px;
+                    border-radius: 25px;
+                    font-size: 16px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    margin-top: 20px;
+                }}
+                
+                .close-button:hover {{
+                    transform: translateY(-2px);
+                    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+                }}
+                
+                .loading-text {{
+                    color: #718096;
+                    font-size: 14px;
+                    margin-top: 20px;
+                }}
+                
+                .spinner {{
+                    display: inline-block;
+                    width: 20px;
+                    height: 20px;
+                    border: 3px solid #f3f3f3;
+                    border-top: 3px solid #667eea;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                    margin-right: 10px;
+                }}
+                
+                @keyframes spin {{
+                    0% {{ transform: rotate(0deg); }}
+                    100% {{ transform: rotate(360deg); }}
+                }}
+            </style>
         </head>
-
         <body>
+            <div class="success-container">
+                <div class="success-icon">
+                    <div class="checkmark">✓</div>
+                </div>
+                
+                <h1 class="success-title">Connection Successful!</h1>
+                <p class="success-subtitle">Your {platform.title()} account has been connected to Emily</p>
+                
+                <div class="platform-info">
+                    <div class="platform-name">{platform.title()}</div>
+                    <div class="account-name">{account_info.get('page_name', 'Connected Account')}</div>
+                    {f'<div class="follower-count">{account_info.get("follower_count", 0):,} followers</div>' if account_info.get('follower_count', 0) > 0 else ''}
+                </div>
+                
+                <button class="close-button" onclick="closeWindow()">
+                    Continue to Emily
+                </button>
+                
+                <div class="loading-text">
+                    <div class="spinner"></div>
+                    This window will close automatically...
+                </div>
+            </div>
 
             <script>
-
-                // Close the popup window or redirect
-
-                if (window.opener) {{
-
-                    window.opener.postMessage({{
-
-                        type: 'OAUTH_SUCCESS',
-
-                        platform: '{platform}',
-
-                        connection: {{
-
-                            id: '{connection_id}',
-
+                function closeWindow() {{
+                    if (window.opener) {{
+                        window.opener.postMessage({{
+                            type: 'OAUTH_SUCCESS',
                             platform: '{platform}',
-
-                            page_name: '{account_info.get('page_name', '')}',
-
-                            follower_count: {account_info.get('follower_count', 0)},
-
-                            connection_status: 'active'
-
-                        }}
-
-                    }}, '*');
-
-                    window.close();
-
-                }} else {{
-
-                    window.location.href = '{frontend_url}';
-
+                            connection: {{
+                                id: '{connection_id}',
+                                platform: '{platform}',
+                                page_name: '{account_info.get('page_name', '')}',
+                                follower_count: {account_info.get('follower_count', 0)},
+                                connection_status: 'active'
+                            }}
+                        }}, '*');
+                        window.close();
+                    }} else {{
+                        window.location.href = '{frontend_url}';
+                    }}
                 }}
 
+                // Auto-close after 3 seconds
+                setTimeout(() => {{
+                    closeWindow();
+                }}, 3000);
             </script>
-
-            <p>Connection successful! You can close this window.</p>
-
         </body>
-
         </html>
-
         """
         
         
@@ -986,55 +1136,197 @@ async def handle_oauth_callback(
         
 
         return f"""
-
         <!DOCTYPE html>
-
-        <html>
-
+        <html lang="en">
         <head>
-
-            <title>Connection Failed</title>
-
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Connection Failed - Emily</title>
+            <style>
+                * {{
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }}
+                
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                }}
+                
+                .error-container {{
+                    background: white;
+                    border-radius: 20px;
+                    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+                    padding: 40px;
+                    text-align: center;
+                    max-width: 500px;
+                    width: 100%;
+                    animation: slideUp 0.6s ease-out;
+                }}
+                
+                @keyframes slideUp {{
+                    from {{
+                        opacity: 0;
+                        transform: translateY(30px);
+                    }}
+                    to {{
+                        opacity: 1;
+                        transform: translateY(0);
+                    }}
+                }}
+                
+                .error-icon {{
+                    width: 80px;
+                    height: 80px;
+                    background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto 30px;
+                    animation: shake 0.5s ease-in-out;
+                }}
+                
+                @keyframes shake {{
+                    0%, 100% {{ transform: translateX(0); }}
+                    25% {{ transform: translateX(-5px); }}
+                    75% {{ transform: translateX(5px); }}
+                }}
+                
+                .error-symbol {{
+                    color: white;
+                    font-size: 40px;
+                    font-weight: bold;
+                }}
+                
+                .error-title {{
+                    font-size: 28px;
+                    font-weight: 700;
+                    color: #2d3748;
+                    margin-bottom: 15px;
+                }}
+                
+                .error-subtitle {{
+                    font-size: 18px;
+                    color: #4a5568;
+                    margin-bottom: 30px;
+                }}
+                
+                .error-details {{
+                    background: #fef5f5;
+                    border-radius: 12px;
+                    padding: 20px;
+                    margin: 20px 0;
+                    border-left: 4px solid #ff6b6b;
+                    text-align: left;
+                }}
+                
+                .error-message {{
+                    font-size: 14px;
+                    color: #e53e3e;
+                    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+                    word-break: break-word;
+                    line-height: 1.5;
+                }}
+                
+                .retry-button {{
+                    background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+                    color: white;
+                    border: none;
+                    padding: 15px 30px;
+                    border-radius: 25px;
+                    font-size: 16px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    margin: 10px;
+                }}
+                
+                .retry-button:hover {{
+                    transform: translateY(-2px);
+                    box-shadow: 0 10px 20px rgba(255, 107, 107, 0.3);
+                }}
+                
+                .close-button {{
+                    background: linear-gradient(135deg, #667eea, #764ba2);
+                    color: white;
+                    border: none;
+                    padding: 15px 30px;
+                    border-radius: 25px;
+                    font-size: 16px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    margin: 10px;
+                }}
+                
+                .close-button:hover {{
+                    transform: translateY(-2px);
+                    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+                }}
+                
+                .button-group {{
+                    margin-top: 30px;
+                }}
+            </style>
         </head>
-
         <body>
-
-            <h2>Connection Failed</h2>
-
-            <p>Error: {error_message}</p>
+            <div class="error-container">
+                <div class="error-icon">
+                    <div class="error-symbol">✕</div>
+                </div>
+                
+                <h1 class="error-title">Connection Failed</h1>
+                <p class="error-subtitle">We couldn't connect your {platform.title()} account to Emily</p>
+                
+                <div class="error-details">
+                    <div class="error-message">{error_message}</div>
+                </div>
+                
+                <div class="button-group">
+                    <button class="retry-button" onclick="retryConnection()">
+                        Try Again
+                    </button>
+                    <button class="close-button" onclick="closeWindow()">
+                        Close Window
+                    </button>
+                </div>
+            </div>
 
             <script>
-
-                // Close the popup window or redirect
-
-                if (window.opener) {{
-
-                    window.opener.postMessage({{
-
-                        type: 'OAUTH_ERROR',
-
-                        platform: '{platform}',
-
-                        error: '{error_message}'
-
-                    }}, '*');
-
-                    window.close();
-
-                }} else {{
-
-                    window.location.href = '{frontend_url}';
-
+                function closeWindow() {{
+                    if (window.opener) {{
+                        window.opener.postMessage({{
+                            type: 'OAUTH_ERROR',
+                            platform: '{platform}',
+                            error: '{error_message}'
+                        }}, '*');
+                        window.close();
+                    }} else {{
+                        window.location.href = '{frontend_url}';
+                    }}
                 }}
 
+                function retryConnection() {{
+                    if (window.opener) {{
+                        window.opener.postMessage({{
+                            type: 'OAUTH_RETRY',
+                            platform: '{platform}'
+                        }}, '*');
+                        window.close();
+                    }} else {{
+                        window.location.href = '{frontend_url}';
+                    }}
+                }}
             </script>
-
-            <p>You can close this window and try again.</p>
-
         </body>
-
         </html>
-
         """
 
 

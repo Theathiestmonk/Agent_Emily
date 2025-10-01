@@ -54,6 +54,7 @@ import {
   Instagram,
   Linkedin,
   Youtube,
+  Building2,
   Wand2,
   Loader2,
   Upload,
@@ -154,17 +155,21 @@ const ContentDashboard = () => {
   }, [selectedDate, availableDates])
 
   // Auto-navigate to next available date when current date has no content
+  // BUT only if the user is not on today's date (allow users to stay on today to generate content)
   useEffect(() => {
     if (availableDates.length > 0 && !generating && !fetchingFreshData) {
       const currentIndex = availableDates.indexOf(selectedDate)
+      const today = new Date().toISOString().split('T')[0]
       
       // Check if current date has no content by checking dateContent and scheduledContent
-      const hasContent = dateContent.length > 0 || (selectedDate === new Date().toISOString().split('T')[0] && scheduledContent.length > 0)
+      const hasContent = dateContent.length > 0 || (selectedDate === today && scheduledContent.length > 0)
       
-      // If current date is not in available dates or has no content, find next available date
-      if (currentIndex === -1 || !hasContent) {
-        const today = new Date().toISOString().split('T')[0]
-        
+      // Only auto-navigate if:
+      // 1. Current date is not in available dates AND it's not today
+      // 2. Current date has no content AND it's not today (allow users to stay on today to generate content)
+      const shouldAutoNavigate = (currentIndex === -1 && selectedDate !== today) || (!hasContent && selectedDate !== today)
+      
+      if (shouldAutoNavigate) {
         // First, try to find the next future date from today onwards
         let nextIndex = availableDates.findIndex(date => date > today)
         
@@ -222,6 +227,9 @@ const ContentDashboard = () => {
             console.debug('Image loading failed for content:', content.id)
           }
         }
+        
+        // Refresh available dates after content is loaded
+        await getAvailableDates()
       }
     } catch (error) {
       console.error('Error fetching scheduled content:', error)
@@ -248,6 +256,9 @@ const ContentDashboard = () => {
             console.debug('Image loading failed for content:', content.id)
           }
         }
+        
+        // Refresh available dates after fetching date content
+        await getAvailableDates()
       } else {
         setDateContent([])
       }
@@ -261,26 +272,52 @@ const ContentDashboard = () => {
   const getAvailableDates = async () => {
     try {
       const result = await contentAPI.getAllContent(1000, 0) // Get more content to find all dates
+      console.log('getAvailableDates - Fetched content:', result.data?.length, 'items')
+      
+      const allDates = new Set()
+      
       if (result.data) {
         // Extract unique dates from content
-        const dates = [...new Set(result.data.map(content => {
+        result.data.forEach(content => {
           const scheduledDate = content.scheduled_at || content.scheduled_date
           if (scheduledDate) {
             if (scheduledDate.includes('T')) {
-              return new Date(scheduledDate).toISOString().split('T')[0]
+              allDates.add(new Date(scheduledDate).toISOString().split('T')[0])
+            } else {
+              allDates.add(scheduledDate)
             }
-            return scheduledDate
           }
-          return null
-        }).filter(Boolean))].sort()
-        
-        setAvailableDates(dates)
-        console.log('Available dates with content:', dates)
-        
-        // Find current date index
-        const currentIndex = dates.indexOf(selectedDate)
-        setCurrentDateIndex(currentIndex >= 0 ? currentIndex : 0)
+          
+          // Also check created_at for content that might not have scheduled dates
+          if (content.created_at) {
+            allDates.add(new Date(content.created_at).toISOString().split('T')[0])
+          }
+        })
       }
+      
+      // Also include today's date if there's scheduled content for today
+      const today = new Date().toISOString().split('T')[0]
+      if (scheduledContent.length > 0) {
+        allDates.add(today)
+      }
+      
+      // Also include today's date if there's any content for today (from dateContent)
+      if (dateContent.length > 0) {
+        allDates.add(today)
+      }
+      
+      // Convert to sorted array
+      const dates = Array.from(allDates).sort()
+      
+      setAvailableDates(dates)
+      console.log('Available dates with content:', dates)
+      console.log('Scheduled content length:', scheduledContent.length)
+      console.log('Date content length:', dateContent.length)
+      console.log('Total unique dates found:', dates.length)
+      
+      // Find current date index
+      const currentIndex = dates.indexOf(selectedDate)
+      setCurrentDateIndex(currentIndex >= 0 ? currentIndex : 0)
     } catch (error) {
       console.error('Error fetching available dates:', error)
     }
@@ -474,6 +511,18 @@ const ContentDashboard = () => {
     : selectedDate === todayStr 
     ? (dateContent.length > 0 ? dateContent : scheduledContent)
     : dateContent
+
+  // Debug logging for content display
+  console.log('Content Dashboard Debug:', {
+    selectedDate,
+    todayStr,
+    isToday: selectedDate === todayStr,
+    dateContentLength: dateContent.length,
+    scheduledContentLength: scheduledContent.length,
+    contentToDisplayLength: contentToDisplay.length,
+    generating,
+    fetchingFreshData
+  })
   
   // Images are now loaded immediately when content is fetched, so this useEffect is no longer needed
   
@@ -486,24 +535,60 @@ const ContentDashboard = () => {
     // Normalize platform name to lowercase for consistent matching
     const normalizedPlatform = platform?.toLowerCase()?.trim()
     
-    // Debug log to see what platform values we're getting
-    console.log('Platform icon requested for:', platform, 'normalized to:', normalizedPlatform)
-    
     const icons = {
-      facebook: <Facebook className="w-5 h-5" />,
-      instagram: <Instagram className="w-5 h-5" />,
-      linkedin: <Linkedin className="w-5 h-5" />,
-      twitter: <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4LjI0NDcgMTkuMzU0OUgxNi4zMTU5TDEyLjQzNzcgMTQuOTQ0M0w4LjU1OTU0IDE5LjM1NDlINi42MzA3M0wxMS4xNjQxIDE0LjI0MDFMNi42MzA3MyA5LjEyNTUzSDguNTU5NTRMMTIuNDM3NyAxMy41MzU5TDE2LjMxNTkgOS4xMjU1M0gxOC4yNDQ3TDEzLjcxMTMgMTQuMjQwMUwxOC4yNDQ3IDE5LjM1NDlaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K" className="w-5 h-5" />,
-      'twitter/x': <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4LjI0NDcgMTkuMzU0OUgxNi4zMTU5TDEyLjQzNzcgMTQuOTQ0M0w4LjU1OTU0IDE5LjM1NDlINi42MzA3M0wxMS4xNjQxIDE0LjI0MDFMNi42MzA3MyA5LjEyNTUzSDguNTU5NTRMMTIuNDM3NyAxMy41MzU5TDE2LjMxNTkgOS4xMjU1M0gxOC4yNDQ3TDEzLjcxMTMgMTQuMjQwMUwxOC4yNDQ3IDE5LjM1NDlaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K" className="w-5 h-5" />,
-      'x': <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4LjI0NDcgMTkuMzU0OUgxNi4zMTU5TDEyLjQzNzcgMTQuOTQ0M0w4LjU1OTU0IDE5LjM1NDlINi42MzA3M0wxMS4xNjQxIDE0LjI0MDFMNi42MzA3MyA5LjEyNTUzSDguNTU5NTRMMTIuNDM3NyAxMy41MzU5TDE2LjMxNTkgOS4xMjU1M0gxOC4yNDQ3TDEzLjcxMTMgMTQuMjQwMUwxOC4yNDQ3IDE5LjM1NDlaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K" className="w-5 h-5" />,
-      tiktok: <div className="w-5 h-5 bg-black rounded text-white flex items-center justify-center text-xs font-bold">TT</div>,
-      youtube: <Youtube className="w-5 h-5" />,
-      unknown: <div className="w-5 h-5 bg-gray-500 rounded text-white flex items-center justify-center text-xs">?</div>
+      facebook: Facebook,
+      instagram: Instagram,
+      linkedin: Linkedin,
+      twitter: X,
+      'twitter/x': X,
+      'x': X,
+      tiktok: 'custom', // Special case for TikTok
+      youtube: Youtube,
+      'google-business': Building2,
+      'google-my-business': Building2,
+      'google business profile': Building2,
+      'google business': Building2,
+      unknown: 'custom' // Special case for unknown
     }
     
-    const icon = icons[normalizedPlatform]
-    if (icon) {
-      return icon
+    // Debug log to see what platform values we're getting
+    console.log('Platform icon requested for:', platform, 'normalized to:', normalizedPlatform)
+    console.log('Available icon keys:', Object.keys(icons))
+    
+    let Icon = icons[normalizedPlatform]
+    console.log('Icon found for', normalizedPlatform, ':', Icon)
+    
+    // Try alternative variations for Twitter/X
+    if (!Icon && (normalizedPlatform.includes('twitter') || normalizedPlatform.includes('x'))) {
+      console.log('Trying alternative Twitter/X variations...')
+      if (normalizedPlatform.includes('twitter')) {
+        Icon = icons['twitter'] || icons['twitter/x'] || icons['x']
+      } else if (normalizedPlatform.includes('x')) {
+        Icon = icons['x'] || icons['twitter'] || icons['twitter/x']
+      }
+      console.log('Alternative icon found:', Icon)
+    }
+    
+    // Try alternative variations for Google Business
+    if (!Icon && (normalizedPlatform.includes('google') && normalizedPlatform.includes('business'))) {
+      console.log('Trying alternative Google Business variations...')
+      Icon = icons['google business profile'] || icons['google business'] || icons['google-business'] || icons['google-my-business']
+      console.log('Alternative Google Business icon found:', Icon)
+    }
+    
+    if (Icon) {
+      // Handle custom cases
+      if (Icon === 'custom') {
+        if (normalizedPlatform === 'tiktok') {
+          return <div className="w-5 h-5 bg-black rounded text-white flex items-center justify-center text-xs font-bold">TT</div>
+        }
+        if (normalizedPlatform === 'unknown') {
+          return <div className="w-5 h-5 bg-gray-500 rounded text-white flex items-center justify-center text-xs">?</div>
+        }
+      }
+      // Handle Lucide React components
+      console.log('Rendering Lucide icon:', Icon, 'for platform:', normalizedPlatform)
+      return <Icon className="w-5 h-5" />
     }
     
     // Fallback with debug info
@@ -583,10 +668,46 @@ const ContentDashboard = () => {
         iconBg: 'bg-red-600',
         text: 'text-red-800',
         accent: 'bg-red-200'
+      },
+      'google business profile': {
+        bg: 'bg-white/50',
+        border: 'border-green-300',
+        iconBg: 'bg-green-600',
+        text: 'text-green-800',
+        accent: 'bg-green-200'
+      },
+      'google business': {
+        bg: 'bg-white/50',
+        border: 'border-green-300',
+        iconBg: 'bg-green-600',
+        text: 'text-green-800',
+        accent: 'bg-green-200'
+      },
+      'google-business': {
+        bg: 'bg-white/50',
+        border: 'border-green-300',
+        iconBg: 'bg-green-600',
+        text: 'text-green-800',
+        accent: 'bg-green-200'
+      },
+      'google-my-business': {
+        bg: 'bg-white/50',
+        border: 'border-green-300',
+        iconBg: 'bg-green-600',
+        text: 'text-green-800',
+        accent: 'bg-green-200'
       }
     }
     
-    const theme = themes[normalizedPlatform]
+    let theme = themes[normalizedPlatform]
+    
+    // Try alternative variations for Google Business
+    if (!theme && (normalizedPlatform.includes('google') && normalizedPlatform.includes('business'))) {
+      console.log('Trying alternative Google Business theme variations...')
+      theme = themes['google business profile'] || themes['google business'] || themes['google-business'] || themes['google-my-business']
+      console.log('Alternative Google Business theme found:', theme)
+    }
+    
     if (theme) {
       return theme
     }
@@ -1414,8 +1535,8 @@ const ContentDashboard = () => {
       // Check if URL already has query parameters
       const separator = imageUrl.includes('?') ? '&' : '?'
       // Add resize transformation to create a smaller, faster-loading thumbnail
-      // Using 50x50 with 60% quality for maximum speed
-      return `${imageUrl}${separator}width=50&height=50&resize=cover&quality=60&format=webp`
+      // Using 40x40 with 50% quality for maximum speed
+      return `${imageUrl}${separator}width=40&height=40&resize=cover&quality=50&format=webp`
     }
     
     // For non-generated folder URLs, return null to trigger image generation
@@ -1432,8 +1553,8 @@ const ContentDashboard = () => {
         imageUrl.includes('supabase.co/storage/v1/object/public/user-uploads/')) {
       // Check if URL already has query parameters
       const separator = imageUrl.includes('?') ? '&' : '?'
-      // Using 30x30 with 40% quality for ultra fast loading in collapsed cards
-      return `${imageUrl}${separator}width=30&height=30&resize=cover&quality=40&format=webp`
+      // Using 24x24 with 30% quality for ultra fast loading in collapsed cards
+      return `${imageUrl}${separator}width=24&height=24&resize=cover&quality=30&format=webp`
     }
     
     // For non-generated folder URLs, return null to trigger image generation
@@ -1450,8 +1571,26 @@ const ContentDashboard = () => {
         imageUrl.includes('supabase.co/storage/v1/object/public/user-uploads/')) {
       // Check if URL already has query parameters
       const separator = imageUrl.includes('?') ? '&' : '?'
-      // Using 200x200 with 70% quality for good balance of size and quality
-      return `${imageUrl}${separator}width=200&height=200&resize=cover&quality=70&format=webp`
+      // Using 150x150 with 60% quality for good balance of size and quality
+      return `${imageUrl}${separator}width=150&height=150&resize=cover&quality=60&format=webp`
+    }
+    
+    // For non-generated folder URLs, return null to trigger image generation
+    return null
+  }
+
+  // Get ultra small thumbnail for very fast loading (e.g., in lists)
+  const getUltraSmallThumbnailUrl = (imageUrl) => {
+    if (!imageUrl) return null
+    
+    // If it's a Supabase storage URL from the generated or user-uploads folder, add resize transformation for ultra small thumbnail
+    if (imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/generated/') || 
+        imageUrl.includes('supabase.co/storage/v1/object/public/ai-generated-images/user-uploads/') ||
+        imageUrl.includes('supabase.co/storage/v1/object/public/user-uploads/')) {
+      // Check if URL already has query parameters
+      const separator = imageUrl.includes('?') ? '&' : '?'
+      // Using 16x16 with 20% quality for ultra fast loading
+      return `${imageUrl}${separator}width=16&height=16&resize=cover&quality=20&format=webp`
     }
     
     // For non-generated folder URLs, return null to trigger image generation
@@ -1731,28 +1870,59 @@ const ContentDashboard = () => {
                     : "This date has no content. Use the navigation arrows to find dates with content."
                   }
                 </p>
-                <button
-                  onClick={handleGenerateContent}
-                  disabled={generating || fetchingFreshData}
-                  className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2 mx-auto"
-                >
-                  {generating ? (
-                    <>
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                      <span>Generating Content...</span>
-                    </>
-                  ) : fetchingFreshData ? (
-                    <>
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                      <span>Loading Content...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-5 h-5" />
-                      <span>Generate Content</span>
-                    </>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <button
+                    onClick={handleGenerateContent}
+                    disabled={generating || fetchingFreshData}
+                    className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                  >
+                    {generating ? (
+                      <>
+                        <RefreshCw className="w-5 h-5 animate-spin" />
+                        <span>Generating Content...</span>
+                      </>
+                    ) : fetchingFreshData ? (
+                      <>
+                        <RefreshCw className="w-5 h-5 animate-spin" />
+                        <span>Loading Content...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-5 h-5" />
+                        <span>Generate Content</span>
+                      </>
+                    )}
+                  </button>
+                  
+                  {selectedDate === new Date().toISOString().split('T')[0] && (
+                    <button
+                      onClick={async () => {
+                        console.log('Refreshing today\'s content...')
+                        await fetchContentByDate(selectedDate)
+                        await fetchData(true) // Force refresh scheduled content too
+                        await getAvailableDates() // Refresh available dates
+                      }}
+                      disabled={generating || fetchingFreshData}
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                    >
+                      <RefreshCw className="w-5 h-5" />
+                      <span>Refresh Today's Content</span>
+                    </button>
                   )}
-                </button>
+                  
+                  <button
+                    onClick={async () => {
+                      console.log('Manually refreshing available dates...')
+                      await getAvailableDates()
+                      console.log('Available dates refreshed:', availableDates)
+                    }}
+                    disabled={generating || fetchingFreshData}
+                    className="bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 rounded-lg hover:from-green-600 hover:to-green-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2 text-sm"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Refresh Dates</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="relative">
@@ -1836,7 +2006,7 @@ const ContentDashboard = () => {
                                 </video>
                               ) : (
                               <img 
-                                src={getMediumThumbnailUrl(generatedImages[content.id].image_url)} 
+                                src={getSmallThumbnailUrl(generatedImages[content.id].image_url)} 
                                 alt="Generated content thumbnail" 
                                 className="w-full h-48 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                                 loading="lazy"
@@ -1975,7 +2145,7 @@ const ContentDashboard = () => {
                                   </div>
                                 )}
                               {(() => {
-                                    const thumbnailUrl = getSmallThumbnailUrl(generatedImages[content.id].image_url)
+                                    const thumbnailUrl = getUltraSmallThumbnailUrl(generatedImages[content.id].image_url)
                                 console.log('🖼️ Content card image check:', {
                                   contentId: content.id,
                                   hasImage: !!generatedImages[content.id].image_url,
@@ -2506,7 +2676,7 @@ const ContentDashboard = () => {
                             </video>
                           ) : (
                           <img 
-                            src={getMediumThumbnailUrl(generatedImages[editForm.id].image_url)} 
+                            src={getSmallThumbnailUrl(generatedImages[editForm.id].image_url)} 
                               alt="Current content media" 
                             className="w-full h-32 object-cover rounded-lg"
                             loading="lazy"
@@ -2843,6 +3013,15 @@ const ContentDashboard = () => {
                   )}
                   {postNotification.platform === 'YouTube' && (
                     <Youtube className="w-8 h-8 text-white" />
+                  )}
+                  {postNotification.platform === 'Twitter' && (
+                    <X className="w-8 h-8 text-white" />
+                  )}
+                  {postNotification.platform === 'X' && (
+                    <X className="w-8 h-8 text-white" />
+                  )}
+                  {postNotification.platform === 'Google Business' && (
+                    <Building2 className="w-8 h-8 text-white" />
                   )}
                 </div>
               </div>

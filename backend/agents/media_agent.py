@@ -142,13 +142,12 @@ class MediaAgent:
             platform = post_data.get("platform", "")
             post_type = post_data.get("post_type", "text")
             
-            # Check if post already has images
+            # Check if post already has images (but allow regeneration)
             existing_images = self.supabase.table("content_images").select("*").eq("post_id", post_data["id"]).execute()
             
             if existing_images.data:
-                state["error_message"] = "Post already has generated images"
-                state["status"] = "failed"
-                return state
+                logger.info(f"Post {post_data['id']} already has {len(existing_images.data)} images, allowing regeneration")
+                # Don't fail, just log that we're regenerating
             
             # Determine if content needs an image
             needs_image = self._should_generate_image(content, platform, post_type)
@@ -215,7 +214,7 @@ class MediaAgent:
             
             Post content: {content}
             Platform: {platform}
-            Image style: {image_style}
+            Image style: {image_style.value if image_style else 'realistic'}
             Business: {business_name}
             Industry: {', '.join(user_profile.get('industry', []))}
             Brand voice: {user_profile.get('brand_voice', 'Professional')}
@@ -223,7 +222,7 @@ class MediaAgent:
             {logo_context}
             
             Generate a detailed, specific prompt that will create an engaging image for this social media post.
-            The prompt should be optimized for {image_style} style and suitable for {platform} audience.
+            The prompt should be optimized for {image_style.value if image_style else 'realistic'} style and suitable for {platform} audience.
             Include specific visual elements, composition, lighting, and mood.
             If a logo is available, ensure it's prominently and tastefully integrated into the design.
             Keep it under 500 characters for API limits.
@@ -356,12 +355,18 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 
                 # Extract the generated image from the response
                 image_data = None
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data is not None:
-                        image_data = part.inline_data.data
-                        break
+                if response.candidates and len(response.candidates) > 0:
+                    candidate = response.candidates[0]
+                    
+                    for part in candidate.content.parts:
+                        if part.inline_data is not None:
+                            image_data = part.inline_data.data
+                            break
+                else:
+                    logger.warning("No candidates in Gemini response")
                 
                 if not image_data:
+                    logger.error("No image data found in Gemini response")
                     raise Exception("No image data returned from Gemini")
                 
                 # Gemini returns image data as bytes, not base64
@@ -372,42 +377,22 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                     image_bytes = base64.b64decode(image_data)
                 
                 # Upload the image to Supabase storage
-                image_url = await self._upload_base64_image(image_bytes, state["post_id"])
-                
+                storage_url = await self._upload_base64_image(image_bytes, state["post_id"])
                 
             except Exception as api_error:
                 logger.error(f"Error generating image with Gemini: {str(api_error)}")
-                # Fallback to placeholder if Gemini fails
-                logger.warning("Falling back to placeholder image")
-                import urllib.parse
-                safe_prompt = urllib.parse.quote(image_prompt[:50].replace('\n', ' ').replace('\r', ''))
-                size_str = image_size.value if hasattr(image_size, 'value') else str(image_size) if image_size else '1024x1024'
-                image_url = f"https://picsum.photos/{size_str}?random=1&text={safe_prompt}"
-                logger.warning(f"Using fallback placeholder: {image_url}")
+                # Fallback to generating a simple placeholder image
+                logger.warning("Falling back to generated placeholder image")
+                storage_url = await self._generate_fallback_image(image_prompt, image_size, state["post_id"])
             
             end_time = datetime.now()
             generation_time = int((end_time - start_time).total_seconds())
             
-            if not image_url:
+            if not storage_url:
                 raise Exception("No image URL generated")
             
             # Calculate cost (approximate)
             cost = self._calculate_generation_cost(image_size, "standard")
-            
-            # Handle image upload to Supabase storage
-            
-            try:
-                if image_url.startswith('data:image/'):
-                    # Handle base64 data URL from Gemini
-                    storage_url = await self._upload_base64_image(image_url, state["post_id"])
-                else:
-                    # Handle regular URL (placeholder)
-                    storage_url = await self._download_and_upload_image(image_url, state["post_id"])
-            except Exception as upload_error:
-                logger.error(f"Failed to upload image to storage: {str(upload_error)}")
-                # Fallback to using the original URL if upload fails
-                storage_url = image_url
-                logger.info(f"Using original URL as fallback: {storage_url}")
             
             state["generated_image_url"] = storage_url
             state["generation_cost"] = cost
@@ -489,6 +474,10 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
         if post_type in ["image", "carousel"]:
             return True
         
+        # Always generate for Instagram (visual platform)
+        if platform.lower() == "instagram":
+            return True
+        
         # Check content length and keywords
         content_lower = content.lower()
         
@@ -496,20 +485,24 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
         image_keywords = [
             "photo", "picture", "image", "visual", "see", "look", "show",
             "behind the scenes", "process", "step by step", "tutorial",
-            "infographic", "chart", "graph", "diagram", "illustration"
+            "infographic", "chart", "graph", "diagram", "illustration",
+            "new", "announcement", "launch", "product", "service", "event"
         ]
         
         has_image_keywords = any(keyword in content_lower for keyword in image_keywords)
         
-        # Platform-specific rules
-        if platform == "instagram" and len(content) > 100:
+        # Platform-specific rules (more permissive)
+        if platform.lower() == "facebook" and (has_image_keywords or len(content) > 50):
             return True
-        elif platform == "facebook" and has_image_keywords:
+        elif platform.lower() == "linkedin" and (has_image_keywords or len(content) > 100):
             return True
-        elif platform == "linkedin" and "infographic" in content_lower:
+        elif platform.lower() == "twitter" and (has_image_keywords or len(content) > 50):
+            return True
+        elif platform.lower() == "youtube" and has_image_keywords:
             return True
         
-        return False
+        # Default: generate image for content longer than 30 characters
+        return len(content) > 30
     
     def _get_user_image_preferences(self, user_id: str) -> Dict[str, Any]:
         """Get user's image preferences"""
@@ -666,14 +659,11 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             file_path = f"generated/{filename}"
             
             # Upload to Supabase storage
-            logger.info(f"Uploading to storage: {file_path}")
             storage_response = self.supabase.storage.from_("ai-generated-images").upload(
                 file_path,
                 image_data,
                 file_options={"content-type": f"image/{file_extension}"}
             )
-            
-            logger.info(f"Storage response: {storage_response}")
             
             # Check if upload was successful (UploadResponse object doesn't have .get() method)
             if hasattr(storage_response, 'error') and storage_response.error:
@@ -681,9 +671,6 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             
             # Get public URL
             public_url = self.supabase.storage.from_("ai-generated-images").get_public_url(file_path)
-            logger.info(f"Generated public URL: {public_url}")
-            
-            logger.info(f"Successfully uploaded image to storage: {public_url}")
             return public_url
             
         except Exception as e:
@@ -691,6 +678,89 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             # Fallback to original URL if storage upload fails
             logger.warning(f"Falling back to original URL: {image_url}")
             return image_url
+
+    async def _generate_fallback_image(self, prompt: str, image_size: ImageSize, post_id: str) -> str:
+        """Generate a simple fallback image when Gemini fails"""
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+            import textwrap
+            
+            # Parse image size
+            if hasattr(image_size, 'value'):
+                size_str = image_size.value
+            else:
+                size_str = str(image_size) if image_size else '1024x1024'
+            
+            width, height = map(int, size_str.split('x'))
+            
+            # Create a simple image with gradient background
+            image = Image.new('RGB', (width, height), color='#f0f0f0')
+            draw = ImageDraw.Draw(image)
+            
+            # Add gradient background
+            for y in range(height):
+                color_value = int(240 - (y / height) * 40)  # Gradient from light to slightly darker
+                draw.line([(0, y), (width, y)], fill=(color_value, color_value, color_value))
+            
+            # Add text content
+            try:
+                # Try to use a default font
+                font_size = min(width, height) // 20
+                font = ImageFont.load_default()
+            except:
+                font = None
+            
+            # Prepare text
+            text_lines = textwrap.wrap(prompt[:100], width=30)  # Limit text length
+            if not text_lines:
+                text_lines = ["Generated Content"]
+            
+            # Calculate text position
+            text_height = len(text_lines) * (font_size + 10) if font else len(text_lines) * 20
+            start_y = (height - text_height) // 2
+            
+            # Draw text
+            for i, line in enumerate(text_lines):
+                text_width = draw.textlength(line, font=font) if font else len(line) * 6
+                x = (width - text_width) // 2
+                y = start_y + i * (font_size + 10 if font else 20)
+                
+                # Add text shadow
+                draw.text((x+2, y+2), line, fill='#666666', font=font)
+                # Add main text
+                draw.text((x, y), line, fill='#333333', font=font)
+            
+            # Add a simple border
+            draw.rectangle([0, 0, width-1, height-1], outline='#cccccc', width=2)
+            
+            # Convert to bytes
+            img_buffer = io.BytesIO()
+            image.save(img_buffer, format='PNG')
+            img_buffer.seek(0)
+            image_bytes = img_buffer.getvalue()
+            
+            # Upload to Supabase storage
+            filename = f"{post_id}_fallback_{uuid.uuid4().hex[:8]}.png"
+            file_path = f"generated/{filename}"
+            
+            storage_response = self.supabase.storage.from_("ai-generated-images").upload(
+                file_path,
+                image_bytes,
+                file_options={"content-type": "image/png"}
+            )
+            
+            if hasattr(storage_response, 'error') and storage_response.error:
+                raise Exception(f"Failed to upload fallback image: {storage_response.error}")
+            
+            # Get public URL
+            public_url = self.supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+            
+            return public_url
+            
+        except Exception as e:
+            logger.error(f"Error generating fallback image: {str(e)}")
+            # Ultimate fallback - return a simple data URL
+            return "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAyNCIgaGVpZ2h0PSIxMDI0IiB2aWV3Qm94PSIwIDAgMTAyNCAxMDI0IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiIGZpbGw9IiNmMGYwZjAiLz48dGV4dCB4PSI1MTIiIHk9IjUxMiIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjQ4IiBmaWxsPSIjMzMzMzMzIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+SW1hZ2UgUGxhY2Vob2xkZXI8L3RleHQ+PC9zdmc+"
     
     async def generate_media_for_post(self, post_id: str, user_id: str = None) -> Dict[str, Any]:
         """Main entry point for generating media for a post"""

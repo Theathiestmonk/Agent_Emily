@@ -507,8 +507,6 @@ class ContentCreationAgent:
                     continue
             
             state.platform_content = content_posts
-            logger.info(f"Generated {len(content_posts)} posts for {platform}")
-            logger.info(f"Platform content stored in state: {len(state.platform_content)} posts")
             
         except Exception as e:
             logger.error(f"Error generating platform content: {e}")
@@ -603,7 +601,6 @@ class ContentCreationAgent:
             
             # Parse JSON response
             raw_response = response.choices[0].message.content.strip()
-            logger.info(f"Raw AI response: {raw_response}")
             
             # Try to extract JSON from markdown code blocks
             if "```json" in raw_response:
@@ -611,13 +608,11 @@ class ContentCreationAgent:
                 json_end = raw_response.find("```", json_start)
                 if json_end != -1:
                     raw_response = raw_response[json_start:json_end].strip()
-                    logger.info(f"Extracted JSON from markdown: {raw_response}")
             elif "```" in raw_response:
                 json_start = raw_response.find("```") + 3
                 json_end = raw_response.find("```", json_start)
                 if json_end != -1:
                     raw_response = raw_response[json_start:json_end].strip()
-                    logger.info(f"Extracted JSON from code block: {raw_response}")
             
             # Try to find JSON object in the response
             if raw_response.startswith('{') and raw_response.endswith('}'):
@@ -628,16 +623,13 @@ class ContentCreationAgent:
                 end_idx = raw_response.rfind('}')
                 if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
                     json_text = raw_response[start_idx:end_idx + 1]
-                    logger.info(f"Extracted JSON from text: {json_text}")
                 else:
                     json_text = raw_response
             
             try:
                 content_data = json.loads(json_text)
-                logger.info(f"Successfully parsed JSON response: {content_data}")
             except json.JSONDecodeError as e:
                 logger.warning(f"JSON parsing failed: {e}")
-                logger.warning(f"Attempted to parse: {json_text}")
                 # Fallback if JSON parsing fails
                 content_data = {
                     "content": raw_response,
@@ -705,9 +697,7 @@ class ContentCreationAgent:
                     logger.warning(f"Too many hashtags for {platform}: {len(post.hashtags)}")
                     break
             
-            if is_valid:
-                logger.info(f"Content validation passed for {platform}")
-            else:
+            if not is_valid:
                 logger.warning(f"Content validation failed for {platform}")
                 
         except Exception as e:
@@ -728,17 +718,10 @@ class ContentCreationAgent:
             min_required = max(1, expected_posts // 2)
             
             if actual_posts >= min_required:
-                if actual_posts == expected_posts:
-                    logger.info(f"Perfect! Generated {actual_posts} posts as expected for {posting_frequency} frequency")
-                else:
-                    logger.info(f"Good! Generated {actual_posts} posts (expected {expected_posts}) for {posting_frequency} frequency")
-                logger.info(f"Content validation: VALID - proceeding to store content")
                 return "valid"
             else:
                 logger.warning(f"Too few posts: got {actual_posts}, need at least {min_required} for {posting_frequency} frequency")
-                logger.info(f"Content validation: INVALID - proceeding to retry logic")
                 return "invalid"
-        logger.info(f"Content validation: INVALID - no content generated")
         return "invalid"
     
     async def should_retry_platform(self, state: ContentState) -> ContentState:
@@ -755,7 +738,6 @@ class ContentCreationAgent:
         """Refine content for the current platform"""
         try:
             state.current_platform_retries += 1
-            logger.info(f"Refining content for {state.current_platform} (attempt {state.current_platform_retries})")
             
             # Re-generate content with more specific instructions
             platform = state.current_platform
@@ -793,7 +775,6 @@ class ContentCreationAgent:
                 content_posts.append(post)
             
             state.platform_content = content_posts
-            logger.info(f"Refined content for {platform}")
             
         except Exception as e:
             logger.error(f"Error refining content: {e}")
@@ -806,9 +787,6 @@ class ContentCreationAgent:
         try:
             platform = state.current_platform
             campaign_id = state.campaign.id
-            
-            logger.info(f"STORE: Storing content for {platform}")
-            logger.info(f"STORE: Number of posts to store: {len(state.platform_content)}")
             
             # Store each post
             for post in state.platform_content:
@@ -826,8 +804,6 @@ class ContentCreationAgent:
                     "metadata": post.metadata
                 }
                 
-                logger.info(f"STORE: Post data for {post.platform}: {post_data}")
-                
                 # Insert post
                 post_response = self.supabase.table("content_posts").insert(post_data).execute()
                 
@@ -844,8 +820,6 @@ class ContentCreationAgent:
             state.all_content.extend(state.platform_content)
             state.completed_platforms.append(platform)
             
-            logger.info(f"Stored {len(state.platform_content)} posts for {platform}")
-            
         except Exception as e:
             logger.error(f"Error storing platform content: {e}")
             state.error_message = f"Failed to store content for {state.current_platform}: {str(e)}"
@@ -857,7 +831,6 @@ class ContentCreationAgent:
         # Add current platform to completed list
         if state.current_platform:
             state.completed_platforms.append(state.current_platform)
-            logger.info(f"Completed platform: {state.current_platform}")
         
         # Move to next platform
         state.current_platform_index += 1
@@ -896,8 +869,6 @@ class ContentCreationAgent:
                     "status": "completed"
                 }).eq("id", state.campaign.id).execute()
             
-            logger.info("Generated weekly summary")
-            
         except Exception as e:
             logger.error(f"Error generating summary: {e}")
             state.error_message = f"Failed to generate summary: {str(e)}"
@@ -909,8 +880,7 @@ class ContentCreationAgent:
         try:
             # Here you would integrate with your notification system
             # For now, just log the completion
-            logger.info(f"Content generation completed for user: {state.user_profile['user_id']}")
-            logger.info(f"Summary: {state.weekly_summary}")
+            pass
             
         except Exception as e:
             logger.error(f"Error sending notification: {e}")
@@ -982,8 +952,6 @@ class ContentCreationAgent:
         
         # Normalize posting frequency for comparison
         freq = posting_frequency.lower().strip() if posting_frequency else "daily"
-        
-        logger.info(f"Calculating posting schedule for frequency: '{posting_frequency}' (normalized: '{freq}')")
         
         if freq == "daily":
             # Generate 30 posts for the month (daily)
@@ -1067,7 +1035,6 @@ class ContentCreationAgent:
                     "day_of_month": post_date.day
                 })
         
-        logger.info(f"Generated {len(schedule)} posts for frequency '{posting_frequency}'")
         return schedule
     
     def get_day_name(self, day_of_week: int) -> str:
@@ -1098,8 +1065,6 @@ class ContentCreationAgent:
     async def run_weekly_generation(self, user_id: str) -> Dict[str, Any]:
         """Run weekly content generation for a user"""
         try:
-            logger.info(f"Starting weekly generation for user: {user_id}")
-            
             # Initialize state
             state = ContentState(
                 user_profile={"user_id": user_id},
@@ -1109,12 +1074,8 @@ class ContentCreationAgent:
                 failed_platforms=[]
             )
             
-            logger.info(f"Initialized state: {state}")
-            
             # Run the graph with increased recursion limit
-            logger.info("Running LangGraph...")
             result = await self.graph.ainvoke(state, config={"recursion_limit": 100})
-            logger.info(f"Graph result: {result}")
             
             return {
                 "success": result.get("success", True),
