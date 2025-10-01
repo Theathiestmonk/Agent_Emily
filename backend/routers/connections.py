@@ -1079,19 +1079,19 @@ async def handle_oauth_callback(
                 function closeWindow() {{
                     if (window.opener) {{
                         window.opener.postMessage({{
-                            type: 'OAUTH_SUCCESS',
+                        type: 'OAUTH_SUCCESS',
+                        platform: '{platform}',
+                        connection: {{
+                            id: '{connection_id}',
                             platform: '{platform}',
-                            connection: {{
-                                id: '{connection_id}',
-                                platform: '{platform}',
-                                page_name: '{account_info.get('page_name', '')}',
-                                follower_count: {account_info.get('follower_count', 0)},
-                                connection_status: 'active'
-                            }}
-                        }}, '*');
-                        window.close();
-                    }} else {{
-                        window.location.href = '{frontend_url}';
+                            page_name: '{account_info.get('page_name', '')}',
+                            follower_count: {account_info.get('follower_count', 0)},
+                            connection_status: 'active'
+                        }}
+                    }}, '*');
+                    window.close();
+                }} else {{
+                    window.location.href = '{frontend_url}';
                     }}
                 }}
 

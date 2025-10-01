@@ -678,7 +678,7 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             # Fallback to original URL if storage upload fails
             logger.warning(f"Falling back to original URL: {image_url}")
             return image_url
-
+    
     async def _generate_fallback_image(self, prompt: str, image_size: ImageSize, post_id: str) -> str:
         """Generate a simple fallback image when Gemini fails"""
         try:

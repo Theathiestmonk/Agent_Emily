@@ -125,61 +125,94 @@ class ImageEditorService:
             }
     
     async def save_edited_image(self, user_id: str, original_image_url: str, edited_image_url: str) -> Dict[str, Any]:
-        """Save edited image by replacing the original in storage and updating database"""
+        """Save edited image by completely replacing the original in storage and updating all references"""
         try:
             
             # 1. Download the edited image
             edited_image_data = await self._download_image(edited_image_url)
             
-            # 2. Extract the original path from the URL
-            # URL format: https://yibrsxythicjzshqhqxf.supabase.co/storage/v1/object/public/ai-generated-images/generated/filename.png
-            # From the image, we can see the structure is: ai-generated-images/generated/filename.png
+            # 2. Extract the original path and bucket from the URL
+            # URL format: https://yibrsxythicjzshqhqxf.supabase.co/storage/v1/object/public/BUCKET_NAME/path/filename.png
             full_path = original_image_url.split('/storage/v1/object/public/')[-1].split('?')[0]
-            # The path should be: generated/filename.png (without the bucket name)
-            original_path = full_path.replace('ai-generated-images/', '')
             
-            # 3. Delete the original image first to avoid duplicate error
+            # Determine bucket and path
+            if 'ai-generated-images/' in full_path:
+                bucket_name = 'ai-generated-images'
+                original_path = full_path.replace('ai-generated-images/', '')
+            elif 'user-uploads/' in full_path:
+                bucket_name = 'user-uploads'
+                original_path = full_path.replace('user-uploads/', '')
+            else:
+                # Fallback to ai-generated-images for backward compatibility
+                bucket_name = 'ai-generated-images'
+                original_path = full_path
+            
+            logger.info(f"Original image URL: {original_image_url}")
+            logger.info(f"Detected bucket: {bucket_name}")
+            logger.info(f"Extracted original path: {original_path}")
+            logger.info(f"Edited image URL: {edited_image_url}")
+            
+            # 3. Find the content post that uses this image
+            content_images_result = self.supabase.table('content_images').select('post_id, image_url').eq('image_url', original_image_url).execute()
+            
+            if not content_images_result.data:
+                raise Exception("No content post found with this image")
+            
+            post_id = content_images_result.data[0]['post_id']
+            
+            # 4. Delete the original image from storage
             try:
-                delete_result = self.supabase.storage.from_('ai-generated-images').remove([original_path])
+                delete_result = self.supabase.storage.from_(bucket_name).remove([original_path])
+                logger.info(f"Deleted original image from {bucket_name}: {original_path}")
+                logger.info(f"Delete result: {delete_result}")
             except Exception as e:
                 logger.warning(f"Could not delete original image (may not exist): {e}")
             
-            # 4. Upload the edited image to replace the original (same path)
-            upload_result = self.supabase.storage.from_('ai-generated-images').upload(
+            # 5. Upload the edited image to replace the original (same path and bucket)
+            logger.info(f"Uploading edited image to {bucket_name} at path: {original_path}")
+            upload_result = self.supabase.storage.from_(bucket_name).upload(
                 original_path,  # Use the same path as the original
                 edited_image_data,
                 file_options={"content-type": "image/jpeg"}
             )
             
+            logger.info(f"Upload result: {upload_result}")
+            
             if hasattr(upload_result, 'error') and upload_result.error:
                 raise Exception(f"Failed to upload edited image: {upload_result.error}")
             
+            logger.info(f"Successfully uploaded edited image to: {original_path}")
             
-            # 5. Delete the temporary edited image from the edited/ folder
+            # 6. Delete the temporary edited image from the edited/ folder (always in ai-generated-images bucket)
             try:
                 edited_path = edited_image_url.split('/storage/v1/object/public/')[-1].split('?')[0]
                 edited_storage_path = edited_path.replace('ai-generated-images/', '')
+                logger.info(f"Temporary edited image path: {edited_storage_path}")
                 delete_edited_result = self.supabase.storage.from_('ai-generated-images').remove([edited_storage_path])
+                logger.info(f"Deleted temporary edited image from ai-generated-images: {edited_storage_path}")
+                logger.info(f"Delete edited result: {delete_edited_result}")
             except Exception as e:
                 logger.error(f"Failed to delete temporary edited image: {e}")
                 # Don't fail the entire operation if delete fails, just log it
             
-            # 6. Update the content_images table - the original URL now points to the edited image
-            result = self.supabase.table('content_images').update({
+            # 7. Update the content_images table with the new image URL (same URL, new content)
+            content_images_update = self.supabase.table('content_images').update({
                 'image_url': original_image_url  # Same URL, but now contains the edited image
-            }).eq('image_url', original_image_url).execute()
+            }).eq('post_id', post_id).execute()
             
-            if result.data:
-                return {
-                    "success": True,
-                    "message": "Image saved successfully! The original image has been replaced with your edited version."
-                }
-            else:
-                logger.warning("No image records found to update for original URL")
-                return {
-                    "success": False,
-                    "error": "No image record found to update"
-                }
+            if not content_images_update.data:
+                logger.warning("No content_images records found to update")
+            
+            # 8. The content_posts table doesn't need to be updated since the image URL stays the same
+            # The image content is replaced in storage, but the URL remains unchanged
+            
+            return {
+                "success": True,
+                "message": f"Image saved successfully! The original image in {bucket_name} has been completely replaced with your edited version.",
+                "post_id": post_id,
+                "image_url": original_image_url,  # Same URL, new content
+                "bucket_used": bucket_name
+            }
                 
         except Exception as e:
             logger.error(f"Error saving image: {e}")

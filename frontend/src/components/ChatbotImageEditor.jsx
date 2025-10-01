@@ -354,10 +354,11 @@ What would you like to do next?`,
       const data = await response.json();
 
       if (data.success) {
-        addMessage('assistant', `🎉 Awesome! Your edited image has been saved and is now ready to use in your content. Great work!`);
+        addMessage('assistant', `🎉 Awesome! Your edited image has been saved and has completely replaced the original image. The same URL now shows your edited version!`);
         
         if (onImageSaved) {
-          onImageSaved(editedImageUrl);
+          // Pass the original URL since that's what now contains the edited image
+          onImageSaved(inputImageUrl);
         }
         
         setTimeout(() => {

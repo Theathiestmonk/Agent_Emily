@@ -3317,23 +3317,23 @@ const ContentDashboard = () => {
           }}
           postContent={imageEditorData.postContent}
           inputImageUrl={imageEditorData.inputImageUrl}
-          onImageSaved={(newImageUrl) => {
-            // Update the generated image URL in the state
-            if (imageEditorData.inputImageUrl) {
-              // Find the content that has this image URL and update it
-              const contentId = Object.keys(generatedImages).find(id => 
-                generatedImages[id]?.image_url === imageEditorData.inputImageUrl
-              )
-              if (contentId) {
-                setGeneratedImages(prev => ({
-                  ...prev,
-                  [contentId]: {
-                    ...prev[contentId],
-                    image_url: newImageUrl
-                  }
-                }))
-              }
+          onImageSaved={async (newImageUrl) => {
+            // The image URL stays the same, but the content is replaced
+            // We need to refresh the content data to show the updated image
+            try {
+              // Refresh the content data to get the updated image
+              await fetchData(true)
+              
+              // Also refresh the current date's content
+              await fetchContentByDate(selectedDate)
+              
+              // Show success message
+              showSuccess('Image saved successfully! The edited image has replaced the original.')
+            } catch (error) {
+              console.error('Error refreshing content after image save:', error)
+              showError('Image saved but failed to refresh content', 'Please refresh the page to see the updated image.')
             }
+            
             setShowImageEditor(false)
             setImageEditorData(null)
           }}
