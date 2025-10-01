@@ -127,6 +127,8 @@ const ContentDashboard = () => {
   const [deleteConfirm, setDeleteConfirm] = useState(null) // Content to delete confirmation
   const [deletingContent, setDeletingContent] = useState(new Set()) // Track which content is being deleted
   const [postNotification, setPostNotification] = useState(null) // Post success notification
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(null) // Track which content has status dropdown open
+  const [updatingStatus, setUpdatingStatus] = useState(new Set()) // Track which content is updating status
 
 
   useEffect(() => {
@@ -134,6 +136,20 @@ const ContentDashboard = () => {
     fetchContentByDate(selectedDate)
     getAvailableDates()
   }, [])
+
+  // Close status dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (statusDropdownOpen && !event.target.closest('.status-dropdown')) {
+        setStatusDropdownOpen(null)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [statusDropdownOpen])
 
   // Handle URL parameter changes
   useEffect(() => {
@@ -1264,6 +1280,52 @@ const ContentDashboard = () => {
     }
   }
 
+  // Handle status change
+  const handleStatusChange = async (contentId, newStatus) => {
+    try {
+      setUpdatingStatus(prev => new Set(prev).add(contentId))
+      
+      const result = await contentAPI.updateContentStatus(contentId, newStatus)
+      
+      if (result.success) {
+        // Update local content cache first
+        updateContentInCache(contentId, { status: newStatus })
+        
+        // Close the dropdown
+        setStatusDropdownOpen(null)
+        
+        // Show success message
+        showSuccess(`Status updated to ${newStatus} successfully!`)
+        
+        // Add a small delay to ensure the status update is processed
+        setTimeout(async () => {
+          // Force refresh the content data to get updated status
+          await fetchData(true)
+        }, 500)
+        
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error updating status:', error)
+      showError('Failed to update status', error.message)
+    } finally {
+      setUpdatingStatus(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(contentId)
+        return newSet
+      })
+    }
+  }
+
+  // Available status options
+  const statusOptions = [
+    { value: 'draft', label: 'Draft', color: 'bg-gray-100 text-gray-800' },
+    { value: 'scheduled', label: 'Scheduled', color: 'bg-blue-100 text-blue-800' },
+    { value: 'published', label: 'Published', color: 'bg-green-100 text-green-800' },
+    { value: 'archived', label: 'Archived', color: 'bg-yellow-100 text-yellow-800' }
+  ]
+
   const handleFileSelect = (event) => {
     const file = event.target.files[0]
     if (file) {
@@ -1960,8 +2022,44 @@ const ContentDashboard = () => {
                             <p className="text-sm text-gray-500">{content.status}</p>
                           </div>
                         </div>
-                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(content.status)}`}>
-                          {content.status}
+                        {/* Status Dropdown */}
+                        <div className="relative status-dropdown">
+                          <button
+                            onClick={() => setStatusDropdownOpen(statusDropdownOpen === content.id ? null : content.id)}
+                            disabled={updatingStatus.has(content.id)}
+                            className={`px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(content.status)} hover:opacity-80 transition-opacity disabled:opacity-50`}
+                          >
+                            <span className="capitalize">{content.status}</span>
+                            {updatingStatus.has(content.id) ? (
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3" />
+                            )}
+                          </button>
+                          
+                          {/* Dropdown Menu */}
+                          {statusDropdownOpen === content.id && (
+                            <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-xl border border-gray-200 z-50 animate-in slide-in-from-top-2 duration-200">
+                              <div className="py-1">
+                                {statusOptions.map((option) => (
+                                  <button
+                                    key={option.value}
+                                    onClick={() => handleStatusChange(content.id, option.value)}
+                                    disabled={updatingStatus.has(content.id) || content.status === option.value}
+                                    className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 transition-colors flex items-center space-x-2 ${
+                                      content.status === option.value ? 'bg-gray-100 text-gray-600' : 'text-gray-700'
+                                    } ${updatingStatus.has(content.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  >
+                                    <div className={`w-2 h-2 rounded-full ${option.color.split(' ')[0]}`}></div>
+                                    <span className="capitalize">{option.label}</span>
+                                    {updatingStatus.has(content.id) && content.status === option.value && (
+                                      <RefreshCw className="w-3 h-3 animate-spin ml-auto" />
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     
