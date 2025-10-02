@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://your-backend-url.onrender.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com';
 
 // Create axios instance with auth token
 const createApiInstance = () => {
