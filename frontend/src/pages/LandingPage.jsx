@@ -52,25 +52,25 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-8">
-              <div className="text-2xl font-bold bg-gradient-to-r from-[#9E005C] to-[#FF4D94] bg-clip-text text-transparent">
+              <div className="text-3xl font-bold bg-gradient-to-r from-[#9E005C] to-[#FF4D94] bg-clip-text text-transparent">
                 atsn ai
               </div>
               <div className="hidden md:flex items-center space-x-8">
                 <button 
                   onClick={() => scrollToSection('features')}
-                  className={`text-sm transition-colors ${activeSection === 'features' ? 'text-[#9E005C]' : 'text-[#2E2E2E]/70 hover:text-[#2E2E2E]'}`}
+                  className={`text-base transition-colors ${activeSection === 'features' ? 'text-[#9E005C]' : 'text-[#2E2E2E]/70 hover:text-[#2E2E2E]'}`}
                 >
                   Features
                 </button>
                 <button 
                   onClick={() => scrollToSection('agents')}
-                  className={`text-sm transition-colors ${activeSection === 'agents' ? 'text-[#9E005C]' : 'text-[#2E2E2E]/70 hover:text-[#2E2E2E]'}`}
+                  className={`text-base transition-colors ${activeSection === 'agents' ? 'text-[#9E005C]' : 'text-[#2E2E2E]/70 hover:text-[#2E2E2E]'}`}
                 >
                   Agents
                 </button>
                 <button 
                   onClick={() => scrollToSection('pricing')}
-                  className={`text-sm transition-colors ${activeSection === 'pricing' ? 'text-[#9E005C]' : 'text-[#2E2E2E]/70 hover:text-[#2E2E2E]'}`}
+                  className={`text-base transition-colors ${activeSection === 'pricing' ? 'text-[#9E005C]' : 'text-[#2E2E2E]/70 hover:text-[#2E2E2E]'}`}
                 >
                   Pricing
                 </button>
@@ -79,13 +79,13 @@ const LandingPage = () => {
             <div className="flex items-center space-x-4">
               <a
                 href="/login"
-                className="hidden md:block text-sm text-[#2E2E2E]/70 hover:text-[#2E2E2E] transition-colors"
+                className="hidden md:block text-base text-[#2E2E2E]/70 hover:text-[#2E2E2E] transition-colors"
               >
                 Sign In
               </a>
               <a
                 href="/signup"
-                className="bg-[#9E005C] text-white px-6 py-2 rounded-full text-sm font-medium hover:bg-[#FF4D94] transition-all duration-300 transform hover:scale-105"
+                className="bg-[#9E005C] text-white px-6 py-2 rounded-full text-base font-medium hover:bg-[#FF4D94] transition-all duration-300 transform hover:scale-105"
               >
                 Get Started
               </a>

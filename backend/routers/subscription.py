@@ -94,8 +94,8 @@ async def get_subscription_plans():
                 "price_monthly": plan["price_monthly"],
                 "price_yearly": plan["price_yearly"],
                 "features": plan["features"],
-                "monthly_price_display": f"Rs {plan['price_monthly'] / 100:.0f}",
-                "yearly_price_display": f"Rs {plan['price_yearly'] / 100:.0f}"
+                "monthly_price_display": f"Rs {plan['price_monthly']}",
+                "yearly_price_display": f"Rs {plan['price_yearly']}"
             })
         
         return JSONResponse(content={
