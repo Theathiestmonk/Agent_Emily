@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { CheckCircle, XCircle, Loader2, AlertCircle } from 'lucide-react'
 import OAuthLoadingScreen from './OAuthLoadingScreen'
 import { onboardingAPI } from '../services/onboarding'
+import { subscriptionAPI } from '../services/subscription'
 
 const TokenExchangeHandler = () => {
   const [status, setStatus] = useState('processing')
@@ -21,12 +22,26 @@ const TokenExchangeHandler = () => {
     setDebugInfo(prev => [...prev, { timestamp: new Date().toISOString(), message: info }])
   }
 
-  const checkOnboardingAndRedirect = async () => {
+  const checkSubscriptionAndRedirect = async () => {
     try {
+      addDebugInfo('Checking subscription status...')
+      
+      const subResponse = await subscriptionAPI.getSubscriptionStatus()
+      const hasActiveSubscription = subResponse.data.has_active_subscription
+      
+      addDebugInfo(`Subscription status: ${hasActiveSubscription ? 'active' : 'inactive'}`)
+      
+      if (!hasActiveSubscription) {
+        addDebugInfo('No active subscription, redirecting to subscription page...')
+        navigate('/subscription')
+        return
+      }
+      
+      // User has active subscription, now check onboarding
       addDebugInfo('Checking onboarding status...')
       
-      const response = await onboardingAPI.getOnboardingStatus()
-      const isOnboardingCompleted = response.data.onboarding_completed
+      const onboardingResponse = await onboardingAPI.getOnboardingStatus()
+      const isOnboardingCompleted = onboardingResponse.data.onboarding_completed
       
       addDebugInfo(`Onboarding status: ${isOnboardingCompleted ? 'completed' : 'incomplete'}`)
       
@@ -38,11 +53,11 @@ const TokenExchangeHandler = () => {
         navigate('/onboarding')
       }
     } catch (error) {
-      console.error('Error checking onboarding status:', error)
-      addDebugInfo(`Onboarding check error: ${error.message}`)
-      // Default to dashboard if onboarding check fails
-      addDebugInfo('Defaulting to dashboard due to onboarding check error')
-      navigate('/dashboard')
+      console.error('Error checking subscription/onboarding status:', error)
+      addDebugInfo(`Status check error: ${error.message}`)
+      // Default to subscription page if check fails
+      addDebugInfo('Defaulting to subscription page due to status check error')
+      navigate('/subscription')
     }
   }
 
@@ -98,8 +113,8 @@ const TokenExchangeHandler = () => {
           addDebugInfo(`User ID: ${data.session.user.id}`)
           addDebugInfo(`Provider: ${data.session.user.app_metadata?.provider}`)
           
-          // Check onboarding status and redirect accordingly
-          checkOnboardingAndRedirect()
+          // Check subscription and onboarding status and redirect accordingly
+          checkSubscriptionAndRedirect()
         } else {
           setStatus('error')
           setMessage('No session created with implicit flow tokens')
@@ -127,8 +142,8 @@ const TokenExchangeHandler = () => {
           addDebugInfo(`User ID: ${data.session.user.id}`)
           addDebugInfo(`Provider: ${data.session.user.app_metadata?.provider}`)
           
-          // Check onboarding status and redirect accordingly
-          checkOnboardingAndRedirect()
+          // Check subscription and onboarding status and redirect accordingly
+          checkSubscriptionAndRedirect()
         } else {
           setStatus('error')
           setMessage('No session created after token exchange')

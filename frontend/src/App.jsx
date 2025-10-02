@@ -48,15 +48,19 @@ function ProtectedRoute({ children }) {
     const checkUserStatus = async () => {
       if (isAuthenticated && user) {
         try {
+          console.log('Checking subscription status for user:', user.id)
           // Check subscription status first
           const subResponse = await subscriptionAPI.getSubscriptionStatus()
+          console.log('Subscription status response:', subResponse.data)
           setSubscriptionStatus(subResponse.data)
           
           // Only check onboarding if user has active subscription
           if (subResponse.data.has_active_subscription) {
+            console.log('User has active subscription, checking onboarding status')
             const onboardingResponse = await onboardingAPI.getOnboardingStatus()
             setOnboardingStatus(onboardingResponse.data.onboarding_completed ? 'completed' : 'incomplete')
           } else {
+            console.log('User does not have active subscription, redirecting to subscription page')
             setOnboardingStatus('subscription_required')
           }
         } catch (error) {
@@ -72,22 +76,28 @@ function ProtectedRoute({ children }) {
   }, [isAuthenticated, user])
 
   if (loading || checkingStatus) {
+    console.log('Loading or checking status...')
     return <LoadingBar />
   }
 
   if (!isAuthenticated) {
+    console.log('User not authenticated, redirecting to login')
     return <Navigate to="/login" />
   }
 
   // Check subscription status
   if (!subscriptionStatus?.has_active_subscription) {
+    console.log('User does not have active subscription, redirecting to subscription page')
     return <Navigate to="/subscription" />
   }
 
   // Check onboarding status
   if (onboardingStatus === 'incomplete') {
+    console.log('User onboarding incomplete, redirecting to onboarding')
     return <Navigate to="/onboarding" />
   }
+
+  console.log('User authenticated with active subscription and completed onboarding')
 
   return (
     <>

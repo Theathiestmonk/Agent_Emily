@@ -61,6 +61,14 @@ const SubscriptionSelector = () => {
   return (
     <div className="min-h-screen bg-[#F6F6F6] py-12">
       <div className="max-w-6xl mx-auto px-6">
+        {/* Test Banner */}
+        <div className="bg-gradient-to-r from-yellow-100 to-orange-100 border border-yellow-400 text-yellow-800 px-6 py-4 rounded-lg mb-8 text-center shadow-sm">
+          <div className="flex items-center justify-center">
+            <span className="font-bold text-lg">🧪 TEST MODE</span>
+            <span className="ml-3 text-sm">These are test plans with small amounts (₹10 & ₹20) for development testing</span>
+          </div>
+        </div>
+
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-bold mb-6">
@@ -104,7 +112,11 @@ const SubscriptionSelector = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           {plans.map((plan) => {
             const price = billingCycle === 'monthly' ? plan.price_monthly : plan.price_yearly;
-            const priceDisplay = billingCycle === 'monthly' ? plan.monthly_price_display : plan.yearly_price_display;
+            // Override prices for test mode
+            const testPrice = plan.name === 'starter' ? (billingCycle === 'monthly' ? 1000 : 10000) : (billingCycle === 'monthly' ? 2000 : 20000);
+            const priceDisplay = billingCycle === 'monthly' 
+              ? (plan.name === 'starter' ? '₹10' : '₹20')
+              : (plan.name === 'starter' ? '₹100' : '₹200');
             const isPro = plan.name === 'pro';
             
             return (
@@ -134,8 +146,8 @@ const SubscriptionSelector = () => {
                   </div>
                   <p className="text-gray-600">
                     {plan.name === 'starter' 
-                      ? 'Perfect for individuals and small teams' 
-                      : 'For growing businesses and teams'
+                      ? 'Test plan for development and testing' 
+                      : 'Test plan for development and testing'
                     }
                   </p>
                 </div>
