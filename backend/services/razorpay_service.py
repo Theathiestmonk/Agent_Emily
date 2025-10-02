@@ -94,32 +94,33 @@ class RazorpayService:
     
     async def _get_plan_details(self, plan_name: str, billing_cycle: str) -> Dict[str, Any]:
         """Get plan details from database"""
-        # This would typically query your database
-        # For now, we'll return mock data
-        plans = {
-            "starter": {
-                "monthly": {
-                    "razorpay_plan_id": "plan_starter_monthly",  # You'll need to create these in Razorpay
-                    "price": 5900
-                },
-                "yearly": {
-                    "razorpay_plan_id": "plan_starter_yearly",
-                    "price": 59000
-                }
-            },
-            "pro": {
-                "monthly": {
-                    "razorpay_plan_id": "plan_pro_monthly",
-                    "price": 9900
-                },
-                "yearly": {
-                    "razorpay_plan_id": "plan_pro_yearly",
-                    "price": 99000
-                }
-            }
-        }
+        from supabase import create_client
+        import os
         
-        return plans.get(plan_name, {}).get(billing_cycle, {})
+        # Initialize Supabase client
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+        supabase = create_client(supabase_url, supabase_key)
+        
+        # Get plan from database
+        result = supabase.table("subscription_plans").select("*").eq("name", plan_name).eq("is_active", True).execute()
+        
+        if not result.data:
+            raise ValueError(f"Plan {plan_name} not found")
+        
+        plan = result.data[0]
+        
+        # Return plan details based on billing cycle
+        if billing_cycle == "monthly":
+            return {
+                "razorpay_plan_id": plan["razorpay_plan_id_monthly"],
+                "price": plan["price_monthly"]
+            }
+        else:  # yearly
+            return {
+                "razorpay_plan_id": plan["razorpay_plan_id_yearly"],
+                "price": plan["price_yearly"]
+            }
     
     async def create_payment_link(self, subscription_id: str, amount: int, currency: str = "USD") -> str:
         """Create a payment link for subscription"""
