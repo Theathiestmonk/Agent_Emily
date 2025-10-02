@@ -22,11 +22,24 @@ class RazorpayService:
         self.webhook_secret = os.getenv("RAZORPAY_WEBHOOK_SECRET")
     
     async def create_customer(self, user_data: Dict[str, Any]) -> str:
-        """Create a Razorpay customer"""
+        """Create a Razorpay customer or get existing one"""
         try:
+            email = user_data.get("email")
+            
+            # First, try to find existing customer by email
+            try:
+                customers = self.client.customer.all({"email": email})
+                if customers.get('items'):
+                    existing_customer = customers['items'][0]
+                    logger.info(f"Found existing Razorpay customer: {existing_customer['id']}")
+                    return existing_customer['id']
+            except Exception as e:
+                logger.info(f"No existing customer found for {email}: {e}")
+            
+            # Create new customer if not found
             customer_data = {
                 "name": user_data.get("name", "User"),
-                "email": user_data.get("email"),
+                "email": email,
                 "contact": user_data.get("phone", ""),
                 "notes": {
                     "user_id": user_data.get("id"),
@@ -35,7 +48,7 @@ class RazorpayService:
             }
             
             customer = self.client.customer.create(customer_data)
-            logger.info(f"Created Razorpay customer: {customer['id']}")
+            logger.info(f"Created new Razorpay customer: {customer['id']}")
             return customer['id']
             
         except Exception as e:

@@ -55,6 +55,29 @@ async def test_razorpay():
             "error": str(e)
         }, status_code=500)
 
+@router.get("/test-customers")
+async def test_customers():
+    """Test Razorpay customers"""
+    try:
+        from services.razorpay_service import RazorpayService
+        razorpay_service = RazorpayService()
+        
+        # Get all customers
+        customers = razorpay_service.client.customer.all()
+        
+        return JSONResponse(content={
+            "success": True,
+            "customers": customers.get('items', []),
+            "total_count": customers.get('count', 0)
+        })
+        
+    except Exception as e:
+        logger.error(f"Razorpay customers test failed: {e}")
+        return JSONResponse(content={
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+
 @router.get("/plans")
 async def get_subscription_plans():
     """Get all available subscription plans"""
