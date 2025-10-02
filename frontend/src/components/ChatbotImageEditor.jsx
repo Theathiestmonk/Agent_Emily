@@ -210,7 +210,7 @@ What would you like to do with your image today?`,
           addMessage('assistant', '✨ **Template Applied Successfully!**\n\nYour content has been beautifully formatted using the template. Take a look at the result!', data.edited_image_url, [
             { text: 'Save Image', value: 'save', type: 'action', icon: 'Download' },
             { text: 'Try Another Template', value: 'use template', type: 'action', icon: 'Layout' },
-            { text: 'Make Adjustments', value: 'manual instructions', type: 'action', icon: 'Edit3' }
+            { text: 'Make Adjustments', value: 'continue_editing', type: 'action', icon: 'Edit3' }
           ]);
         } else {
           throw new Error(data.message || 'Failed to apply template');

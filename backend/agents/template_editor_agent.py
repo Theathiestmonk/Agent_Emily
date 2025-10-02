@@ -57,6 +57,9 @@ class TemplateEditorState(TypedDict):
     template_type: str  # 'user_upload' or 'premade'
     template_id: Optional[str]  # For premade templates
     
+    # Logo data
+    user_logo: Optional[Dict[str, Any]]  # User's logo information
+    
     # Analysis results
     template_analysis: Optional[Dict[str, Any]]
     content_pieces: Optional[Dict[str, str]]
@@ -89,6 +92,7 @@ class TemplateEditorAgent:
         # Add nodes
         workflow.add_node("template_uploader", self.template_uploader)
         workflow.add_node("template_analyzer", self.template_analyzer)
+        workflow.add_node("logo_fetcher", self.logo_fetcher)
         workflow.add_node("content_modifier", self.content_modifier)
         workflow.add_node("image_modifier", self.image_modifier)
         workflow.add_node("content_output_generator", self.content_output_generator)
@@ -101,7 +105,8 @@ class TemplateEditorAgent:
         
         # Add edges
         workflow.add_edge("template_uploader", "template_analyzer")
-        workflow.add_edge("template_analyzer", "content_modifier")
+        workflow.add_edge("template_analyzer", "logo_fetcher")
+        workflow.add_edge("logo_fetcher", "content_modifier")
         workflow.add_edge("content_modifier", "image_modifier")
         workflow.add_edge("image_modifier", "content_output_generator")
         workflow.add_edge("content_output_generator", "flow_router")
@@ -216,6 +221,16 @@ class TemplateEditorAgent:
                                     "content_guidelines": "Should complement the educational/informational content"
                                 }
                             ],
+                            "logo_areas": [
+                                {
+                                    "label": "company_logo",
+                                    "purpose": "brand identification",
+                                    "position": {"x": 400, "y": 20, "width": 80, "height": 80},
+                                    "aspect_ratio": "1:1",
+                                    "content_guidelines": "User's company/brand logo for brand recognition",
+                                    "required": True
+                                }
+                            ],
                             "design_info": {
                                 "primary_colors": ["#4A90E2", "#FFFFFF"],
                                 "secondary_colors": ["#CCCCCC", "#333333"],
@@ -278,6 +293,16 @@ class TemplateEditorAgent:
                                     "position": {"x": 50, "y": 300, "width": 400, "height": 200},
                                     "aspect_ratio": "2:1",
                                     "content_guidelines": "Should be high-quality and relevant to the main message"
+                                }
+                            ],
+                            "logo_areas": [
+                                {
+                                    "label": "company_logo",
+                                    "purpose": "brand identification",
+                                    "position": {"x": 400, "y": 20, "width": 60, "height": 60},
+                                    "aspect_ratio": "1:1",
+                                    "content_guidelines": "User's company/brand logo for brand recognition",
+                                    "required": True
                                 }
                             ],
                             "design_info": {
@@ -409,9 +434,11 @@ class TemplateEditorAgent:
             2. VISUAL ELEMENTS - Identify image areas and design elements:
                - Main image placeholder
                - Background images
-               - Logo placement areas
+               - Logo placement areas (CRITICAL: Look for company/brand logo spots)
                - Decorative elements
                - Icons or graphics
+               - Watermark areas
+               - Brand/attribution areas
             
             3. DESIGN ANALYSIS - Analyze the visual design:
                - Primary color scheme (hex codes)
@@ -454,6 +481,16 @@ class TemplateEditorAgent:
                         "position": {"x": 50, "y": 100, "width": 400, "height": 300},
                         "aspect_ratio": "4:3",
                         "content_guidelines": "Should be high-quality and relevant to the main message"
+                    }
+                ],
+                "logo_areas": [
+                    {
+                        "label": "company_logo",
+                        "purpose": "brand identification",
+                        "position": {"x": 400, "y": 20, "width": 80, "height": 80},
+                        "aspect_ratio": "1:1",
+                        "content_guidelines": "User's company/brand logo",
+                        "required": true
                     }
                 ],
                 "design_info": {
@@ -529,6 +566,70 @@ class TemplateEditorAgent:
         except Exception as e:
             state["error_message"] = f"Template analysis failed: {str(e)}"
             print(f"❌ Template analysis error: {e}")
+        
+        return state
+    
+    async def logo_fetcher(self, state: TemplateEditorState) -> TemplateEditorState:
+        """Node 2.5: Logo fetcher - fetches user's logo from profile if template needs it"""
+        print("🚀 LOGO FETCHER NODE CALLED!")
+        try:
+            print("🏢 Logo Fetcher: Checking for logo requirements...")
+            
+            template_analysis = state.get("template_analysis", {})
+            logo_areas = template_analysis.get("logo_areas", [])
+            
+            if not logo_areas:
+                print("ℹ️ No logo areas detected in template, skipping logo fetch")
+                state["user_logo"] = None
+                state["current_node"] = "logo_fetcher"
+                return state
+            
+            print(f"🔍 Found {len(logo_areas)} logo areas in template")
+            
+            # Fetch user's logo from Supabase profiles table
+            user_id = state.get("user_id")
+            if not user_id:
+                print("⚠️ No user_id provided, skipping logo fetch")
+                state["user_logo"] = None
+                state["current_node"] = "logo_fetcher"
+                return state
+            
+            # Import supabase here to avoid circular imports
+            try:
+                from lib.supabase import supabase_admin
+                
+                # Fetch user profile with logo information
+                profile_response = supabase_admin.table("profiles").select("logo_url, company_name").eq("id", user_id).execute()
+                
+                if profile_response.data and len(profile_response.data) > 0:
+                    profile = profile_response.data[0]
+                    logo_url = profile.get("logo_url")
+                    company_name = profile.get("company_name", "Company")
+                    
+                    if logo_url:
+                        print(f"✅ Found user logo: {logo_url}")
+                        state["user_logo"] = {
+                            "url": logo_url,
+                            "company_name": company_name,
+                            "areas": logo_areas
+                        }
+                    else:
+                        print("⚠️ User has no logo_url in profile")
+                        state["user_logo"] = None
+                else:
+                    print("⚠️ User profile not found")
+                    state["user_logo"] = None
+                    
+            except Exception as e:
+                print(f"⚠️ Error fetching user logo: {e}")
+                state["user_logo"] = None
+            
+            state["current_node"] = "logo_fetcher"
+            print("✅ Logo fetching completed")
+            
+        except Exception as e:
+            state["error_message"] = f"Logo fetching failed: {str(e)}"
+            print(f"❌ Logo fetching error: {e}")
         
         return state
     
@@ -806,6 +907,14 @@ class TemplateEditorAgent:
             for label, text in content_pieces.items():
                 content_text += f"{label.upper()}: {text}\n"
             
+            # Check if user logo is available
+            user_logo = state.get("user_logo")
+            logo_info = ""
+            if user_logo:
+                logo_areas = user_logo.get("areas", [])
+                company_name = user_logo.get("company_name", "Company")
+                logo_info = f"\nLOGO REQUIREMENTS:\n- Company: {company_name}\n- Logo areas: {len(logo_areas)} detected\n- Logo URL: {user_logo.get('url', 'N/A')}\n"
+            
             gemini_prompt = f"""
 You are a professional graphic designer creating a customized social media post.
 
@@ -825,7 +934,7 @@ CONTENT STRATEGY:
 - Call to Action: {content_strategy.get('call_to_action', 'encourage engagement')}
 
 CUSTOMIZED CONTENT TO INTEGRATE:
-{content_text}
+{content_text}{logo_info}
 
 DESIGN REQUIREMENTS:
 1. Use the original image (first image) as your foundation
@@ -909,6 +1018,31 @@ OUTPUT: A single, professionally designed image that seamlessly combines the ori
                     "data": template_data
                 }
             })
+            
+            # Add user logo if available
+            if user_logo and user_logo.get("url"):
+                try:
+                    import httpx
+                    async with httpx.AsyncClient() as client:
+                        logo_response = await client.get(user_logo["url"])
+                        if logo_response.status_code == 200:
+                            logo_image_data = base64.b64encode(logo_response.content).decode()
+                            contents.append({
+                                "text": f"USER LOGO: Integrate this {user_logo.get('company_name', 'company')} logo into the design at the appropriate logo areas."
+                            })
+                            contents.append({
+                                "inline_data": {
+                                    "mime_type": "image/png",  # Assume PNG, could be enhanced to detect actual type
+                                    "data": logo_image_data
+                                }
+                            })
+                            print(f"✅ Added user logo to Gemini input: {user_logo.get('company_name', 'Company')}")
+                        else:
+                            print(f"⚠️ Could not download user logo: HTTP {logo_response.status_code}")
+                except Exception as e:
+                    print(f"⚠️ Error downloading user logo: {e}")
+            else:
+                print("ℹ️ No user logo available for integration")
             
             # Call Gemini API
             print("🤖 Calling Gemini API for image generation...")
