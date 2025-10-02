@@ -596,7 +596,11 @@ class TemplateEditorAgent:
             
             # Import supabase here to avoid circular imports
             try:
-                from lib.supabase import supabase_admin
+                from supabase import create_client, Client
+                supabase_admin = create_client(
+                    os.getenv("SUPABASE_URL"),
+                    os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+                )
                 
                 # Fetch user profile with logo information
                 profile_response = supabase_admin.table("profiles").select("logo_url, company_name").eq("id", user_id).execute()
