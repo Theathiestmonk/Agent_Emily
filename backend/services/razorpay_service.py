@@ -9,9 +9,16 @@ logger = logging.getLogger(__name__)
 
 class RazorpayService:
     def __init__(self):
-        self.client = razorpay.Client(
-            auth=(os.getenv("RAZORPAY_KEY_ID"), os.getenv("RAZORPAY_KEY_SECRET"))
-        )
+        key_id = os.getenv("RAZORPAY_KEY_ID")
+        key_secret = os.getenv("RAZORPAY_KEY_SECRET")
+        
+        logger.info(f"Razorpay Key ID: {'SET' if key_id else 'NOT SET'}")
+        logger.info(f"Razorpay Key Secret: {'SET' if key_secret else 'NOT SET'}")
+        
+        if not key_id or not key_secret:
+            raise ValueError("Razorpay API keys not configured")
+        
+        self.client = razorpay.Client(auth=(key_id, key_secret))
         self.webhook_secret = os.getenv("RAZORPAY_WEBHOOK_SECRET")
     
     async def create_customer(self, user_data: Dict[str, Any]) -> str:

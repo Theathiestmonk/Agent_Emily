@@ -31,6 +31,30 @@ router = APIRouter(prefix="/api/subscription", tags=["subscription"])
 # Initialize Razorpay service
 razorpay_service = RazorpayService()
 
+@router.get("/test-razorpay")
+async def test_razorpay():
+    """Test Razorpay connectivity"""
+    try:
+        # Test if Razorpay client can be initialized
+        from services.razorpay_service import RazorpayService
+        razorpay_service = RazorpayService()
+        
+        # Test a simple API call
+        plans = razorpay_service.client.plan.all()
+        
+        return JSONResponse(content={
+            "success": True,
+            "message": "Razorpay connection successful",
+            "plans_count": len(plans.get('items', []))
+        })
+        
+    except Exception as e:
+        logger.error(f"Razorpay test failed: {e}")
+        return JSONResponse(content={
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+
 @router.get("/plans")
 async def get_subscription_plans():
     """Get all available subscription plans"""
