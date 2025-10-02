@@ -59,6 +59,16 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Configure CORS
+cors_origins = os.getenv("CORS_ORIGINS", "https://atsnai.com,https://www.atsnai.com,https://agentemily.vercel.app").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Include routers (Google router first to handle /auth/google/callback)
 app.include_router(google_router)
 app.include_router(connections_router)
