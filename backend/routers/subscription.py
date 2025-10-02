@@ -95,7 +95,9 @@ async def get_subscription_plans():
                 "price_yearly": plan["price_yearly"],
                 "features": plan["features"],
                 "monthly_price_display": f"Rs {plan['price_monthly']}",
-                "yearly_price_display": f"Rs {plan['price_yearly']}"
+                "yearly_price_display": f"Rs {plan['price_yearly']}",
+                "razorpay_plan_id_monthly": plan.get("razorpay_plan_id_monthly"),
+                "razorpay_plan_id_yearly": plan.get("razorpay_plan_id_yearly")
             })
         
         return JSONResponse(content={
