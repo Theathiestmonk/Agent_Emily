@@ -25,6 +25,7 @@ from routers.blogs import router as blogs_router
 from routers.platform_connections import router as platform_connections_router
 from routers.custom_content import router as custom_content_router
 from routers.simple_image_editor import router as simple_image_editor_router
+from routers.template_editor import router as template_editor_router
 
 # Load environment variables
 load_dotenv()
@@ -70,6 +71,7 @@ app.include_router(ads_router)
 app.include_router(blogs_router)
 app.include_router(custom_content_router)
 app.include_router(simple_image_editor_router)
+app.include_router(template_editor_router)
 
 # Health check endpoint
 @app.get("/health")

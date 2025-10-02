@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ReactMarkdown from 'react-markdown';
+import TemplateSelector from './TemplateSelector';
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -51,11 +52,7 @@ const ImageEditor = ({
   const [isLoading, setIsLoading] = useState(false);
   const [userInput, setUserInput] = useState('');
   const [editingHistory, setEditingHistory] = useState([]);
-  const [availableTemplates, setAvailableTemplates] = useState([]);
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [showTemplateUpload, setShowTemplateUpload] = useState(false);
-  const [templateFile, setTemplateFile] = useState(null);
-  const [templateName, setTemplateName] = useState('');
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -214,60 +211,22 @@ const ImageEditor = ({
     sendMessage(value);
   };
 
-  const handleTemplateUpload = async () => {
-    if (!templateFile || !templateName.trim()) return;
-
-    try {
-      setIsLoading(true);
-      const formData = new FormData();
-      formData.append('conversation_id', conversationId);
-      formData.append('template_name', templateName);
-      formData.append('file', templateFile);
-
-      const authToken = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/image-editor/upload-template`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: formData
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setMessages(prev => [...prev, data.message]);
-        setShowTemplateUpload(false);
-        setTemplateFile(null);
-        setTemplateName('');
-      }
-    } catch (error) {
-      console.error('Error uploading template:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const loadTemplates = async () => {
-    try {
-      const authToken = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/image-editor/templates`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
-      });
-
-      const data = await response.json();
-      setAvailableTemplates(data.templates || []);
-      setShowTemplates(true);
-    } catch (error) {
-      console.error('Error loading templates:', error);
-    }
+    setShowTemplateSelector(true);
   };
 
-  const selectTemplate = (templateName) => {
-    sendMessage(`Use template: ${templateName}`);
-    setShowTemplates(false);
+  const selectTemplate = (template) => {
+    sendMessage(`Use template: ${template.name} (ID: ${template.id})`);
+    setShowTemplateSelector(false);
+  };
+
+  const handleTemplateSelect = (template) => {
+    selectTemplate(template);
+  };
+
+  const handleCustomUpload = (template) => {
+    // Handle custom template upload completion
+    setShowTemplateSelector(false);
   };
 
   const handleKeyPress = (e) => {
@@ -527,111 +486,13 @@ const ImageEditor = ({
           </div>
         </div>
 
-        {/* Templates Modal */}
-        {showTemplates && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60 p-4">
-            <div className="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold">Choose a Template</h3>
-                <button
-                  onClick={() => setShowTemplates(false)}
-                  className="p-2 hover:bg-gray-100 rounded-full"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                {availableTemplates.map((template) => (
-                  <div
-                    key={template.id}
-                    onClick={() => selectTemplate(template.name)}
-                    className="p-4 border border-gray-200 rounded-lg hover:border-purple-500 cursor-pointer transition-colors"
-                  >
-                    <div className="aspect-video bg-gray-100 rounded mb-2 flex items-center justify-center">
-                      <ImageIcon className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <h4 className="font-semibold">{template.name}</h4>
-                    <p className="text-sm text-gray-600">{template.description}</p>
-                  </div>
-                ))}
-              </div>
-              
-              <button
-                onClick={() => {
-                  setShowTemplates(false);
-                  setShowTemplateUpload(true);
-                }}
-                className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-500 transition-colors"
-              >
-                <Upload className="w-5 h-5 mx-auto mb-1" />
-                Upload Custom Template
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Template Upload Modal */}
-        {showTemplateUpload && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60 p-4">
-            <div className="bg-white rounded-2xl p-6 max-w-md w-full">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold">Upload Template</h3>
-                <button
-                  onClick={() => setShowTemplateUpload(false)}
-                  className="p-2 hover:bg-gray-100 rounded-full"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Template Name
-                  </label>
-                  <input
-                    type="text"
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Enter template name"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Template File
-                  </label>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setTemplateFile(e.target.files[0])}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
-                </div>
-                
-                <div className="flex space-x-3">
-                  <button
-                    onClick={handleTemplateUpload}
-                    disabled={!templateFile || !templateName.trim() || isLoading}
-                    className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white py-2 px-4 rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 disabled:opacity-50"
-                  >
-                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Upload Template'}
-                  </button>
-                  
-                  <button
-                    onClick={() => setShowTemplateUpload(false)}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Template Selector */}
+        <TemplateSelector
+          isOpen={showTemplateSelector}
+          onClose={() => setShowTemplateSelector(false)}
+          onTemplateSelect={handleTemplateSelect}
+          onCustomUpload={handleCustomUpload}
+        />
       </div>
     </div>
   );

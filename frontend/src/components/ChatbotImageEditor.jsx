@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ReactMarkdown from 'react-markdown';
+import TemplateSelector from './TemplateSelector';
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -46,6 +47,7 @@ const ChatbotImageEditor = ({
   const [currentStep, setCurrentStep] = useState('initial');
   const [fullImageModal, setFullImageModal] = useState({ isOpen: false, imageUrl: '', title: '' });
   const [currentWorkingImageUrl, setCurrentWorkingImageUrl] = useState(null);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   
   const messagesEndRef = useRef(null);
 
@@ -144,11 +146,84 @@ What would you like to do with your image today?`,
     if (lowerInput.includes('logo') || lowerInput.includes('add logo')) {
       await startAddLogo();
     } else if (lowerInput.includes('template') || lowerInput.includes('use template')) {
-      addMessage('assistant', 'Templates are coming soon! For now, I can help you add your logo or work with your creative instructions. What would you like to try?');
+      await startTemplateSelection();
     } else if (lowerInput.includes('manual') || lowerInput.includes('instruction')) {
       await startManualInstructions();
     } else {
       addMessage('assistant', 'I\'m not quite sure what you\'d like to do! Could you pick one of these options?\n\n🎨 **Add Logo**\n📋 **Use Template**\n✏️ **Give Instructions**');
+    }
+  };
+
+  const startTemplateSelection = async () => {
+    addMessage('assistant', 'Great choice! Let me show you our beautiful template collection. You can choose from pre-made templates or upload your own custom design.');
+    setShowTemplateSelector(true);
+  };
+
+  const handleTemplateSelect = (template) => {
+    addMessage('assistant', `Perfect! I've selected the "${template.name}" template. Let me apply it to your content and create a beautiful design for you.`);
+    setShowTemplateSelector(false);
+    
+    // Start the template application process
+    applyTemplate(template);
+  };
+
+  const handleCustomUpload = (template) => {
+    addMessage('assistant', `Excellent! I've uploaded your custom template "${template.name}". Let me apply it to your content now.`);
+    setShowTemplateSelector(false);
+    
+    // Start the template application process
+    applyTemplate(template);
+  };
+
+  const applyTemplate = async (template) => {
+    try {
+      setIsLoading(true);
+      setCurrentStep('template_application');
+      
+      addMessage('assistant', '🎨 **Applying Template...**\n\nI\'m now analyzing your content and applying the template design. This will create a beautiful, professional-looking image that matches your content perfectly.');
+      
+      // Here you would integrate with the template editor API
+      // For now, we'll simulate the process
+      const authToken = await getAuthToken();
+      
+      // Create form data
+      const formData = new FormData();
+      formData.append('template_id', template.id);
+      formData.append('content', postContent);
+      if (inputImageUrl) {
+        formData.append('image_url', inputImageUrl);
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/api/template-editor/apply-template`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: formData
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setEditedImageUrl(data.edited_image_url);
+          setCurrentStep('preview');
+          addMessage('assistant', '✨ **Template Applied Successfully!**\n\nYour content has been beautifully formatted using the template. Take a look at the result!', data.edited_image_url, [
+            { text: 'Save Image', value: 'save', type: 'action', icon: 'Download' },
+            { text: 'Try Another Template', value: 'use template', type: 'action', icon: 'Layout' },
+            { text: 'Make Adjustments', value: 'manual instructions', type: 'action', icon: 'Edit3' }
+          ]);
+        } else {
+          throw new Error(data.message || 'Failed to apply template');
+        }
+      } else {
+        throw new Error('Failed to apply template');
+      }
+    } catch (error) {
+      console.error('Error applying template:', error);
+      addMessage('assistant', `❌ **Error applying template**: ${error.message}\n\nLet me know if you'd like to try a different template or give me manual instructions instead.`);
+      setCurrentStep('initial');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -424,18 +499,36 @@ What's your vision for this image?`
       const authToken = await getAuthToken();
       const { data: { user } } = await supabase.auth.getUser();
 
-      const response = await fetch(`${API_BASE_URL}/simple-image-editor/save-image`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({
-          user_id: user?.id,
-          original_image_url: inputImageUrl,
-          edited_image_url: editedImageUrl
-        })
-      });
+      // Determine which save endpoint to use based on current step
+      let response;
+      if (currentStep === 'template_application' || currentStep === 'preview') {
+        // Use template editor save endpoint
+        const formData = new FormData();
+        formData.append('original_image_url', inputImageUrl);
+        formData.append('edited_image_url', editedImageUrl);
+
+        response = await fetch(`${API_BASE_URL}/api/template-editor/save-template`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: formData
+        });
+      } else {
+        // Use simple image editor save endpoint
+        response = await fetch(`${API_BASE_URL}/simple-image-editor/save-image`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            user_id: user?.id,
+            original_image_url: inputImageUrl,
+            edited_image_url: editedImageUrl
+          })
+        });
+      }
 
       const data = await response.json();
 
@@ -694,6 +787,14 @@ What's your vision for this image?`
           </div>
         </div>
       )}
+
+      {/* Template Selector */}
+      <TemplateSelector
+        isOpen={showTemplateSelector}
+        onClose={() => setShowTemplateSelector(false)}
+        onTemplateSelect={handleTemplateSelect}
+        onCustomUpload={handleCustomUpload}
+      />
     </div>
   );
 };

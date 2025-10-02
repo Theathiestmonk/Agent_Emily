@@ -31,6 +31,16 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         token = credentials.credentials
         print(f"🔍 Auth - Received token: {token[:20]}...")
         
+        # Temporary test token for development
+        if token == "test-token":
+            print("🔍 Auth - Using test token for development")
+            return User(
+                id="22ecf157-2eef-4aea-b1a7-67e7c09127d0",  # Valid user ID from Supabase
+                email="test@example.com",
+                name="Test User",
+                created_at="2025-01-01T00:00:00Z"
+            )
+        
         # Verify token with Supabase
         response = supabase.auth.get_user(token)
         print(f"🔍 Auth - Supabase response: {response}")
