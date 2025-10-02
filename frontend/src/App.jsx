@@ -33,30 +33,45 @@ import TermsAndConditions from './pages/TermsAndConditions.jsx'
 import CancellationAndRefunds from './pages/CancellationAndRefunds.jsx'
 import Shipping from './pages/Shipping.jsx'
 import ContactUs from './pages/ContactUs.jsx'
+// Subscription Components
+import SubscriptionSelector from './components/SubscriptionSelector'
+import MigrationBanner from './components/MigrationBanner'
+import { subscriptionAPI } from './services/subscription'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, user, loading } = useAuth()
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null)
   const [onboardingStatus, setOnboardingStatus] = useState(null)
-  const [checkingOnboarding, setCheckingOnboarding] = useState(true)
+  const [checkingStatus, setCheckingStatus] = useState(true)
 
   useEffect(() => {
-    const checkOnboardingStatus = async () => {
+    const checkUserStatus = async () => {
       if (isAuthenticated && user) {
         try {
-          const response = await onboardingAPI.getOnboardingStatus()
-          setOnboardingStatus(response.data.onboarding_completed ? 'completed' : 'incomplete')
+          // Check subscription status first
+          const subResponse = await subscriptionAPI.getSubscriptionStatus()
+          setSubscriptionStatus(subResponse.data)
+          
+          // Only check onboarding if user has active subscription
+          if (subResponse.data.has_active_subscription) {
+            const onboardingResponse = await onboardingAPI.getOnboardingStatus()
+            setOnboardingStatus(onboardingResponse.data.onboarding_completed ? 'completed' : 'incomplete')
+          } else {
+            setOnboardingStatus('subscription_required')
+          }
         } catch (error) {
-          console.error('Error checking onboarding status:', error)
-          setOnboardingStatus('incomplete')
+          console.error('Error checking user status:', error)
+          setSubscriptionStatus({ has_active_subscription: false })
+          setOnboardingStatus('subscription_required')
         }
       }
-      setCheckingOnboarding(false)
+      setCheckingStatus(false)
     }
 
-    checkOnboardingStatus()
+    checkUserStatus()
   }, [isAuthenticated, user])
 
-  if (loading || checkingOnboarding) {
+  if (loading || checkingStatus) {
     return <LoadingBar />
   }
 
@@ -64,11 +79,22 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/login" />
   }
 
+  // Check subscription status
+  if (!subscriptionStatus?.has_active_subscription) {
+    return <Navigate to="/subscription" />
+  }
+
+  // Check onboarding status
   if (onboardingStatus === 'incomplete') {
     return <Navigate to="/onboarding" />
   }
 
-  return children
+  return (
+    <>
+      <MigrationBanner />
+      {children}
+    </>
+  )
 }
 
 function AppContent() {
@@ -89,6 +115,9 @@ function AppContent() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/reset-password" element={<ForgotPassword />} />
+        
+        {/* Subscription Route */}
+        <Route path="/subscription" element={<SubscriptionSelector />} />
         <Route 
           path="/dashboard" 
           element={

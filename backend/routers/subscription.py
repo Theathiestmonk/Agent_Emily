@@ -1,23 +1,30 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
 from typing import Dict, Any
 import os
 import logging
 from datetime import datetime, timedelta
+from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-from ..auth import get_current_user, User
-from ..database import get_db
-from ..services.razorpay_service import RazorpayService
-from ..models.subscription import SubscriptionPlan, SubscriptionTransaction
-from ..schemas.subscription import (
+from auth import get_current_user, User
+from services.razorpay_service import RazorpayService
+from schemas.subscription import (
     SubscriptionCreateRequest,
     SubscriptionResponse,
     SubscriptionStatusResponse,
     MigrationStatusResponse
 )
+
+# Initialize Supabase client
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+supabase: Client = create_client(supabase_url, supabase_key)
 
 router = APIRouter(prefix="/api/subscription", tags=["subscription"])
 
@@ -25,22 +32,23 @@ router = APIRouter(prefix="/api/subscription", tags=["subscription"])
 razorpay_service = RazorpayService()
 
 @router.get("/plans")
-async def get_subscription_plans(db: Session = Depends(get_db)):
+async def get_subscription_plans():
     """Get all available subscription plans"""
     try:
-        plans = db.query(SubscriptionPlan).filter(SubscriptionPlan.is_active == True).all()
+        result = supabase.table("subscription_plans").select("*").eq("is_active", True).execute()
+        plans = result.data
         
         plans_data = []
         for plan in plans:
             plans_data.append({
-                "id": plan.id,
-                "name": plan.name,
-                "display_name": plan.display_name,
-                "price_monthly": plan.price_monthly,
-                "price_yearly": plan.price_yearly,
-                "features": plan.features,
-                "monthly_price_display": f"${plan.price_monthly / 100:.2f}",
-                "yearly_price_display": f"${plan.price_yearly / 100:.2f}"
+                "id": plan["id"],
+                "name": plan["name"],
+                "display_name": plan["display_name"],
+                "price_monthly": plan["price_monthly"],
+                "price_yearly": plan["price_yearly"],
+                "features": plan["features"],
+                "monthly_price_display": f"${plan['price_monthly'] / 100:.2f}",
+                "yearly_price_display": f"${plan['price_yearly'] / 100:.2f}"
             })
         
         return JSONResponse(content={
@@ -54,28 +62,26 @@ async def get_subscription_plans(db: Session = Depends(get_db)):
 
 @router.get("/status")
 async def get_subscription_status(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user)
 ):
     """Get user's subscription status"""
     try:
         # Get user's subscription info from database
-        result = db.execute(
-            "SELECT * FROM get_user_subscription_info(:user_id)",
-            {"user_id": current_user.id}
-        ).fetchone()
+        result = supabase.rpc("get_user_subscription_info", {"user_uuid": current_user.id}).execute()
         
-        if not result:
+        if not result.data:
             raise HTTPException(status_code=404, detail="User not found")
+        
+        user_info = result.data[0]
         
         return JSONResponse(content={
             "success": True,
-            "status": result.subscription_status,
-            "plan": result.subscription_plan,
-            "has_active_subscription": result.has_active_subscription,
-            "migration_status": result.migration_status,
-            "grace_period_end": result.grace_period_end.isoformat() if result.grace_period_end else None,
-            "days_left": result.days_left
+            "status": user_info["subscription_status"],
+            "plan": user_info["subscription_plan"],
+            "has_active_subscription": user_info["has_active_subscription"],
+            "migration_status": user_info["migration_status"],
+            "grace_period_end": user_info["grace_period_end"],
+            "days_left": user_info["days_left"]
         })
         
     except Exception as e:
@@ -84,19 +90,17 @@ async def get_subscription_status(
 
 @router.get("/migration-status")
 async def get_migration_status(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user)
 ):
     """Get user's migration status for existing users"""
     try:
         # Check if user needs migration
-        result = db.execute(
-            "SELECT * FROM get_user_subscription_info(:user_id)",
-            {"user_id": current_user.id}
-        ).fetchone()
+        result = supabase.rpc("get_user_subscription_info", {"user_uuid": current_user.id}).execute()
         
-        if not result:
+        if not result.data:
             raise HTTPException(status_code=404, detail="User not found")
+        
+        user_info = result.data[0]
         
         migration_info = {
             "needs_migration": False,
@@ -107,13 +111,13 @@ async def get_migration_status(
         }
         
         # Check if user is grandfathered
-        if result.migration_status == 'grandfathered' and result.grace_period_end:
+        if user_info["migration_status"] == 'grandfathered' and user_info["grace_period_end"]:
             migration_info = {
                 "needs_migration": True,
                 "migration_type": "grandfathered",
                 "current_access": "full",
-                "grace_period_end": result.grace_period_end.isoformat(),
-                "days_left": result.days_left
+                "grace_period_end": user_info["grace_period_end"],
+                "days_left": user_info["days_left"]
             }
         
         return JSONResponse(content={
@@ -128,28 +132,23 @@ async def get_migration_status(
 @router.post("/create")
 async def create_subscription(
     request: SubscriptionCreateRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user)
 ):
     """Create a new subscription"""
     try:
         # Check if user already has active subscription
-        result = db.execute(
-            "SELECT * FROM get_user_subscription_info(:user_id)",
-            {"user_id": current_user.id}
-        ).fetchone()
+        result = supabase.rpc("get_user_subscription_info", {"user_uuid": current_user.id}).execute()
         
-        if result.has_active_subscription:
+        if result.data and result.data[0]["has_active_subscription"]:
             raise HTTPException(status_code=400, detail="User already has an active subscription")
         
         # Get plan details
-        plan = db.query(SubscriptionPlan).filter(
-            SubscriptionPlan.name == request.plan_name,
-            SubscriptionPlan.is_active == True
-        ).first()
+        plan_result = supabase.table("subscription_plans").select("*").eq("name", request.plan_name).eq("is_active", True).execute()
         
-        if not plan:
+        if not plan_result.data:
             raise HTTPException(status_code=404, detail="Plan not found")
+        
+        plan = plan_result.data[0]
         
         # Create Razorpay customer
         customer_id = await razorpay_service.create_customer({
@@ -166,25 +165,15 @@ async def create_subscription(
         )
         
         # Update user profile with subscription info
-        db.execute("""
-            UPDATE profiles 
-            SET 
-                razorpay_customer_id = :customer_id,
-                razorpay_subscription_id = :subscription_id,
-                subscription_plan = :plan_name,
-                migration_status = 'migrated'
-            WHERE id = :user_id
-        """, {
-            "customer_id": customer_id,
-            "subscription_id": subscription['id'],
-            "plan_name": request.plan_name,
-            "user_id": current_user.id
-        })
-        
-        db.commit()
+        supabase.table("profiles").update({
+            "razorpay_customer_id": customer_id,
+            "razorpay_subscription_id": subscription['id'],
+            "subscription_plan": request.plan_name,
+            "migration_status": 'migrated'
+        }).eq("id", current_user.id).execute()
         
         # Create payment link
-        amount = plan.price_monthly if request.billing_cycle == "monthly" else plan.price_yearly
+        amount = plan["price_monthly"] if request.billing_cycle == "monthly" else plan["price_yearly"]
         payment_url = await razorpay_service.create_payment_link(
             subscription['id'], 
             amount
@@ -202,58 +191,8 @@ async def create_subscription(
         logger.error(f"Error creating subscription: {e}")
         raise HTTPException(status_code=500, detail="Failed to create subscription")
 
-@router.post("/verify-payment")
-async def verify_payment(
-    payment_data: Dict[str, Any],
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Verify payment and update subscription status"""
-    try:
-        subscription_id = payment_data.get("subscription_id")
-        payment_id = payment_data.get("payment_id")
-        
-        if not subscription_id or not payment_id:
-            raise HTTPException(status_code=400, detail="Missing required payment data")
-        
-        # Get subscription details from Razorpay
-        subscription_details = await razorpay_service.get_subscription_details(subscription_id)
-        
-        if subscription_details['status'] == 'active':
-            # Update user subscription status
-            db.execute("""
-                UPDATE profiles 
-                SET 
-                    subscription_status = 'active',
-                    subscription_start_date = NOW(),
-                    subscription_end_date = NOW() + INTERVAL '1 month'
-                WHERE razorpay_subscription_id = :subscription_id
-            """, {"subscription_id": subscription_id})
-            
-            # Record transaction
-            transaction = SubscriptionTransaction(
-                user_id=current_user.id,
-                subscription_id=subscription_id,
-                razorpay_payment_id=payment_id,
-                amount=subscription_details.get('plan', {}).get('item', {}).get('amount', 0),
-                status='completed'
-            )
-            db.add(transaction)
-            db.commit()
-            
-            return JSONResponse(content={
-                "success": True,
-                "message": "Payment verified and subscription activated"
-            })
-        else:
-            raise HTTPException(status_code=400, detail="Payment verification failed")
-            
-    except Exception as e:
-        logger.error(f"Error verifying payment: {e}")
-        raise HTTPException(status_code=500, detail="Failed to verify payment")
-
 @router.post("/webhook")
-async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
+async def razorpay_webhook(request: Request):
     """Handle Razorpay webhooks"""
     try:
         payload = await request.body()
@@ -270,35 +209,29 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
         webhook_data = await request.json()
         
         # Store webhook event
-        db.execute("""
-            INSERT INTO subscription_webhooks (event_id, event_type, subscription_id, payment_id, payload)
-            VALUES (:event_id, :event_type, :subscription_id, :payment_id, :payload)
-            ON CONFLICT (event_id) DO NOTHING
-        """, {
+        supabase.table("subscription_webhooks").insert({
             "event_id": webhook_data.get("id"),
             "event_type": webhook_data.get("event"),
             "subscription_id": webhook_data.get("payload", {}).get("subscription", {}).get("entity", {}).get("id"),
             "payment_id": webhook_data.get("payload", {}).get("payment", {}).get("entity", {}).get("id"),
             "payload": webhook_data
-        })
+        }).execute()
         
         # Process webhook based on event type
         event_type = webhook_data.get("event")
         
         if event_type == "subscription.activated":
-            await _handle_subscription_activated(webhook_data, db)
+            await _handle_subscription_activated(webhook_data)
         elif event_type == "subscription.charged":
-            await _handle_subscription_charged(webhook_data, db)
+            await _handle_subscription_charged(webhook_data)
         elif event_type == "subscription.cancelled":
-            await _handle_subscription_cancelled(webhook_data, db)
+            await _handle_subscription_cancelled(webhook_data)
         elif event_type == "subscription.completed":
-            await _handle_subscription_completed(webhook_data, db)
+            await _handle_subscription_completed(webhook_data)
         elif event_type == "subscription.paused":
-            await _handle_subscription_paused(webhook_data, db)
+            await _handle_subscription_paused(webhook_data)
         elif event_type == "subscription.resumed":
-            await _handle_subscription_resumed(webhook_data, db)
-        
-        db.commit()
+            await _handle_subscription_resumed(webhook_data)
         
         return JSONResponse(content={"success": True})
         
@@ -306,23 +239,20 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
         logger.error(f"Error processing webhook: {e}")
         raise HTTPException(status_code=500, detail="Webhook processing failed")
 
-async def _handle_subscription_activated(webhook_data: Dict[str, Any], db: Session):
+async def _handle_subscription_activated(webhook_data: Dict[str, Any]):
     """Handle subscription activated webhook"""
     subscription = webhook_data.get("payload", {}).get("subscription", {}).get("entity", {})
     subscription_id = subscription.get("id")
     
     if subscription_id:
         # Activate subscription in database
-        db.execute("""
-            UPDATE profiles 
-            SET 
-                subscription_status = 'active',
-                subscription_start_date = NOW(),
-                subscription_end_date = NOW() + INTERVAL '1 month'
-            WHERE razorpay_subscription_id = :subscription_id
-        """, {"subscription_id": subscription_id})
+        supabase.table("profiles").update({
+            "subscription_status": 'active',
+            "subscription_start_date": datetime.utcnow().isoformat(),
+            "subscription_end_date": (datetime.utcnow() + timedelta(days=30)).isoformat()
+        }).eq("razorpay_subscription_id", subscription_id).execute()
 
-async def _handle_subscription_charged(webhook_data: Dict[str, Any], db: Session):
+async def _handle_subscription_charged(webhook_data: Dict[str, Any]):
     """Handle subscription charged webhook"""
     subscription = webhook_data.get("payload", {}).get("subscription", {}).get("entity", {})
     payment = webhook_data.get("payload", {}).get("payment", {}).get("entity", {})
@@ -332,74 +262,59 @@ async def _handle_subscription_charged(webhook_data: Dict[str, Any], db: Session
     
     if subscription_id and payment_id:
         # Record successful payment
-        db.execute("""
-            INSERT INTO subscription_transactions (user_id, subscription_id, razorpay_payment_id, amount, status)
-            SELECT id, :subscription_id, :payment_id, :amount, 'completed'
-            FROM profiles 
-            WHERE razorpay_subscription_id = :subscription_id
-        """, {
+        supabase.table("subscription_transactions").insert({
             "subscription_id": subscription_id,
-            "payment_id": payment_id,
-            "amount": payment.get("amount", 0)
-        })
+            "razorpay_payment_id": payment_id,
+            "amount": payment.get("amount", 0),
+            "status": 'completed'
+        }).execute()
         
         # Update subscription end date
-        db.execute("""
-            UPDATE profiles 
-            SET subscription_end_date = NOW() + INTERVAL '1 month'
-            WHERE razorpay_subscription_id = :subscription_id
-        """, {"subscription_id": subscription_id})
+        supabase.table("profiles").update({
+            "subscription_end_date": (datetime.utcnow() + timedelta(days=30)).isoformat()
+        }).eq("razorpay_subscription_id", subscription_id).execute()
 
-async def _handle_subscription_cancelled(webhook_data: Dict[str, Any], db: Session):
+async def _handle_subscription_cancelled(webhook_data: Dict[str, Any]):
     """Handle subscription cancelled webhook"""
     subscription = webhook_data.get("payload", {}).get("subscription", {}).get("entity", {})
     subscription_id = subscription.get("id")
     
     if subscription_id:
         # Cancel subscription in database
-        db.execute("""
-            UPDATE profiles 
-            SET 
-                subscription_status = 'cancelled',
-                subscription_end_date = NOW()
-            WHERE razorpay_subscription_id = :subscription_id
-        """, {"subscription_id": subscription_id})
+        supabase.table("profiles").update({
+            "subscription_status": 'cancelled',
+            "subscription_end_date": datetime.utcnow().isoformat()
+        }).eq("razorpay_subscription_id", subscription_id).execute()
 
-async def _handle_subscription_completed(webhook_data: Dict[str, Any], db: Session):
+async def _handle_subscription_completed(webhook_data: Dict[str, Any]):
     """Handle subscription completed webhook"""
     subscription = webhook_data.get("payload", {}).get("subscription", {}).get("entity", {})
     subscription_id = subscription.get("id")
     
     if subscription_id:
         # Mark subscription as completed
-        db.execute("""
-            UPDATE profiles 
-            SET subscription_status = 'completed'
-            WHERE razorpay_subscription_id = :subscription_id
-        """, {"subscription_id": subscription_id})
+        supabase.table("profiles").update({
+            "subscription_status": 'completed'
+        }).eq("razorpay_subscription_id", subscription_id).execute()
 
-async def _handle_subscription_paused(webhook_data: Dict[str, Any], db: Session):
+async def _handle_subscription_paused(webhook_data: Dict[str, Any]):
     """Handle subscription paused webhook"""
     subscription = webhook_data.get("payload", {}).get("subscription", {}).get("entity", {})
     subscription_id = subscription.get("id")
     
     if subscription_id:
         # Pause subscription in database
-        db.execute("""
-            UPDATE profiles 
-            SET subscription_status = 'paused'
-            WHERE razorpay_subscription_id = :subscription_id
-        """, {"subscription_id": subscription_id})
+        supabase.table("profiles").update({
+            "subscription_status": 'paused'
+        }).eq("razorpay_subscription_id", subscription_id).execute()
 
-async def _handle_subscription_resumed(webhook_data: Dict[str, Any], db: Session):
+async def _handle_subscription_resumed(webhook_data: Dict[str, Any]):
     """Handle subscription resumed webhook"""
     subscription = webhook_data.get("payload", {}).get("subscription", {}).get("entity", {})
     subscription_id = subscription.get("id")
     
     if subscription_id:
         # Resume subscription in database
-        db.execute("""
-            UPDATE profiles 
-            SET subscription_status = 'active'
-            WHERE razorpay_subscription_id = :subscription_id
-        """, {"subscription_id": subscription_id})
+        supabase.table("profiles").update({
+            "subscription_status": 'active'
+        }).eq("razorpay_subscription_id", subscription_id).execute()
