@@ -88,7 +88,7 @@ const SideNavbar = () => {
       hasSubmenu: true,
       submenu: [
         {
-          name: 'Content',
+          name: 'Social',
           href: '/content',
           icon: FileText
         },
