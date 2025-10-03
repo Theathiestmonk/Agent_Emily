@@ -14,7 +14,9 @@ import {
   Share2,
   Megaphone,
   BookOpen,
-  CreditCard
+  CreditCard,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react'
 
 const SideNavbar = () => {
@@ -24,6 +26,7 @@ const SideNavbar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [profile, setProfile] = useState(null)
   const [profileFetched, setProfileFetched] = useState(false)
+  const [expandedMenus, setExpandedMenus] = useState({})
 
   // Cache key for localStorage
   const getCacheKey = (userId) => `profile_${userId}`
@@ -77,50 +80,56 @@ const SideNavbar = () => {
     {
       name: 'Dashboard',
       href: '/dashboard',
-      icon: Home,
-      description: 'Overview and quick actions'
+      icon: Home
     },
     {
       name: 'Content',
-      href: '/content',
       icon: FileText,
-      description: 'Manage your content'
+      hasSubmenu: true,
+      submenu: [
+        {
+          name: 'Content',
+          href: '/content',
+          icon: FileText
+        },
+        {
+          name: 'Blogs',
+          href: '/blogs',
+          icon: BookOpen
+        }
+      ]
     },
     {
       name: 'Social Media',
       href: '/social',
-      icon: Share2,
-      description: 'Latest posts from your channels'
+      icon: Share2
     },
     {
       name: 'Analytics',
       href: '/analytics',
-      icon: BarChart3,
-      description: 'Performance insights'
+      icon: BarChart3
     },
     {
       name: 'Ads',
       href: '/ads',
-      icon: Megaphone,
-      description: 'Active advertising campaigns'
-    },
-    {
-      name: 'Blogs',
-      href: '/blogs',
-      icon: BookOpen,
-      description: 'Manage your blog posts'
-    },
-    {
-      name: 'Billing',
-      href: '/billing',
-      icon: CreditCard,
-      description: 'Manage your subscription and billing'
+      icon: Megaphone
     },
     {
       name: 'Settings',
-      href: '/settings',
       icon: Settings,
-      description: 'Social media connections'
+      hasSubmenu: true,
+      submenu: [
+        {
+          name: 'Connections',
+          href: '/settings',
+          icon: Settings
+        },
+        {
+          name: 'Billing',
+          href: '/billing',
+          icon: CreditCard
+        }
+      ]
     }
   ]
 
@@ -137,6 +146,31 @@ const SideNavbar = () => {
   const isActive = (href) => {
     return location.pathname === href
   }
+
+  const toggleSubmenu = (menuName) => {
+    setExpandedMenus(prev => ({
+      ...prev,
+      [menuName]: !prev[menuName]
+    }))
+  }
+
+  const isSubmenuActive = (submenuItems) => {
+    return submenuItems.some(item => isActive(item.href))
+  }
+
+  // Auto-expand submenus when their child pages are active
+  useEffect(() => {
+    const newExpandedMenus = {}
+    navigationItems.forEach(item => {
+      if (item.hasSubmenu && item.submenu) {
+        const hasActiveChild = item.submenu.some(subItem => isActive(subItem.href))
+        if (hasActiveChild) {
+          newExpandedMenus[item.name] = true
+        }
+      }
+    })
+    setExpandedMenus(prev => ({ ...prev, ...newExpandedMenus }))
+  }, [location.pathname])
 
   const displayName = useMemo(() => {
     return profile?.name || user?.user_metadata?.name || user?.email || 'User'
@@ -184,11 +218,69 @@ const SideNavbar = () => {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {navigationItems.map((item) => {
           const Icon = item.icon
-          const active = isActive(item.href)
+          const active = item.href ? isActive(item.href) : isSubmenuActive(item.submenu || [])
+          const isExpanded = expandedMenus[item.name]
           
+          if (item.hasSubmenu) {
+            return (
+              <div key={item.name}>
+                <button
+                  onClick={() => toggleSubmenu(item.name)}
+                  className={`w-full flex items-center p-3 rounded-lg transition-all duration-200 group ${
+                    active
+                      ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                >
+                  <Icon className={`w-5 h-5 ${isCollapsed ? 'mx-auto' : 'mr-3'}`} />
+                  {!isCollapsed && (
+                    <>
+                      <div className="flex-1 text-left">
+                        <div className="font-medium">{item.name}</div>
+                      </div>
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
+                    </>
+                  )}
+                </button>
+                
+                {/* Submenu */}
+                {!isCollapsed && isExpanded && item.submenu && (
+                  <div className="ml-6 mt-2 space-y-1">
+                    {item.submenu.map((subItem) => {
+                      const SubIcon = subItem.icon
+                      const subActive = isActive(subItem.href)
+                      
+                      return (
+                        <button
+                          key={subItem.name}
+                          onClick={() => navigate(subItem.href)}
+                          className={`w-full flex items-center p-2 rounded-lg transition-all duration-200 group ${
+                            subActive
+                              ? 'bg-gray-200 text-gray-900'
+                              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                          }`}
+                        >
+                          <SubIcon className="w-4 h-4 mr-3" />
+                          <div className="flex-1 text-left">
+                            <div className="font-medium text-sm">{subItem.name}</div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          }
+          
+          // Regular menu item
           return (
             <button
               key={item.name}
@@ -203,11 +295,6 @@ const SideNavbar = () => {
               {!isCollapsed && (
                 <div className="flex-1 text-left">
                   <div className="font-medium">{item.name}</div>
-                  <div className={`text-xs ${
-                    active ? 'text-pink-100' : 'text-gray-500'
-                  }`}>
-                    {item.description}
-                  </div>
                 </div>
               )}
             </button>
@@ -216,7 +303,7 @@ const SideNavbar = () => {
       </nav>
 
       {/* User Section */}
-      <div className="p-4 border-t border-gray-200">
+      <div className="p-4 border-t border-gray-200 flex-shrink-0">
         {!isCollapsed ? (
           <div className="space-y-3">
             <button
