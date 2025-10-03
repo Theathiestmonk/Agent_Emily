@@ -1072,6 +1072,7 @@ class CustomContentAgent:
                             "image_size": "custom",
                             "image_quality": "custom",
                             "generation_model": "user_upload",
+                            "generation_service": "user_upload",
                             "generation_cost": 0,
                             "generation_time": 0,
                             "is_approved": True

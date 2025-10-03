@@ -13,6 +13,7 @@ import MainContentLoader from './MainContentLoader'
 import SideNavbar from './SideNavbar'
 import CustomContentChatbot from './CustomContentChatbot'
 import ChatbotImageEditor from './ChatbotImageEditor'
+import MediaGenerationCelebration from './MediaGenerationCelebration'
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -130,6 +131,8 @@ const ContentDashboard = () => {
   const [postNotification, setPostNotification] = useState(null) // Post success notification
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(null) // Track which content has status dropdown open
   const [updatingStatus, setUpdatingStatus] = useState(new Set()) // Track which content is updating status
+  const [showCelebration, setShowCelebration] = useState(false) // Show celebration popup
+  const [celebrationData, setCelebrationData] = useState(null) // Celebration data (imageUrl, generationTime)
 
 
   useEffect(() => {
@@ -1195,10 +1198,22 @@ const ContentDashboard = () => {
         // Fetch the generated image from Supabase
         await fetchPostImages(content.id)
         
-        // Check what was fetched
-        console.log('🖼️ Generated images after fetch:', generatedImages)
+        // Use the image URL directly from the result, not from state
+        const imageUrl = result.image_url
+        console.log('🖼️ Image URL from result:', imageUrl)
         
-        showSuccess('Media generated successfully!', `Image created in ${result.generation_time}s`)
+        if (imageUrl) {
+          setCelebrationData({
+            imageUrl: imageUrl,
+            generationTime: result.generation_time,
+            generationModel: result.generation_model,
+            generationService: result.generation_service
+          })
+          setShowCelebration(true)
+        } else {
+          // Fallback to regular notification if no image URL
+          showSuccess('Media generated successfully!', `Image created in ${result.generation_time}s`)
+        }
       } else {
         throw new Error(result.error || 'Failed to generate media')
       }
@@ -3386,6 +3401,19 @@ const ContentDashboard = () => {
           }}
         />
       )}
+
+      {/* Media Generation Celebration Popup */}
+      <MediaGenerationCelebration
+        isOpen={showCelebration}
+        onClose={() => {
+          setShowCelebration(false)
+          setCelebrationData(null)
+        }}
+        imageUrl={celebrationData?.imageUrl}
+        generationTime={celebrationData?.generationTime}
+        generationModel={celebrationData?.generationModel}
+        generationService={celebrationData?.generationService}
+      />
 
     </div>
   )

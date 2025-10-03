@@ -517,6 +517,7 @@ Return the response as a JSON array with 3 ad copy objects.
                             "image_size": ad_image.image_size,
                             "image_quality": ad_image.image_quality,
                             "generation_model": ad_image.generation_model,
+                            "generation_service": "openai_dalle",  # Ads use DALL-E
                             "generation_cost": ad_image.generation_cost,
                             "generation_time": ad_image.generation_time,
                             "is_approved": ad_image.is_approved,

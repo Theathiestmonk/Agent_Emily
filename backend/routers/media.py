@@ -91,9 +91,14 @@ async def generate_image_for_post(
         # Create media agent
         gemini_api_key = os.getenv("GEMINI_API_KEY")
         if not gemini_api_key:
-            raise HTTPException(status_code=500, detail="Gemini API key not configured")
+            logger.error("GEMINI_API_KEY environment variable not set")
+            raise HTTPException(status_code=500, detail="Image generation service not configured. Please contact support.")
         
-        media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, gemini_api_key)
+        try:
+            media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, gemini_api_key)
+        except Exception as e:
+            logger.error(f"Failed to create media agent: {str(e)}")
+            raise HTTPException(status_code=500, detail="Image generation service initialization failed. Please contact support.")
         
         # Generate image
         result = await media_agent.generate_media_for_post(request.post_id, current_user.id)
@@ -126,9 +131,14 @@ async def generate_images_for_posts(
         # Create media agent
         gemini_api_key = os.getenv("GEMINI_API_KEY")
         if not gemini_api_key:
-            raise HTTPException(status_code=500, detail="Gemini API key not configured")
+            logger.error("GEMINI_API_KEY environment variable not set")
+            raise HTTPException(status_code=500, detail="Image generation service not configured. Please contact support.")
         
-        media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, gemini_api_key)
+        try:
+            media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, gemini_api_key)
+        except Exception as e:
+            logger.error(f"Failed to create media agent: {str(e)}")
+            raise HTTPException(status_code=500, detail="Image generation service initialization failed. Please contact support.")
         
         # Generate images for each post
         results = []

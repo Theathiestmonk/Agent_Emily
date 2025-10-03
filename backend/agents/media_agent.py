@@ -52,6 +52,8 @@ class MediaAgentState(TypedDict):
     generated_image_url: Optional[str]
     generation_cost: Optional[float]
     generation_time: Optional[int]
+    generation_model: Optional[str]
+    generation_service: Optional[str]
     error_message: Optional[str]
     status: str  # pending, generating, completed, failed
 
@@ -376,14 +378,37 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                     # If it's base64 string, decode it
                     image_bytes = base64.b64decode(image_data)
                 
-                # Upload the image to Supabase storage
-                storage_url = await self._upload_base64_image(image_bytes, state["post_id"])
+                # Upload the image bytes directly to Supabase storage
+                storage_url = await self._upload_image_bytes(image_bytes, state["post_id"])
                 
             except Exception as api_error:
                 logger.error(f"Error generating image with Gemini: {str(api_error)}")
-                # Fallback to generating a simple placeholder image
-                logger.warning("Falling back to generated placeholder image")
-                storage_url = await self._generate_fallback_image(image_prompt, image_size, state["post_id"])
+                logger.error(f"API Error details: {type(api_error).__name__}: {str(api_error)}")
+                
+                # Check if it's a configuration issue
+                if "API key" in str(api_error).lower() or "authentication" in str(api_error).lower():
+                    logger.error("Gemini API key issue detected - check GEMINI_API_KEY environment variable")
+                    raise Exception(f"Gemini API configuration error: {str(api_error)}")
+                elif "quota" in str(api_error).lower() or "limit" in str(api_error).lower():
+                    logger.error("Gemini API quota exceeded")
+                    raise Exception(f"Gemini API quota exceeded: {str(api_error)}")
+                else:
+                    # Try DALL-E as fallback if available
+                    logger.warning("Gemini failed, trying DALL-E as fallback...")
+                    try:
+                        storage_url = await self._generate_with_dalle(image_prompt, image_size, state["post_id"])
+                        logger.info(f"DALL-E fallback successful: {storage_url}")
+                        # Update metadata for DALL-E
+                        state["generation_model"] = "dall-e-3"
+                        state["generation_service"] = "openai_dalle"
+                    except Exception as dalle_error:
+                        logger.error(f"DALL-E fallback also failed: {str(dalle_error)}")
+                        # Final fallback to placeholder
+                        logger.warning("Falling back to generated placeholder image")
+                        storage_url = await self._generate_fallback_image(image_prompt, image_size, state["post_id"])
+                        # Update metadata for fallback
+                        state["generation_model"] = "fallback_placeholder"
+                        state["generation_service"] = "internal_fallback"
             
             end_time = datetime.now()
             generation_time = int((end_time - start_time).total_seconds())
@@ -397,6 +422,8 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             state["generated_image_url"] = storage_url
             state["generation_cost"] = cost
             state["generation_time"] = generation_time
+            state["generation_model"] = "gemini-2.5-flash-image-preview"
+            state["generation_service"] = "google_gemini"
             state["status"] = "saving"
             
             return state
@@ -432,7 +459,8 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 "image_style": state["image_style"].value if state["image_style"] else "realistic",
                 "image_size": state["image_size"].value if state["image_size"] else "1024x1024",
                 "image_quality": "standard",
-                "generation_model": "gemini-2.5-flash-image-preview",
+                "generation_model": state.get("generation_model", "unknown"),
+                "generation_service": state.get("generation_service", "unknown"),
                 "generation_cost": state["generation_cost"],
                 "generation_time": state["generation_time"],
                 "is_approved": False
@@ -592,6 +620,33 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
         
         return round(base_cost, 4)
 
+    async def _upload_image_bytes(self, image_bytes: bytes, post_id: str) -> str:
+        """Upload image bytes directly to Supabase storage"""
+        try:
+            # Generate unique filename
+            filename = f"{post_id}_generated_{uuid.uuid4().hex[:8]}.png"
+            file_path = f"generated/{filename}"
+            
+            # Upload to Supabase storage
+            storage_response = self.supabase.storage.from_("ai-generated-images").upload(
+                file_path,
+                image_bytes,
+                file_options={"content-type": "image/png"}
+            )
+            
+            if hasattr(storage_response, 'error') and storage_response.error:
+                raise Exception(f"Failed to upload image: {storage_response.error}")
+            
+            # Get public URL
+            public_url = self.supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+            
+            logger.info(f"Successfully uploaded image to Supabase: {public_url}")
+            return public_url
+            
+        except Exception as e:
+            logger.error(f"Error uploading image bytes: {str(e)}")
+            raise Exception(f"Failed to upload image: {str(e)}")
+
     async def _upload_base64_image(self, image_bytes: bytes, post_id: str) -> str:
         """Upload image bytes to Supabase storage"""
         try:
@@ -644,6 +699,24 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
     async def _download_and_upload_image(self, image_url: str, post_id: str) -> str:
         """Download image from URL and upload to Supabase storage"""
         try:
+            import httpx
+            
+            # Download the image
+            async with httpx.AsyncClient() as client:
+                response = await client.get(image_url, timeout=30.0)
+                response.raise_for_status()
+                image_bytes = response.content
+            
+            # Upload to Supabase
+            return await self._upload_image_bytes(image_bytes, post_id)
+            
+        except Exception as e:
+            logger.error(f"Error downloading and uploading image: {str(e)}")
+            raise Exception(f"Failed to download and upload image: {str(e)}")
+
+    async def _download_and_upload_image_old(self, image_url: str, post_id: str) -> str:
+        """Download image from URL and upload to Supabase storage"""
+        try:
             # Download image from URL
             async with httpx.AsyncClient() as client:
                 response = await client.get(image_url)
@@ -679,6 +752,47 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             logger.warning(f"Falling back to original URL: {image_url}")
             return image_url
     
+    async def _generate_with_dalle(self, prompt: str, image_size: ImageSize, post_id: str) -> str:
+        """Generate image using DALL-E as fallback"""
+        try:
+            import openai
+            
+            # Check if OpenAI API key is available
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            if not openai_api_key:
+                raise Exception("OpenAI API key not available for DALL-E fallback")
+            
+            # Configure OpenAI
+            client = openai.AsyncOpenAI(api_key=openai_api_key)
+            
+            # Convert image size to DALL-E format
+            dalle_size = "1024x1024"  # DALL-E 3 only supports 1024x1024
+            if hasattr(image_size, 'value'):
+                size_str = image_size.value
+            else:
+                size_str = str(image_size) if image_size else '1024x1024'
+            
+            # Generate image with DALL-E
+            response = await client.images.generate(
+                model="dall-e-3",
+                prompt=prompt,
+                size=dalle_size,
+                quality="standard",
+                n=1
+            )
+            
+            image_url = response.data[0].url
+            
+            # Download and upload to Supabase
+            storage_url = await self._download_and_upload_image(image_url, post_id)
+            
+            logger.info(f"DALL-E generated image successfully: {storage_url}")
+            return storage_url
+            
+        except Exception as e:
+            logger.error(f"Error generating image with DALL-E: {str(e)}")
+            raise Exception(f"DALL-E generation failed: {str(e)}")
+
     async def _generate_fallback_image(self, prompt: str, image_size: ImageSize, post_id: str) -> str:
         """Generate a simple fallback image when Gemini fails"""
         try:
@@ -739,23 +853,8 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             img_buffer.seek(0)
             image_bytes = img_buffer.getvalue()
             
-            # Upload to Supabase storage
-            filename = f"{post_id}_fallback_{uuid.uuid4().hex[:8]}.png"
-            file_path = f"generated/{filename}"
-            
-            storage_response = self.supabase.storage.from_("ai-generated-images").upload(
-                file_path,
-                image_bytes,
-                file_options={"content-type": "image/png"}
-            )
-            
-            if hasattr(storage_response, 'error') and storage_response.error:
-                raise Exception(f"Failed to upload fallback image: {storage_response.error}")
-            
-            # Get public URL
-            public_url = self.supabase.storage.from_("ai-generated-images").get_public_url(file_path)
-            
-            return public_url
+            # Upload to Supabase storage using the new method
+            return await self._upload_image_bytes(image_bytes, post_id)
             
         except Exception as e:
             logger.error(f"Error generating fallback image: {str(e)}")
@@ -786,6 +885,8 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 "image_url": result.get("generated_image_url"),
                 "cost": result.get("generation_cost"),
                 "generation_time": result.get("generation_time"),
+                "generation_model": result.get("generation_model"),
+                "generation_service": result.get("generation_service"),
                 "error": result.get("error_message")
             }
         except Exception as e:
