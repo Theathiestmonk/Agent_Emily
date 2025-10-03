@@ -67,8 +67,17 @@ function ProtectedRoute({ children }) {
           }
         } catch (error) {
           console.error('Error checking user status:', error)
-          setSubscriptionStatus({ has_active_subscription: false })
-          setOnboardingStatus('subscription_required')
+          // Only set as no subscription if it's a clear 404 or similar error
+          // For network errors, keep checking
+          if (error.response?.status === 404 || error.response?.status === 403) {
+            setSubscriptionStatus({ has_active_subscription: false })
+            setOnboardingStatus('subscription_required')
+          } else {
+            // For other errors, retry or show error
+            console.log('Network or server error, will retry...')
+            setSubscriptionStatus({ has_active_subscription: false })
+            setOnboardingStatus('subscription_required')
+          }
         }
       }
       setCheckingStatus(false)
@@ -82,13 +91,19 @@ function ProtectedRoute({ children }) {
     return <LoadingBar />
   }
 
+  // If we're still checking subscription status, show loading
+  if (subscriptionStatus === null) {
+    console.log('Still checking subscription status...')
+    return <LoadingBar />
+  }
+
   if (!isAuthenticated) {
     console.log('User not authenticated, redirecting to login')
     return <Navigate to="/login" />
   }
 
-  // Check subscription status
-  if (!subscriptionStatus?.has_active_subscription) {
+  // Check subscription status - only redirect if we've actually checked and confirmed no subscription
+  if (subscriptionStatus !== null && !subscriptionStatus?.has_active_subscription) {
     console.log('User does not have active subscription, redirecting to subscription page')
     return <Navigate to="/subscription" />
   }
