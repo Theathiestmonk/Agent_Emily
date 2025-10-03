@@ -255,9 +255,23 @@ async def razorpay_webhook(request: Request):
         
         logger.info(f"Webhook received - Event: {event_type}")
         
-        # For now, just log and return success
-        # This will help us see if webhooks are being received
-        logger.info(f"Webhook payload: {webhook_data}")
+        # Process webhook based on event type
+        if event_type == "subscription.activated":
+            await _handle_subscription_activated(webhook_data)
+        elif event_type == "subscription.charged":
+            await _handle_subscription_charged(webhook_data)
+        elif event_type == "subscription.cancelled":
+            await _handle_subscription_cancelled(webhook_data)
+        elif event_type == "subscription.completed":
+            await _handle_subscription_completed(webhook_data)
+        elif event_type == "subscription.paused":
+            await _handle_subscription_paused(webhook_data)
+        elif event_type == "subscription.resumed":
+            await _handle_subscription_resumed(webhook_data)
+        elif event_type == "payment_link.paid":
+            await _handle_payment_link_paid(webhook_data)
+        else:
+            logger.warning(f"Unhandled webhook event: {event_type}")
         
         return JSONResponse(content={"success": True, "event": event_type})
         
