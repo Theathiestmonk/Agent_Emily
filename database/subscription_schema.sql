@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS subscription_webhooks (
 -- 5. Insert default subscription plans
 INSERT INTO subscription_plans (name, display_name, price_monthly, price_yearly, features) VALUES
 ('starter', 'Starter', 5900, 59000, '["1 AI Agent", "Basic Analytics", "Email Support", "Standard Features"]'),
-('pro', 'Pro', 9900, 99000, '["All AI Agents", "Advanced Analytics", "Priority Support", "Custom Integrations", "Team Collaboration"]')
+('pro', 'Pro', 9900, 99000, '["Managed Agents", "Advanced Analytics", "Priority Support", "Custom Integrations"]')
 ON CONFLICT (name) DO NOTHING;
 
 -- 6. Create indexes for better performance

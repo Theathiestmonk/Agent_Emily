@@ -281,6 +281,8 @@ async def razorpay_webhook(request: Request):
             await _handle_subscription_paused(webhook_data)
         elif event_type == "subscription.resumed":
             await _handle_subscription_resumed(webhook_data)
+        elif event_type == "payment_link.paid":
+            await _handle_payment_link_paid(webhook_data)
         
         return JSONResponse(content={"success": True})
         
@@ -367,3 +369,84 @@ async def _handle_subscription_resumed(webhook_data: Dict[str, Any]):
         supabase.table("profiles").update({
             "subscription_status": 'active'
         }).eq("razorpay_subscription_id", subscription_id).execute()
+
+async def _handle_payment_link_paid(webhook_data: Dict[str, Any]):
+    """Handle payment link paid webhook"""
+    payment_link = webhook_data.get("payload", {}).get("payment_link", {}).get("entity", {})
+    payment = webhook_data.get("payload", {}).get("payment", {}).get("entity", {})
+    
+    payment_link_id = payment_link.get("id")
+    payment_id = payment.get("id")
+    amount = payment.get("amount", 0)
+    
+    logger.info(f"Payment link paid: {payment_link_id}, Payment: {payment_id}, Amount: {amount}")
+    
+    if payment_link_id and payment_id:
+        # Find user by payment link reference (subscription ID)
+        # The payment link description contains the subscription ID
+        description = payment_link.get("description", "")
+        subscription_id = None
+        
+        # Extract subscription ID from description
+        if "Subscription payment for" in description:
+            subscription_id = description.replace("Subscription payment for ", "").strip()
+        
+        if subscription_id:
+            # Use service role key for admin access
+            from supabase import create_client
+            import os
+            
+            supabase_admin = create_client(
+                os.getenv("SUPABASE_URL"),
+                os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+            )
+            
+            # Find user with this subscription ID
+            user_result = supabase_admin.table("profiles").select("id, subscription_plan").eq("razorpay_subscription_id", subscription_id).execute()
+            
+            if user_result.data:
+                user = user_result.data[0]
+                user_id = user["id"]
+                plan = user.get("subscription_plan", "starter")
+                
+                # Validate payment amount matches expected plan price
+                plan_result = supabase_admin.table("subscription_plans").select("price_monthly, price_yearly").eq("name", plan).execute()
+                
+                if plan_result.data:
+                    expected_amount = plan_result.data[0]["price_monthly"]  # Assuming monthly for now
+                    
+                    # Validate payment amount
+                    if amount != expected_amount:
+                        logger.warning(f"Payment amount {amount} does not match expected amount {expected_amount} for plan {plan}")
+                        return
+                
+                # Activate subscription
+                now = datetime.utcnow()
+                end_date = now + timedelta(days=30)
+                
+                update_result = supabase_admin.table("profiles").update({
+                    "subscription_status": "active",
+                    "subscription_start_date": now.isoformat(),
+                    "subscription_end_date": end_date.isoformat(),
+                    "migration_status": "migrated"
+                }).eq("id", user_id).execute()
+                
+                if update_result.data:
+                    # Record payment transaction
+                    supabase_admin.table("subscription_transactions").insert({
+                        "user_id": user_id,
+                        "subscription_id": subscription_id,
+                        "razorpay_payment_id": payment_id,
+                        "amount": amount,
+                        "currency": "INR",
+                        "status": "completed",
+                        "payment_method": payment.get("method", "card")
+                    }).execute()
+                    
+                    logger.info(f"Subscription activated for user {user_id} with plan {plan}")
+                else:
+                    logger.error(f"Failed to update user profile for user {user_id}")
+            else:
+                logger.warning(f"No user found with subscription ID: {subscription_id}")
+        else:
+            logger.warning(f"Could not extract subscription ID from description: {description}")
