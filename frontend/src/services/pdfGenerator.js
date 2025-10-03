@@ -1,18 +1,20 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-export const generateInvoicePDF = (invoiceData, billingHistory) => {
+export const generateInvoicePDF = (invoiceData, billingHistory, userProfile) => {
   try {
     const doc = new jsPDF();
     
-    // Set up colors
-    const primaryColor = '#9333F6';
+    // Set up colors (matching landing page gradient)
+    const primaryColor = '#9E005C'; // Start of gradient
+    const secondaryColor = '#FF4D94'; // End of gradient
     const textColor = '#374151';
     
     // Header
-    doc.setFontSize(24);
+    doc.setFontSize(28);
     doc.setTextColor(primaryColor);
-    doc.text('ATSN AI', 20, 30);
+    doc.setFont(undefined, 'bold');
+    doc.text('atsn ai', 20, 30);
     
     doc.setFontSize(10);
     doc.setTextColor(textColor);
@@ -39,9 +41,19 @@ export const generateInvoicePDF = (invoiceData, billingHistory) => {
     
     doc.setFontSize(10);
     doc.setTextColor(textColor);
-    doc.text('Customer Name', 20, 90);
-    doc.text('Email Address', 20, 98);
-    doc.text('Subscription Plan', 20, 106);
+    doc.setFont(undefined, 'normal');
+    // Customer details with better fallbacks
+    const customerName = userProfile?.name || userProfile?.business_name || 'Customer Name';
+    const customerEmail = userProfile?.email || 'Email Address';
+    const subscriptionPlan = userProfile?.subscription_plan ? 
+      `${userProfile.subscription_plan.charAt(0).toUpperCase() + userProfile.subscription_plan.slice(1)}` : 
+      'Subscription Plan';
+    
+    console.log('PDF Customer Details:', { customerName, customerEmail, subscriptionPlan });
+    
+    doc.text(customerName, 20, 90);
+    doc.text(customerEmail, 20, 98);
+    doc.text(subscriptionPlan, 20, 106);
     
     // Line separator
     doc.setDrawColor(primaryColor);
@@ -53,7 +65,7 @@ export const generateInvoicePDF = (invoiceData, billingHistory) => {
       ['Description', 'Amount', 'Status'],
       [
         invoiceData.description || 'Subscription Payment',
-        `₹${(invoiceData.amount / 100).toFixed(2)}`,
+        `INR ${(invoiceData.amount / 100).toFixed(2)}`,
         invoiceData.status.toUpperCase()
       ]
     ];
@@ -82,7 +94,7 @@ export const generateInvoicePDF = (invoiceData, billingHistory) => {
     doc.setFontSize(12);
     doc.setTextColor(primaryColor);
     doc.text('Total Amount:', 140, finalY);
-    doc.text(`₹${(invoiceData.amount / 100).toFixed(2)}`, 170, finalY);
+    doc.text(`INR ${(invoiceData.amount / 100).toFixed(2)}`, 170, finalY);
     
     // Payment info
     doc.setFontSize(10);
@@ -106,18 +118,20 @@ export const generateInvoicePDF = (invoiceData, billingHistory) => {
   }
 };
 
-export const generateBillingHistoryPDF = (billingHistory, userInfo) => {
+export const generateBillingHistoryPDF = (billingHistory, userProfile) => {
   try {
     const doc = new jsPDF();
     
-    // Set up colors
-    const primaryColor = '#9333F6';
+    // Set up colors (matching landing page gradient)
+    const primaryColor = '#9E005C'; // Start of gradient
+    const secondaryColor = '#FF4D94'; // End of gradient
     const textColor = '#374151';
     
     // Header
-    doc.setFontSize(24);
+    doc.setFontSize(28);
     doc.setTextColor(primaryColor);
-    doc.text('ATSN AI', 20, 30);
+    doc.setFont(undefined, 'bold');
+    doc.text('atsn ai', 20, 30);
     
     doc.setFontSize(10);
     doc.setTextColor(textColor);
@@ -133,9 +147,11 @@ export const generateBillingHistoryPDF = (billingHistory, userInfo) => {
     // Report details
     doc.setFontSize(10);
     doc.setTextColor(textColor);
+    doc.setFont(undefined, 'normal');
     doc.text(`Generated: ${new Date().toLocaleDateString()}`, 140, 40);
-    doc.text(`Customer: ${userInfo?.name || 'N/A'}`, 140, 48);
-    doc.text(`Total Transactions: ${billingHistory.length}`, 140, 56);
+    doc.text(`Customer: ${userProfile?.name || userProfile?.business_name || 'N/A'}`, 140, 48);
+    doc.text(`Email: ${userProfile?.email || 'N/A'}`, 140, 56); // Uses registered email
+    doc.text(`Total Transactions: ${billingHistory.length}`, 140, 64);
     
     // Line separator
     doc.setDrawColor(primaryColor);
@@ -188,7 +204,7 @@ export const generateBillingHistoryPDF = (billingHistory, userInfo) => {
     
     doc.setFontSize(10);
     doc.setTextColor(textColor);
-    doc.text(`Total Amount: ₹${(totalAmount / 100).toFixed(2)}`, 20, finalY + 15);
+    doc.text(`Total Amount: INR ${(totalAmount / 100).toFixed(2)}`, 20, finalY + 15);
     doc.text(`Paid Transactions: ${paidCount}`, 20, finalY + 25);
     doc.text(`Total Transactions: ${billingHistory.length}`, 20, finalY + 35);
     

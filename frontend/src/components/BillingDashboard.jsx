@@ -21,6 +21,7 @@ const BillingDashboard = () => {
   const { user } = useAuth();
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [billingHistory, setBillingHistory] = useState([]);
+  const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -43,11 +44,44 @@ const BillingDashboard = () => {
       const historyResponse = await subscriptionAPI.getBillingHistory();
       setBillingHistory(historyResponse.data.billing_history || []);
       
+      // Fetch user profile
+      await fetchUserProfile();
+      
     } catch (err) {
       console.error('Error fetching billing data:', err);
       setError('Failed to load billing information');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUserProfile = async () => {
+    try {
+      console.log('Fetching user profile for user:', user?.id);
+      
+      // Always use user metadata as primary source since it's more reliable
+      const profileData = {
+        name: user?.user_metadata?.name || user?.user_metadata?.full_name || 'Customer Name',
+        email: user?.email || 'Email Address',
+        business_name: user?.user_metadata?.name || user?.user_metadata?.full_name,
+        subscription_plan: subscriptionStatus?.plan || 'Subscription Plan'
+      };
+      
+      console.log('Profile data:', profileData);
+      setUserProfile(profileData);
+      
+      // Cache the profile
+      localStorage.setItem(`profile_${user?.id}`, JSON.stringify(profileData));
+      
+    } catch (error) {
+      console.error('Error setting user profile:', error);
+      // Use user metadata as fallback
+      setUserProfile({
+        name: user?.user_metadata?.name || user?.email || 'Customer Name',
+        email: user?.email || 'Email Address',
+        business_name: user?.user_metadata?.name,
+        subscription_plan: subscriptionStatus?.plan || 'Subscription Plan'
+      });
     }
   };
 
@@ -66,7 +100,7 @@ const BillingDashboard = () => {
   };
 
   const formatCurrency = (amount) => {
-    return `₹${(amount / 100).toFixed(2)}`;
+    return `INR ${(amount / 100).toFixed(2)}`;
   };
 
   const getStatusColor = (status) => {
@@ -145,10 +179,7 @@ const BillingDashboard = () => {
       }
 
       // Generate PDF
-      const pdf = generateBillingHistoryPDF(billingHistory, {
-        name: user?.user_metadata?.name || 'Customer',
-        email: user?.email || 'N/A'
-      });
+      const pdf = generateBillingHistoryPDF(billingHistory, userProfile);
       
       // Download PDF
       pdf.save(`billing-history-${new Date().toISOString().split('T')[0]}.pdf`);
@@ -165,8 +196,11 @@ const BillingDashboard = () => {
         return;
       }
 
+      console.log('Generating invoice with user profile:', userProfile);
+      console.log('Invoice data:', invoice);
+
       // Generate individual invoice PDF
-      const pdf = generateInvoicePDF(invoice, billingHistory);
+      const pdf = generateInvoicePDF(invoice, billingHistory, userProfile);
       
       // Download PDF
       pdf.save(`invoice-${invoice.id}-${new Date().toISOString().split('T')[0]}.pdf`);
