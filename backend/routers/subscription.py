@@ -31,6 +31,11 @@ router = APIRouter(prefix="/api/subscription", tags=["subscription"])
 # Initialize Razorpay service
 razorpay_service = RazorpayService()
 
+@router.get("/test-webhook")
+async def test_webhook():
+    """Test webhook endpoint"""
+    return JSONResponse(content={"success": True, "message": "Webhook endpoint is working"})
+
 @router.get("/test-razorpay")
 async def test_razorpay():
     """Test Razorpay connectivity"""
@@ -244,51 +249,23 @@ async def create_subscription(
 async def razorpay_webhook(request: Request):
     """Handle Razorpay webhooks"""
     try:
-        payload = await request.body()
-        signature = request.headers.get("X-Razorpay-Signature")
-        
-        if not signature:
-            raise HTTPException(status_code=400, detail="Missing signature")
-        
-        # Verify webhook signature
-        if not await razorpay_service.verify_webhook(payload.decode(), signature):
-            raise HTTPException(status_code=400, detail="Invalid signature")
-        
         # Parse webhook data
         webhook_data = await request.json()
-        
-        # Store webhook event
-        supabase.table("subscription_webhooks").insert({
-            "event_id": webhook_data.get("id"),
-            "event_type": webhook_data.get("event"),
-            "subscription_id": webhook_data.get("payload", {}).get("subscription", {}).get("entity", {}).get("id"),
-            "payment_id": webhook_data.get("payload", {}).get("payment", {}).get("entity", {}).get("id"),
-            "payload": webhook_data
-        }).execute()
-        
-        # Process webhook based on event type
         event_type = webhook_data.get("event")
         
-        if event_type == "subscription.activated":
-            await _handle_subscription_activated(webhook_data)
-        elif event_type == "subscription.charged":
-            await _handle_subscription_charged(webhook_data)
-        elif event_type == "subscription.cancelled":
-            await _handle_subscription_cancelled(webhook_data)
-        elif event_type == "subscription.completed":
-            await _handle_subscription_completed(webhook_data)
-        elif event_type == "subscription.paused":
-            await _handle_subscription_paused(webhook_data)
-        elif event_type == "subscription.resumed":
-            await _handle_subscription_resumed(webhook_data)
-        elif event_type == "payment_link.paid":
-            await _handle_payment_link_paid(webhook_data)
+        logger.info(f"Webhook received - Event: {event_type}")
         
-        return JSONResponse(content={"success": True})
+        # For now, just log and return success
+        # This will help us see if webhooks are being received
+        logger.info(f"Webhook payload: {webhook_data}")
+        
+        return JSONResponse(content={"success": True, "event": event_type})
         
     except Exception as e:
         logger.error(f"Error processing webhook: {e}")
-        raise HTTPException(status_code=500, detail="Webhook processing failed")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 async def _handle_subscription_activated(webhook_data: Dict[str, Any]):
     """Handle subscription activated webhook"""
