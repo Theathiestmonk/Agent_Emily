@@ -37,6 +37,7 @@ import ContactUs from './pages/ContactUs.jsx'
 import SubscriptionSelector from './components/SubscriptionSelector'
 import PaymentSuccess from './components/PaymentSuccess'
 import MigrationBanner from './components/MigrationBanner'
+import BillingDashboard from './components/BillingDashboard'
 import { subscriptionAPI } from './services/subscription'
 
 function ProtectedRoute({ children }) {
@@ -221,6 +222,14 @@ function AppContent() {
         <Route 
           path="/auth/callback" 
           element={<TokenExchangeHandler />} 
+        />
+        <Route 
+          path="/billing" 
+          element={
+            <ProtectedRoute>
+              <BillingDashboard />
+            </ProtectedRoute>
+          } 
         />
         <Route 
           path="/settings" 

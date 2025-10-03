@@ -43,5 +43,11 @@ export const subscriptionAPI = {
   async cancelSubscription(subscriptionId) {
     const api = createApiInstance();
     return await api.post('/api/subscription/cancel', { subscription_id: subscriptionId });
+  },
+
+  // Get billing history
+  async getBillingHistory() {
+    const api = createApiInstance();
+    return await api.get('/api/subscription/billing-history');
   }
 };

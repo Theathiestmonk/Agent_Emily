@@ -13,7 +13,8 @@ import {
   BarChart3,
   Share2,
   Megaphone,
-  BookOpen
+  BookOpen,
+  CreditCard
 } from 'lucide-react'
 
 const SideNavbar = () => {
@@ -108,6 +109,12 @@ const SideNavbar = () => {
       href: '/blogs',
       icon: BookOpen,
       description: 'Manage your blog posts'
+    },
+    {
+      name: 'Billing',
+      href: '/billing',
+      icon: CreditCard,
+      description: 'Manage your subscription and billing'
     },
     {
       name: 'Settings',

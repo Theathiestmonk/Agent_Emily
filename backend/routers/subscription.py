@@ -183,6 +183,72 @@ async def get_migration_status(
         logger.error(f"Error fetching migration status: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch migration status")
 
+@router.get("/billing-history")
+async def get_billing_history(
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's billing history"""
+    try:
+        # Get user's subscription transactions
+        result = supabase.table("subscription_transactions").select("*").eq("user_id", current_user.id).order("created_at", desc=True).execute()
+        
+        billing_history = []
+        for transaction in result.data:
+            # Get plan details for display
+            plan_result = supabase.table("subscription_plans").select("display_name").eq("name", transaction.get("subscription_plan", "starter")).execute()
+            plan_name = plan_result.data[0]["display_name"] if plan_result.data else "Unknown Plan"
+            
+            billing_history.append({
+                "id": transaction.get("razorpay_payment_id", f"txn_{transaction['id']}"),
+                "date": transaction.get("created_at", ""),
+                "amount": transaction.get("amount", 0),
+                "status": transaction.get("status", "completed"),
+                "description": f"{plan_name} - Payment",
+                "currency": transaction.get("currency", "INR"),
+                "payment_method": transaction.get("payment_method", "card")
+            })
+        
+        return JSONResponse(content={
+            "success": True,
+            "billing_history": billing_history
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching billing history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch billing history")
+
+@router.post("/cancel")
+async def cancel_subscription(
+    request: Dict[str, Any],
+    current_user: User = Depends(get_current_user)
+):
+    """Cancel user's subscription"""
+    try:
+        subscription_id = request.get("subscription_id")
+        
+        if not subscription_id:
+            raise HTTPException(status_code=400, detail="Subscription ID is required")
+        
+        # Update subscription status to cancelled
+        result = supabase.table("profiles").update({
+            "subscription_status": "cancelled",
+            "subscription_end_date": datetime.utcnow().isoformat()
+        }).eq("id", current_user.id).eq("razorpay_subscription_id", subscription_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        
+        logger.info(f"Subscription cancelled for user {current_user.id}")
+        
+        return JSONResponse(content={
+            "success": True,
+            "message": "Subscription cancelled successfully"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error cancelling subscription: {e}")
+        raise HTTPException(status_code=500, detail="Failed to cancel subscription")
+
 @router.post("/create")
 async def create_subscription(
     request: SubscriptionCreateRequest,
