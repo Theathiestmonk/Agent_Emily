@@ -7,8 +7,8 @@ const SubscriptionSelector = () => {
   const [plans, setPlans] = useState([]);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [billingCycle, setBillingCycle] = useState('monthly');
-  const [loading, setLoading] = useState(false);
   const [loadingPlans, setLoadingPlans] = useState(true);
+  const [loadingPlan, setLoadingPlan] = useState(null); // Track which plan is loading
   const { logout } = useAuth();
 
   useEffect(() => {
@@ -27,7 +27,7 @@ const SubscriptionSelector = () => {
   }, []);
 
   const handleSubscribe = async (planName) => {
-    setLoading(true);
+    setLoadingPlan(planName);
     try {
       const response = await subscriptionAPI.createSubscription({
         plan_name: planName,
@@ -45,7 +45,7 @@ const SubscriptionSelector = () => {
       console.error('Error creating subscription:', error);
       alert('Error creating subscription. Please try again.');
     } finally {
-      setLoading(false);
+      setLoadingPlan(null);
     }
   };
 
@@ -211,14 +211,14 @@ const SubscriptionSelector = () => {
                 
                 <button
                   onClick={() => handleSubscribe(plan.name)}
-                  disabled={loading}
+                  disabled={loadingPlan === plan.name}
                   className={`w-full py-2.5 rounded-lg font-medium transition-all duration-300 flex items-center justify-center text-sm ${
                     isPro
                       ? 'bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white hover:from-[#9E005C] hover:to-[#FF4D94]'
                       : 'bg-gradient-to-r from-[#9E005C] to-[#FF4D94] text-white hover:from-[#FF4D94] hover:to-[#9E005C]'
-                  } ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+                  } ${loadingPlan === plan.name ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
                 >
-                  {loading ? (
+                  {loadingPlan === plan.name ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin mr-2" />
                       Processing...

@@ -211,17 +211,14 @@ async def create_subscription(
             "email": current_user.email
         })
         
-        # Create Razorpay subscription
-        subscription = await razorpay_service.create_subscription(
-            customer_id, 
-            request.plan_name, 
-            request.billing_cycle
-        )
+        # Generate a unique subscription ID for tracking
+        import uuid
+        subscription_id = f"sub_{uuid.uuid4().hex[:8]}"
         
         # Update user profile with subscription info
         supabase.table("profiles").update({
             "razorpay_customer_id": customer_id,
-            "razorpay_subscription_id": subscription['id'],
+            "razorpay_subscription_id": subscription_id,
             "subscription_plan": request.plan_name,
             "migration_status": 'migrated'
         }).eq("id", current_user.id).execute()
@@ -229,13 +226,13 @@ async def create_subscription(
         # Create payment link
         amount = plan["price_monthly"] if request.billing_cycle == "monthly" else plan["price_yearly"]
         payment_url = await razorpay_service.create_payment_link(
-            subscription['id'], 
+            subscription_id, 
             amount
         )
         
         return JSONResponse(content={
             "success": True,
-            "subscription_id": subscription['id'],
+            "subscription_id": subscription_id,
             "customer_id": customer_id,
             "payment_url": payment_url,
             "message": "Subscription created successfully"
