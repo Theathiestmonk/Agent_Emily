@@ -28,7 +28,7 @@ class SubscriptionTransaction(Base):
     subscription_id = Column(String(255), nullable=False, index=True)
     razorpay_payment_id = Column(String(255), nullable=False)
     amount = Column(Integer, nullable=False)  # Amount in cents
-    currency = Column(String(3), default="USD")
+    currency = Column(String(3), default="INR")
     status = Column(String(20), nullable=False)
     payment_method = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -790,7 +790,7 @@ const Profile = () => {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {renderTextField('Monthly Budget Range', 'monthly_budget_range', null, 'text', 'e.g., $500-$1000')}
+                {renderTextField('Monthly Budget Range', 'monthly_budget_range', null, 'text', 'e.g., ₹500-₹1000')}
                 {renderTextField('Posting Frequency', 'posting_frequency', null, 'text', 'e.g., Daily, Weekly')}
                 {renderArrayField('Preferred Content Types', 'preferred_content_types')}
                 {renderArrayField('Content Themes', 'content_themes')}

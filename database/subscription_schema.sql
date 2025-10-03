@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS subscription_transactions (
     subscription_id VARCHAR(255) NOT NULL,
     razorpay_payment_id VARCHAR(255) NOT NULL,
     amount INTEGER NOT NULL, -- Amount in cents
-    currency VARCHAR(3) DEFAULT 'USD',
+    currency VARCHAR(3) DEFAULT 'INR',
     status VARCHAR(20) NOT NULL,
     payment_method VARCHAR(50) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT NOW(),

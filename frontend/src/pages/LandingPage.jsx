@@ -384,7 +384,7 @@ const LandingPage = () => {
               <div className="text-center mb-8">
                 <h3 className="text-2xl font-bold mb-2 text-[#2E2E2E]">Starter</h3>
                 <div className="text-4xl font-bold mb-2">
-                  <span className="bg-gradient-to-r from-[#9E005C] to-[#FF4D94] bg-clip-text text-transparent">$59</span>
+                  <span className="bg-gradient-to-r from-[#9E005C] to-[#FF4D94] bg-clip-text text-transparent">₹59</span>
                   <span className="text-[#2E2E2E]/50 text-lg">/month</span>
                 </div>
                 <p className="text-[#2E2E2E]/70">Perfect for individuals and small teams</p>
@@ -430,7 +430,7 @@ const LandingPage = () => {
                 <div className="text-center mb-8">
                   <h3 className="text-2xl font-bold mb-2 text-[#2E2E2E]">Pro</h3>
                   <div className="text-4xl font-bold mb-2">
-                    <span className="bg-gradient-to-r from-[#FF4D94] to-[#3F2B96] bg-clip-text text-transparent">$99</span>
+                    <span className="bg-gradient-to-r from-[#FF4D94] to-[#3F2B96] bg-clip-text text-transparent">₹99</span>
                     <span className="text-[#2E2E2E]/50 text-lg">/month</span>
                   </div>
                   <p className="text-[#2E2E2E]/70">For growing businesses and teams</p>

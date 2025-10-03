@@ -142,7 +142,7 @@ class RazorpayService:
                 "price": plan["price_yearly"]
             }
     
-    async def create_payment_link(self, subscription_id: str, amount: int, currency: str = "USD") -> str:
+    async def create_payment_link(self, subscription_id: str, amount: int, currency: str = "INR") -> str:
         """Create a payment link for subscription"""
         try:
             payment_link_data = {
