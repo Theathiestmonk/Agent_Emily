@@ -294,18 +294,7 @@ function SignUp() {
                   )}
                 </div>
               </div>
-              {/* Email validation message */}
-              {emailValidation.message && (
-                <p className={`mt-2 text-sm ${
-                  emailValidation.isValid === true 
-                    ? 'text-green-600' 
-                    : emailValidation.isValid === false 
-                    ? 'text-red-600' 
-                    : 'text-gray-500'
-                }`}>
-                  {emailValidation.message}
-                </p>
-              )}
+              {/* Email validation message - removed all text messages, keeping only visual indicators */}
             </div>
 
             {/* Password Field */}

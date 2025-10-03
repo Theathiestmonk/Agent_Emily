@@ -49,3 +49,4 @@ def add_blog_url_column():
 
 if __name__ == "__main__":
     add_blog_url_column()
+
