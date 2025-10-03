@@ -35,6 +35,7 @@ import Shipping from './pages/Shipping.jsx'
 import ContactUs from './pages/ContactUs.jsx'
 // Subscription Components
 import SubscriptionSelector from './components/SubscriptionSelector'
+import PaymentSuccess from './components/PaymentSuccess'
 import MigrationBanner from './components/MigrationBanner'
 import { subscriptionAPI } from './services/subscription'
 
@@ -126,8 +127,9 @@ function AppContent() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/reset-password" element={<ForgotPassword />} />
         
-        {/* Subscription Route */}
+        {/* Subscription Routes */}
         <Route path="/subscription" element={<SubscriptionSelector />} />
+        <Route path="/payment/success" element={<PaymentSuccess />} />
         <Route 
           path="/dashboard" 
           element={
