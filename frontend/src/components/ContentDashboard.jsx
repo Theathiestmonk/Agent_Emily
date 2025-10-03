@@ -14,6 +14,7 @@ import SideNavbar from './SideNavbar'
 import CustomContentChatbot from './CustomContentChatbot'
 import ChatbotImageEditor from './ChatbotImageEditor'
 import MediaGenerationCelebration from './MediaGenerationCelebration'
+import ProgressiveImage from './ProgressiveImage'
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -2132,22 +2133,14 @@ const ContentDashboard = () => {
                                   )
                                 } else {
                                   return (
-                                    <img 
+                                    <ProgressiveImage
                                       src={getSmallThumbnailUrl(imageUrl)} 
                                       alt="Content thumbnail" 
-                                className="w-full h-48 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                                loading="lazy"
-                                onLoad={() => handleImageLoad(content.id)}
-                                onError={() => handleImageError(content.id)}
-                                onLoadStart={() => startImageLoading(content.id)}
+                                      className="w-full h-48 rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                      onLoad={() => handleImageLoad(content.id)}
+                                      onError={() => handleImageError(content.id)}
                                       onClick={() => handleImageClick(getFullSizeImageUrl(imageUrl), content.title)}
-                                style={{
-                                  opacity: imageLoading.has(content.id) ? 0 : 1,
-                                  filter: imageLoading.has(content.id) ? 'blur(8px)' : 'blur(0px)',
-                                  transform: imageLoading.has(content.id) ? 'scale(1.05)' : 'scale(1)',
-                                  transition: 'all 0.6s ease-in-out'
-                                }}
-                              />
+                                    />
                                   )
                                 }
                               })()}
@@ -2331,11 +2324,10 @@ const ContentDashboard = () => {
                                 // If thumbnail URL is null (non-generated folder URL), show original image
                                 if (!thumbnailUrl) {
                                   return (
-                                    <img 
+                                    <ProgressiveImage
                                       src={imageUrl} 
                                       alt="Content image" 
-                                      className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
-                                      loading="eager"
+                                      className="w-full h-full rounded cursor-pointer hover:opacity-90 transition-opacity"
                                       onClick={() => handleImageClick(imageUrl, content.title)}
                                       onLoad={() => {
                                         console.log('✅ Image loaded for content:', content.id)
@@ -2346,25 +2338,17 @@ const ContentDashboard = () => {
                                         console.error('❌ Failed URL:', imageUrl)
                                         handleImageError(content.id)
                                       }}
-                                      onLoadStart={() => startImageLoading(content.id)}
-                                      style={{
-                                        opacity: imageLoading.has(content.id) ? 0 : 1,
-                                        filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
-                                        transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
-                                        transition: 'all 0.5s ease-in-out'
-                                      }}
                                     />
-                                      )
-                                    }
+                                  )
+                                }
                                     
                                     // Show image if we have a valid Supabase thumbnail URL
                                     return (
-                                      <img 
+                                      <ProgressiveImage
                                         src={thumbnailUrl} 
                                         alt="Content image" 
-                                        className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
-                                        loading="eager"
-                                      onClick={() => handleImageClick(getFullSizeImageUrl(imageUrl), content.title)}
+                                        className="w-full h-full rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                        onClick={() => handleImageClick(getFullSizeImageUrl(imageUrl), content.title)}
                                         onLoad={() => {
                                           console.log('✅ Image loaded for content:', content.id)
                                           handleImageLoad(content.id)
@@ -2373,13 +2357,6 @@ const ContentDashboard = () => {
                                           console.error('❌ Image failed to load for content:', content.id)
                                           console.error('❌ Failed URL:', thumbnailUrl)
                                           handleImageError(content.id)
-                                        }}
-                                        onLoadStart={() => startImageLoading(content.id)}
-                                        style={{
-                                          opacity: imageLoading.has(content.id) ? 0 : 1,
-                                          filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
-                                          transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
-                                          transition: 'all 0.5s ease-in-out'
                                         }}
                                       />
                                     )
@@ -2804,20 +2781,12 @@ const ContentDashboard = () => {
                               Your browser does not support the video tag.
                             </video>
                           ) : (
-                          <img 
+                          <ProgressiveImage
                             src={getSmallThumbnailUrl(generatedImages[editForm.id].image_url)} 
-                              alt="Current content media" 
-                            className="w-full h-32 object-cover rounded-lg"
-                            loading="lazy"
+                            alt="Current content media" 
+                            className="w-full h-32 rounded-lg"
                             onLoad={() => handleImageLoad(editForm.id)}
                             onError={() => handleImageError(editForm.id)}
-                            onLoadStart={() => startImageLoading(editForm.id)}
-                            style={{
-                              opacity: imageLoading.has(editForm.id) ? 0 : 1,
-                              filter: imageLoading.has(editForm.id) ? 'blur(8px)' : 'blur(0px)',
-                              transform: imageLoading.has(editForm.id) ? 'scale(1.05)' : 'scale(1)',
-                              transition: 'all 0.6s ease-in-out'
-                            }}
                           />
                           )}
                         </div>
