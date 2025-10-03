@@ -139,6 +139,11 @@ const BillingDashboard = () => {
 
   const handleExportBilling = () => {
     try {
+      if (!billingHistory || billingHistory.length === 0) {
+        alert('No billing history available to export.');
+        return;
+      }
+
       // Generate PDF
       const pdf = generateBillingHistoryPDF(billingHistory, {
         name: user?.user_metadata?.name || 'Customer',
@@ -149,12 +154,17 @@ const BillingDashboard = () => {
       pdf.save(`billing-history-${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
+      alert(`Failed to generate PDF: ${error.message || 'Unknown error'}`);
     }
   };
 
   const handleDownloadInvoice = (invoice) => {
     try {
+      if (!invoice) {
+        alert('Invalid invoice data.');
+        return;
+      }
+
       // Generate individual invoice PDF
       const pdf = generateInvoicePDF(invoice, billingHistory);
       
@@ -162,7 +172,7 @@ const BillingDashboard = () => {
       pdf.save(`invoice-${invoice.id}-${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
       console.error('Error generating invoice PDF:', error);
-      alert('Failed to generate invoice PDF. Please try again.');
+      alert(`Failed to generate invoice PDF: ${error.message || 'Unknown error'}`);
     }
   };
 
