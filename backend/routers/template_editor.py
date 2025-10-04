@@ -14,6 +14,7 @@ import os
 from agents.template_editor_agent import template_editor_agent
 from auth import get_current_user
 from utils.template_manager import template_manager
+from utils.prompt_manager import prompt_manager
 from supabase import create_client, Client
 
 router = APIRouter(prefix="/api/template-editor", tags=["template-editor"])
@@ -713,4 +714,133 @@ async def save_template(
         import traceback
         print(f"❌ Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error saving template: {str(e)}")
+
+# Custom Prompt Management Endpoints
+
+@router.get("/custom-prompts")
+async def get_custom_prompts(current_user: dict = Depends(get_current_user)):
+    """Get all available custom prompts"""
+    try:
+        templates = prompt_manager.get_available_templates()
+        return JSONResponse(content={
+            "success": True,
+            "templates": templates
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching custom prompts: {str(e)}")
+
+@router.get("/custom-prompts/{template_name}")
+async def get_custom_prompt(template_name: str, current_user: dict = Depends(get_current_user)):
+    """Get custom prompt for a specific template"""
+    try:
+        prompt_data = prompt_manager.get_template_prompt(template_name)
+        if prompt_data:
+            return JSONResponse(content={
+                "success": True,
+                "template": prompt_data
+            })
+        else:
+            raise HTTPException(status_code=404, detail=f"No custom prompt found for template: {template_name}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching custom prompt: {str(e)}")
+
+@router.post("/custom-prompts")
+async def create_custom_prompt(
+    template_name: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(...),
+    prompt: str = Form(...),
+    skip_template_analyzer: bool = Form(True),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create or update a custom prompt for a template"""
+    try:
+        prompt_data = {
+            "name": name,
+            "description": description,
+            "prompt": prompt,
+            "skip_template_analyzer": skip_template_analyzer,
+            "created_by": current_user.get("email", "unknown")
+        }
+        
+        success = prompt_manager.add_template_prompt(template_name, prompt_data)
+        if success:
+            return JSONResponse(content={
+                "success": True,
+                "message": f"Custom prompt created/updated for template: {template_name}",
+                "template": prompt_data
+            })
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save custom prompt")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating custom prompt: {str(e)}")
+
+@router.put("/custom-prompts/{template_name}")
+async def update_custom_prompt(
+    template_name: str,
+    name: str = Form(...),
+    description: str = Form(...),
+    prompt: str = Form(...),
+    skip_template_analyzer: bool = Form(True),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update an existing custom prompt"""
+    try:
+        prompt_data = {
+            "name": name,
+            "description": description,
+            "prompt": prompt,
+            "skip_template_analyzer": skip_template_analyzer,
+            "updated_by": current_user.get("email", "unknown")
+        }
+        
+        success = prompt_manager.add_template_prompt(template_name, prompt_data)
+        if success:
+            return JSONResponse(content={
+                "success": True,
+                "message": f"Custom prompt updated for template: {template_name}",
+                "template": prompt_data
+            })
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update custom prompt")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating custom prompt: {str(e)}")
+
+@router.delete("/custom-prompts/{template_name}")
+async def delete_custom_prompt(template_name: str, current_user: dict = Depends(get_current_user)):
+    """Delete a custom prompt for a template"""
+    try:
+        success = prompt_manager.remove_template_prompt(template_name)
+        if success:
+            return JSONResponse(content={
+                "success": True,
+                "message": f"Custom prompt deleted for template: {template_name}"
+            })
+        else:
+            raise HTTPException(status_code=404, detail=f"No custom prompt found for template: {template_name}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting custom prompt: {str(e)}")
+
+@router.post("/custom-prompts/reload")
+async def reload_custom_prompts(current_user: dict = Depends(get_current_user)):
+    """Reload custom prompts configuration from file"""
+    try:
+        success = prompt_manager.reload_config()
+        if success:
+            return JSONResponse(content={
+                "success": True,
+                "message": "Custom prompts configuration reloaded successfully"
+            })
+        else:
+            raise HTTPException(status_code=500, detail="Failed to reload custom prompts configuration")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reloading custom prompts: {str(e)}")
 

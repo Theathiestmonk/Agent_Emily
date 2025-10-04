@@ -1,0 +1,46 @@
+{
+  "templates": {
+    "did_you_know": {
+      "name": "Did You Know",
+      "description": "Educational and engaging fact-based template",
+      "prompt": "You are a social media content transformer. Your task is to read the following post: {post_content}. Identify the most compelling benefit, surprising fact, or key insight from the post. Rewrite it into a short, inspiring statement that fits the 'Did you know?' template.\n\nOutput format:\nDid you know? {single, clear, engaging fact written in plain language}.\n\nGuidelines:\n\nKeep it to 1–2 sentences only.\n\nMake it motivational, friendly, and easy to understand.\n\nAvoid technical jargon, long explanations, or promotional tone.\n\nFocus on how it helps or impacts the reader.\n\nDo not include hashtags, emojis, or links.",
+      "skip_template_analyzer": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "created_by": "team"
+    },
+    "motivational_quote": {
+      "name": "Motivational Quote",
+      "description": "Inspirational quote template for motivation",
+      "prompt": "You are a motivational content creator. Transform the following post: {post_content} into an inspiring, uplifting message that fits a motivational quote template.\n\nOutput format:\n\"{inspiring quote or message}\"\n- {author or source}\n\nGuidelines:\n\nKeep it concise and powerful (1-2 sentences).\n\nMake it universally relatable and inspiring.\n\nUse positive, empowering language.\n\nFocus on growth, success, or overcoming challenges.\n\nAvoid clichés and generic phrases.",
+      "skip_template_analyzer": true,
+      "created_at": "2024-01-15T10:05:00Z",
+      "updated_at": "2024-01-15T10:05:00Z",
+      "created_by": "team"
+    },
+    "tips_and_tricks": {
+      "name": "Tips and Tricks",
+      "description": "Helpful tips and practical advice template",
+      "prompt": "You are a helpful content creator. Transform the following post: {post_content} into a practical tip or trick that readers can immediately apply.\n\nOutput format:\n💡 Pro Tip: {practical advice or tip}\n\nGuidelines:\n\nMake it actionable and specific.\n\nKeep it simple and easy to follow.\n\nFocus on immediate value for the reader.\n\nUse clear, step-by-step language when possible.\n\nAvoid overly complex explanations.",
+      "skip_template_analyzer": true,
+      "created_at": "2024-01-15T10:10:00Z",
+      "updated_at": "2024-01-15T10:10:00Z",
+      "created_by": "team"
+    },
+    "behind_the_scenes": {
+      "name": "Behind the Scenes",
+      "description": "Behind the scenes or process reveal template",
+      "prompt": "You are a content creator sharing behind-the-scenes insights. Transform the following post: {post_content} into an engaging behind-the-scenes story or process reveal.\n\nOutput format:\nBehind the scenes: {interesting process, story, or insight}\n\nGuidelines:\n\nMake it personal and authentic.\n\nShare something surprising or unexpected.\n\nKeep it relatable and engaging.\n\nFocus on the human element or process.\n\nAvoid revealing sensitive information.",
+      "skip_template_analyzer": true,
+      "created_at": "2024-01-15T10:15:00Z",
+      "updated_at": "2024-01-15T10:15:00Z",
+      "created_by": "team"
+    }
+  },
+  "settings": {
+    "default_skip_analyzer": true,
+    "fallback_to_analyzer": true,
+    "prompt_version": "1.0.0",
+    "last_updated": "2024-01-15T10:15:00Z"
+  }
+}

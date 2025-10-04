@@ -59,7 +59,7 @@ template_uploader → template_analyzer → logo_fetcher → content_modifier �
 1. Check if template analysis detected logo areas
 2. If no logo areas, skip logo fetching
 3. Fetch user profile from Supabase profiles table
-4. Extract logo_url and company_name
+4. Extract logo_url and business_name
 5. Store logo information in state for Gemini integration
 
 ### Gemini Integration:
