@@ -1,6 +1,6 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { onboardingAPI } from '../services/onboarding'
-import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, X, Save } from 'lucide-react'
 import LogoUpload from './LogoUpload'
 
 const OnboardingForm = forwardRef(({ 
@@ -83,6 +83,8 @@ const OnboardingForm = forwardRef(({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
   const [logoUrl, setLogoUrl] = useState('')
   const [logoError, setLogoError] = useState('')
 
@@ -607,6 +609,73 @@ const OnboardingForm = forwardRef(({
   // Check if a step is completed
   const isStepCompleted = (stepIndex) => {
     return completedSteps.has(stepIndex)
+  }
+
+  const handleSaveStep = async () => {
+    setIsSaving(true)
+    setError('')
+    setSaveSuccess(false)
+    
+    try {
+      // Prepare the data for submission
+      const submissionData = {
+        ...formData,
+        // Mark onboarding as completed when saving in edit mode
+        onboarding_completed: true,
+        // Populate the general target_audience field with all selected target audience details
+        target_audience: [
+          ...(formData.target_audience_age_groups || []),
+          ...(formData.target_audience_life_stages || []),
+          ...(formData.target_audience_professional_types || []),
+          ...(formData.target_audience_lifestyle_interests || []),
+          ...(formData.target_audience_buyer_behavior || []),
+          ...(formData.target_audience_other ? [formData.target_audience_other] : [])
+        ].filter(Boolean), // Remove any empty values
+        
+        // Include all "Other" input fields
+        business_type_other: otherInputs.businessTypeOther,
+        industry_other: otherInputs.industryOther,
+        social_platform_other: otherInputs.socialPlatformOther,
+        goal_other: otherInputs.goalOther,
+        metric_other: otherInputs.metricOther,
+        content_type_other: otherInputs.contentTypeOther,
+        content_theme_other: otherInputs.contentThemeOther,
+        posting_time_other: otherInputs.postingTimeOther,
+        current_presence_other: otherInputs.currentPresenceOther,
+        top_performing_content_type_other: otherInputs.topPerformingContentTypeOther
+      }
+
+      console.log('Saving step data:', submissionData)
+      console.log('Current step:', currentStep)
+      console.log('API call starting...')
+
+      // Update existing profile with onboarding completed
+      const result = await onboardingAPI.updateProfile(submissionData)
+      console.log('Save result:', result)
+      console.log('API call completed successfully')
+      
+      // Mark current step as completed
+      setCompletedSteps(prev => new Set([...prev, currentStep]))
+      if (onStepComplete) {
+        onStepComplete(currentStep)
+      }
+      
+      // Show success indicator
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 2000)
+      
+      // Notify parent component of successful save
+      if (onSuccess) {
+        onSuccess()
+      }
+      
+    } catch (err) {
+      console.error('Error saving step:', err)
+      console.error('Error details:', err.response || err.message)
+      setError(err.message || 'Failed to save changes')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleSubmit = async () => {
@@ -2145,6 +2214,14 @@ const OnboardingForm = forwardRef(({
             </div>
           )}
 
+          {/* Save Success Indicator - Only in edit mode */}
+          {isEditMode && saveSuccess && (
+            <div className="text-sm text-green-600 flex items-center">
+              <Check className="w-4 h-4 mr-1" />
+              Changes Saved Successfully!
+            </div>
+          )}
+
         {currentStep === steps.length - 1 ? (
           <button
             onClick={handleSubmit}
@@ -2163,11 +2240,39 @@ const OnboardingForm = forwardRef(({
               </>
             )}
           </button>
+        ) : isEditMode ? (
+          // In edit mode, show Save button for each step
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={handleSaveStep}
+              disabled={isSaving}
+              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
+            >
+              {isSaving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save
+                </>
+              )}
+            </button>
+            <button
+              onClick={nextStep}
+              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all"
+            >
+              Next
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </button>
+          </div>
         ) : (
           <button
             onClick={nextStep}
-              disabled={!isEditMode && !isStepAccessible(currentStep + 1)}
-              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
+            disabled={!isEditMode && !isStepAccessible(currentStep + 1)}
+            className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
           >
             Next
             <ArrowRight className="w-4 h-4 ml-2" />
