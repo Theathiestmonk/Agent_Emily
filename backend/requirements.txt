@@ -26,3 +26,6 @@ python-dateutil
 Pillow
 aiofiles
 razorpay
+beautifulsoup4
+aiohttp
+textstat
