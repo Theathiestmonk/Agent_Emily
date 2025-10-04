@@ -270,9 +270,9 @@ const AnalyticsDashboard = () => {
       <SideNavbar />
       
       {/* Main Content */}
-      <div className="ml-64 flex flex-col min-h-screen">
+      <div className="ml-48 xl:ml-64 flex flex-col min-h-screen">
         {/* Fixed Header */}
-        <div className="fixed top-0 right-0 left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+        <div className="fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-6 py-4">
             <div className="flex justify-between items-center">
               <div>

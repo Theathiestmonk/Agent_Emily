@@ -1840,20 +1840,20 @@ const ContentDashboard = () => {
       <SideNavbar />
       
       {/* Main Content */}
-      <div className={`ml-64 flex flex-col min-h-screen ${availableDates.length > 1 ? 'pb-20' : ''}`}>
+      <div className={`ml-48 xl:ml-64 flex flex-col min-h-screen ${availableDates.length > 1 ? 'pb-20' : ''}`}>
         {/* Fixed Header */}
-        <div className="fixed top-0 right-0 left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
-          <div className="px-6 py-4">
+        <div className="fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+          <div className="px-4 lg:px-6 py-3 lg:py-4">
             <div className="flex justify-between items-center">
-              <div className="flex items-center space-x-8">
+              <div className="flex items-center space-x-4 lg:space-x-8">
                 {/* Content Date Header */}
-                <div className="flex items-center space-x-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-white" />
+                <div className="flex items-center space-x-2 lg:space-x-4">
+                  <div className="flex items-center space-x-2 lg:space-x-3">
+                    <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                      <Calendar className="w-4 h-4 lg:w-5 lg:h-5 text-white" />
                     </div>
                     <div>
-                      <h1 className="text-xl font-bold text-gray-900">
+                      <h1 className="text-lg lg:text-xl font-bold text-gray-900">
                         {new Date(selectedDate).toLocaleDateString('en-US', { 
                               weekday: 'long', 
                               year: 'numeric', 
@@ -1861,7 +1861,7 @@ const ContentDashboard = () => {
                               day: 'numeric' 
                         })}
                       </h1>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-xs lg:text-sm text-gray-600">
                         {contentToDisplay.length} {contentToDisplay.length === 1 ? 'post' : 'posts'}
                       </p>
                     </div>
@@ -1907,7 +1907,7 @@ const ContentDashboard = () => {
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 p-6 pt-24">
+        <div className="flex-1 p-4 lg:p-6 pt-20 lg:pt-24">
           {loading ? (
             <MainContentLoader message="Loading your content..." />
           ) : (

@@ -487,7 +487,7 @@ const BlogDashboard = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
         <SideNavbar />
-        <div className="ml-64 p-6">
+        <div className="ml-48 xl:ml-64 p-6">
           <div className="text-center py-12">
             <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Blog Dashboard</h3>
@@ -519,9 +519,9 @@ const BlogDashboard = () => {
       <SideNavbar />
 
       {/* Main Content */}
-      <div className="ml-64 p-6">
+      <div className="ml-48 xl:ml-64 p-6">
         {/* Header */}
-        <div className="fixed top-0 right-0 left-64 bg-gradient-to-r from-pink-50 to-purple-50 shadow-lg border-b border-pink-200 z-30" style={{position: 'fixed', zIndex: 30}}>
+        <div className="fixed top-0 right-0 left-48 xl:left-64 bg-gradient-to-r from-pink-50 to-purple-50 shadow-lg border-b border-pink-200 z-30" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center space-x-8">

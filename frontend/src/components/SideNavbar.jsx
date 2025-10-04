@@ -192,18 +192,18 @@ const SideNavbar = () => {
 
   return (
     <div className={`bg-white shadow-lg transition-all duration-300 fixed left-0 top-0 h-screen z-50 ${
-      isCollapsed ? 'w-16' : 'w-64'
+      isCollapsed ? 'w-16' : 'w-48 xl:w-64'
     } flex flex-col overflow-hidden`} style={{position: 'fixed', zIndex: 50}}>
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-3 lg:p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           {!isCollapsed && (
             <div className="flex items-center">
-              <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mr-3">
-                <span className="text-white font-bold text-lg">E</span>
+              <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mr-2 lg:mr-3">
+                <span className="text-white font-bold text-sm lg:text-lg">E</span>
               </div>
               <div>
-                <h1 className="text-lg font-bold text-gray-900">Emily</h1>
+                <h1 className="text-base lg:text-lg font-bold text-gray-900">Emily</h1>
                 <p className="text-xs text-gray-500">AI Marketing</p>
               </div>
             </div>
@@ -218,7 +218,7 @@ const SideNavbar = () => {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+      <nav className="flex-1 p-3 lg:p-4 space-y-1 lg:space-y-2 overflow-y-auto">
         {navigationItems.map((item) => {
           const Icon = item.icon
           const active = item.href ? isActive(item.href) : isSubmenuActive(item.submenu || [])
@@ -229,7 +229,7 @@ const SideNavbar = () => {
               <div key={item.name}>
                 <button
                   onClick={() => toggleSubmenu(item.name)}
-                  className={`w-full flex items-center p-3 rounded-lg transition-all duration-200 group ${
+                  className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-all duration-200 group ${
                     active
                       ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -261,7 +261,7 @@ const SideNavbar = () => {
                         <button
                           key={subItem.name}
                           onClick={() => navigate(subItem.href)}
-                          className={`w-full flex items-center p-2 rounded-lg transition-all duration-200 group ${
+                          className={`w-full flex items-center p-1.5 lg:p-2 rounded-lg transition-all duration-200 group ${
                             subActive
                               ? 'bg-gray-200 text-gray-900'
                               : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'

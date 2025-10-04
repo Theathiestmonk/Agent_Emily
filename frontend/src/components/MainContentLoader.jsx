@@ -11,7 +11,7 @@ const MainContentLoader = ({ message = "Loading..." }) => {
         <p className="text-gray-600 font-medium">{message}</p>
         
         {/* Loading Bar */}
-        <div className="w-64 bg-gray-200 rounded-full h-2 overflow-hidden mt-4">
+        <div className="w-48 xl:w-64 bg-gray-200 rounded-full h-2 overflow-hidden mt-4">
           <div className="h-full bg-gradient-to-r from-pink-500 to-purple-600 rounded-full animate-pulse">
             <div 
               className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded-full animate-pulse" 

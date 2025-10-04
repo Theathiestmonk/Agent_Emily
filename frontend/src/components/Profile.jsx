@@ -520,7 +520,7 @@ const Profile = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex">
         <SideNavbar />
-        <div className="flex-1 ml-64 flex items-center justify-center">
+        <div className="flex-1 ml-48 xl:ml-64 flex items-center justify-center">
           <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8">
             <div className="flex items-center space-x-4">
               <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl flex items-center justify-center">
@@ -541,7 +541,7 @@ const Profile = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex">
         <SideNavbar />
-        <div className="flex-1 ml-64 flex items-center justify-center">
+        <div className="flex-1 ml-48 xl:ml-64 flex items-center justify-center">
           <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 text-center max-w-md">
             <div className="w-16 h-16 bg-gradient-to-r from-red-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -568,7 +568,7 @@ const Profile = () => {
       <SideNavbar />
       
       {/* Main Content */}
-      <div className="flex-1 ml-64">
+      <div className="flex-1 ml-48 xl:ml-64">
         {/* Header */}
         <div className="bg-white/80 backdrop-blur-sm shadow-lg border-b border-gray-200/50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
