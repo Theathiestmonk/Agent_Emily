@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
+import { createClient } from '@supabase/supabase-js'
 import { 
   Upload, 
   Image, 
@@ -17,6 +18,12 @@ import {
   Template,
   Layers
 } from 'lucide-react'
+
+// Initialize Supabase client
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
 
 const TemplateEditor = ({ content, onClose, onSave }) => {
   const { user } = useAuth()
@@ -49,11 +56,14 @@ const TemplateEditor = ({ content, onClose, onSave }) => {
   // Preview states
   const [showPreview, setShowPreview] = useState(false)
   const [previewImage, setPreviewImage] = useState(null)
+  
 
   useEffect(() => {
     loadPremadeTemplates()
     loadCategories()
   }, [])
+
+
 
   const loadPremadeTemplates = async () => {
     try {
@@ -393,6 +403,8 @@ const TemplateEditor = ({ content, onClose, onSave }) => {
                 </div>
               )}
 
+
+
               {/* Action Buttons */}
               <div className="flex justify-end space-x-3">
                 <button
@@ -512,6 +524,7 @@ const TemplateEditor = ({ content, onClose, onSave }) => {
           )}
         </div>
       </div>
+
     </div>
   )
 }

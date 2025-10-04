@@ -46,6 +46,10 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
   const [customTemplateDescription, setCustomTemplateDescription] = useState('')
   const [uploading, setUploading] = useState(false)
   const [showFullImage, setShowFullImage] = useState({ isOpen: false, imageUrl: '', title: '' })
+  
+  // Confirmation popup state
+  const [showConfirmation, setShowConfirmation] = useState(false)
+  const [templateToConfirm, setTemplateToConfirm] = useState(null)
 
   // Category icons mapping
   const categoryIcons = {
@@ -119,8 +123,22 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
   })
 
   const handleTemplateSelect = (template) => {
-    onTemplateSelect(template)
-    onClose()
+    setTemplateToConfirm(template)
+    setShowConfirmation(true)
+  }
+
+  const confirmTemplateSelection = () => {
+    if (templateToConfirm) {
+      onTemplateSelect(templateToConfirm)
+      onClose()
+    }
+    setShowConfirmation(false)
+    setTemplateToConfirm(null)
+  }
+
+  const cancelTemplateSelection = () => {
+    setShowConfirmation(false)
+    setTemplateToConfirm(null)
   }
 
   const handleCustomUpload = async () => {
@@ -306,8 +324,8 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
                       <h3 className="font-semibold text-gray-900 mb-1 group-hover:text-purple-600 transition-colors">
                         {template.name}
                       </h3>
-                      <p className="text-sm text-gray-600 line-clamp-2">
-                        {template.description}
+                      <p className="text-sm text-gray-600 capitalize">
+                        {template.category.replace('-', ' ')} template
                       </p>
                       
                       {/* Template Stats */}
@@ -486,6 +504,62 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
                 alt={showFullImage.title}
                 className="max-w-full max-h-[70vh] object-contain rounded-lg"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Popup */}
+      {showConfirmation && templateToConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Confirm Template</h3>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <div className="text-center mb-6">
+                <div className="aspect-video bg-gray-100 rounded-lg mb-4 flex items-center justify-center max-w-xs mx-auto">
+                  <img
+                    src={getTemplateImageUrl(templateToConfirm)}
+                    alt={templateToConfirm.name}
+                    className="w-full h-full object-cover rounded-lg"
+                    onError={(e) => {
+                      e.target.style.display = 'none'
+                      e.target.nextSibling.style.display = 'flex'
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gray-100 flex items-center justify-center" style={{ display: 'none' }}>
+                    <Image className="w-16 h-16 text-gray-400" />
+                  </div>
+                </div>
+                <h4 className="font-semibold text-gray-900 text-lg">{templateToConfirm.name}</h4>
+                <p className="text-sm text-gray-500 capitalize">{templateToConfirm.category.replace('-', ' ')} template</p>
+              </div>
+
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={confirmTemplateSelection}
+                  className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition-all"
+                >
+                  Confirm
+                </button>
+                <button
+                  onClick={cancelTemplateSelection}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
