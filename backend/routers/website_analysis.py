@@ -513,3 +513,20 @@ async def create_analysis_history(analysis_id: str, analysis_data: Dict[str, Any
         
     except Exception as e:
         logger.error(f"Error creating analysis history: {str(e)}")
+
+@router.get("/profiles/{user_id}")
+async def get_user_profile(user_id: str, current_user: User = Depends(get_current_user)):
+    """Get user profile for website analysis"""
+    try:
+        logger.info(f"Getting profile for user {user_id}")
+        
+        result = supabase_admin.table('profiles').select('*').eq('id', user_id).execute()
+        
+        if result.data:
+            return result.data[0]
+        else:
+            raise HTTPException(status_code=404, detail="Profile not found")
+            
+    except Exception as e:
+        logger.error(f"Error getting profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
