@@ -216,8 +216,10 @@ class WebsiteAnalyzerAgent:
         """Analyze website performance using PageSpeed Insights API"""
         try:
             if not self.pagespeed_api_key:
+                logger.warning("PageSpeed API key not configured")
                 return {'error': 'PageSpeed API key not configured'}
             
+            logger.info(f"Calling PageSpeed API for: {url}")
             # PageSpeed Insights API call
             pagespeed_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
             params = {
@@ -227,14 +229,23 @@ class WebsiteAnalyzerAgent:
                 'category': ['performance', 'accessibility', 'best-practices', 'seo']
             }
             
-            async with aiohttp.ClientSession() as session:
+            logger.info(f"PageSpeed API URL: {pagespeed_url}")
+            logger.info(f"PageSpeed API params: {params}")
+            
+            connector = aiohttp.TCPConnector(ssl=False)
+            async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.get(pagespeed_url, params=params) as response:
+                    logger.info(f"PageSpeed API response status: {response.status}")
                     if response.status == 200:
                         data = await response.json()
-                        return self._parse_pagespeed_data(data)
+                        logger.info("PageSpeed API call successful, parsing data...")
+                        result = self._parse_pagespeed_data(data)
+                        logger.info(f"Parsed PageSpeed data: {result}")
+                        return result
                     else:
-                        logger.error(f"PageSpeed API error: {response.status}")
-                        return {'error': f'PageSpeed API returned status {response.status}'}
+                        error_text = await response.text()
+                        logger.error(f"PageSpeed API error: {response.status} - {error_text}")
+                        return {'error': f'PageSpeed API returned status {response.status}: {error_text}'}
                         
         except Exception as e:
             logger.error(f"Error in performance analysis: {str(e)}")
@@ -467,7 +478,8 @@ class WebsiteAnalyzerAgent:
             Analysis data: {json.dumps(analysis_summary, indent=2)}
             """
             
-            response = await openai.ChatCompletion.acreate(
+            client = openai.AsyncOpenAI(api_key=self.openai_api_key)
+            response = await client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=1000,
