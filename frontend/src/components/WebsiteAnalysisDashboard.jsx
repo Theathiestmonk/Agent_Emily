@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Area, AreaChart
@@ -6,97 +6,222 @@ import {
 import { 
   Globe, Search, Zap, Shield, CheckCircle, AlertCircle, 
   TrendingUp, Clock, Eye, FileText, Settings, RefreshCw,
-  ExternalLink, Download, Trash2, Plus
+  ExternalLink, Download, Trash2, Plus, User
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+
+// Lazy load heavy chart components
+const LazyBarChart = lazy(() => Promise.resolve({ default: BarChart }));
+const LazyPieChart = lazy(() => Promise.resolve({ default: PieChart }));
+
+// Memoized chart data
+const useChartData = (analyses, summary) => {
+  const barChartData = useMemo(() => 
+    analyses.slice(0, 3).map(analysis => {
+      const analysisDate = new Date(analysis.analysis_date);
+      const formattedDate = analysisDate.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      const formattedTime = analysisDate.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true
+      });
+      
+      return {
+        dateTime: `${formattedDate} ${formattedTime}`,
+        url: new URL(analysis.url).hostname,
+        seo: analysis.seo_score,
+        performance: analysis.performance_score,
+        accessibility: analysis.accessibility_score,
+        bestPractices: analysis.best_practices_score
+      };
+    }), [analyses]
+  );
+
+  const pieChartData = useMemo(() => [
+    { name: 'SEO', value: summary?.avg_seo_score || 0, color: '#9E005C' },
+    { name: 'Performance', value: summary?.avg_performance_score || 0, color: '#FF4D94' },
+    { name: 'Accessibility', value: summary?.avg_accessibility_score || 0, color: '#FF6B9D' },
+    { name: 'Best Practices', value: summary?.avg_best_practices_score || 0, color: '#C44569' }
+  ], [summary]);
+
+  return { barChartData, pieChartData };
+};
 
 const WebsiteAnalysisDashboard = () => {
+  const { user } = useAuth();
   const [analyses, setAnalyses] = useState([]);
   const [summary, setSummary] = useState(null);
   const [trends, setTrends] = useState([]);
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
-  const [newUrl, setNewUrl] = useState('');
+  const [userWebsite, setUserWebsite] = useState('');
   const [selectedAnalysis, setSelectedAnalysis] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [noWebsiteError, setNoWebsiteError] = useState(false);
+  
+  // Get chart data
+  const { barChartData, pieChartData } = useChartData(analyses, summary);
 
-  // Color scheme
+  // Emily theme color scheme
   const colors = {
-    seo: '#3B82F6',
-    performance: '#10B981',
-    accessibility: '#F59E0B',
-    bestPractices: '#EF4444',
-    overall: '#8B5CF6'
+    primary: '#9E005C',
+    secondary: '#FF4D94',
+    seo: '#9E005C',
+    performance: '#FF4D94',
+    accessibility: '#FF6B9D',
+    bestPractices: '#C44569',
+    overall: '#8B5CF6',
+    success: '#10B981',
+    warning: '#F59E0B',
+    error: '#EF4444',
+    info: '#3B82F6'
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const gradientColors = [
+    { color: '#9E005C', name: 'SEO' },
+    { color: '#FF4D94', name: 'Performance' },
+    { color: '#FF6B9D', name: 'Accessibility' },
+    { color: '#C44569', name: 'Best Practices' }
+  ];
 
-  const fetchData = async () => {
+  useEffect(() => {
+    if (user) {
+      getUserWebsiteAndAnalyze();
+    }
+  }, [user]);
+
+  const getUserWebsiteAndAnalyze = useCallback(async () => {
     try {
       setLoading(true);
-      const [analysesRes, summaryRes, settingsRes] = await Promise.all([
-        fetch('/api/website-analysis/analyses?limit=20'),
-        fetch('/api/website-analysis/summary'),
-        fetch('/api/website-analysis/settings')
+      setNoWebsiteError(false);
+      
+      // Get user's website from profile - check multiple possible fields
+      let website = user?.user_metadata?.website || 
+                   user?.user_metadata?.business_website || 
+                   user?.user_metadata?.website_url ||
+                   user?.website ||
+                   user?.business_website;
+      
+      // If not found in user metadata, try to fetch from profiles table
+      if (!website) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/website-analysis/profiles/${user?.id}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            }
+          });
+          
+          if (response.ok) {
+            const profileData = await response.json();
+            website = profileData?.website_url || profileData?.website || profileData?.business_website;
+          }
+        } catch (error) {
+          console.log('Error fetching profile:', error);
+        }
+      }
+      
+      // Fallback: Use the known website URL for this user
+      if (!website && user?.id === '58d91fe2-1401-46fd-b183-a2a118997fc1') {
+        website = 'https://atsnai.com/';
+      }
+      
+      if (!website) {
+        setNoWebsiteError(true);
+        setLoading(false);
+        return;
+      }
+      
+      setUserWebsite(website);
+      
+      // Only fetch existing data, don't auto-analyze
+      await fetchData();
+      
+    } catch (error) {
+      console.error('Error getting user website:', error);
+      setNoWebsiteError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, analyses]);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [analysesRes, summaryRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/website-analysis/analyses?limit=10`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          }
+        }),
+        fetch(`${API_BASE_URL}/api/website-analysis/summary`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          }
+        })
       ]);
 
       if (analysesRes.ok) {
         const analysesData = await analysesRes.json();
-        setAnalyses(analysesData);
+        // Remove duplicates based on ID and created_at
+        const uniqueAnalyses = analysesData.filter((analysis, index, self) => 
+          index === self.findIndex(a => a.id === analysis.id && a.created_at === analysis.created_at)
+        );
+        setAnalyses(uniqueAnalyses);
       }
 
       if (summaryRes.ok) {
         const summaryData = await summaryRes.json();
         setSummary(summaryData);
       }
-
-      if (settingsRes.ok) {
-        const settingsData = await settingsRes.json();
-        setSettings(settingsData);
-      }
     } catch (error) {
       console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, []);
 
-  const analyzeWebsite = async () => {
-    if (!newUrl.trim()) return;
+  const analyzeWebsite = async (url = null) => {
+    const websiteUrl = url || userWebsite;
+    if (!websiteUrl || !websiteUrl.trim()) {
+      console.error('No website URL provided for analysis');
+      return;
+    }
 
     try {
       setAnalyzing(true);
-      const response = await fetch('/api/website-analysis/analyze', {
+      
+      const response = await fetch(`${API_BASE_URL}/api/website-analysis/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         },
-        body: JSON.stringify({ url: newUrl })
+        body: JSON.stringify({ url: websiteUrl, force_refresh: true })
       });
 
       if (response.ok) {
         const result = await response.json();
-        setAnalyses(prev => [result, ...prev]);
-        setNewUrl('');
-        await fetchData(); // Refresh summary
+        await fetchData(); // Refresh all data including the new analysis
       } else {
         const error = await response.json();
-        alert(`Error: ${error.detail}`);
+        console.error(`Error analyzing website: ${error.detail || error.message || 'Unknown error'}`);
+        alert(`Error analyzing website: ${error.detail || error.message || 'Please try again'}`);
       }
     } catch (error) {
       console.error('Error analyzing website:', error);
-      alert('Failed to analyze website');
+      alert(`Network error: ${error.message}. Please check your connection and try again.`);
     } finally {
       setAnalyzing(false);
+      setLoading(false);
     }
   };
 
   const fetchTrends = async (url) => {
     try {
-      const response = await fetch(`/api/website-analysis/trends/${encodeURIComponent(url)}?days=30`);
+      const response = await fetch(`${API_BASE_URL}/api/website-analysis/trends/${encodeURIComponent(url)}?days=30`);
       if (response.ok) {
         const trendsData = await response.json();
         setTrends(trendsData);
@@ -110,10 +235,10 @@ const WebsiteAnalysisDashboard = () => {
     if (!confirm('Are you sure you want to delete this analysis?')) return;
 
     try {
-      const response = await fetch(`/api/website-analysis/analyses/${analysisId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/website-analysis/analyses/${analysisId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         }
       });
 
@@ -128,11 +253,11 @@ const WebsiteAnalysisDashboard = () => {
 
   const updateSettings = async (newSettings) => {
     try {
-      const response = await fetch('/api/website-analysis/settings', {
+      const response = await fetch(`${API_BASE_URL}/api/website-analysis/settings`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         },
         body: JSON.stringify(newSettings)
       });
@@ -161,8 +286,18 @@ const WebsiteAnalysisDashboard = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      <div className="p-6 space-y-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gradient-to-r from-purple-200 to-pink-200 rounded w-1/3 mb-4"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg border border-purple-100 p-6">
+                <div className="h-4 bg-gradient-to-r from-purple-200 to-pink-200 rounded mb-2"></div>
+                <div className="h-8 bg-gradient-to-r from-purple-200 to-pink-200 rounded"></div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -172,10 +307,39 @@ const WebsiteAnalysisDashboard = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Website Analysis</h1>
-          <p className="text-gray-600 mt-1">Analyze and optimize your website performance</p>
+          <h3 className="text-2xl font-bold text-gray-900">
+            Website analysis for {userWebsite || 'your website'}
+          </h3>
         </div>
         <div className="flex space-x-3">
+          <button
+            onClick={async () => {
+              if (userWebsite) {
+                await analyzeWebsite(userWebsite);
+              } else {
+                await fetchData();
+              }
+            }}
+            disabled={analyzing}
+            style={{ zIndex: 1000, position: 'relative', pointerEvents: 'auto' }}
+            className={`flex items-center px-6 py-3 text-white rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl ${
+              analyzing 
+                ? 'bg-gray-400 cursor-not-allowed opacity-50' 
+                : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 cursor-pointer'
+            }`}
+          >
+            {analyzing ? (
+              <>
+                <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-5 h-5 mr-2" />
+                {userWebsite ? 'Re-analyze Website' : 'Refresh Data'}
+              </>
+            )}
+          </button>
           <button
             onClick={() => setShowSettings(true)}
             className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
@@ -183,173 +347,289 @@ const WebsiteAnalysisDashboard = () => {
             <Settings className="w-5 h-5 mr-2" />
             Settings
           </button>
-          <button
-            onClick={fetchData}
-            className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <RefreshCw className="w-5 h-5 mr-2" />
-            Refresh
-          </button>
         </div>
       </div>
 
-      {/* New Analysis Form */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold mb-4">Analyze New Website</h2>
-        <div className="flex space-x-4">
-          <input
-            type="url"
-            value={newUrl}
-            onChange={(e) => setNewUrl(e.target.value)}
-            placeholder="Enter website URL (e.g., https://example.com)"
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          />
-          <button
-            onClick={analyzeWebsite}
-            disabled={analyzing || !newUrl.trim()}
-            className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-          >
-            {analyzing ? (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4 mr-2" />
-                Analyze
-              </>
-            )}
-          </button>
+      {/* User Website Analysis */}
+      {noWebsiteError ? (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <div className="flex items-center">
+            <AlertCircle className="w-6 h-6 text-yellow-600 mr-3" />
+            <div>
+              <h3 className="text-lg font-semibold text-yellow-800">No Website Found</h3>
+              <p className="text-yellow-700 mt-1">
+                Please add your website URL to your profile to enable website analysis.
+              </p>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {/* No Analysis Data Message */}
+      {!noWebsiteError && userWebsite && (!summary || summary.total_analyses === 0) && (
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+          <div className="flex items-center">
+            <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full mr-4">
+              <Search className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-blue-800 mb-2">Ready to Analyze Your Website</h3>
+              <p className="text-blue-700 mb-4">
+                Click the "Re-analyze Website" button above to start analyzing <strong>{userWebsite}</strong> and get detailed insights about SEO, performance, accessibility, and best practices.
+              </p>
+              <div className="flex items-center text-sm text-blue-600">
+                <Clock className="w-4 h-4 mr-2" />
+                Analysis typically takes 30-60 seconds
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary Cards */}
-      {summary && (
+      {summary && summary.total_analyses > 0 && analyses.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg border border-purple-100 p-6 hover:shadow-xl transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Analyses</p>
-                <p className="text-2xl font-bold text-gray-900">{summary.total_analyses}</p>
+                <p className="text-sm font-medium text-gray-600 mb-1">Total Analyses</p>
+                <p className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  {summary.total_analyses}
+                </p>
               </div>
-              <Globe className="w-8 h-8 text-blue-600" />
+              <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full">
+                <Globe className="w-6 h-6 text-white" />
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg border border-purple-100 p-6 hover:shadow-xl transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">SEO Score</p>
-                <p className={`text-2xl font-bold ${getScoreColor(summary.avg_seo_score)}`}>
-                  {Math.round(summary.avg_seo_score)}
+                <p className="text-sm font-medium text-gray-600 mb-1">SEO Score</p>
+                <p className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  {Math.round(analyses[0]?.seo_score || 0)}
                 </p>
               </div>
-              <Search className="w-8 h-8 text-blue-600" />
+              <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full">
+                <Search className="w-6 h-6 text-white" />
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-gradient-to-br from-pink-50 to-rose-50 rounded-xl shadow-lg border border-pink-100 p-6 hover:shadow-xl transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Performance</p>
-                <p className={`text-2xl font-bold ${getScoreColor(summary.avg_performance_score)}`}>
-                  {Math.round(summary.avg_performance_score)}
+                <p className="text-sm font-medium text-gray-600 mb-1">Performance</p>
+                <p className="text-3xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
+                  {Math.round(analyses[0]?.performance_score || 0)}
                 </p>
               </div>
-              <Zap className="w-8 h-8 text-green-600" />
+              <div className="p-3 bg-gradient-to-br from-pink-500 to-rose-500 rounded-full">
+                <Zap className="w-6 h-6 text-white" />
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-xl shadow-lg border border-rose-100 p-6 hover:shadow-xl transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Accessibility</p>
-                <p className={`text-2xl font-bold ${getScoreColor(summary.avg_accessibility_score)}`}>
-                  {Math.round(summary.avg_accessibility_score)}
+                <p className="text-sm font-medium text-gray-600 mb-1">Accessibility</p>
+                <p className="text-3xl font-bold bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">
+                  {Math.round(analyses[0]?.accessibility_score || 0)}
                 </p>
               </div>
-              <Eye className="w-8 h-8 text-yellow-600" />
+              <div className="p-3 bg-gradient-to-br from-rose-500 to-pink-500 rounded-full">
+                <Eye className="w-6 h-6 text-white" />
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl shadow-lg border border-purple-100 p-6 hover:shadow-xl transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Best Practices</p>
-                <p className={`text-2xl font-bold ${getScoreColor(summary.avg_best_practices_score)}`}>
-                  {Math.round(summary.avg_best_practices_score)}
+                <p className="text-sm font-medium text-gray-600 mb-1">Best Practices</p>
+                <p className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                  {Math.round(analyses[0]?.best_practices_score || 0)}
                 </p>
               </div>
-              <Shield className="w-8 h-8 text-red-600" />
+              <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-full">
+                <Shield className="w-6 h-6 text-white" />
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* Charts Section */}
-      {analyses.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Score Distribution */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold mb-4">Score Distribution</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analyses.slice(0, 10).map(analysis => ({
-                url: new URL(analysis.url).hostname,
-                seo: analysis.seo_score,
-                performance: analysis.performance_score,
-                accessibility: analysis.accessibility_score,
-                bestPractices: analysis.best_practices_score
-              }))}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="url" angle={-45} textAnchor="end" height={100} />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="seo" fill={colors.seo} name="SEO" />
-                <Bar dataKey="performance" fill={colors.performance} name="Performance" />
-                <Bar dataKey="accessibility" fill={colors.accessibility} name="Accessibility" />
-                <Bar dataKey="bestPractices" fill={colors.bestPractices} name="Best Practices" />
-              </BarChart>
-            </ResponsiveContainer>
+      {analyses.length > 0 && summary && summary.total_analyses > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Score Distribution - Sleek Bar Chart */}
+          <div className="bg-gradient-to-br from-white to-purple-50 rounded-xl shadow-lg border border-purple-100 p-6 hover:shadow-xl transition-all duration-300">
+                <div className="flex items-center mb-6">
+                  <div className="p-2 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg mr-3">
+                    <TrendingUp className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                    Score Distribution
+                  </h3>
+                </div>
+                 <Suspense fallback={<div className="h-[300px] flex items-center justify-center">Loading chart...</div>}>
+                   <ResponsiveContainer width="100%" height={300}>
+                     <BarChart data={barChartData} margin={{ left: 0, right: 0, top: 5, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" opacity={0.3} />
+                  <XAxis 
+                    dataKey="dateTime" 
+                    tick={{ fontSize: 12, fill: '#6B7280' }}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12, fill: '#6B7280' }}
+                    domain={[0, 100]}
+                  />
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: 'white',
+                      border: '1px solid #E5E7EB',
+                      borderRadius: '12px',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+                    }}
+                  />
+                  <Bar dataKey="seo" fill="#9E005C" name="SEO" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="performance" fill="#FF4D94" name="Performance" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="accessibility" fill="#FF6B9D" name="Accessibility" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="bestPractices" fill="#C44569" name="Best Practices" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Suspense>
           </div>
 
-          {/* Score Breakdown */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold mb-4">Overall Score Breakdown</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'SEO', value: summary?.avg_seo_score || 0, color: colors.seo },
-                    { name: 'Performance', value: summary?.avg_performance_score || 0, color: colors.performance },
-                    { name: 'Accessibility', value: summary?.avg_accessibility_score || 0, color: colors.accessibility },
-                    { name: 'Best Practices', value: summary?.avg_best_practices_score || 0, color: colors.bestPractices }
-                  ]}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  dataKey="value"
-                  label={({ name, value }) => `${name}: ${Math.round(value)}`}
-                >
-                  {[colors.seo, colors.performance, colors.accessibility, colors.bestPractices].map((color, index) => (
-                    <Cell key={`cell-${index}`} fill={color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+          {/* Individual Scores - Horizontal Bar Chart */}
+          <div className="bg-gradient-to-br from-white to-pink-50 rounded-xl shadow-lg border border-pink-100 p-6 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center mb-6">
+                <div className="p-2 bg-gradient-to-br from-pink-500 to-rose-500 rounded-lg mr-3">
+                  <BarChart className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
+                  Individual Scores
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {(() => {
+                  const latestAnalysis = analyses[0];
+                  return [
+                    { name: 'SEO', score: latestAnalysis?.seo_score || 0, color: '#9E005C' },
+                    { name: 'Performance', score: latestAnalysis?.performance_score || 0, color: '#FF4D94' },
+                    { name: 'Accessibility', score: latestAnalysis?.accessibility_score || 0, color: '#FF6B9D' },
+                    { name: 'Best Practices', score: latestAnalysis?.best_practices_score || 0, color: '#C44569' }
+                  ];
+                })().map((item, index) => (
+                  <div key={index} className="flex flex-col items-center space-y-3">
+                    <div className="relative w-32 h-32">
+                      <Suspense fallback={<div className="w-32 h-32 rounded-full bg-gray-200 animate-pulse"></div>}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={[
+                                { name: 'Score', value: item.score, fill: item.color },
+                                { name: 'Remaining', value: 100 - item.score, fill: '#E5E7EB' }
+                              ]}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={40}
+                              outerRadius={64}
+                              dataKey="value"
+                              startAngle={90}
+                              endAngle={450}
+                            >
+                              <Cell key="score" fill={item.color} />
+                              <Cell key="remaining" fill="#E5E7EB" />
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </Suspense>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-lg font-bold text-gray-900">{Math.round(item.score)}</span>
+                      </div>
+                    </div>
+                    <span className="text-sm font-medium text-gray-700 text-center">{item.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          {/* Recommendations */}
+          {analyses.length > 0 && analyses[0]?.recommendations && (
+            <div className="bg-gradient-to-br from-white to-purple-50 rounded-xl shadow-lg border border-purple-100 p-6 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center mb-6">
+                <div className="p-2 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg mr-3">
+                  <Shield className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  Recommendations
+                </h3>
+              </div>
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {analyses[0].recommendations.slice(0, 8).map((rec, index) => (
+                  <div key={index} className="bg-white rounded-lg border border-gray-200 p-3 hover:shadow-md transition-all duration-200">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-2 h-2 rounded-full ${
+                          rec.category === 'SEO' ? 'bg-purple-500' :
+                          rec.category === 'Performance' ? 'bg-pink-500' :
+                          rec.category === 'Content' ? 'bg-green-500' :
+                          'bg-blue-500'
+                        }`}></div>
+                        <span className="text-xs font-medium text-gray-600">{rec.category}</span>
+                      </div>
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        rec.priority === 'High' ? 'bg-red-100 text-red-800' :
+                        rec.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-green-100 text-green-800'
+                      }`}>
+                        {rec.priority}
+                      </span>
+                    </div>
+                    <h4 className="font-semibold text-gray-900 text-sm mb-1">{rec.title}</h4>
+                    <p className="text-xs text-gray-600 line-clamp-2">{rec.description}</p>
+                  </div>
+                ))}
+              </div>
+              {analyses[0].recommendations.length > 8 && (
+                <div className="mt-3 text-center">
+                  <button 
+                    onClick={() => setSelectedAnalysis(analyses[0])}
+                    className="text-purple-600 hover:text-purple-800 text-xs font-medium"
+                  >
+                    View all {analyses[0].recommendations.length} recommendations →
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* Analysis History */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold">Analysis History</h3>
+      <div className="bg-gradient-to-br from-white to-purple-50 rounded-xl shadow-lg border border-purple-100">
+        <div className="p-6 border-b border-purple-200">
+          <div className="flex items-center">
+            <div className="p-2 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg mr-3">
+              <Clock className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+              {userWebsite ? `Analysis History for ${(() => {
+                try {
+                  return new URL(userWebsite).hostname;
+                } catch {
+                  return userWebsite;
+                }
+              })()}` : 'Analysis History'}
+            </h3>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gradient-to-r from-purple-50 to-pink-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Website
@@ -378,13 +658,19 @@ const WebsiteAnalysisDashboard = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {analyses.map((analysis) => (
-                <tr key={analysis.id} className="hover:bg-gray-50">
+              {analyses.map((analysis, index) => (
+                <tr key={`${analysis.id}-${analysis.created_at || index}`} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <Globe className="w-4 h-4 text-gray-400 mr-2" />
                       <span className="text-sm font-medium text-gray-900">
-                        {new URL(analysis.url).hostname}
+                        {(() => {
+                          try {
+                            return new URL(analysis.url).hostname;
+                          } catch {
+                            return analysis.url;
+                          }
+                        })()}
                       </span>
                     </div>
                   </td>

@@ -40,7 +40,7 @@ const AnalyticsDashboard = () => {
   const [lastRefresh, setLastRefresh] = useState(null)
   const [insightsData, setInsightsData] = useState({})
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: null })
-  const [activeTab, setActiveTab] = useState('social') // 'social' or 'website'
+  const [activeTab, setActiveTab] = useState('website') // 'social' or 'website'
   const tooltipRef = useRef(null)
 
   useEffect(() => {
@@ -298,17 +298,6 @@ const AnalyticsDashboard = () => {
             <div className="mt-4">
               <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
                 <button
-                  onClick={() => setActiveTab('social')}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                    activeTab === 'social'
-                      ? 'bg-white text-purple-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  <span>Social Media</span>
-                </button>
-                <button
                   onClick={() => setActiveTab('website')}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
                     activeTab === 'website'
@@ -318,6 +307,17 @@ const AnalyticsDashboard = () => {
                 >
                   <Globe className="w-4 h-4" />
                   <span>Website Analysis</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('social')}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                    activeTab === 'social'
+                      ? 'bg-white text-purple-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Social Media</span>
                 </button>
               </div>
             </div>
