@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
+import WebsiteAnalysisDashboard from './WebsiteAnalysisDashboard'
 import { 
   Facebook, 
   Instagram, 
@@ -17,7 +18,9 @@ import {
   Activity,
   Target,
   Zap,
-  TrendingUp
+  TrendingUp,
+  Globe,
+  Search
 } from 'lucide-react'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
@@ -37,6 +40,7 @@ const AnalyticsDashboard = () => {
   const [lastRefresh, setLastRefresh] = useState(null)
   const [insightsData, setInsightsData] = useState({})
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: null })
+  const [activeTab, setActiveTab] = useState('social') // 'social' or 'website'
   const tooltipRef = useRef(null)
 
   useEffect(() => {
@@ -274,7 +278,7 @@ const AnalyticsDashboard = () => {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h1>
                 <p className="text-sm text-gray-500">
-                  Performance insights and analytics for your social media channels
+                  Performance insights and analytics for your social media channels and websites
                 </p>
               </div>
               
@@ -289,24 +293,53 @@ const AnalyticsDashboard = () => {
                 </button>
               </div>
             </div>
+            
+            {/* Tabs */}
+            <div className="mt-4">
+              <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
+                <button
+                  onClick={() => setActiveTab('social')}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                    activeTab === 'social'
+                      ? 'bg-white text-purple-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Social Media</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('website')}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                    activeTab === 'website'
+                      ? 'bg-white text-purple-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Globe className="w-4 h-4" />
+                  <span>Website Analysis</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 pt-24 p-6">
-          {loading ? (
-            <MainContentLoader message="Loading analytics dashboard..." />
-          ) : (
-            <>
-          {platformsWithPosts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-96">
-              <BarChart3 className="w-16 h-16 text-gray-300 mb-4" />
-              <h3 className="text-xl font-semibold text-gray-600 mb-2">No Analytics Data</h3>
-              <p className="text-gray-500 text-center max-w-md">
-                Connect your social media accounts to see performance insights and analytics.
-              </p>
-            </div>
-          ) : (
+        <div className="flex-1 pt-32 p-6">
+          {activeTab === 'social' ? (
+            loading ? (
+              <MainContentLoader message="Loading analytics dashboard..." />
+            ) : (
+              <>
+                {platformsWithPosts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-96">
+                    <BarChart3 className="w-16 h-16 text-gray-300 mb-4" />
+                    <h3 className="text-xl font-semibold text-gray-600 mb-2">No Analytics Data</h3>
+                    <p className="text-gray-500 text-center max-w-md">
+                      Connect your social media accounts to see performance insights and analytics.
+                    </p>
+                  </div>
+                ) : (
             <div>
               {/* Performance Insights Cards */}
               {insightsData && Object.keys(insightsData).length > 0 && (
@@ -459,7 +492,17 @@ const AnalyticsDashboard = () => {
               Last updated: {lastRefresh.toLocaleTimeString()}
             </div>
           )}
-            </>
+              </>
+            )
+          ) : (
+            <WebsiteAnalysisDashboard />
+          )}
+          
+          {/* Last Updated Timestamp - Bottom Right */}
+          {lastRefresh && activeTab === 'social' && (
+            <div className="fixed bottom-4 right-4 text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border">
+              Last updated: {lastRefresh.toLocaleTimeString()}
+            </div>
           )}
         </div>
       </div>
