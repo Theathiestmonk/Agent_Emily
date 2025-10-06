@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 
 import { useNotifications } from '../contexts/NotificationContext'
+import { BlogSkeleton } from './LazyLoadingSkeleton'
 
 import { 
 
@@ -1316,7 +1317,7 @@ const BlogDashboard = () => {
 
           {loading ? (
 
-            <MainContentLoader message="Loading your blogs..." />
+            <BlogSkeleton />
 
           ) : filteredBlogs.length === 0 ? (
 
@@ -1373,7 +1374,7 @@ const BlogDashboard = () => {
 
               data-testid="blogs-section"
 
-              className={viewMode === 'grid' ? 'p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-8' : 'divide-y'}
+              className={viewMode === 'grid' ? 'p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6' : 'divide-y'}
 
             >
 
@@ -1447,7 +1448,7 @@ const BlogDashboard = () => {
 
                     {/* Blog Image Header */}
 
-                    <div className="relative h-64 bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 overflow-hidden">
+                    <div className="relative h-44 bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 overflow-hidden">
 
                       <img 
 
@@ -1507,15 +1508,15 @@ const BlogDashboard = () => {
 
                     {/* Card Content */}
 
-                    <div className="p-8">
+                    <div className="p-5">
 
                       {/* Author and Meta Info */}
 
-                      <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center justify-between mb-4">
 
                         <div className="flex items-center space-x-3">
 
-                          <div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                          <div className="w-6 h-6 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-xs">
 
                             A
 
@@ -1561,15 +1562,15 @@ const BlogDashboard = () => {
                       
                       {/* Blog Title */}
 
-                      <h3 className="font-bold text-gray-900 text-2xl mb-4 line-clamp-2 leading-tight">{blog.title}</h3>
+                      <h3 className="font-bold text-gray-900 text-lg mb-3 line-clamp-2 leading-tight">{blog.title}</h3>
 
                       
                       
                       {/* Blog Content Preview */}
 
-                      <div className="mb-6">
+                      <div className="mb-4">
 
-                        <p className="text-gray-600 text-base leading-relaxed line-clamp-3">
+                        <p className="text-gray-600 text-sm leading-relaxed line-clamp-2">
 
                           {blog.excerpt || blog.meta_description || blog.content.substring(0, 150) + '...'}
 
@@ -1581,13 +1582,13 @@ const BlogDashboard = () => {
                       
                       {/* Categories and Tags */}
 
-                      <div className="mb-6">
+                      <div className="mb-4">
 
-                        <div className="flex flex-wrap gap-3">
+                        <div className="flex flex-wrap gap-2">
 
                           {blog.categories && blog.categories.map((category, index) => (
 
-                            <span key={index} className="text-sm bg-gradient-to-r from-pink-100 to-purple-100 text-pink-800 px-4 py-2 rounded-full font-medium">
+                            <span key={index} className="text-xs bg-gradient-to-r from-pink-100 to-purple-100 text-pink-800 px-3 py-1 rounded-full font-medium">
 
                               {category}
 
@@ -1603,15 +1604,15 @@ const BlogDashboard = () => {
 
                       {/* Card Footer with Stats and Actions */}
 
-                      <div className="flex items-center justify-between pt-6 border-t border-gray-100">
+                      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
 
                         {blog.status === 'published' ? (
 
-                          <div className="flex items-center space-x-4">
+                          <div className="flex items-center space-x-3">
 
                             <div className="flex items-center space-x-2 text-gray-500">
 
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
 
@@ -1619,19 +1620,19 @@ const BlogDashboard = () => {
 
                               </svg>
 
-                              <span className="text-base font-medium">{Math.floor(Math.random() * 5000) + 1000} views</span>
+                              <span className="text-sm font-medium">{Math.floor(Math.random() * 5000) + 1000} views</span>
 
                             </div>
 
                             <div className="flex items-center space-x-2 text-gray-500">
 
-                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
 
                                 <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
 
                               </svg>
 
-                              <span className="text-base font-medium">{Math.floor(Math.random() * 100) + 10}</span>
+                              <span className="text-sm font-medium">{Math.floor(Math.random() * 100) + 10}</span>
 
                             </div>
 

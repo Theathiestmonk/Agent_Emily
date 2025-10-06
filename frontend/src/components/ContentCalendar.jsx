@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useContentCache } from '../contexts/ContentCacheContext'
 import { contentAPI } from '../services/content'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
+import { DashboardSkeleton } from './LazyLoadingSkeleton'
 import { 
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -273,7 +274,14 @@ const ContentCalendar = () => {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
   if (loading || contentLoading) {
-    return <LoadingBar message="Loading content calendar..." />
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50">
+        <SideNavbar />
+        <div className="ml-48 xl:ml-64 flex items-center justify-center min-h-screen">
+          <DashboardSkeleton />
+        </div>
+      </div>
+    )
   }
 
   return (

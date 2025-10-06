@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
+import { DashboardSkeleton } from './LazyLoadingSkeleton'
 import { 
   Target,
   Calendar,
@@ -156,7 +157,7 @@ const CampaignsDashboard = () => {
         {/* Content */}
         <div className="flex-1 pt-24 p-6">
           {loading ? (
-            <MainContentLoader message="Loading campaigns..." />
+            <DashboardSkeleton />
           ) : (
             <>
           {campaigns.length === 0 ? (

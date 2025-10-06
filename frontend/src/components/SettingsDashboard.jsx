@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { 
   Settings, 
   Plus, 
@@ -27,6 +27,7 @@ import SideNavbar from './SideNavbar'
 import MainContentLoader from './MainContentLoader'
 import DisconnectConfirmationModal from './DisconnectConfirmationModal'
 import WordPressInstructionsModal from './WordPressInstructionsModal'
+import { DashboardSkeleton } from './LazyLoadingSkeleton'
 // Using URL-based approach for logos
 
 const SettingsDashboard = () => {
@@ -896,7 +897,7 @@ const SettingsDashboard = () => {
         {/* Scrollable Content */}
         <div className="flex-1 p-6 pt-24">
           {loading ? (
-            <MainContentLoader message="Loading settings dashboard..." />
+            <DashboardSkeleton />
           ) : (
             <>
 

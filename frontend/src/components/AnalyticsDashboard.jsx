@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useSocialMediaCache } from '../contexts/SocialMediaCacheContext'
@@ -7,6 +7,10 @@ import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import WebsiteAnalysisDashboard from './WebsiteAnalysisDashboard'
+import { DashboardSkeleton } from './LazyLoadingSkeleton'
+
+// Lazy load heavy components
+const LazyWebsiteAnalysisDashboard = lazy(() => import('./WebsiteAnalysisDashboard'))
 import { 
   Facebook, 
   Instagram, 
@@ -328,7 +332,7 @@ const AnalyticsDashboard = () => {
         <div className="flex-1 pt-32 p-6">
           {activeTab === 'social' ? (
             loading ? (
-              <MainContentLoader message="Loading analytics dashboard..." />
+              <DashboardSkeleton />
             ) : (
               <>
                 {platformsWithPosts.length === 0 ? (

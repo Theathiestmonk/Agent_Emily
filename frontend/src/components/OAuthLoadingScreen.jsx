@@ -62,10 +62,15 @@ const OAuthLoadingScreen = ({ status, message }) => {
         {/* Success Animation */}
         {status === 'success' && (
           <div className="mb-8">
-            <div className="flex justify-center space-x-2">
-              <div className="w-3 h-3 bg-pink-500 rounded-full animate-bounce"></div>
-              <div className="w-3 h-3 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-              <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+            <div className="w-48 bg-gray-200 rounded-full h-2 overflow-hidden mx-auto">
+              <div 
+                className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded-full"
+                style={{
+                  background: 'linear-gradient(90deg, #ec4899, #8b5cf6, #6366f1)',
+                  backgroundSize: '200% 100%',
+                  animation: 'loading-gradient 1.5s ease-in-out infinite'
+                }}
+              />
             </div>
             <p className="text-sm text-gray-500 mt-4">Redirecting to your dashboard...</p>
           </div>
@@ -87,6 +92,23 @@ const OAuthLoadingScreen = ({ status, message }) => {
           </p>
         </div>
       </div>
+      
+      <style>{`
+        @keyframes loading-gradient {
+          0% { 
+            background-position: 0% 50%; 
+            transform: translateX(-100%);
+          }
+          50% { 
+            background-position: 100% 50%; 
+            transform: translateX(0%);
+          }
+          100% { 
+            background-position: 0% 50%; 
+            transform: translateX(100%);
+          }
+        }
+      `}</style>
     </div>
   )
 }

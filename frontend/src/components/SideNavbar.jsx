@@ -242,9 +242,9 @@ const SideNavbar = () => {
                         <div className="font-medium">{item.name}</div>
                       </div>
                       {isExpanded ? (
-                        <ChevronDown className="w-4 h-4" />
+                        <ChevronDown className="w-5 h-5" />
                       ) : (
-                        <ChevronRight className="w-4 h-4" />
+                        <ChevronRight className="w-5 h-5" />
                       )}
                     </>
                   )}
@@ -252,7 +252,7 @@ const SideNavbar = () => {
                 
                 {/* Submenu */}
                 {!isCollapsed && isExpanded && item.submenu && (
-                  <div className="ml-6 mt-2 space-y-1">
+                  <div className="ml-4 mt-2 space-y-1 lg:space-y-2">
                     {item.submenu.map((subItem) => {
                       const SubIcon = subItem.icon
                       const subActive = isActive(subItem.href)
@@ -261,15 +261,15 @@ const SideNavbar = () => {
                         <button
                           key={subItem.name}
                           onClick={() => navigate(subItem.href)}
-                          className={`w-full flex items-center p-1.5 lg:p-2 rounded-lg transition-all duration-200 group ${
+                          className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-all duration-200 group ${
                             subActive
-                              ? 'bg-gray-200 text-gray-900'
+                              ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
                               : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                           }`}
                         >
-                          <SubIcon className="w-4 h-4 mr-3" />
+                          <SubIcon className="w-5 h-5 mr-2 lg:mr-3" />
                           <div className="flex-1 text-left">
-                            <div className="font-medium text-sm">{subItem.name}</div>
+                            <div className="font-medium text-sm lg:text-base">{subItem.name}</div>
                           </div>
                         </button>
                       )
@@ -285,7 +285,7 @@ const SideNavbar = () => {
             <button
               key={item.name}
               onClick={() => navigate(item.href)}
-              className={`w-full flex items-center p-3 rounded-lg transition-all duration-200 group ${
+              className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-all duration-200 group ${
                 active
                   ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -308,7 +308,7 @@ const SideNavbar = () => {
           <div className="space-y-3">
             <button
               onClick={() => navigate('/profile')}
-              className="w-full flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
+              className="w-full flex items-center p-2 lg:p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
             >
               <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mr-3 overflow-hidden">
                 {profile?.logo_url && (
@@ -329,7 +329,7 @@ const SideNavbar = () => {
             
             <button
               onClick={handleLogout}
-              className="w-full flex items-center p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors group"
+              className="w-full flex items-center p-2 lg:p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors group"
             >
               <LogOut className="w-5 h-5 mr-3" />
               <span className="font-medium">Logout</span>
@@ -339,7 +339,7 @@ const SideNavbar = () => {
           <div className="space-y-2">
             <button
               onClick={() => navigate('/profile')}
-              className="w-full flex items-center justify-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              className="w-full flex items-center justify-center p-2 lg:p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
               title={profileTitle}
             >
               <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center overflow-hidden">
@@ -354,7 +354,7 @@ const SideNavbar = () => {
             </button>
             <button
               onClick={handleLogout}
-              className="w-full flex items-center justify-center p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+              className="w-full flex items-center justify-center p-2 lg:p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
               title="Logout"
             >
               <LogOut className="w-5 h-5" />

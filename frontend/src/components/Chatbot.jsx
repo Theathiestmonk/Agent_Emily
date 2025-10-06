@@ -300,12 +300,18 @@ const Chatbot = () => {
                     </ReactMarkdown>
                   </div>
                 ) : message.isStreaming ? (
-                  <div className="flex items-center space-x-1">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                      <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                      <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-16 bg-gray-200 rounded-full h-1 overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-purple-400 to-pink-400 rounded-full"
+                        style={{
+                          background: 'linear-gradient(90deg, #a855f7, #ec4899)',
+                          backgroundSize: '200% 100%',
+                          animation: 'loading-gradient 1.5s ease-in-out infinite'
+                        }}
+                      />
                     </div>
+                    <span className="text-xs text-gray-500">Typing...</span>
                   </div>
                 ) : (
                   <div className="text-sm leading-relaxed prose prose-sm max-w-none">
@@ -390,6 +396,23 @@ const Chatbot = () => {
           </div>
         </div>
       </div>
+      
+      <style>{`
+        @keyframes loading-gradient {
+          0% { 
+            background-position: 0% 50%; 
+            transform: translateX(-100%);
+          }
+          50% { 
+            background-position: 100% 50%; 
+            transform: translateX(0%);
+          }
+          100% { 
+            background-position: 0% 50%; 
+            transform: translateX(100%);
+          }
+        }
+      `}</style>
     </div>
   )
 }

@@ -479,6 +479,8 @@ class TemplateEditorAgent:
             
             # Convert template_id to lowercase for matching
             template_id_lower = template_id.lower()
+            print(f"🔍 Template ID: {template_id}")
+            print(f"🔍 Template ID Lower: {template_id_lower}")
             
             # Check for known template patterns
             if 'did_you_know' in template_id_lower:
@@ -489,13 +491,16 @@ class TemplateEditorAgent:
                 return 'tips_and_tricks'
             elif 'behind_the_scenes' in template_id_lower:
                 return 'behind_the_scenes'
+            elif 'new_product' in template_id_lower:
+                return 'new_product'
             else:
                 # Try to extract from the template_id pattern
-                # Assuming format like "social-media-Did_you_know-1"
+                # Assuming format like "social-media-Did_you_know-1" or "social-media-New Product"
                 parts = template_id.split('-')
                 if len(parts) >= 2:
-                    # Convert to lowercase and replace underscores
-                    template_name = parts[-1].lower().replace('_', '_')
+                    # Convert to lowercase, replace spaces with underscores, and handle underscores
+                    template_name = parts[-1].lower().replace(' ', '_').replace('_', '_')
+                    print(f"🔍 Extracted template name: {template_name}")
                     return template_name
                 
                 return ""

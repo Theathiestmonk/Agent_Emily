@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
@@ -14,6 +14,7 @@ import SideNavbar from './SideNavbar'
 import CustomContentChatbot from './CustomContentChatbot'
 import ChatbotImageEditor from './ChatbotImageEditor'
 import MediaGenerationCelebration from './MediaGenerationCelebration'
+import { ContentSkeleton } from './LazyLoadingSkeleton'
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -1909,7 +1910,7 @@ const ContentDashboard = () => {
         {/* Scrollable Content */}
         <div className="flex-1 p-4 lg:p-6 pt-20 lg:pt-24">
           {loading ? (
-            <MainContentLoader message="Loading your content..." />
+            <ContentSkeleton />
           ) : (
             <>
               {/* Status Message - Only show error messages */}

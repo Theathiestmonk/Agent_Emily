@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { Mail, Calendar, Send, RefreshCw, Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import SideNavbar from './SideNavbar'
 import MainContentLoader from './MainContentLoader'
+import { DashboardSkeleton } from './LazyLoadingSkeleton'
 
 const GoogleDashboard = () => {
   const { user } = useAuth()
@@ -236,7 +237,7 @@ const GoogleDashboard = () => {
 
         {/* Main Content Area */}
         {loading && gmailMessages.length === 0 ? (
-          <MainContentLoader message="Loading Google data..." />
+          <DashboardSkeleton />
         ) : (
           <div className="flex-1 pt-24 p-6">
             <div className="max-w-7xl mx-auto">

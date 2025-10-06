@@ -267,6 +267,49 @@
         "font_families": ["Arial", "Helvetica"],
         "overall_style": "artistic"
       }
+    },
+    {
+      "id": "marketing-2",
+      "name": "New Product",
+      "category": "marketing",
+      "description": "Curiosity-driven product launch teaser template",
+      "filename": null,
+      "preview_url": null,
+      "content_areas": [
+        {
+          "type": "text",
+          "label": "curiosity_opener",
+          "position": {"x": 50, "y": 100, "width": 400, "height": 60},
+          "style": {"font_size": 28, "color": "#FFFFFF", "font_family": "Arial Bold"},
+          "required": true
+        },
+        {
+          "type": "text",
+          "label": "teaser_text",
+          "position": {"x": 50, "y": 180, "width": 400, "height": 80},
+          "style": {"font_size": 20, "color": "#F0F0F0", "font_family": "Arial"},
+          "required": true
+        },
+        {
+          "type": "text",
+          "label": "product_hint",
+          "position": {"x": 50, "y": 280, "width": 400, "height": 60},
+          "style": {"font_size": 18, "color": "#CCCCCC", "font_family": "Arial"},
+          "required": false
+        }
+      ],
+      "image_areas": [
+        {
+          "label": "product_preview",
+          "position": {"x": 500, "y": 80, "width": 200, "height": 200},
+          "aspect_ratio": "1:1"
+        }
+      ],
+      "design_info": {
+        "primary_colors": ["#FF6B35", "#F7931E"],
+        "font_families": ["Arial", "Helvetica"],
+        "overall_style": "mysterious"
+      }
     }
   ],
   "categories": [

@@ -35,6 +35,15 @@
       "created_at": "2024-01-15T10:15:00Z",
       "updated_at": "2024-01-15T10:15:00Z",
       "created_by": "team"
+    },
+    "new_product": {
+      "name": "New Product",
+      "description": "Curiosity-driven product launch teaser template",
+      "prompt": "You are a social media content transformer.\nYour task is to read the following post: {post_content}.\nThe post may be a full announcement, introduction, or detailed description of a new product or service.\nIdentify what is being launched and the most appealing benefit, emotion, or unique element behind it.\nRewrite it into a short, curiosity-driven teaser that fits the 'Product Launch' template.\n\nOutput format:\n{Curiosity opener like \"Pssst…\", \"Guess what?\", or \"Shhh…\"}\n{Rewritten version of \"Something new is coming\" that matches the product's theme, e.g., \"Something intelligent is coming\", \"Something powerful is on the way\", etc.}\n{Optional 1-line tagline revealing the product name or hinting at what it does.}\n\nGuidelines:\n\nKeep it short, mysterious, and exciting (2–3 lines max).\n\nMaintain a tone of curiosity and anticipation — don't fully reveal the product details.\n\nPreserve the product launch essence — it should clearly feel like a \"coming soon\" teaser.\n\nUse simple, modern, human language.\n\nAvoid hashtags, emojis, or promotional fluff.\n\nFocus on building curiosity while subtly showing what makes the product interesting or valuable.",
+      "skip_template_analyzer": true,
+      "created_at": "2024-01-15T10:20:00Z",
+      "updated_at": "2024-01-15T10:20:00Z",
+      "created_by": "team"
     }
   },
   "settings": {

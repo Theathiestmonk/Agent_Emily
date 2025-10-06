@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionAPI } from '../services/subscription';
 import { generateInvoicePDF, generateBillingHistoryPDF } from '../services/pdfGenerator';
 import SideNavbar from './SideNavbar';
+import { DashboardSkeleton, CardSkeleton } from './LazyLoadingSkeleton';
 import { 
   CreditCard, 
   Calendar, 
@@ -219,10 +220,98 @@ const BillingDashboard = () => {
     return (
       <div className="min-h-screen bg-white">
         <SideNavbar />
-        <div className="ml-48 xl:ml-64 flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-purple-600" />
-            <p className="text-gray-600">Loading billing information...</p>
+        
+        {/* Main Content */}
+        <div className="ml-48 xl:ml-64 flex flex-col min-h-screen">
+          {/* Fixed Header Skeleton */}
+          <div className="fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+            <div className="px-6 py-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 bg-gradient-to-r from-purple-200 to-indigo-200 rounded-full animate-pulse"></div>
+                  <div>
+                    <div className="h-6 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-48 mb-2 animate-pulse"></div>
+                    <div className="h-4 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-64 animate-pulse"></div>
+                  </div>
+                </div>
+                
+                {/* Refresh Button Skeleton */}
+                <div className="flex items-center space-x-4">
+                  <div className="h-10 bg-gradient-to-r from-purple-200 to-indigo-200 rounded-lg w-24 animate-pulse"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Content Area Skeleton */}
+          <div className="flex-1 pt-24 p-6">
+            <div className="space-y-6">
+              {/* Current Subscription Card Skeleton */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-6 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-48 animate-pulse"></div>
+                  <div className="h-8 bg-gradient-to-r from-purple-200 to-indigo-200 rounded-full w-24 animate-pulse"></div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <div className="h-4 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-16 animate-pulse"></div>
+                      <div className="h-6 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-24 animate-pulse"></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Billing History Card Skeleton */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="h-6 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-32 animate-pulse"></div>
+                  <div className="h-10 bg-gradient-to-r from-purple-200 to-indigo-200 rounded-lg w-28 animate-pulse"></div>
+                </div>
+
+                <div className="space-y-4">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-10 h-10 bg-gradient-to-r from-purple-200 to-indigo-200 rounded-lg animate-pulse"></div>
+                        <div>
+                          <div className="h-4 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-32 mb-2 animate-pulse"></div>
+                          <div className="h-3 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-24 animate-pulse"></div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-6">
+                        <div className="text-right">
+                          <div className="h-4 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-16 mb-2 animate-pulse"></div>
+                          <div className="h-3 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-20 animate-pulse"></div>
+                        </div>
+                        
+                        <div className="h-8 bg-gradient-to-r from-purple-200 to-indigo-200 rounded-full w-20 animate-pulse"></div>
+                        
+                        <div className="h-8 bg-gradient-to-r from-purple-200 to-indigo-200 rounded-lg w-32 animate-pulse"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Payment Method Card Skeleton */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-6 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-40 animate-pulse"></div>
+                  <div className="h-10 bg-gradient-to-r from-purple-200 to-indigo-200 rounded-lg w-36 animate-pulse"></div>
+                </div>
+
+                <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="w-12 h-8 bg-gradient-to-r from-purple-200 to-indigo-200 rounded animate-pulse"></div>
+                  <div>
+                    <div className="h-4 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-32 mb-2 animate-pulse"></div>
+                    <div className="h-3 bg-gradient-to-r from-purple-200 to-indigo-200 rounded w-24 animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

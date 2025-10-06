@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import SideNavbar from './SideNavbar'
+import { DashboardSkeleton, CardSkeleton } from './LazyLoadingSkeleton'
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -670,10 +671,64 @@ const AdsDashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen bg-white">
         <SideNavbar />
-        <div className="ml-48 xl:ml-64 flex items-center justify-center min-h-screen">
-          <MainContentLoader message="Loading ads dashboard..." />
+        
+        {/* Main Content */}
+        <div className="ml-48 xl:ml-64 flex flex-col min-h-screen">
+          {/* Fixed Header Skeleton */}
+          <div className="fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+            <div className="px-6 py-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center space-x-8">
+                  {/* Stats Cards Skeleton */}
+                  <div className="flex items-center space-x-6">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="flex items-center space-x-2">
+                        <div className="w-8 h-8 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg animate-pulse"></div>
+                        <div>
+                          <div className="h-3 bg-gradient-to-r from-purple-200 to-pink-200 rounded w-16 mb-1 animate-pulse"></div>
+                          <div className="h-5 bg-gradient-to-r from-purple-200 to-pink-200 rounded w-8 animate-pulse"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Generate Button Skeleton */}
+                <div className="flex items-center space-x-4">
+                  <div className="h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-32 animate-pulse"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Content Area Skeleton */}
+          <div className="flex-1 pt-24 p-6">
+            <div className="max-w-7xl mx-auto">
+              {/* Filters Skeleton */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-48 animate-pulse"></div>
+                    <div className="h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-32 animate-pulse"></div>
+                    <div className="h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-32 animate-pulse"></div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="h-10 w-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg animate-pulse"></div>
+                    <div className="h-10 w-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Ads Grid Skeleton */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {[...Array(8)].map((_, i) => (
+                  <CardSkeleton key={i} className="h-64" />
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     )

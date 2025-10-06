@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useSocialMediaCache } from '../contexts/SocialMediaCacheContext'
@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
+import { ContentSkeleton } from './LazyLoadingSkeleton'
 import { 
   Facebook, 
   Instagram, 
@@ -252,7 +253,7 @@ const SocialMediaDashboard = () => {
         {/* Scrollable Content */}
         <div className="flex-1 p-6 pt-24">
           {loading || !dataLoaded ? (
-            <MainContentLoader message="Loading social media dashboard..." />
+            <ContentSkeleton />
           ) : (
             <>
 

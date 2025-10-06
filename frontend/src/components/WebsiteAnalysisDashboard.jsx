@@ -9,6 +9,7 @@ import {
   ExternalLink, Download, Trash2, Plus, User
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { LazyChart } from './LazyWrapper'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
 
@@ -474,7 +475,7 @@ const WebsiteAnalysisDashboard = () => {
                     Score Distribution
                   </h3>
                 </div>
-                 <Suspense fallback={<div className="h-[300px] flex items-center justify-center">Loading chart...</div>}>
+                 <LazyChart height={300} className="h-[300px]">
                    <ResponsiveContainer width="100%" height={300}>
                      <BarChart data={barChartData} margin={{ left: 0, right: 0, top: 5, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" opacity={0.3} />
@@ -500,7 +501,7 @@ const WebsiteAnalysisDashboard = () => {
                   <Bar dataKey="bestPractices" fill="#C44569" name="Best Practices" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            </Suspense>
+            </LazyChart>
           </div>
 
           {/* Individual Scores - Horizontal Bar Chart */}
@@ -525,7 +526,7 @@ const WebsiteAnalysisDashboard = () => {
                 })().map((item, index) => (
                   <div key={index} className="flex flex-col items-center space-y-3">
                     <div className="relative w-32 h-32">
-                      <Suspense fallback={<div className="w-32 h-32 rounded-full bg-gray-200 animate-pulse"></div>}>
+                      <LazyChart height={128} className="w-32 h-32">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
@@ -546,7 +547,7 @@ const WebsiteAnalysisDashboard = () => {
                             </Pie>
                           </PieChart>
                         </ResponsiveContainer>
-                      </Suspense>
+                      </LazyChart>
                       <div className="absolute inset-0 flex items-center justify-center">
                         <span className="text-lg font-bold text-gray-900">{Math.round(item.score)}</span>
                       </div>
