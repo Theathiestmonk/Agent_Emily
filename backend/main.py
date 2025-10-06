@@ -547,6 +547,25 @@ async def register(user: UserCreate):
                 detail="Failed to create user"
             )
         
+        # Create basic profile record immediately after user registration
+        # This ensures the profile exists for subscription webhooks
+        try:
+            profile_data = {
+                "id": response.user.id,
+                "name": user.name,
+                "onboarding_completed": False,
+                "subscription_status": "inactive",
+                "migration_status": "pending"
+            }
+            
+            profile_result = supabase.table("profiles").insert(profile_data).execute()
+            print(f"Profile created: {profile_result}")  # Debug logging
+            
+        except Exception as profile_error:
+            print(f"Profile creation error (non-critical): {profile_error}")
+            # Don't fail registration if profile creation fails
+            # The profile will be created during onboarding
+        
         # Check if email confirmation is required
         if not response.session:
             return {

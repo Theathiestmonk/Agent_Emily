@@ -256,32 +256,59 @@ async def create_subscription(
 ):
     """Create a new subscription"""
     try:
+        logger.info(f"Creating subscription for user {current_user.id}, plan: {request.plan_name}, billing: {request.billing_cycle}")
+        
         # Check if user already has active subscription
         result = supabase.rpc("get_user_subscription_info", {"user_uuid": current_user.id}).execute()
         
         if result.data and result.data[0]["has_active_subscription"]:
+            logger.warning(f"User {current_user.id} already has active subscription")
             raise HTTPException(status_code=400, detail="User already has an active subscription")
         
         # Get plan details
         plan_result = supabase.table("subscription_plans").select("*").eq("name", request.plan_name).eq("is_active", True).execute()
         
         if not plan_result.data:
+            logger.error(f"Plan not found: {request.plan_name}")
             raise HTTPException(status_code=404, detail="Plan not found")
         
         plan = plan_result.data[0]
+        logger.info(f"Found plan: {plan['name']}, monthly price: {plan['price_monthly']}, yearly price: {plan['price_yearly']}")
         
         # Create Razorpay customer
+        logger.info(f"Creating Razorpay customer for user {current_user.id}")
         customer_id = await razorpay_service.create_customer({
             "id": current_user.id,
             "name": current_user.name,
             "email": current_user.email
         })
+        logger.info(f"Created Razorpay customer: {customer_id}")
         
         # Generate a unique subscription ID for tracking
         import uuid
         subscription_id = f"sub_{uuid.uuid4().hex[:8]}"
+        logger.info(f"Generated subscription ID: {subscription_id}")
+        
+        # Ensure profile exists before updating subscription info
+        logger.info(f"Ensuring profile exists for user {current_user.id}")
+        
+        # First check if profile exists
+        profile_check = supabase.table("profiles").select("id").eq("id", current_user.id).execute()
+        
+        if not profile_check.data:
+            # Create basic profile if it doesn't exist
+            logger.info(f"Creating profile for user {current_user.id}")
+            supabase.table("profiles").insert({
+                "id": current_user.id,
+                "name": current_user.name,
+                "onboarding_completed": False,
+                "subscription_status": "inactive",
+                "migration_status": "pending"
+            }).execute()
+            logger.info(f"Profile created for user {current_user.id}")
         
         # Update user profile with subscription info
+        logger.info(f"Updating user profile with subscription info")
         supabase.table("profiles").update({
             "razorpay_customer_id": customer_id,
             "razorpay_subscription_id": subscription_id,
@@ -291,10 +318,14 @@ async def create_subscription(
         
         # Create payment link
         amount = plan["price_monthly"] if request.billing_cycle == "monthly" else plan["price_yearly"]
+        logger.info(f"Creating payment link for amount: {amount}")
         payment_url = await razorpay_service.create_payment_link(
             subscription_id, 
-            amount
+            amount,
+            customer_name=current_user.name,
+            customer_email=current_user.email
         )
+        logger.info(f"Created payment link: {payment_url}")
         
         return JSONResponse(content={
             "success": True,
@@ -306,7 +337,9 @@ async def create_subscription(
         
     except Exception as e:
         logger.error(f"Error creating subscription: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create subscription")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to create subscription: {str(e)}")
 
 @router.post("/webhook")
 async def razorpay_webhook(request: Request):
@@ -473,6 +506,21 @@ async def _handle_payment_link_paid(webhook_data: Dict[str, Any]):
                     if amount != expected_amount:
                         logger.warning(f"Payment amount {amount} does not match expected amount {expected_amount} for plan {plan}")
                         return
+                
+                # Ensure profile exists before updating subscription status
+                profile_check = supabase_admin.table("profiles").select("id").eq("id", user_id).execute()
+                
+                if not profile_check.data:
+                    # Create basic profile if it doesn't exist
+                    logger.info(f"Creating profile for user {user_id} during webhook")
+                    supabase_admin.table("profiles").insert({
+                        "id": user_id,
+                        "name": "User",  # Default name since we don't have user details in webhook
+                        "onboarding_completed": False,
+                        "subscription_status": "inactive",
+                        "migration_status": "pending"
+                    }).execute()
+                    logger.info(f"Profile created for user {user_id}")
                 
                 # Activate subscription
                 now = datetime.utcnow()

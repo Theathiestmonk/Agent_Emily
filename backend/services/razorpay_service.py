@@ -24,6 +24,7 @@ class RazorpayService:
     async def create_customer(self, user_data: Dict[str, Any]) -> str:
         """Create a Razorpay customer or get existing one"""
         try:
+            logger.info(f"Creating/finding Razorpay customer with data: {user_data}")
             email = user_data.get("email")
             
             # First, try to find existing customer by email
@@ -47,12 +48,15 @@ class RazorpayService:
                 }
             }
             
+            logger.info(f"Creating new customer with data: {customer_data}")
             customer = self.client.customer.create(customer_data)
             logger.info(f"Created new Razorpay customer: {customer['id']}")
             return customer['id']
             
         except Exception as e:
             logger.error(f"Error creating Razorpay customer: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
     
     async def create_subscription(self, customer_id: str, plan_id: str, billing_cycle: str = "monthly") -> Dict[str, Any]:
@@ -142,29 +146,42 @@ class RazorpayService:
                 "price": plan["price_yearly"]
             }
     
-    async def create_payment_link(self, subscription_id: str, amount: int, currency: str = "INR") -> str:
+    async def create_payment_link(self, subscription_id: str, amount: int, currency: str = "INR", customer_name: str = "Customer", customer_email: str = "customer@example.com") -> str:
         """Create a payment link for subscription"""
         try:
+            frontend_url = os.getenv('FRONTEND_URL')
+            
+            # Fallback to localhost for development if FRONTEND_URL is not set
+            if not frontend_url:
+                frontend_url = "http://localhost:3000"
+                logger.warning(f"FRONTEND_URL not set, using fallback: {frontend_url}")
+            
+            logger.info(f"Creating payment link for subscription {subscription_id}, amount: {amount}, frontend_url: {frontend_url}")
+            
             payment_link_data = {
                 "amount": amount,
                 "currency": currency,
                 "description": f"Subscription payment for {subscription_id}",
                 "customer": {
-                    "name": "Customer",
-                    "email": "customer@example.com"
+                    "name": customer_name,
+                    "email": customer_email
                 },
                 "notify": {
                     "sms": True,
                     "email": True
                 },
                 "reminder_enable": True,
-                "callback_url": f"{os.getenv('FRONTEND_URL')}/payment/success",
+                "callback_url": f"{frontend_url}/payment/success",
                 "callback_method": "get"
             }
             
+            logger.info(f"Payment link data: {payment_link_data}")
             payment_link = self.client.payment_link.create(payment_link_data)
+            logger.info(f"Created payment link: {payment_link}")
             return payment_link['short_url']
             
         except Exception as e:
             logger.error(f"Error creating payment link: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
