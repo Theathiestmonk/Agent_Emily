@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { onboardingAPI } from '../services/onboarding'
 import OnboardingComplete from './OnboardingComplete'
 import OnboardingConnections from './OnboardingConnections'
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, LogOut } from 'lucide-react'
 import LogoUpload from './LogoUpload'
 
 const Onboarding = () => {
@@ -123,7 +123,7 @@ const Onboarding = () => {
     other: false
   })
   
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading, logout } = useAuth()
   const navigate = useNavigate()
 
 
@@ -139,7 +139,7 @@ const Onboarding = () => {
     'Business Description', 
     'Brand & Contact',
     'Current Presence & Focus Areas',
-    'Social Media & Goals',
+    'Digital Marketing & Goals',
     'Content Strategy',
     'Market & Competition',
     'Campaign Planning',
@@ -364,7 +364,7 @@ const Onboarding = () => {
 
   const focusAreas = [
     'SEO', 'Blog/Article Writing', 'Website Optimization/Copywriting', 
-    'Social Media Marketing (Organic Growth)', 'Paid Advertising', 
+    'Digital Marketing (Organic Growth)', 'Paid Advertising', 
     'Email Marketing & Campaigns', 'YouTube/Video Marketing', 'Influencer Marketing', 
     'PPC', 'Lead Generation Campaigns', 'Brand Awareness', 'Local SEO/Maps Presence', 
     'Customer Retargeting', 'Not Sure – Let Emily suggest the best path'
@@ -441,12 +441,10 @@ const Onboarding = () => {
         return formData.business_name && formData.business_type.length > 0 && formData.industry.length > 0
       case 1: // Business Description
         return formData.business_description && formData.unique_value_proposition &&
-               (formData.target_audience_age_groups.length > 0 || 
-                formData.target_audience_life_stages.length > 0 || 
-                formData.target_audience_professional_types.length > 0 || 
-                formData.target_audience_lifestyle_interests.length > 0 || 
-                formData.target_audience_buyer_behavior.length > 0 || 
-                formData.target_audience_other)
+               formData.target_audience_age_groups.length > 0 && 
+               formData.target_audience_life_stages.length > 0 && 
+               formData.target_audience_professional_types.length > 0 && 
+               formData.target_audience_buyer_behavior.length > 0
       case 2: // Brand & Contact
         return formData.brand_voice && formData.brand_tone && formData.phone_number && 
                formData.street_address && formData.city && formData.state && formData.country
@@ -456,7 +454,7 @@ const Onboarding = () => {
           return false;
         }
         return true
-      case 4: // Social Media & Goals
+      case 4: // Digital Marketing & Goals
         return formData.social_media_platforms.length > 0 && formData.primary_goals.length > 0 && 
                formData.key_metrics_to_track.length > 0
       case 5: // Content Strategy
@@ -466,7 +464,7 @@ const Onboarding = () => {
       case 7: // Campaign Planning
         return formData.top_performing_content_types.length > 0 && formData.best_time_to_post.length > 0
       case 8: // Performance & Customer
-        return formData.successful_campaigns && formData.hashtags_that_work_well && 
+        return formData.hashtags_that_work_well && 
                formData.customer_pain_points && formData.typical_customer_journey
       case 9: // Automation & Platform
         return formData.automation_level
@@ -511,18 +509,16 @@ const Onboarding = () => {
         return formData.business_name && formData.business_type.length > 0 && formData.industry.length > 0
       case 1: // Business Description
         return formData.business_description && formData.unique_value_proposition &&
-               (formData.target_audience_age_groups.length > 0 || 
-                formData.target_audience_life_stages.length > 0 || 
-                formData.target_audience_professional_types.length > 0 || 
-                formData.target_audience_lifestyle_interests.length > 0 || 
-                formData.target_audience_buyer_behavior.length > 0 || 
-                formData.target_audience_other)
+               formData.target_audience_age_groups.length > 0 && 
+               formData.target_audience_life_stages.length > 0 && 
+               formData.target_audience_professional_types.length > 0 && 
+               formData.target_audience_buyer_behavior.length > 0
       case 2: // Brand & Contact
         return formData.brand_voice && formData.brand_tone && formData.phone_number && 
                formData.street_address && formData.city && formData.state && formData.country
       case 3: // Current Presence & Focus Areas
         return formData.current_presence.length > 0 || formData.focus_areas.length > 0
-      case 4: // Social Media & Goals
+      case 4: // Digital Marketing & Goals
         return formData.social_media_platforms.length > 0 && formData.primary_goals.length > 0 && 
                formData.key_metrics_to_track.length > 0
       case 5: // Content Strategy
@@ -532,7 +528,7 @@ const Onboarding = () => {
       case 7: // Campaign Planning
         return formData.top_performing_content_types.length > 0 && formData.best_time_to_post.length > 0
       case 8: // Performance & Customer
-        return formData.successful_campaigns && formData.hashtags_that_work_well && 
+        return formData.hashtags_that_work_well && 
                formData.customer_pain_points && formData.typical_customer_journey
       case 9: // Automation & Platform
         return formData.automation_level
@@ -705,8 +701,6 @@ const Onboarding = () => {
       case 0:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Basic Business Information</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Business Name *</label>
               <input
@@ -779,8 +773,6 @@ const Onboarding = () => {
       case 1:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Business Description</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Business Description *</label>
               <textarea
@@ -807,7 +799,7 @@ const Onboarding = () => {
 
 
              <div>
-               <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience (Select all that apply) *</label>
+               <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience *</label>
                <div className="space-y-4">
                  {/* Age Groups Card */}
                  <div className="border border-gray-200 rounded-lg">
@@ -816,7 +808,7 @@ const Onboarding = () => {
                      onClick={() => toggleCard('ageGroups')}
                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors relative"
                    >
-                     <span className="text-sm font-medium text-gray-700">Age Groups</span>
+                     <span className="text-sm font-medium text-gray-700">Age Groups <span className="text-black">*</span></span>
                      <div className="flex items-center space-x-2">
                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
                          {getSelectedCount('target_audience_age_groups')}
@@ -857,7 +849,7 @@ const Onboarding = () => {
                      onClick={() => toggleCard('lifeStages')}
                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors relative"
                    >
-                     <span className="text-sm font-medium text-gray-700">Life Stage / Roles</span>
+                     <span className="text-sm font-medium text-gray-700">Life Stage / Roles <span className="text-black">*</span></span>
                      <div className="flex items-center space-x-2">
                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
                          {getSelectedCount('target_audience_life_stages')}
@@ -898,7 +890,7 @@ const Onboarding = () => {
                      onClick={() => toggleCard('professionalTypes')}
                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors relative"
                    >
-                     <span className="text-sm font-medium text-gray-700">Professional / Business Type</span>
+                     <span className="text-sm font-medium text-gray-700">Professional / Business Type <span className="text-black">*</span></span>
                      <div className="flex items-center space-x-2">
                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
                          {getSelectedCount('target_audience_professional_types')}
@@ -939,7 +931,7 @@ const Onboarding = () => {
                      onClick={() => toggleCard('lifestyleInterests')}
                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors relative"
                    >
-                     <span className="text-sm font-medium text-gray-700">Lifestyle & Interests</span>
+                     <span className="text-sm font-medium text-gray-700">Lifestyle & Interests <span className="text-gray-500 text-xs">(Optional)</span></span>
                      <div className="flex items-center space-x-2">
                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
                          {getSelectedCount('target_audience_lifestyle_interests')}
@@ -980,7 +972,7 @@ const Onboarding = () => {
                      onClick={() => toggleCard('buyerBehavior')}
                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors relative"
                    >
-                     <span className="text-sm font-medium text-gray-700">Buyer Behavior</span>
+                     <span className="text-sm font-medium text-gray-700">Buyer Behavior <span className="text-black">*</span></span>
                      <div className="flex items-center space-x-2">
                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
                          {getSelectedCount('target_audience_buyer_behavior')}
@@ -1021,7 +1013,7 @@ const Onboarding = () => {
                      onClick={() => toggleCard('other')}
                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors relative"
                    >
-                     <span className="text-sm font-medium text-gray-700">Other</span>
+                     <span className="text-sm font-medium text-gray-700">Other <span className="text-gray-500 text-xs">(Optional)</span></span>
                      <div className="flex items-center space-x-2">
                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
                          {formData.target_audience_other ? 1 : 0}
@@ -1094,8 +1086,6 @@ const Onboarding = () => {
       case 2:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Brand & Contact Information</h3>
-            
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Brand Voice *</label>
@@ -1199,8 +1189,6 @@ const Onboarding = () => {
       case 3:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Current Presence & Focus Areas</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Current Presence</label>
               <div className="grid grid-cols-2 gap-2">
@@ -1437,10 +1425,8 @@ const Onboarding = () => {
       case 4:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Social Media & Goals</h3>
-            
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Social Media Platforms *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Digital Marketing Platforms *</label>
               <div className="grid grid-cols-3 gap-2">
                 {socialPlatforms.map(platform => (
                   <label key={platform} className="flex items-center space-x-2">
@@ -1528,8 +1514,6 @@ const Onboarding = () => {
       case 5:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Content Strategy</h3>
-            
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Budget Range *</label>
@@ -1620,8 +1604,6 @@ const Onboarding = () => {
       case 6:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Market & Competition</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Market Position *</label>
               <select
@@ -1665,8 +1647,6 @@ const Onboarding = () => {
       case 7:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Campaign Planning</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Important Launch Date</label>
               <div className="relative">
@@ -1756,10 +1736,8 @@ const Onboarding = () => {
       case 8:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Performance & Customer</h3>
-            
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Successful Campaigns *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Most Successful Campaigns</label>
               <textarea
                 value={formData.successful_campaigns}
                 onChange={(e) => handleInputChange('successful_campaigns', e.target.value)}
@@ -1807,8 +1785,6 @@ const Onboarding = () => {
       case 9:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Automation & Platform</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Automation Level *</label>
               <select
@@ -1878,8 +1854,6 @@ const Onboarding = () => {
       case 10:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Review & Submit</h3>
-            
             <div className="bg-gray-50 p-6 rounded-lg">
               <h4 className="font-semibold text-gray-800 mb-4">Review Your Information</h4>
               <div className="space-y-2 text-sm">
@@ -1936,16 +1910,47 @@ const Onboarding = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl font-bold text-white">E</span>
+    <div className="min-h-screen bg-[#F6F6F6] flex flex-col">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            {/* Logo and Brand */}
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                <span className="text-white font-bold text-xl">E</span>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Emily</h1>
+                <p className="text-sm text-gray-500">AI Marketing Assistant</p>
+              </div>
+            </div>
+
+            {/* Header Buttons */}
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={logout}
+                className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="text-sm font-medium">Logout</span>
+              </button>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome to Emily!</h1>
-          <p className="text-gray-600">Let's get to know your business so I can provide personalized marketing assistance.</p>
         </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex items-center justify-center py-8">
+        <div className="max-w-4xl mx-auto px-4 w-full">
+          {/* Welcome Section */}
+          <div className="text-center mb-8">
+            <div className="w-20 h-20 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-3xl font-bold text-white">E</span>
+            </div>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome to Emily!</h1>
+            <p className="text-gray-600">Let's get to know your business so I can provide personalized marketing assistance.</p>
+          </div>
 
         {/* Progress Bar */}
         <div className="mb-8">
@@ -2079,6 +2084,7 @@ const Onboarding = () => {
               <ArrowRight className="w-4 h-4 ml-2" />
             </button>
           )}
+        </div>
         </div>
       </div>
     </div>

@@ -18,7 +18,7 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
     'Business Description', 
     'Brand & Contact',
     'Current Presence & Focus Areas',
-    'Social Media & Goals',
+    'Digital Marketing & Goals',
     'Content Strategy',
     'Market & Competition',
     'Campaign Planning',

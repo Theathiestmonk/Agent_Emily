@@ -57,7 +57,7 @@ import MainContentLoader from './MainContentLoader'
 const BlogDashboard = () => {
 
   console.log('BlogDashboard component rendering...')
-
+  
   
   
   const { showSuccess, showError, showLoading, removeNotification } = useNotifications()
@@ -553,7 +553,7 @@ const BlogDashboard = () => {
         }, 2000)
         
         
-
+        
       } else {
 
         console.error(`❌ Blog generation failed: ${result.error}`)
@@ -931,7 +931,7 @@ const BlogDashboard = () => {
       blog.excerpt.toLowerCase().includes(searchTerm.toLowerCase())
     
     
-
+    
     return matchesStatus && matchesCampaign && matchesSearch
 
   })
@@ -1149,14 +1149,14 @@ const BlogDashboard = () => {
                     </div>
 
                   </div>
-
                   
                   
+                  
 
-                </div>
+                    </div>
 
               </div>
-
+              
               <div className="flex items-center space-x-4">
                 {/* Connection Status - More prominent and reliable */}
                 <div className="flex items-center space-x-2">
@@ -1169,10 +1169,10 @@ const BlogDashboard = () => {
                   ) : hasWordPressConnections ? (
                     <div className="flex items-center space-x-2 text-green-700 bg-green-100 border border-green-200 px-4 py-2 rounded-xl shadow-sm">
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <Globe className="w-4 h-4" />
+                    <Globe className="w-4 h-4" />
                       <span className="text-sm font-semibold">WordPress Connected</span>
-                    </div>
-                  ) : (
+                  </div>
+                ) : (
                     <div className="flex items-center space-x-2 text-blue-700 bg-blue-100 border border-blue-200 px-4 py-2 rounded-xl shadow-sm group relative">
                       <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                       <FileText className="w-4 h-4" />
@@ -1183,8 +1183,8 @@ const BlogDashboard = () => {
                         Create and manage blogs without WordPress connection
                         <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                       </div>
-                    </div>
-                  )}
+                  </div>
+                )}
                 </div>
                 
                 <button
@@ -1341,7 +1341,7 @@ const BlogDashboard = () => {
                 )}
               </div>
 
-              <button
+                <button
 
                   onClick={generateBlogs}
 
@@ -1688,7 +1688,7 @@ const BlogDashboard = () => {
                                   {publishingBlogs.has(blog.id) ? (
                                     <RefreshCw className="w-5 h-5 animate-spin" />
                                   ) : (
-                                    <Send className="w-5 h-5" />
+                                  <Send className="w-5 h-5" />
                                   )}
                                 </button>
                               )}
@@ -1735,7 +1735,7 @@ const BlogDashboard = () => {
                             {deletingBlogs.has(blog.id) ? (
                               <RefreshCw className="w-5 h-5 animate-spin" />
                             ) : (
-                              <Trash2 className="w-5 h-5" />
+                            <Trash2 className="w-5 h-5" />
                             )}
 
                           </button>
@@ -2494,22 +2494,22 @@ const BlogDashboard = () => {
                   <div className="relative w-full h-64 rounded-xl overflow-hidden shadow-lg">
                     <img 
                       src={selectedBlog.featured_image} 
-                      alt={selectedBlog.title}
-                      className="w-full h-full object-cover"
+                            alt={selectedBlog.title}
+                            className="w-full h-full object-cover"
                     />
-                    <div className="absolute top-4 left-4">
+                  <div className="absolute top-4 left-4">
                       <span className="px-3 py-1 text-xs rounded-full bg-white/90 text-gray-800 font-medium">
-                        {selectedBlog.status.toUpperCase()}
-                      </span>
-                    </div>
+                      {selectedBlog.status.toUpperCase()}
+                    </span>
+                  </div>
                     <div className="absolute top-4 right-4">
                       <div className="flex items-center space-x-2 text-white/90 bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full">
-                        <Globe className="w-4 h-4" />
-                        <span className="text-sm font-medium">{selectedBlog.site_name || 'Unknown Site'}</span>
-                      </div>
+                      <Globe className="w-4 h-4" />
+                      <span className="text-sm font-medium">{selectedBlog.site_name || 'Unknown Site'}</span>
                     </div>
                   </div>
-                </div>
+                          </div>
+                        </div>
               )}
 
               {/* 2. Full Blog Content (without scrolling) */}
@@ -2528,10 +2528,10 @@ const BlogDashboard = () => {
                     <div 
                       className="prose prose-lg max-w-none text-gray-700 leading-relaxed"
                       dangerouslySetInnerHTML={{ __html: selectedBlog.content.replace(/\n/g, '<br>') }}
-                    />
-                  </div>
-                </div>
-              </div>
+                                  />
+                                </div>
+                              </div>
+                          </div>
 
               {/* 3. Insights and Categories */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2547,22 +2547,22 @@ const BlogDashboard = () => {
                     <div className="text-center p-4 bg-white rounded-lg shadow-sm">
                       <div className="text-2xl font-bold text-pink-600">{selectedBlog.reading_time}</div>
                       <div className="text-sm text-gray-600">min read</div>
-                    </div>
+                        </div>
                     
                     <div className="text-center p-4 bg-white rounded-lg shadow-sm">
                       <div className="text-2xl font-bold text-purple-600">{selectedBlog.word_count}</div>
                       <div className="text-sm text-gray-600">words</div>
-                    </div>
-                    
+              </div>
+
                     <div className="text-center p-4 bg-white rounded-lg shadow-sm">
                       <div className="text-2xl font-bold text-blue-600">{selectedBlog.seo_score}</div>
                       <div className="text-sm text-gray-600">SEO score</div>
-                    </div>
-                    
+              </div>
+
                     <div className="text-center p-4 bg-white rounded-lg shadow-sm">
                       <div className="text-2xl font-bold text-gray-600">{formatDate(selectedBlog.scheduled_at)}</div>
                       <div className="text-sm text-gray-600">scheduled</div>
-                    </div>
+                  </div>
                   </div>
                   
                   {/* Additional insights */}
@@ -2570,7 +2570,7 @@ const BlogDashboard = () => {
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-600">Status:</span>
                       <span className="font-medium text-gray-800">{selectedBlog.status}</span>
-                    </div>
+                  </div>
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-600">Site:</span>
                       <span className="font-medium text-gray-800">{selectedBlog.site_name || 'Standalone'}</span>
@@ -2578,9 +2578,9 @@ const BlogDashboard = () => {
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-600">Created:</span>
                       <span className="font-medium text-gray-800">{formatDate(selectedBlog.created_at)}</span>
-                    </div>
                   </div>
                 </div>
+              </div>
 
                 {/* Categories and Tags Section */}
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6">
@@ -2622,10 +2622,10 @@ const BlogDashboard = () => {
                     <div className="text-center text-gray-500 py-8">
                       <Target className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                       <p className="text-sm">No categories or tags assigned</p>
-                    </div>
-                  )}
                 </div>
-              </div>
+              )}
+                </div>
+            </div>
 
             </div>
 
@@ -2681,14 +2681,14 @@ const BlogDashboard = () => {
                     {publishingBlogs.has(selectedBlog.id) ? (
                       <RefreshCw className="w-4 h-4 animate-spin" />
                     ) : (
-                      <Send className="w-4 h-4" />
+                    <Send className="w-4 h-4" />
                     )}
                     <span>{publishingBlogs.has(selectedBlog.id) ? 'Publishing...' : 'Publish'}</span>
                   </button>
                 )}
 
                 {selectedBlog.status === 'draft' && !selectedBlog.wordpress_site_id && (
-                  <button
+                <button
                     onClick={() => {
                       handleCopyBlog(selectedBlog)
                       handleCloseBlogPreview()

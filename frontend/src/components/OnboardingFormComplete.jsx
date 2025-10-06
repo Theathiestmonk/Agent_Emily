@@ -116,7 +116,7 @@ const OnboardingForm = ({
     'Business Description', 
     'Brand & Contact',
     'Current Presence & Focus Areas',
-    'Social Media & Goals',
+    'Digital Marketing & Goals',
     'Content Strategy',
     'Market & Competition',
     'Campaign Planning',
@@ -332,7 +332,7 @@ const OnboardingForm = ({
           return false;
         }
         return true
-      case 4: // Social Media & Goals
+      case 4: // Digital Marketing & Goals
         return formData.social_media_platforms.length > 0 && formData.primary_goals.length > 0 && 
                formData.key_metrics_to_track.length > 0
       case 5: // Content Strategy

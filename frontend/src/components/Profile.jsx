@@ -76,7 +76,7 @@ const Profile = () => {
         country: data?.country || '',
         timezone: data?.timezone || '',
         
-        // Social Media & Goals
+        // Digital Marketing & Goals
         social_media_platforms: data?.social_media_platforms || [],
         primary_goals: data?.primary_goals || [],
         key_metrics_to_track: data?.key_metrics_to_track || [],
@@ -205,7 +205,7 @@ const Profile = () => {
       country: profile?.country || '',
       timezone: profile?.timezone || '',
       
-      // Social Media & Goals
+      // Digital Marketing & Goals
       social_media_platforms: profile?.social_media_platforms || [],
       primary_goals: profile?.primary_goals || [],
       key_metrics_to_track: profile?.key_metrics_to_track || [],
@@ -758,14 +758,14 @@ const Profile = () => {
               </div>
             </div>
 
-            {/* Social Media & Goals */}
+            {/* Digital Marketing & Goals */}
             <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
               <div className="flex items-center mb-8">
                 <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg">
                   <Target className="w-6 h-6 text-white" />
                 </div>
                 <div className="ml-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Social Media & Goals</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">Digital Marketing & Goals</h2>
                   <p className="text-gray-600">Your social presence and objectives</p>
                 </div>
               </div>

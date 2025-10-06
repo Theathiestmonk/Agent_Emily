@@ -35,7 +35,7 @@ export function AuthProvider({ children }) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state change:', event, session?.user?.id)
       
       if (session) {
@@ -43,6 +43,15 @@ export function AuthProvider({ children }) {
         setIsAuthenticated(true)
         // Store token in localStorage for API calls
         localStorage.setItem('authToken', session.access_token)
+        
+        // Ensure profile exists for new users (especially Google OAuth)
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          console.log('🔄 Auth event triggered, ensuring profile exists...', event)
+          // Run profile creation in background without blocking
+          ensureProfileExists(session.user).catch(error => {
+            console.log('⚠️ Profile creation failed, will be created during onboarding:', error.message)
+          })
+        }
       } else {
         setUser(null)
         setIsAuthenticated(false)
@@ -97,6 +106,28 @@ export function AuthProvider({ children }) {
         }
       }
 
+      // Create basic profile record for new users
+      if (data.user) {
+        try {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              id: data.user.id,
+              name: name,
+              onboarding_completed: false,
+              subscription_status: 'inactive',
+              migration_status: 'pending'
+            })
+
+          if (profileError) {
+            console.log('Profile creation error (non-critical):', profileError)
+            // Don't fail registration if profile creation fails
+          }
+        } catch (profileError) {
+          console.log('Profile creation error (non-critical):', profileError)
+        }
+      }
+
       // Check if email confirmation is required
       if (data.user && !data.session) {
         return { 
@@ -144,11 +175,112 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // Function to ensure profile exists for Google OAuth users
+  const ensureProfileExists = async (user) => {
+    if (!user) {
+      console.log('❌ No user provided to ensureProfileExists')
+      return
+    }
+
+    console.log('🔍 ensureProfileExists called for user:', user.id, user.email)
+
+    try {
+      // Check if profile exists with timeout
+      console.log('🔍 Checking if profile exists for user:', user.id)
+      
+      const profileCheckPromise = supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle()
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile check timeout')), 5000)
+      )
+      
+      const { data: existingProfile, error: fetchError } = await Promise.race([
+        profileCheckPromise,
+        timeoutPromise
+      ])
+
+      if (fetchError) {
+        console.error('❌ Error checking profile:', fetchError)
+        return
+      }
+
+      console.log('📊 Profile check result:', existingProfile)
+
+      // If no profile exists, create one
+      if (!existingProfile) {
+        console.log('➕ No profile found, creating new profile for user:', user.id)
+        const profileData = {
+          id: user.id,
+          name: user.user_metadata?.name || user.email,
+          onboarding_completed: false,
+          subscription_status: 'inactive',
+          migration_status: 'pending'
+        }
+        
+        console.log('📝 Creating profile with data:', profileData)
+        
+        const profileInsertPromise = supabase
+          .from('profiles')
+          .insert(profileData)
+        
+        const insertTimeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Profile creation timeout')), 5000)
+        )
+        
+        const { error: insertError } = await Promise.race([
+          profileInsertPromise,
+          insertTimeoutPromise
+        ])
+
+        if (insertError) {
+          console.error('❌ Error creating profile for Google user:', insertError)
+        } else {
+          console.log('✅ Profile created successfully for Google user:', user.id)
+        }
+      } else {
+        console.log('✅ Profile already exists for user:', user.id)
+      }
+    } catch (error) {
+      console.error('💥 Error ensuring profile exists:', error)
+      console.log('🔄 Profile creation failed, user will need to create profile manually')
+    }
+  }
+
   const logout = async () => {
     try {
+      console.log('🚪 Logging out user...')
+      
+      // Sign out from Supabase
       await supabase.auth.signOut()
+      
+      // Clear local state
+      setUser(null)
+      setIsAuthenticated(false)
+      
+      // Clear localStorage
+      localStorage.removeItem('authToken')
+      
+      // Clear any other cached data
+      localStorage.removeItem('socialMediaCache')
+      localStorage.removeItem('contentCache')
+      
+      console.log('✅ User logged out successfully')
+      
+      // Redirect to login page
+      window.location.href = '/login'
+      
     } catch (error) {
-      console.error('Logout error:', error)
+      console.error('❌ Logout error:', error)
+      
+      // Even if logout fails, clear local state and redirect
+      setUser(null)
+      setIsAuthenticated(false)
+      localStorage.clear()
+      window.location.href = '/login'
     }
   }
 
@@ -220,7 +352,8 @@ export function AuthProvider({ children }) {
     loginWithGoogle,
     logout,
     sendPasswordResetCode,
-    resetPassword
+    resetPassword,
+    ensureProfileExists
   }
 
   return (

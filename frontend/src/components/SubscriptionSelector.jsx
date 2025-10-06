@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Check, ArrowRight, Loader2, Home, HelpCircle, Settings, LogOut } from 'lucide-react';
 import { subscriptionAPI } from '../services/subscription';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 const SubscriptionSelector = () => {
   const [plans, setPlans] = useState([]);
@@ -9,6 +10,7 @@ const SubscriptionSelector = () => {
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [loadingPlan, setLoadingPlan] = useState(null); // Track which plan is loading
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { logout } = useAuth();
 
   useEffect(() => {
@@ -26,24 +28,73 @@ const SubscriptionSelector = () => {
     fetchPlans();
   }, []);
 
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   const handleSubscribe = async (planName) => {
     setLoadingPlan(planName);
     try {
+      console.log('🚀 Creating subscription for plan:', planName, 'billing:', billingCycle);
+      
+      // First ensure profile exists
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          console.log('🔍 Ensuring profile exists before subscription creation...');
+          
+          // Check if profile exists
+          const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('id', user.id)
+            .maybeSingle();
+          
+          if (!existingProfile) {
+            console.log('➕ Creating profile before subscription...');
+            await supabase
+              .from('profiles')
+              .upsert({
+                id: user.id,
+                name: user.user_metadata?.name || user.email,
+                onboarding_completed: false,
+                subscription_status: 'inactive',
+                migration_status: 'pending'
+              });
+            console.log('✅ Profile created successfully!');
+          }
+        }
+      } catch (profileError) {
+        console.log('⚠️ Profile creation failed, proceeding anyway:', profileError);
+      }
+      
       const response = await subscriptionAPI.createSubscription({
         plan_name: planName,
         billing_cycle: billingCycle
       });
       
+      console.log('📊 Subscription creation response:', response.data);
+      
       if (response.data.success && response.data.payment_url) {
+        console.log('✅ Payment URL received, redirecting to:', response.data.payment_url);
         // Redirect to Razorpay payment page
         window.location.href = response.data.payment_url;
       } else {
-        console.error('Failed to create subscription');
-        alert('Failed to create subscription. Please try again.');
+        console.error('❌ Failed to create subscription - no payment URL');
+        console.error('Response data:', response.data);
+        alert(`Failed to create subscription: ${response.data.message || 'No payment URL received'}`);
       }
     } catch (error) {
-      console.error('Error creating subscription:', error);
-      alert('Error creating subscription. Please try again.');
+      console.error('💥 Error creating subscription:', error);
+      console.error('Error details:', error.response?.data);
+      alert(`Error creating subscription: ${error.response?.data?.detail || error.message || 'Unknown error'}`);
     } finally {
       setLoadingPlan(null);
     }
@@ -106,11 +157,18 @@ const SubscriptionSelector = () => {
               <div className="h-6 w-px bg-gray-300"></div>
               
               <button
-                onClick={logout}
-                className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <LogOut className="w-4 h-4" />
-                <span className="text-sm font-medium">Logout</span>
+                {isLoggingOut ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <LogOut className="w-4 h-4" />
+                )}
+                <span className="text-sm font-medium">
+                  {isLoggingOut ? 'Logging out...' : 'Logout'}
+                </span>
               </button>
             </div>
           </div>
