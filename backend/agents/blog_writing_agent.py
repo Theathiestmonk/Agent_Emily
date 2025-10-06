@@ -311,7 +311,7 @@ class BlogWritingAgent:
                         # Get site information for WordPress sites
                         supabase_admin = self.get_supabase_admin()
                         site_response = supabase_admin.table("platform_connections").select("*").eq("id", site_id).eq("platform", "wordpress").execute()
-                        
+                    
                         if not site_response.data:
                             logger.warning(f"Site not found: {site_id}")
                             continue
