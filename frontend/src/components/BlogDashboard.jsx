@@ -40,7 +40,9 @@ import {
 
   ExternalLink,
 
-  Sparkles
+  Sparkles,
+
+  Copy
 
 } from 'lucide-react'
 
@@ -57,12 +59,10 @@ const BlogDashboard = () => {
   console.log('BlogDashboard component rendering...')
 
   
-
-  const { showSuccess, showError, showLoading } = useNotifications()
+  
+  const { showSuccess, showError, showLoading, removeNotification } = useNotifications()
 
   const [blogs, setBlogs] = useState([])
-
-  const [campaigns, setCampaigns] = useState([])
 
   const [stats, setStats] = useState({})
 
@@ -128,6 +128,12 @@ const BlogDashboard = () => {
 
   const [publishedBlogData, setPublishedBlogData] = useState(null)
 
+  const [deletingBlogs, setDeletingBlogs] = useState(new Set())
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  const [blogToDelete, setBlogToDelete] = useState(null)
+
 
 
   const statusColors = {
@@ -164,15 +170,15 @@ const BlogDashboard = () => {
 
 
 
-  // Update stats when blogs or campaigns change
+  // Update stats when blogs change
 
   useEffect(() => {
 
     // Only log when there's a significant change
 
-    if (blogs.length > 0 || campaigns.length > 0) {
+    if (blogs.length > 0) {
 
-      console.log('📊 BlogDashboard state updated:', { blogs: blogs.length, campaigns: campaigns.length, loading })
+      console.log('📊 BlogDashboard state updated:', { blogs: blogs.length, loading })
 
     }
 
@@ -180,7 +186,7 @@ const BlogDashboard = () => {
 
     setStats(newStats)
 
-  }, [blogs, campaigns])
+  }, [blogs])
 
 
 
@@ -219,14 +225,12 @@ const BlogDashboard = () => {
       console.log('Fetching blog data...')
 
       
-
+      
       // Fetch all blog data independently
 
       await Promise.all([
 
         fetchBlogs(),
-
-        fetchCampaigns(),
 
         fetchStats(),
 
@@ -241,7 +245,7 @@ const BlogDashboard = () => {
       console.error('Error fetching data:', error)
 
       
-
+      
       // Handle authentication errors specifically
 
       if (error.message.includes('Authentication failed') || error.message.includes('Please log in')) {
@@ -255,7 +259,7 @@ const BlogDashboard = () => {
       }
 
       
-
+      
       showError('Error Loading Data', `Failed to load blog data: ${error.message}`)
 
     } finally {
@@ -289,7 +293,7 @@ const BlogDashboard = () => {
       console.error('Blog fetch error details:', error.message, error.stack)
 
       
-
+      
       // Only show error if we don't have any blogs already
 
       if (blogs.length === 0) {
@@ -310,33 +314,6 @@ const BlogDashboard = () => {
 
 
 
-  const fetchCampaigns = async () => {
-
-    try {
-
-      console.log('Fetching campaigns...')
-
-      const response = await blogService.getCampaigns()
-
-      console.log('Campaigns response:', response)
-
-      console.log('Setting campaigns state with:', response.campaigns || [])
-
-      setCampaigns(response.campaigns || [])
-
-    } catch (error) {
-
-      console.error('Error fetching campaigns:', error)
-
-      console.error('Campaigns fetch error details:', error.message, error.stack)
-
-      // Don't show error for campaigns as it's not critical
-
-      console.warn('Failed to fetch campaigns, continuing without them')
-
-    }
-
-  }
 
 
 
@@ -372,7 +349,6 @@ const BlogDashboard = () => {
 
         scheduled_blogs: 0,
 
-        total_campaigns: 0
 
       })
 
@@ -396,10 +372,6 @@ const BlogDashboard = () => {
 
     const scheduledBlogs = blogs.filter(blog => blog.status === 'scheduled').length
 
-    const totalCampaigns = campaigns.length
-
-
-
     // Only log stats calculation when there are blogs
 
     if (totalBlogs > 0) {
@@ -412,9 +384,7 @@ const BlogDashboard = () => {
 
         draftBlogs,
 
-        scheduledBlogs,
-
-        totalCampaigns
+        scheduledBlogs
 
       })
 
@@ -430,9 +400,7 @@ const BlogDashboard = () => {
 
       draft_blogs: draftBlogs,
 
-      scheduled_blogs: scheduledBlogs,
-
-      total_campaigns: totalCampaigns
+      scheduled_blogs: scheduledBlogs
 
     }
 
@@ -495,7 +463,7 @@ const BlogDashboard = () => {
       })
 
       
-
+      
       // Clear console for fresh start
 
       console.clear()
@@ -503,7 +471,7 @@ const BlogDashboard = () => {
       console.log('🚀 Starting blog generation...')
 
       
-
+      
       // Simulate progress steps
 
       setGenerationProgress({
@@ -517,11 +485,11 @@ const BlogDashboard = () => {
       })
 
       
-
+      
       const result = await blogService.generateBlogs()
 
       
-
+      
       setGenerationProgress({
 
         step: 'Finalizing',
@@ -533,7 +501,7 @@ const BlogDashboard = () => {
       })
 
       
-
+      
       if (result.success) {
 
         console.log(`✅ SUCCESS! Blogs generated successfully!`)
@@ -541,19 +509,19 @@ const BlogDashboard = () => {
         console.log('📊 New blogs:', result.blogs?.map(b => b.title) || [])
 
         
-
+        
         // Refresh all data to show new blogs
 
         await fetchData()
 
         
-
+        
         // Get the actual count from the refreshed data
 
         const actualBlogCount = result.total_blogs || 0
 
         
-
+        
         setGenerationProgress({
 
           step: 'Complete',
@@ -565,7 +533,7 @@ const BlogDashboard = () => {
         })
 
         
-
+        
         // Close modal after a short delay
 
         setTimeout(() => {
@@ -583,7 +551,7 @@ const BlogDashboard = () => {
           })
 
         }, 2000)
-
+        
         
 
       } else {
@@ -601,7 +569,7 @@ const BlogDashboard = () => {
         })
 
         
-
+        
         // Close modal after showing error
 
         setTimeout(() => {
@@ -637,7 +605,7 @@ const BlogDashboard = () => {
       })
 
       
-
+      
       // Close modal after showing error
 
       setTimeout(() => {
@@ -669,7 +637,7 @@ const BlogDashboard = () => {
   const handleEditBlog = (blog) => {
 
     setEditingBlog(blog)
-
+    
     setEditForm({
 
       title: blog.title,
@@ -695,7 +663,7 @@ const BlogDashboard = () => {
       setSaving(true)
 
       
-
+      
       const updateData = {
 
         title: editForm.title,
@@ -773,7 +741,7 @@ const BlogDashboard = () => {
     let blogUrl = blog.blog_url || blog.website_url
 
     
-
+    
     // If no specific blog URL, try to construct it
 
     if (!blogUrl || blogUrl === blog.website_url) {
@@ -795,7 +763,7 @@ const BlogDashboard = () => {
     }
 
     
-
+    
     if (blogUrl && blogUrl !== '#') {
 
       window.open(blogUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
@@ -869,32 +837,81 @@ const BlogDashboard = () => {
 
 
 
-  const handleDeleteBlog = async (blogId) => {
+  const handleDeleteBlog = (blog) => {
+    setBlogToDelete(blog)
+    setShowDeleteConfirm(true)
+  }
 
-    if (!window.confirm('Are you sure you want to delete this blog?')) {
+  const confirmDeleteBlog = async () => {
+    if (!blogToDelete) return
 
-      return
+    const blogId = blogToDelete.id
 
-    }
+    // Add to deleting set
+    setDeletingBlogs(prev => new Set(prev).add(blogId))
 
+    // Close confirmation modal
+    setShowDeleteConfirm(false)
 
+    // Show loading notification and store its ID
+    const loadingNotificationId = showLoading('Deleting Blog...', 'Please wait while we delete your blog post')
 
     try {
-
       await blogService.deleteBlog(blogId)
-
+      
+      // Remove the loading notification before showing success
+      removeNotification(loadingNotificationId)
+      
+      // Refresh the blogs list
       await fetchBlogs()
 
-      showSuccess('Blog Deleted! 🗑️', 'Your blog has been deleted successfully!')
+      // Remove from deleting set
+      setDeletingBlogs(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(blogId)
+        return newSet
+      })
+
+      // Show success notification with better styling
+      showSuccess('Blog Deleted Successfully! 🗑️', 'Your blog post has been permanently removed from your account.')
 
     } catch (error) {
-
       console.error('Error deleting blog:', error)
+      
+      // Remove the loading notification on error
+      removeNotification(loadingNotificationId)
+      
+      // Remove from deleting set on error
+      setDeletingBlogs(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(blogId)
+        return newSet
+      })
+      
+      // Show error notification with more details
+      const errorMessage = error.response?.data?.detail || error.message || 'An unexpected error occurred'
+      showError('Failed to Delete Blog', `Unable to delete blog: ${errorMessage}`)
 
-      showError('Error Deleting Blog', `Failed to delete blog: ${error.message}`)
-
+    } finally {
+      setBlogToDelete(null)
     }
+  }
 
+  const cancelDeleteBlog = () => {
+    setShowDeleteConfirm(false)
+    setBlogToDelete(null)
+  }
+
+
+  const handleCopyBlog = async (blog) => {
+    try {
+      const blogText = `Title: ${blog.title}\n\n${blog.content}`
+      await navigator.clipboard.writeText(blogText)
+      showSuccess('Blog Copied! 📋', 'Blog content has been copied to your clipboard!')
+    } catch (error) {
+      console.error('Error copying blog:', error)
+      showError('Copy Failed', 'Failed to copy blog content to clipboard')
+    }
   }
 
 
@@ -912,7 +929,7 @@ const BlogDashboard = () => {
       blog.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
 
       blog.excerpt.toLowerCase().includes(searchTerm.toLowerCase())
-
+    
     
 
     return matchesStatus && matchesCampaign && matchesSearch
@@ -997,15 +1014,19 @@ const BlogDashboard = () => {
 
 
 
-  // Check if WordPress connections exist - show message in main content area
+  // Check if WordPress connections exist - but don't block standalone mode
 
-  const showWordPressConnectionMessage = !wordpressConnections || wordpressConnections.length === 0
+  const hasWordPressConnections = Array.isArray(wordpressConnections) && wordpressConnections.length > 0
+
+  const isStandaloneMode = !hasWordPressConnections
+
+  const isConnectionsLoading = wordpressConnections === undefined || wordpressConnections === null
 
 
 
   // Add error boundary fallback
 
-  if (blogs === undefined || campaigns === undefined || stats === undefined) {
+  if (blogs === undefined || stats === undefined) {
 
     return (
 
@@ -1050,8 +1071,6 @@ const BlogDashboard = () => {
   console.log('BlogDashboard render state:', { 
 
     blogs: blogs.length, 
-
-    campaigns: campaigns.length, 
 
     loading, 
 
@@ -1112,7 +1131,7 @@ const BlogDashboard = () => {
                   </div>
 
                   
-
+                  
                   <div className="flex items-center space-x-3 bg-white/80 backdrop-blur-sm rounded-xl p-3 shadow-sm">
 
                     <div className="p-2 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg">
@@ -1132,33 +1151,42 @@ const BlogDashboard = () => {
                   </div>
 
                   
-
-                  <div className="flex items-center space-x-3 bg-white/80 backdrop-blur-sm rounded-xl p-3 shadow-sm">
-
-                    <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg">
-
-                      <Target className="w-5 h-5 text-white" />
-
-                    </div>
-
-                    <div>
-
-                      <p className="text-sm text-gray-600">Campaigns</p>
-
-                      <p className="text-xl font-bold text-gray-900">{calculateStats().total_campaigns}</p>
-
-                    </div>
-
-                  </div>
+                  
 
                 </div>
 
               </div>
 
-              
-
               <div className="flex items-center space-x-4">
-
+                {/* Connection Status - More prominent and reliable */}
+                <div className="flex items-center space-x-2">
+                  {isConnectionsLoading ? (
+                    <div className="flex items-center space-x-2 text-gray-600 bg-gray-100 border border-gray-200 px-4 py-2 rounded-xl shadow-sm">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span className="text-sm font-semibold">Checking connections...</span>
+                    </div>
+                  ) : hasWordPressConnections ? (
+                    <div className="flex items-center space-x-2 text-green-700 bg-green-100 border border-green-200 px-4 py-2 rounded-xl shadow-sm">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <Globe className="w-4 h-4" />
+                      <span className="text-sm font-semibold">WordPress Connected</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2 text-blue-700 bg-blue-100 border border-blue-200 px-4 py-2 rounded-xl shadow-sm group relative">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      <FileText className="w-4 h-4" />
+                      <span className="text-sm font-semibold">Standalone Mode</span>
+                      <span className="text-xs text-blue-600">Local content only</span>
+                      {/* Tooltip */}
+                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                        Create and manage blogs without WordPress connection
+                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
                 <button
 
                   onClick={generateBlogs}
@@ -1184,7 +1212,7 @@ const BlogDashboard = () => {
                 </button>
 
                 
-
+                
                 {/* Filter and View Controls */}
 
                 <div className="flex items-center space-x-4">
@@ -1212,35 +1240,10 @@ const BlogDashboard = () => {
                   </select>
 
                   
-
-                  {/* Campaign Filter */}
-
-                  <select
-
-                    value={selectedCampaign}
-
-                    onChange={(e) => setSelectedCampaign(e.target.value)}
-
-                    className="px-4 py-2 border border-pink-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm"
-
-                  >
-
-                    <option value="all">All Campaigns</option>
-
-                    {campaigns.map(campaign => (
-
-                      <option key={campaign.id} value={campaign.id}>
-
-                        {campaign.campaign_name}
-
-                      </option>
-
-                    ))}
-
-                  </select>
-
                   
 
+                  
+                  
                   {/* Search */}
 
                   <div className="relative">
@@ -1264,7 +1267,7 @@ const BlogDashboard = () => {
                   </div>
 
                   
-
+                  
                   {/* View Mode Toggle */}
 
                   <div className="flex border border-pink-200 rounded-xl overflow-hidden bg-white/80 backdrop-blur-sm shadow-sm">
@@ -1315,60 +1318,6 @@ const BlogDashboard = () => {
 
             <MainContentLoader message="Loading your blogs..." />
 
-          ) : showWordPressConnectionMessage ? (
-
-            <div className="p-12 text-center">
-
-              <Globe className="w-16 h-16 text-blue-500 mx-auto mb-4" />
-
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Connect to WordPress</h3>
-
-              <p className="text-gray-500 mb-6">
-
-                To start creating and managing blog posts, you need to connect your WordPress site first.
-
-              </p>
-
-              <div className="space-y-4">
-
-                <div className="flex space-x-4 justify-center">
-
-                  <button
-
-                    onClick={() => window.location.href = '/settings'}
-
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-
-                  >
-
-                    Go to Settings
-
-                  </button>
-
-                  <button
-
-                    onClick={() => fetchData()}
-
-                    className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-
-                  >
-
-                    Refresh
-
-                  </button>
-
-                </div>
-
-                <p className="text-sm text-gray-400">
-
-                  In Settings, you can add your WordPress site credentials to get started.
-
-                </p>
-
-              </div>
-
-            </div>
-
           ) : filteredBlogs.length === 0 ? (
 
             <div className="p-12 text-center">
@@ -1377,33 +1326,46 @@ const BlogDashboard = () => {
 
               <h3 className="text-lg font-medium text-gray-900 mb-2">No blogs found</h3>
 
-              <p className="text-gray-500 mb-6">Generate your first blog post to get started</p>
+              <div className="text-gray-500 mb-6">
+                {isStandaloneMode ? (
+                  <>
+                    <p>Generate your first blog post to get started!</p>
+                    <div className="mt-4 inline-flex items-center space-x-2 text-blue-700 bg-blue-50 border border-blue-200 px-4 py-2 rounded-lg">
+                      <FileText className="w-4 h-4" />
+                      <span className="text-sm font-medium">Standalone Mode Active</span>
+                      <span className="text-xs text-blue-600">- No WordPress required</span>
+                    </div>
+                  </>
+                ) : (
+                  <p>Generate your first blog post to get started.</p>
+                )}
+              </div>
 
               <button
 
-                onClick={generateBlogs}
+                  onClick={generateBlogs}
 
-                disabled={generating}
+                  disabled={generating}
 
-                className="flex items-center px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 mx-auto"
+                  className="flex items-center px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 mx-auto"
 
-              >
+                >
 
-                {generating ? (
+                  {generating ? (
 
-                  <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
+                    <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
 
-                ) : (
+                  ) : (
 
-                  <Plus className="w-5 h-5 mr-2" />
+                    <Plus className="w-5 h-5 mr-2" />
 
-                )}
+                  )}
 
-                {generating ? 'Generating...' : 'Generate Blogs'}
+                  {generating ? 'Generating...' : 'Generate Blogs'}
 
-              </button>
+                </button>
 
-            </div>
+                  </div>
 
           ) : (
 
@@ -1420,7 +1382,7 @@ const BlogDashboard = () => {
                 const StatusIcon = statusIcons[blog.status] || AlertCircle
 
                 
-
+                
                 return (
 
                   <div 
@@ -1438,7 +1400,7 @@ const BlogDashboard = () => {
                         let blogUrl = blog.blog_url || blog.website_url
 
                         
-
+                        
                         // If no specific blog URL, try to construct it
 
                         if (!blogUrl || blogUrl === blog.website_url) {
@@ -1460,7 +1422,7 @@ const BlogDashboard = () => {
                         }
 
                         
-
+                        
                         if (blogUrl && blogUrl !== '#') {
 
                           window.open(blogUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
@@ -1596,13 +1558,13 @@ const BlogDashboard = () => {
                       </div>
 
                       
-
+                      
                       {/* Blog Title */}
 
                       <h3 className="font-bold text-gray-900 text-2xl mb-4 line-clamp-2 leading-tight">{blog.title}</h3>
 
                       
-
+                      
                       {/* Blog Content Preview */}
 
                       <div className="mb-6">
@@ -1616,7 +1578,7 @@ const BlogDashboard = () => {
                       </div>
 
                       
-
+                      
                       {/* Categories and Tags */}
 
                       <div className="mb-6">
@@ -1709,38 +1671,39 @@ const BlogDashboard = () => {
 
                               </button>
 
-                              {blog.status === 'draft' && (
-
+                              {blog.status === 'draft' && blog.wordpress_site_id && (
                                 <button
-
                                   onClick={(e) => {
-
                                     e.stopPropagation()
-
                                     handlePublishBlog(blog.id)
-
                                   }}
-
                                   disabled={publishingBlogs.has(blog.id)}
-
                                   className={`p-3 rounded-lg transition-all duration-200 ${
                                     publishingBlogs.has(blog.id)
                                       ? 'text-green-600 bg-green-100 cursor-not-allowed animate-pulse'
                                       : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
                                   }`}
-
                                   title={publishingBlogs.has(blog.id) ? "Publishing to WordPress..." : "Publish to WordPress"}
-
                                 >
-
                                   {publishingBlogs.has(blog.id) ? (
                                     <RefreshCw className="w-5 h-5 animate-spin" />
                                   ) : (
                                     <Send className="w-5 h-5" />
                                   )}
-
                                 </button>
+                              )}
 
+                              {blog.status === 'draft' && !blog.wordpress_site_id && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleCopyBlog(blog)
+                                  }}
+                                  className="p-3 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                  title="Copy blog content"
+                                >
+                                  <Copy className="w-5 h-5" />
+                                </button>
                               )}
 
                             </>
@@ -1753,17 +1716,27 @@ const BlogDashboard = () => {
 
                               e.stopPropagation()
 
-                              handleDeleteBlog(blog.id)
+                              handleDeleteBlog(blog)
 
                             }}
 
-                            className="p-3 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            disabled={deletingBlogs.has(blog.id)}
 
-                            title="Delete blog"
+                            className={`p-3 rounded-lg transition-colors ${
+                              deletingBlogs.has(blog.id) 
+                                ? 'text-gray-300 cursor-not-allowed bg-gray-100' 
+                                : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+                            }`}
+
+                            title={deletingBlogs.has(blog.id) ? "Deleting..." : "Delete blog"}
 
                           >
 
-                            <Trash2 className="w-5 h-5" />
+                            {deletingBlogs.has(blog.id) ? (
+                              <RefreshCw className="w-5 h-5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-5 h-5" />
+                            )}
 
                           </button>
 
@@ -1806,7 +1779,7 @@ const BlogDashboard = () => {
               </button>
 
               
-
+              
               <div className="flex space-x-1">
 
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
@@ -1838,7 +1811,7 @@ const BlogDashboard = () => {
         </div>
 
               
-
+              
               <button
 
                 onClick={() => handlePageChange(currentPage + 1)}
@@ -1892,7 +1865,7 @@ const BlogDashboard = () => {
             </div>
 
             
-
+            
             <div className="space-y-4">
 
               <div>
@@ -1914,7 +1887,7 @@ const BlogDashboard = () => {
               </div>
 
               
-
+              
               <div>
 
                 <label className="block text-sm font-medium text-gray-700 mb-1">Excerpt</label>
@@ -1934,7 +1907,7 @@ const BlogDashboard = () => {
               </div>
 
               
-
+              
               <div>
 
                 <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
@@ -1954,7 +1927,7 @@ const BlogDashboard = () => {
               </div>
 
               
-
+              
               <div className="grid grid-cols-2 gap-4">
 
                 <div>
@@ -1978,7 +1951,7 @@ const BlogDashboard = () => {
                 </div>
 
                 
-
+                
                 <div>
 
                   <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
@@ -2000,11 +1973,11 @@ const BlogDashboard = () => {
                 </div>
 
               </div>
-
+              
             </div>
 
             
-
+            
             <div className="flex items-center justify-end space-x-3 mt-6">
 
               <button
@@ -2194,7 +2167,7 @@ const BlogDashboard = () => {
                   )}
 
                   
-
+                  
                   {selectedBlog.tags?.length > 0 && (
 
                     <div>
@@ -2515,183 +2488,144 @@ const BlogDashboard = () => {
 
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
 
-              {/* Blog Card Preview */}
-
-              <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden mb-6">
-
-                {/* Preview Header */}
-
-                <div className="relative h-32 bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 overflow-hidden">
-
-                  <div className="absolute inset-0 bg-gradient-to-br from-pink-500/80 via-purple-500/80 to-blue-500/80"></div>
-
-                  <div className="absolute top-4 left-4">
-
-                    <span className="px-3 py-1 text-xs rounded-full bg-white/90 text-gray-800 font-medium">
-
-                      {selectedBlog.status.toUpperCase()}
-
-                    </span>
-
-                  </div>
-
-                  <div className="absolute bottom-4 left-4 right-4">
-
-                    <div className="flex items-center space-x-2 text-white/90">
-
-                      <Globe className="w-4 h-4" />
-
-                      <span className="text-sm font-medium">{selectedBlog.site_name || 'Unknown Site'}</span>
-
+              {/* 1. Blog Image (if exists) */}
+              {selectedBlog.featured_image && (
+                <div className="mb-6">
+                  <div className="relative w-full h-64 rounded-xl overflow-hidden shadow-lg">
+                    <img 
+                      src={selectedBlog.featured_image} 
+                      alt={selectedBlog.title}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-4 left-4">
+                      <span className="px-3 py-1 text-xs rounded-full bg-white/90 text-gray-800 font-medium">
+                        {selectedBlog.status.toUpperCase()}
+                      </span>
                     </div>
-
-                  </div>
-
-                </div>
-
-
-
-                {/* Preview Content */}
-
-                <div className="p-6">
-
-                  <h3 className="font-bold text-gray-900 text-lg mb-3">{selectedBlog.title}</h3>
-
-                  
-
-                  <div className="mb-4">
-
-                    <p className="text-gray-600 text-sm leading-relaxed line-clamp-3">
-
-                      {selectedBlog.excerpt || selectedBlog.content.substring(0, 200) + '...'}
-
-                    </p>
-
-                  </div>
-
-                  
-
-                  {/* Blog Stats */}
-
-                  <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg">
-
-                    <div className="text-center">
-
-                      <div className="text-lg font-bold text-pink-600">{selectedBlog.reading_time}</div>
-
-                      <div className="text-xs text-gray-600">min read</div>
-
-                    </div>
-
-                    <div className="text-center">
-
-                      <div className="text-lg font-bold text-purple-600">{selectedBlog.word_count}</div>
-
-                      <div className="text-xs text-gray-600">words</div>
-
-                    </div>
-
-                    <div className="text-center">
-
-                      <div className="text-lg font-bold text-blue-600">{selectedBlog.seo_score}</div>
-
-                      <div className="text-xs text-gray-600">SEO score</div>
-
-                    </div>
-
-                    <div className="text-center">
-
-                      <div className="text-lg font-bold text-gray-600">{formatDate(selectedBlog.scheduled_at)}</div>
-
-                      <div className="text-xs text-gray-600">scheduled</div>
-
-                    </div>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-
-
-              {/* Full Content Preview */}
-
-              <div className="bg-gray-50 rounded-xl p-6">
-
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Full Content Preview</h3>
-
-                <div 
-
-                  className="text-gray-700 leading-relaxed whitespace-pre-wrap text-sm max-h-96 overflow-y-auto"
-
-                  dangerouslySetInnerHTML={{ __html: selectedBlog.content.replace(/\n/g, '<br>') }}
-
-                />
-
-              </div>
-
-
-
-              {/* Categories and Tags */}
-
-              {(selectedBlog.categories?.length > 0 || selectedBlog.tags?.length > 0) && (
-
-                <div className="mt-6">
-
-                  {selectedBlog.categories?.length > 0 && (
-
-                    <div className="mb-4">
-
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Categories</h4>
-
-                      <div className="flex flex-wrap gap-2">
-
-                        {selectedBlog.categories.map((category, index) => (
-
-                          <span key={index} className="px-3 py-1 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-800 rounded-full text-xs font-medium">
-
-                            {category}
-
-                          </span>
-
-                        ))}
-
+                    <div className="absolute top-4 right-4">
+                      <div className="flex items-center space-x-2 text-white/90 bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full">
+                        <Globe className="w-4 h-4" />
+                        <span className="text-sm font-medium">{selectedBlog.site_name || 'Unknown Site'}</span>
                       </div>
-
                     </div>
-
-                  )}
-
-                  
-
-                  {selectedBlog.tags?.length > 0 && (
-
-                    <div>
-
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Tags</h4>
-
-                      <div className="flex flex-wrap gap-2">
-
-                        {selectedBlog.tags.map((tag, index) => (
-
-                          <span key={index} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
-
-                            #{tag}
-
-                          </span>
-
-                        ))}
-
-                      </div>
-
-                    </div>
-
-                  )}
-
+                  </div>
                 </div>
-
               )}
+
+              {/* 2. Full Blog Content (without scrolling) */}
+              <div className="mb-6">
+                <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+                  {/* Blog Header */}
+                  <div className="p-6 border-b border-gray-100">
+                    <h1 className="text-2xl font-bold text-gray-900 mb-3">{selectedBlog.title}</h1>
+                    {selectedBlog.excerpt && (
+                      <p className="text-gray-600 text-lg leading-relaxed">{selectedBlog.excerpt}</p>
+                    )}
+                  </div>
+                  
+                  {/* Blog Content */}
+                  <div className="p-6">
+                    <div 
+                      className="prose prose-lg max-w-none text-gray-700 leading-relaxed"
+                      dangerouslySetInnerHTML={{ __html: selectedBlog.content.replace(/\n/g, '<br>') }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Insights and Categories */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* Insights Section */}
+                <div className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <BarChart3 className="w-5 h-5 mr-2 text-pink-600" />
+                    Blog Insights
+                  </h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                      <div className="text-2xl font-bold text-pink-600">{selectedBlog.reading_time}</div>
+                      <div className="text-sm text-gray-600">min read</div>
+                    </div>
+                    
+                    <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                      <div className="text-2xl font-bold text-purple-600">{selectedBlog.word_count}</div>
+                      <div className="text-sm text-gray-600">words</div>
+                    </div>
+                    
+                    <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                      <div className="text-2xl font-bold text-blue-600">{selectedBlog.seo_score}</div>
+                      <div className="text-sm text-gray-600">SEO score</div>
+                    </div>
+                    
+                    <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                      <div className="text-2xl font-bold text-gray-600">{formatDate(selectedBlog.scheduled_at)}</div>
+                      <div className="text-sm text-gray-600">scheduled</div>
+                    </div>
+                  </div>
+                  
+                  {/* Additional insights */}
+                  <div className="mt-4 space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">Status:</span>
+                      <span className="font-medium text-gray-800">{selectedBlog.status}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">Site:</span>
+                      <span className="font-medium text-gray-800">{selectedBlog.site_name || 'Standalone'}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">Created:</span>
+                      <span className="font-medium text-gray-800">{formatDate(selectedBlog.created_at)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Categories and Tags Section */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <Target className="w-5 h-5 mr-2 text-blue-600" />
+                    Categories & Tags
+                  </h3>
+                  
+                  {/* Categories */}
+                  {selectedBlog.categories?.length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3">Categories</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedBlog.categories.map((category, index) => (
+                          <span key={index} className="px-3 py-1 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-800 rounded-full text-sm font-medium">
+                            {category}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Tags */}
+                  {selectedBlog.tags?.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3">Tags</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedBlog.tags.map((tag, index) => (
+                          <span key={index} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* No categories/tags message */}
+                  {(!selectedBlog.categories?.length && !selectedBlog.tags?.length) && (
+                    <div className="text-center text-gray-500 py-8">
+                      <Target className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-sm">No categories or tags assigned</p>
+                    </div>
+                  )}
+                </div>
+              </div>
 
             </div>
 
@@ -2731,38 +2665,39 @@ const BlogDashboard = () => {
 
                 </button>
 
-                {selectedBlog.status === 'draft' && (
-
+                {selectedBlog.status === 'draft' && selectedBlog.wordpress_site_id && (
                   <button
-
                     onClick={() => {
-
                       handlePublishBlog(selectedBlog.id)
-
                       handleCloseBlogPreview()
-
                     }}
-
                     disabled={publishingBlogs.has(selectedBlog.id)}
-
                     className={`px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 ${
                       publishingBlogs.has(selectedBlog.id)
                         ? 'bg-green-500 text-white cursor-not-allowed opacity-75 animate-pulse'
                         : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
-
                   >
-
                     {publishingBlogs.has(selectedBlog.id) ? (
                       <RefreshCw className="w-4 h-4 animate-spin" />
                     ) : (
                       <Send className="w-4 h-4" />
                     )}
-
                     <span>{publishingBlogs.has(selectedBlog.id) ? 'Publishing...' : 'Publish'}</span>
-
                   </button>
+                )}
 
+                {selectedBlog.status === 'draft' && !selectedBlog.wordpress_site_id && (
+                  <button
+                    onClick={() => {
+                      handleCopyBlog(selectedBlog)
+                      handleCloseBlogPreview()
+                    }}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
+                  >
+                    <Copy className="w-4 h-4" />
+                    <span>Copy</span>
+                  </button>
                 )}
 
                 <button
@@ -2795,7 +2730,7 @@ const BlogDashboard = () => {
             <div className="relative mb-8">
               <div className="w-24 h-24 bg-gradient-to-r from-green-400 to-emerald-600 rounded-full flex items-center justify-center mx-auto animate-bounce shadow-lg">
                 <CheckCircle className="w-12 h-12 text-white" />
-              </div>
+    </div>
               {/* Confetti Effect */}
               <div className="absolute -top-3 -left-3 w-6 h-6 bg-yellow-400 rounded-full animate-ping"></div>
               <div className="absolute -top-2 -right-4 w-5 h-5 bg-pink-400 rounded-full animate-ping animation-delay-200"></div>
@@ -2861,6 +2796,85 @@ const BlogDashboard = () => {
                   <span>View Post</span>
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Beautiful Delete Confirmation Modal */}
+      {showDeleteConfirm && blogToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl transform transition-all duration-300 scale-100">
+            
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-red-500 to-pink-600 text-white p-6 rounded-t-2xl">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-white/20 rounded-full">
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">Delete Blog Post</h3>
+                  <p className="text-red-100 text-sm">This action cannot be undone</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              <div className="mb-4">
+                <p className="text-gray-700 text-base leading-relaxed">
+                  Are you sure you want to delete <strong>"{blogToDelete.title}"</strong>?
+                </p>
+                <p className="text-gray-500 text-sm mt-2">
+                  This will permanently remove the blog post and all its content from your account.
+                </p>
+              </div>
+
+              {/* Blog Preview */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <div className="flex items-start space-x-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-pink-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-medium text-gray-900 truncate">{blogToDelete.title}</h4>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {blogToDelete.word_count} words • {blogToDelete.reading_time} min read
+                    </p>
+                    <div className="flex items-center space-x-2 mt-2">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        blogToDelete.status === 'published' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {blogToDelete.status}
+                      </span>
+                      {blogToDelete.site_name && (
+                        <span className="text-xs text-gray-500">
+                          {blogToDelete.site_name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3">
+                <button
+                  onClick={cancelDeleteBlog}
+                  className="flex-1 px-4 py-3 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all duration-200 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteBlog}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-xl hover:from-red-600 hover:to-pink-700 transition-all duration-200 font-medium shadow-sm hover:shadow-md flex items-center justify-center space-x-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Forever</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
