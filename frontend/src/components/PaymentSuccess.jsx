@@ -61,30 +61,57 @@ const PaymentSuccess = () => {
     processPayment();
   }, [searchParams]);
 
-  const checkUserStatus = async () => {
+  const checkUserStatus = async (retryCount = 0) => {
     try {
+      console.log(`🔍 Checking user status after payment... (attempt ${retryCount + 1})`);
+      
       // Check subscription status
       const subResponse = await subscriptionAPI.getSubscriptionStatus();
+      console.log('📊 Subscription status response:', subResponse.data);
       
       if (subResponse.data.has_active_subscription) {
+        console.log('✅ User has active subscription, checking onboarding...');
+        
         // Check onboarding status
         const onboardingResponse = await onboardingAPI.getOnboardingStatus();
+        console.log('📋 Onboarding status response:', onboardingResponse.data);
         
         if (onboardingResponse.data.onboarding_completed) {
+          console.log('🎯 User completed onboarding, redirecting to dashboard');
           // User has subscription and completed onboarding - go to dashboard
           navigate('/dashboard');
         } else {
+          console.log('📝 User needs onboarding, redirecting to onboarding page');
           // User has subscription but needs onboarding
           navigate('/onboarding');
         }
       } else {
-        // No active subscription - go back to subscription page
-        navigate('/subscription');
+        // If no active subscription and we haven't retried too many times, wait and retry
+        if (retryCount < 3) {
+          console.log(`⏳ No active subscription yet, waiting 2 seconds before retry ${retryCount + 1}/3...`);
+          setTimeout(() => {
+            checkUserStatus(retryCount + 1);
+          }, 2000);
+        } else {
+          console.log('❌ No active subscription after retries, redirecting to subscription page');
+          // No active subscription - go back to subscription page
+          navigate('/subscription');
+        }
       }
     } catch (error) {
-      console.error('Error checking user status:', error);
-      // Default to dashboard on error
-      navigate('/dashboard');
+      console.error('💥 Error checking user status:', error);
+      
+      // If we haven't retried too many times, wait and retry
+      if (retryCount < 3) {
+        console.log(`⏳ Error occurred, waiting 2 seconds before retry ${retryCount + 1}/3...`);
+        setTimeout(() => {
+          checkUserStatus(retryCount + 1);
+        }, 2000);
+      } else {
+        console.log('🔄 Defaulting to dashboard due to repeated errors');
+        // Default to dashboard on error
+        navigate('/dashboard');
+      }
     }
   };
 
@@ -151,13 +178,23 @@ const PaymentSuccess = () => {
         {/* Action Buttons */}
         <div className="space-y-3">
           {status === 'success' && (
-            <button
-              onClick={handleContinue}
-              className="w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:from-pink-600 hover:to-purple-700 transition-all duration-300 flex items-center justify-center"
-            >
-              Continue to Dashboard
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={handleContinue}
+                className="w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:from-pink-600 hover:to-purple-700 transition-all duration-300 flex items-center justify-center"
+              >
+                Continue to Dashboard
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </button>
+              
+              <button
+                onClick={() => navigate('/onboarding')}
+                className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-3 px-6 rounded-lg font-medium hover:from-blue-600 hover:to-indigo-700 transition-all duration-300 flex items-center justify-center"
+              >
+                Go to Onboarding
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </button>
+            </div>
           )}
 
           {status === 'error' && (

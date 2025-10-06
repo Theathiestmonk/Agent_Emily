@@ -105,7 +105,7 @@ const OnboardingForm = forwardRef(({
     'Business Description', 
     'Brand & Contact',
     'Current Presence & Focus Areas',
-    'Social Media & Goals',
+    'Digital Marketing & Goals',
     'Content Strategy',
     'Market & Competition',
     'Campaign Planning',
@@ -452,7 +452,7 @@ const OnboardingForm = forwardRef(({
 
   const focusAreas = [
     'SEO', 'Blog/Article Writing', 'Website Optimization/Copywriting', 
-    'Social Media Marketing (Organic Growth)', 'Paid Advertising', 
+    'Digital Marketing (Organic Growth)', 'Paid Advertising', 
     'Email Marketing & Campaigns', 'YouTube/Video Marketing', 'Influencer Marketing', 
     'PPC', 'Lead Generation Campaigns', 'Brand Awareness', 'Local SEO/Maps Presence', 
     'Customer Retargeting', 'Not Sure – Let Emily suggest the best path'
@@ -551,7 +551,7 @@ const OnboardingForm = forwardRef(({
       case 3: // Current Presence & Focus Areas
         // This step is optional - no required fields
         return true
-      case 4: // Social Media & Goals
+      case 4: // Digital Marketing & Goals
         return (formData.social_media_platforms && formData.social_media_platforms.length > 0) && 
                (formData.primary_goals && formData.primary_goals.length > 0) && 
                (formData.key_metrics_to_track && formData.key_metrics_to_track.length > 0)
@@ -564,7 +564,7 @@ const OnboardingForm = forwardRef(({
         return (formData.top_performing_content_types && formData.top_performing_content_types.length > 0) && 
                (formData.best_time_to_post && formData.best_time_to_post.length > 0)
       case 8: // Performance & Customer
-        return formData.successful_campaigns && formData.hashtags_that_work_well && 
+        return formData.hashtags_that_work_well && 
                formData.customer_pain_points && formData.typical_customer_journey
       case 9: // Automation & Platform
         return formData.automation_level
@@ -742,8 +742,6 @@ const OnboardingForm = forwardRef(({
       case 0:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Basic Business Information</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Business Name *</label>
               <input
@@ -816,8 +814,6 @@ const OnboardingForm = forwardRef(({
       case 1:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Business Description</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Business Description *</label>
               <textarea
@@ -1131,8 +1127,6 @@ const OnboardingForm = forwardRef(({
       case 2:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Brand & Contact Information</h3>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Brand Voice *</label>
@@ -1250,8 +1244,6 @@ const OnboardingForm = forwardRef(({
       case 3:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Current Presence & Focus Areas</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Current Online Presence (Select all that apply)</label>
               <div className="grid grid-cols-2 gap-2">
@@ -1493,10 +1485,8 @@ const OnboardingForm = forwardRef(({
       case 4:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Social Media & Goals</h3>
-            
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Social Media Platforms (Select all that apply) *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Digital Marketing Platforms (Select all that apply) *</label>
               <div className="grid grid-cols-2 gap-2">
                 {socialPlatforms.map(platform => (
                   <label key={platform} className="flex items-center space-x-2">
@@ -1517,7 +1507,7 @@ const OnboardingForm = forwardRef(({
                     value={otherInputs.socialPlatformOther}
                     onChange={(e) => handleOtherInputChange('socialPlatformOther', e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="Please specify your other social media platform"
+                    placeholder="Please specify your other digital marketing platform"
                   />
                 </div>
               )}
@@ -1614,8 +1604,6 @@ const OnboardingForm = forwardRef(({
       case 5:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Content Strategy</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Content Types (Select all that apply) *</label>
               <div className="grid grid-cols-2 gap-2">
@@ -1705,8 +1693,6 @@ const OnboardingForm = forwardRef(({
       case 6:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Market & Competition</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Market Position *</label>
               <select
@@ -1774,8 +1760,6 @@ const OnboardingForm = forwardRef(({
       case 7:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Campaign Planning</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Top Performing Content Types (Select all that apply) *</label>
               <div className="grid grid-cols-2 gap-2">
@@ -1833,7 +1817,7 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Successful Campaigns</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Most Successful Campaigns</label>
               <textarea
                 value={formData.successful_campaigns}
                 onChange={(e) => handleInputChange('successful_campaigns', e.target.value)}
@@ -1881,10 +1865,8 @@ const OnboardingForm = forwardRef(({
       case 8:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Performance & Customer</h3>
-            
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Successful Campaigns *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Most Successful Campaigns</label>
               <textarea
                 value={formData.successful_campaigns}
                 onChange={(e) => handleInputChange('successful_campaigns', e.target.value)}
@@ -1932,8 +1914,6 @@ const OnboardingForm = forwardRef(({
       case 9:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Automation & Platform</h3>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Automation Level *</label>
               <select
@@ -2007,7 +1987,6 @@ const OnboardingForm = forwardRef(({
       case 10:
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">Review & Submit</h3>
             <p className="text-gray-600">Please review all your information before submitting your profile.</p>
             
             <div className="bg-gray-50 p-6 rounded-lg">
@@ -2146,13 +2125,14 @@ const OnboardingForm = forwardRef(({
           {currentStep === 0 && "Tell us about your business basics"}
           {currentStep === 1 && "Help us understand what you do"}
           {currentStep === 2 && "How should we represent your brand?"}
-          {currentStep === 3 && "What are your social media goals?"}
-          {currentStep === 4 && "What's your content strategy?"}
-          {currentStep === 5 && "How do you fit in the market?"}
-          {currentStep === 6 && "What campaigns are you planning?"}
-          {currentStep === 7 && "What's worked well for you?"}
-          {currentStep === 8 && "How automated should your marketing be?"}
-          {currentStep === 9 && "Review everything before we start"}
+          {currentStep === 3 && "What's your current online presence?"}
+          {currentStep === 4 && "What are your digital marketing goals?"}
+          {currentStep === 5 && "What's your content strategy?"}
+          {currentStep === 6 && "How do you fit in the market?"}
+          {currentStep === 7 && "What campaigns are you planning?"}
+          {currentStep === 8 && "What's worked well for you?"}
+          {currentStep === 9 && "How automated should your marketing be?"}
+          {currentStep === 10 && "Review everything before we start"}
         </p>
       </div>
 
