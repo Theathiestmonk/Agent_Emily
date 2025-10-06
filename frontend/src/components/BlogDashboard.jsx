@@ -1159,34 +1159,6 @@ const BlogDashboard = () => {
               </div>
               
               <div className="flex items-center space-x-4">
-                {/* Connection Status - More prominent and reliable */}
-                <div className="flex items-center space-x-2">
-                  {isConnectionsLoading ? (
-                    <div className="flex items-center space-x-2 text-gray-600 bg-gray-100 border border-gray-200 px-4 py-2 rounded-xl shadow-sm">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span className="text-sm font-semibold">Checking connections...</span>
-                    </div>
-                  ) : hasWordPressConnections ? (
-                    <div className="flex items-center space-x-2 text-green-700 bg-green-100 border border-green-200 px-4 py-2 rounded-xl shadow-sm">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <Globe className="w-4 h-4" />
-                      <span className="text-sm font-semibold">WordPress Connected</span>
-                  </div>
-                ) : (
-                    <div className="flex items-center space-x-2 text-blue-700 bg-blue-100 border border-blue-200 px-4 py-2 rounded-xl shadow-sm group relative">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                      <FileText className="w-4 h-4" />
-                      <span className="text-sm font-semibold">Standalone Mode</span>
-                      <span className="text-xs text-blue-600">Local content only</span>
-                      {/* Tooltip */}
-                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                        Create and manage blogs without WordPress connection
-                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                      </div>
-                  </div>
-                )}
-                </div>
                 
                 <button
 
@@ -1328,18 +1300,7 @@ const BlogDashboard = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-2">No blogs found</h3>
 
               <div className="text-gray-500 mb-6">
-                {isStandaloneMode ? (
-                  <>
-                    <p>Generate your first blog post to get started!</p>
-                    <div className="mt-4 inline-flex items-center space-x-2 text-blue-700 bg-blue-50 border border-blue-200 px-4 py-2 rounded-lg">
-                      <FileText className="w-4 h-4" />
-                      <span className="text-sm font-medium">Standalone Mode Active</span>
-                      <span className="text-xs text-blue-600">- No WordPress required</span>
-                    </div>
-                  </>
-                ) : (
-                  <p>Generate your first blog post to get started.</p>
-                )}
+                <p>Generate your first blog post to get started!</p>
               </div>
 
                 <button
@@ -2285,162 +2246,102 @@ const BlogDashboard = () => {
 
       {showGenerationModal && (
 
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
 
-          <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden transform transition-all duration-300 scale-100">
 
-            <div className="text-center">
-
-              <div className="mb-6">
-
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white p-6">
+              <div className="text-center">
+                <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
                   {generationProgress.step === 'Complete' ? (
-
-                    <CheckCircle className="w-8 h-8 text-green-500" />
-
+                    <CheckCircle className="w-10 h-10 text-white" />
                   ) : generationProgress.step === 'Error' ? (
-
-                    <XCircle className="w-8 h-8 text-red-500" />
-
+                    <XCircle className="w-10 h-10 text-white" />
                   ) : (
-
-                    <RefreshCw className={`w-8 h-8 text-blue-500 ${generating ? 'animate-spin' : ''}`} />
-
+                    <RefreshCw className={`w-10 h-10 text-white ${generating ? 'animate-spin' : ''}`} />
                   )}
-
                 </div>
-
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-
-                  {generationProgress.step === 'Complete' ? 'Blogs Generated!' : 
-
-                   generationProgress.step === 'Error' ? 'Generation Failed' : 
-
-                   'Generating Blogs'}
-
+                
+                <h3 className="text-2xl font-bold mb-2">
+                  {generationProgress.step === 'Complete' ? '🎉 Blogs Generated!' : 
+                   generationProgress.step === 'Error' ? '❌ Generation Failed' : 
+                   '✨ Generating Blogs'}
                 </h3>
-
-                <p className="text-gray-600 mb-6">{generationProgress.message}</p>
-
+                
+                <p className="text-white/90 text-sm">{generationProgress.message}</p>
               </div>
-
-
-
-              {/* Progress Bar */}
-
-              {generationProgress.step !== 'Error' && (
-
-                <div className="mb-6">
-
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-
-                    <div 
-
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out"
-
-                      style={{ width: `${generationProgress.percentage}%` }}
-
-                    ></div>
-
-                  </div>
-
-                  <p className="text-sm text-gray-500 mt-2">{generationProgress.percentage}% Complete</p>
-
-                </div>
-
-              )}
-
-
-
-              {/* Action Buttons */}
-
-              {generationProgress.step === 'Complete' && (
-
-                <div className="flex space-x-3">
-
-                  <button
-
-                    onClick={() => {
-
-                      setShowGenerationModal(false)
-
-                      setGenerationProgress({ step: '', percentage: 0, message: '' })
-
-                    }}
-
-                    className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-
-                  >
-
-                    View Blogs
-
-                  </button>
-
-                </div>
-
-              )}
-
-
-
-              {generationProgress.step === 'Error' && (
-
-                <div className="flex space-x-3">
-
-                  <button
-
-                    onClick={() => {
-
-                      setShowGenerationModal(false)
-
-                      setGenerationProgress({ step: '', percentage: 0, message: '' })
-
-                    }}
-
-                    className="flex-1 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
-
-                  >
-
-                    Close
-
-                  </button>
-
-                  <button
-
-                    onClick={() => generateBlogs()}
-
-                    className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-
-                  >
-
-                    Try Again
-
-                  </button>
-
-                </div>
-
-              )}
-
-
-
-              {/* Loading state - no close button */}
-
-              {generationProgress.step !== 'Complete' && generationProgress.step !== 'Error' && (
-
-                <div className="text-sm text-gray-500">
-
-                  Please wait while we generate your content...
-
-                </div>
-
-              )}
-
             </div>
 
+            {/* Modal Content */}
+            <div className="p-6">
+              {/* Progress Bar */}
+              {generationProgress.step !== 'Error' && (
+                <div className="mb-6">
+                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div 
+                      className="bg-gradient-to-r from-pink-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out relative"
+                      style={{ width: `${generationProgress.percentage}%` }}
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full animate-pulse"></div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center mt-3">
+                    <span className="text-sm font-medium text-gray-600">Progress</span>
+                    <span className="text-sm font-bold text-pink-600">{generationProgress.percentage}%</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              {generationProgress.step === 'Complete' && (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => {
+                      setShowGenerationModal(false)
+                      setGenerationProgress({ step: '', percentage: 0, message: '' })
+                    }}
+                    className="w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl transform hover:scale-105"
+                  >
+                    🚀 View Your New Blogs
+                  </button>
+                </div>
+              )}
+
+              {generationProgress.step === 'Error' && (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => {
+                      setShowGenerationModal(false)
+                      setGenerationProgress({ step: '', percentage: 0, message: '' })
+                    }}
+                    className="w-full bg-gray-100 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-200 transition-all duration-300 font-semibold"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={() => generateBlogs()}
+                    className="w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl transform hover:scale-105"
+                  >
+                    🔄 Try Again
+                  </button>
+                </div>
+              )}
+
+              {/* Loading state */}
+              {generationProgress.step !== 'Complete' && generationProgress.step !== 'Error' && (
+                <div className="text-center py-4">
+                  <div className="flex items-center justify-center space-x-2 text-gray-600">
+                    <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                    <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-3">Please wait while we create amazing content for you...</p>
+                </div>
+              )}
+            </div>
           </div>
-
         </div>
-
       )}
 
 
