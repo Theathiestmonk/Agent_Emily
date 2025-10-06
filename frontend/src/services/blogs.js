@@ -153,25 +153,6 @@ class BlogService {
     })
   }
 
-  // Blog Campaigns
-  async getCampaigns(params = {}) {
-    const queryParams = new URLSearchParams()
-    
-    if (params.status) queryParams.append('status', params.status)
-    
-    const queryString = queryParams.toString()
-    const endpoint = `/api/blogs/campaigns/${queryString ? `?${queryString}` : ''}`
-    
-    return this.makeRequest(endpoint)
-  }
-
-  async getCampaign(campaignId) {
-    return this.makeRequest(`/api/blogs/campaigns/${campaignId}`)
-  }
-
-  async getCampaignBlogs(campaignId) {
-    return this.makeRequest(`/api/blogs/campaigns/${campaignId}/blogs`)
-  }
 
   // Blog Statistics
   async getBlogStats() {

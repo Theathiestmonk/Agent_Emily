@@ -26,7 +26,7 @@ class BlogPost(BaseModel):
     categories: List[str] = []
     tags: List[str] = []
     author_id: str
-    wordpress_site_id: str
+    wordpress_site_id: Optional[str] = None  # Made optional for standalone blogs
     scheduled_at: str
     published_at: Optional[str] = None
     wordpress_post_id: Optional[str] = None
@@ -112,19 +112,19 @@ class BlogWritingAgent:
             if response.data:
                 state.profile = response.data[0]
                 print("=" * 80)
-                print("📊 PROFILE DATA LOADED FROM DATABASE:")
+                print("PROFILE DATA LOADED FROM DATABASE:")
                 print("=" * 80)
-                print(f"👤 User ID: {state.user_id}")
-                print(f"📝 Name: {state.profile.get('name', 'Unknown')}")
-                print(f"🏢 Business Name: {state.profile.get('business_name', 'Not specified')}")
-                print(f"🏭 Industry: {state.profile.get('industry', 'Not specified')}")
-                print(f"👥 Target Audience: {state.profile.get('target_audience', 'Not specified')}")
-                print(f"🎨 Content Themes: {state.profile.get('content_themes', 'Not specified')}")
-                print(f"📄 Business Description: {state.profile.get('business_description', 'Not specified')}")
-                print(f"💎 Unique Value Proposition: {state.profile.get('unique_value_proposition', 'Not specified')}")
-                print(f"🛍️ Products/Services: {state.profile.get('products_or_services', 'Not specified')}")
-                print(f"🎤 Brand Voice: {state.profile.get('brand_voice', 'Not specified')}")
-                print(f"🎭 Brand Tone: {state.profile.get('brand_tone', 'Not specified')}")
+                print(f"User ID: {state.user_id}")
+                print(f"Name: {state.profile.get('name', 'Unknown')}")
+                print(f"Business Name: {state.profile.get('business_name', 'Not specified')}")
+                print(f"Industry: {state.profile.get('industry', 'Not specified')}")
+                print(f"Target Audience: {state.profile.get('target_audience', 'Not specified')}")
+                print(f"Content Themes: {state.profile.get('content_themes', 'Not specified')}")
+                print(f"Business Description: {state.profile.get('business_description', 'Not specified')}")
+                print(f"Unique Value Proposition: {state.profile.get('unique_value_proposition', 'Not specified')}")
+                print(f"Products/Services: {state.profile.get('products_or_services', 'Not specified')}")
+                print(f"Brand Voice: {state.profile.get('brand_voice', 'Not specified')}")
+                print(f"Brand Tone: {state.profile.get('brand_tone', 'Not specified')}")
                 print("=" * 80)
                 
                 logger.info(f"Profile fetched successfully for user {state.user_id}:")
@@ -139,16 +139,16 @@ class BlogWritingAgent:
                 
                 # Validate critical fields
                 if not state.profile.get('business_name'):
-                    print("❌ CRITICAL: No business_name in profile data!")
+                    print("CRITICAL: No business_name in profile data!")
                     logger.error("CRITICAL: No business_name in profile data!")
                 if not state.profile.get('industry'):
-                    print("❌ CRITICAL: No industry in profile data!")
+                    print("CRITICAL: No industry in profile data!")
                     logger.error("CRITICAL: No industry in profile data!")
                 if not state.profile.get('target_audience'):
-                    print("❌ CRITICAL: No target_audience in profile data!")
+                    print("CRITICAL: No target_audience in profile data!")
                     logger.error("CRITICAL: No target_audience in profile data!")
             else:
-                print("❌ CRITICAL: No profile found for user:", state.user_id)
+                print("CRITICAL: No profile found for user:", state.user_id)
                 logger.error(f"CRITICAL: No profile found for user: {state.user_id}")
                 state.profile = {"name": "Unknown User", "bio": ""}
             
@@ -159,7 +159,7 @@ class BlogWritingAgent:
             return state
 
     async def _fetch_wordpress_sites(self, state: BlogWritingState) -> BlogWritingState:
-        """Fetch user's WordPress sites"""
+        """Fetch user's WordPress sites or create standalone mode"""
         try:
             logger.info(f"Fetching WordPress sites for user: {state.user_id}")
             
@@ -170,7 +170,7 @@ class BlogWritingAgent:
                 state.wordpress_sites = [site["id"] for site in response.data]
                 state.total_sites = len(state.wordpress_sites)
                 print("=" * 80)
-                print("🌐 WORDPRESS SITES LOADED:")
+                print("WORDPRESS SITES LOADED:")
                 print("=" * 80)
                 for i, site in enumerate(response.data):
                     print(f"Site {i+1}: {site.get('wordpress_site_name', site.get('page_name', 'Unknown'))} (ID: {site['id']})")
@@ -180,10 +180,19 @@ class BlogWritingAgent:
                 print("=" * 80)
                 logger.info(f"Found {len(state.wordpress_sites)} WordPress sites")
             else:
-                print("⚠️ No WordPress sites found for user")
-                logger.warning("No WordPress sites found")
-                state.wordpress_sites = []
-                state.total_sites = 0
+                print("No WordPress sites found - enabling standalone mode")
+                logger.info("No WordPress sites found - enabling standalone mode")
+                # Create a virtual site for standalone blog generation
+                state.wordpress_sites = ["standalone"]
+                state.total_sites = 1
+                print("=" * 80)
+                print("STANDALONE MODE ENABLED:")
+                print("=" * 80)
+                print("Site: Standalone Blog (No WordPress connection required)")
+                print("  - Mode: Content generation only")
+                print("  - Storage: Local database")
+                print("  - Publishing: Manual or future integration")
+                print("=" * 80)
             
             return state
         except Exception as e:
@@ -280,12 +289,12 @@ class BlogWritingAgent:
             return state
 
     async def _generate_blog(self, state: BlogWritingState) -> BlogWritingState:
-        """Generate blog content for each WordPress site"""
+        """Generate blog content for each WordPress site or standalone mode"""
         try:
             logger.info("Generating blog content")
             
             if not state.wordpress_sites:
-                logger.warning("No WordPress sites available")
+                logger.warning("No sites available for blog generation")
                 return state
             
             # Generate blogs for each site
@@ -294,25 +303,30 @@ class BlogWritingAgent:
                 try:
                     logger.info(f"Generating blog for site: {site_id}")
                     
-                    # Get site information
-                    supabase_admin = self.get_supabase_admin()
-                    site_response = supabase_admin.table("platform_connections").select("*").eq("id", site_id).eq("platform", "wordpress").execute()
-                    
-                    if not site_response.data:
-                        logger.warning(f"Site not found: {site_id}")
-                        continue
-                    
-                    site_info = site_response.data[0]
-                    site_name = site_info.get("wordpress_site_name", site_info.get("page_name", "Unknown Site"))
+                    # Handle standalone mode
+                    if site_id == "standalone":
+                        site_name = "Standalone Blog"
+                        logger.info("Generating standalone blog content")
+                    else:
+                        # Get site information for WordPress sites
+                        supabase_admin = self.get_supabase_admin()
+                        site_response = supabase_admin.table("platform_connections").select("*").eq("id", site_id).eq("platform", "wordpress").execute()
+                        
+                        if not site_response.data:
+                            logger.warning(f"Site not found: {site_id}")
+                            continue
+                        
+                        site_info = site_response.data[0]
+                        site_name = site_info.get("wordpress_site_name", site_info.get("page_name", "Unknown Site"))
                     
                     # Generate blog content
                     blog = await self._generate_blog_content(state, site_id, site_name)
-                    print(f"🔍 Blog generation result: {blog}")
+                    print(f"Blog generation result: {blog}")
                     if blog == "API_QUOTA_ERROR":
                         # API quota error detected
                         state.error = "OpenAI API quota exceeded. Please check your billing details."
-                        logger.error("❌ API quota exceeded - stopping blog generation")
-                        print("❌ API QUOTA EXCEEDED - Please check your billing details")
+                        logger.error("API quota exceeded - stopping blog generation")
+                        print("API QUOTA EXCEEDED - Please check your billing details")
                         break  # Stop trying to generate more blogs
                     elif blog:
                         state.blogs.append(blog)
@@ -329,7 +343,7 @@ class BlogWritingAgent:
             if successful_blogs == 0 and len(state.wordpress_sites) > 0:
                 if not state.error:  # Only set error if not already set
                     state.error = "Failed to generate any blogs. Please check your OpenAI API quota and billing details."
-                    print("❌ NO BLOGS GENERATED - Check OpenAI API quota")
+                    print("NO BLOGS GENERATED - Check OpenAI API quota")
             
             return state
         except Exception as e:
@@ -363,19 +377,19 @@ class BlogWritingAgent:
             
             # Log the final values being used for blog generation
             print("=" * 80)
-            print("🎯 BLOG GENERATION CONTEXT - PROFILE DATA BEING USED:")
+            print("BLOG GENERATION CONTEXT - PROFILE DATA BEING USED:")
             print("=" * 80)
-            print(f"📝 Author: {profile_name}")
-            print(f"🏢 Business Name: {business_name}")
-            print(f"🏭 Industry: {industry}")
-            print(f"👥 Target Audience: {target_audience}")
-            print(f"🎨 Content Themes: {content_themes}")
-            print(f"📄 Business Description: {business_description}")
-            print(f"🛍️ Products/Services: {products_or_services}")
-            print(f"💎 Unique Value Proposition: {unique_value_proposition}")
-            print(f"🎤 Brand Voice: {brand_voice}")
-            print(f"🎭 Brand Tone: {brand_tone}")
-            print(f"🌐 WordPress Site: {site_name}")
+            print(f"Author: {profile_name}")
+            print(f"Business Name: {business_name}")
+            print(f"Industry: {industry}")
+            print(f"Target Audience: {target_audience}")
+            print(f"Content Themes: {content_themes}")
+            print(f"Business Description: {business_description}")
+            print(f"Products/Services: {products_or_services}")
+            print(f"Unique Value Proposition: {unique_value_proposition}")
+            print(f"Brand Voice: {brand_voice}")
+            print(f"Brand Tone: {brand_tone}")
+            print(f"WordPress Site: {site_name}")
             print("=" * 80)
             
             logger.info(f"Final blog generation context (using PROFILE DATA ONLY):")
@@ -387,14 +401,14 @@ class BlogWritingAgent:
             logger.info(f"  - Products/Services: {products_or_services[:100]}...")
             logger.info(f"  - Unique Value Proposition: {unique_value_proposition[:100]}...")
             
-            # Validate that we have essential business data
+            # Validate that we have essential business data - use fallback if missing
             if not business_name or business_name.strip() == '':
-                logger.error("No business name found in profile data")
-                return None
+                logger.warning("No business name found in profile data, using fallback")
+                business_name = "Your Business"
             
             if not industry or (isinstance(industry, list) and len(industry) == 0):
-                logger.error("No industry information found in profile data")
-                return None
+                logger.warning("No industry information found in profile data, using fallback")
+                industry = "Business"
             
             # Create blog generation prompt with detailed business context
             prompt = f"""
@@ -489,25 +503,28 @@ class BlogWritingAgent:
             
             # Log the generated blog content
             print("=" * 80)
-            print("📝 GENERATED BLOG CONTENT:")
+            print("GENERATED BLOG CONTENT:")
             print("=" * 80)
-            print(f"📰 Title: {blog_data.get('title', 'No title')}")
-            print(f"📄 Excerpt: {blog_data.get('excerpt', 'No excerpt')}")
-            print(f"🔗 Slug: {blog_data.get('slug', 'No slug')}")
-            print(f"📂 Categories: {blog_data.get('categories', [])}")
-            print(f"🏷️ Tags: {blog_data.get('tags', [])}")
-            print(f"🔍 Meta Description: {blog_data.get('meta_description', 'No meta description')}")
-            print(f"🔑 Meta Keywords: {blog_data.get('meta_keywords', [])}")
-            print(f"⏱️ Reading Time: {blog_data.get('reading_time', 0)} minutes")
-            print(f"📊 Word Count: {blog_data.get('word_count', 0)} words")
-            print(f"⭐ SEO Score: {blog_data.get('seo_score', 0)}/100")
-            print(f"📝 Content Preview: {blog_data.get('content', 'No content')[:200]}...")
+            print(f"Title: {blog_data.get('title', 'No title')}")
+            print(f"Excerpt: {blog_data.get('excerpt', 'No excerpt')}")
+            print(f"Slug: {blog_data.get('slug', 'No slug')}")
+            print(f"Categories: {blog_data.get('categories', [])}")
+            print(f"Tags: {blog_data.get('tags', [])}")
+            print(f"Meta Description: {blog_data.get('meta_description', 'No meta description')}")
+            print(f"Meta Keywords: {blog_data.get('meta_keywords', [])}")
+            print(f"Reading Time: {blog_data.get('reading_time', 0)} minutes")
+            print(f"Word Count: {blog_data.get('word_count', 0)} words")
+            print(f"SEO Score: {blog_data.get('seo_score', 0)}/100")
+            print(f"Content Preview: {blog_data.get('content', 'No content')[:200]}...")
             print("=" * 80)
             
             # Create blog post
             blog_id = str(uuid.uuid4())
             now = datetime.now()
             scheduled_time = now + timedelta(hours=1)  # Schedule 1 hour from now
+            
+            # Handle WordPress site ID for standalone mode
+            wordpress_site_id = None if site_id == "standalone" else site_id
             
             blog = BlogPost(
                 id=blog_id,
@@ -521,7 +538,7 @@ class BlogWritingAgent:
                 categories=blog_data.get("categories", ["General"]),
                 tags=blog_data.get("tags", ["blog"]),
                 author_id=state.user_id,
-                wordpress_site_id=site_id,
+                wordpress_site_id=wordpress_site_id,
                 scheduled_at=scheduled_time.isoformat(),
                 meta_description=blog_data.get("meta_description", ""),
                 meta_keywords=blog_data.get("meta_keywords", []),
@@ -533,6 +550,7 @@ class BlogWritingAgent:
                 metadata={
                     "generated_by": "blog_writing_agent",
                     "site_name": site_name,
+                    "site_type": "standalone" if site_id == "standalone" else "wordpress",
                     "campaign_id": state.campaign.id if state.campaign else None,
                     "ai_model": "gpt-4",
                     "generation_time": datetime.now().isoformat()
@@ -543,11 +561,11 @@ class BlogWritingAgent:
             
         except Exception as e:
             logger.error(f"Error generating blog content: {e}")
-            print(f"❌ ERROR generating blog content: {e}")
+            print(f"ERROR generating blog content: {e}")
             # Check if it's an API quota error
             error_str = str(e)
             if "quota" in error_str.lower() or "429" in error_str or "insufficient_quota" in error_str:
-                print("💳 OPENAI API QUOTA EXCEEDED - Please check your billing details")
+                print("OPENAI API QUOTA EXCEEDED - Please check your billing details")
                 # Return a special error indicator
                 return "API_QUOTA_ERROR"
             return None
@@ -564,12 +582,14 @@ class BlogWritingAgent:
             
             for blog in state.blogs:
                 try:
-                    # Get site name from platform_connections
+                    # Get site name from platform_connections or use metadata
                     site_name = "Unknown Site"
-                    if blog.wordpress_site_id:
+                    if blog.wordpress_site_id and blog.wordpress_site_id != "standalone":
                         site_response = supabase_admin.table("platform_connections").select("wordpress_site_name").eq("id", blog.wordpress_site_id).eq("platform", "wordpress").execute()
                         if site_response.data:
                             site_name = site_response.data[0].get("wordpress_site_name", "Unknown Site")
+                    elif blog.metadata and blog.metadata.get("site_name"):
+                        site_name = blog.metadata.get("site_name")
                     
                     # Prepare blog data for database
                     blog_data = {
@@ -655,8 +675,16 @@ class BlogWritingAgent:
             result = await self.graph.ainvoke(state)
             
             # Debug: Log the result structure
-            logger.info(f"Blog generation result type: {type(result)}")
-            logger.info(f"Blog generation result: {result}")
+            logger.info(f"Blog generation workflow completed")
+            logger.info(f"Result type: {type(result)}")
+            if hasattr(result, 'blogs'):
+                logger.info(f"Blogs in result: {len(result.blogs) if result.blogs else 0}")
+            if hasattr(result, 'wordpress_sites'):
+                logger.info(f"WordPress sites in result: {result.wordpress_sites}")
+            if hasattr(result, 'error'):
+                logger.info(f"Error in result: {result.error}")
+            if hasattr(result, 'profile'):
+                logger.info(f"Profile in result: {result.profile is not None}")
             
             # Check if result is a dict or BlogWritingState object
             if isinstance(result, dict):
@@ -705,8 +733,8 @@ class BlogWritingAgent:
                 
                 # Check if no blogs were generated and there was an error
                 if len(blogs_dict) == 0 and hasattr(result, 'error') and result.error:
-                    logger.error(f"❌ No blogs generated due to error: {result.error}")
-                    print(f"❌ BLOG GENERATION FAILED: {result.error}")
+                    logger.error(f"No blogs generated due to error: {result.error}")
+                    print(f"BLOG GENERATION FAILED: {result.error}")
                     return {
                         "success": False,
                         "error": result.error,
@@ -716,21 +744,67 @@ class BlogWritingAgent:
                         "message": f"Blog generation failed: {result.error}"
                     }
                 
-                # Also check if no blogs were generated (regardless of error state)
-                if len(blogs_dict) == 0:
-                    error_msg = "No blogs were generated. This could be due to OpenAI API quota exceeded or other issues."
-                    logger.warning(f"⚠️ {error_msg}")
-                    print(f"⚠️ {error_msg}")
-                    return {
-                        "success": False,
-                        "error": error_msg,
-                        "blogs": [],
-                        "campaign": campaign_dict,
-                        "total_blogs": 0,
-                        "message": error_msg
-                    }
+                # Check if no blogs were generated but only if there was no specific error
+                if len(blogs_dict) == 0 and not (hasattr(result, 'error') and result.error):
+                    # Check if we have sites to generate for
+                    if hasattr(result, 'wordpress_sites') and result.wordpress_sites and len(result.wordpress_sites) > 0:
+                        # Try to generate a fallback blog in standalone mode
+                        if "standalone" in result.wordpress_sites:
+                            logger.info("Attempting to generate fallback standalone blog...")
+                            try:
+                                fallback_blog = await self._generate_fallback_blog(result, user_id)
+                                if fallback_blog:
+                                    blogs_dict = [fallback_blog.dict() if hasattr(fallback_blog, 'dict') else fallback_blog]
+                                    logger.info("Fallback blog generated successfully")
+                                else:
+                                    error_msg = "No blogs were generated despite having sites available. This could be due to OpenAI API quota exceeded or other issues."
+                                    logger.warning(f"{error_msg}")
+                                    print(f"{error_msg}")
+                                    return {
+                                        "success": False,
+                                        "error": error_msg,
+                                        "blogs": [],
+                                        "campaign": campaign_dict,
+                                        "total_blogs": 0,
+                                        "message": error_msg
+                                    }
+                            except Exception as e:
+                                logger.error(f"Fallback blog generation failed: {e}")
+                                error_msg = "No blogs were generated despite having sites available. This could be due to OpenAI API quota exceeded or other issues."
+                                logger.warning(f"{error_msg}")
+                                print(f"{error_msg}")
+                                return {
+                                    "success": False,
+                                    "error": error_msg,
+                                    "blogs": [],
+                                    "campaign": campaign_dict,
+                                    "total_blogs": 0,
+                                    "message": error_msg
+                                }
+                        else:
+                            error_msg = "No blogs were generated despite having sites available. This could be due to OpenAI API quota exceeded or other issues."
+                            logger.warning(f"{error_msg}")
+                            print(f"{error_msg}")
+                            return {
+                                "success": False,
+                                "error": error_msg,
+                                "blogs": [],
+                                "campaign": campaign_dict,
+                                "total_blogs": 0,
+                                "message": error_msg
+                            }
+                    else:
+                        # No sites available - this might be expected in some cases
+                        logger.info("No blogs generated - no sites available for generation")
+                        return {
+                            "success": True,
+                            "blogs": [],
+                            "campaign": campaign_dict,
+                            "total_blogs": 0,
+                            "message": "No sites available for blog generation"
+                        }
                 
-                logger.info(f"✅ Blog generation successful: {len(blogs_dict)} blogs created")
+                logger.info(f"Blog generation successful: {len(blogs_dict)} blogs created")
                 
                 return {
                     "success": True,
@@ -756,3 +830,78 @@ class BlogWritingAgent:
                 "blogs": [],
                 "campaign": None
             }
+
+    async def _generate_fallback_blog(self, result, user_id: str) -> Optional[BlogPost]:
+        """Generate a simple fallback blog when normal generation fails"""
+        try:
+            logger.info("Generating fallback blog...")
+            
+            # Get profile data
+            profile = result.profile if hasattr(result, 'profile') else {}
+            business_name = profile.get('business_name', 'Your Business')
+            industry = profile.get('industry', 'Business')
+            
+            # Create a simple blog post
+            blog_id = str(uuid.uuid4())
+            now = datetime.now()
+            scheduled_time = now + timedelta(hours=1)
+            
+            # Simple blog content
+            title = f"Welcome to {business_name} - Your {industry} Journey Begins"
+            content = f"""
+            <h2>Welcome to {business_name}</h2>
+            <p>We're excited to share our journey in the {industry} industry with you. This is just the beginning of our story, and we can't wait to show you what we have in store.</p>
+            
+            <h3>What You Can Expect</h3>
+            <p>In the coming weeks and months, we'll be sharing:</p>
+            <ul>
+                <li>Industry insights and trends</li>
+                <li>Behind-the-scenes content</li>
+                <li>Expert tips and advice</li>
+                <li>Success stories and case studies</li>
+            </ul>
+            
+            <h3>Stay Connected</h3>
+            <p>Make sure to follow us for regular updates and don't hesitate to reach out if you have any questions or suggestions.</p>
+            
+            <p>Thank you for being part of our community!</p>
+            <p><strong>The {business_name} Team</strong></p>
+            """
+            
+            blog = BlogPost(
+                id=blog_id,
+                title=title,
+                content=content,
+                excerpt="Welcome to our blog! We're excited to share our journey and insights with you.",
+                slug=f"welcome-to-{business_name.lower().replace(' ', '-')}",
+                status="draft",
+                post_type="post",
+                format="standard",
+                categories=["Welcome", "Introduction"],
+                tags=["welcome", "introduction", "business"],
+                author_id=user_id,
+                wordpress_site_id=None,  # Standalone blog
+                scheduled_at=scheduled_time.isoformat(),
+                meta_description=f"Welcome to {business_name}'s blog. Discover insights, tips, and stories from our {industry} journey.",
+                meta_keywords=["welcome", "business", industry.lower(), "blog"],
+                reading_time=3,
+                word_count=len(content.split()),
+                seo_score=75,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                metadata={
+                    "generated_by": "blog_writing_agent_fallback",
+                    "site_name": "Standalone Blog",
+                    "site_type": "standalone",
+                    "ai_model": "fallback",
+                    "generation_time": datetime.now().isoformat(),
+                    "is_fallback": True
+                }
+            )
+            
+            logger.info(f"Fallback blog generated: {blog.title}")
+            return blog
+            
+        except Exception as e:
+            logger.error(f"Error generating fallback blog: {e}")
+            return None

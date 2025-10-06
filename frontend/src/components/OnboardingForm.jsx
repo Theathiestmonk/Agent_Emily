@@ -2271,8 +2271,8 @@ const OnboardingForm = forwardRef(({
         ) : (
           <button
             onClick={nextStep}
-            disabled={!isEditMode && !isStepAccessible(currentStep + 1)}
-            className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
+              disabled={!isEditMode && !isStepAccessible(currentStep + 1)}
+              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
           >
             Next
             <ArrowRight className="w-4 h-4 ml-2" />

@@ -131,85 +131,6 @@ async def get_blogs(
         logger.error(f"Error fetching blogs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch blogs: {str(e)}")
 
-# Campaign routes (must come before {blog_id} route)
-@router.get("/campaigns/")
-async def get_campaigns(
-    current_user: User = Depends(get_current_user),
-    status: Optional[str] = Query(None, description="Filter by status")
-):
-    """Get all blog campaigns for the current user"""
-    try:
-        logger.info(f"Fetching campaigns for user: {current_user.id}")
-        
-        query = supabase_admin.table("blog_campaigns").select("*").eq("user_id", current_user.id)
-        
-        if status:
-            query = query.eq("status", status)
-        
-        query = query.order("created_at", desc=True)
-        
-        response = query.execute()
-        campaigns = response.data if response.data else []
-        
-        logger.info(f"Found {len(campaigns)} campaigns")
-        return {"campaigns": campaigns, "total": len(campaigns)}
-        
-    except Exception as e:
-        logger.error(f"Error fetching campaigns: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch campaigns: {str(e)}")
-
-@router.get("/campaigns/{campaign_id}")
-async def get_campaign(
-    campaign_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Get a specific campaign by ID"""
-    try:
-        logger.info(f"Fetching campaign {campaign_id} for user: {current_user.id}")
-        
-        response = supabase_admin.table("blog_campaigns").select("*").eq("id", campaign_id).eq("user_id", current_user.id).execute()
-        
-        if not response.data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
-        
-        campaign = response.data[0]
-        logger.info(f"Campaign found: {campaign['campaign_name']}")
-        return {"campaign": campaign}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching campaign: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch campaign: {str(e)}")
-
-@router.get("/campaigns/{campaign_id}/blogs")
-async def get_campaign_blogs(
-    campaign_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Get all blogs for a specific campaign"""
-    try:
-        logger.info(f"Fetching blogs for campaign {campaign_id} for user: {current_user.id}")
-        
-        # First verify the campaign belongs to the user
-        campaign_response = supabase_admin.table("blog_campaigns").select("id").eq("id", campaign_id).eq("user_id", current_user.id).execute()
-        
-        if not campaign_response.data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
-        
-        # Get blogs for this campaign
-        response = supabase_admin.table("blog_posts").select("*").eq("campaign_id", campaign_id).eq("author_id", current_user.id).order("created_at", desc=True).execute()
-        
-        blogs = response.data if response.data else []
-        
-        logger.info(f"Found {len(blogs)} blogs for campaign {campaign_id}")
-        return {"blogs": blogs, "total": len(blogs)}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching campaign blogs: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch campaign blogs: {str(e)}")
 
 # Stats route (must come before {blog_id} route)
 @router.get("/stats/")
@@ -438,9 +359,9 @@ async def publish_blog(
         
         blog = blog_response.data[0]
         
-        # Get WordPress connection details
+        # Check if blog has WordPress connection
         if not blog.get('wordpress_site_id'):
-            raise HTTPException(status_code=400, detail="WordPress site not found for this blog")
+            raise HTTPException(status_code=400, detail="This blog is in standalone mode and cannot be published to WordPress. Please connect WordPress in settings to enable publishing.")
         
         # Get the WordPress connection from platform_connections
         wordpress_response = supabase_admin.table("platform_connections").select("*").eq("id", blog['wordpress_site_id']).eq("platform", "wordpress").execute()
