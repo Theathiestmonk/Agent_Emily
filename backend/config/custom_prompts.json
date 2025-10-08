@@ -64,8 +64,8 @@
       "updated_at": "2024-01-15T10:25:00Z",
       "created_by": "team"
     },
-    "industrial_insights": {
-      "name": "Industrial Insights",
+    "insights": {
+      "name": "Insights",
       "description": "Industry insight template with circular charts and data visualization",
       "prompt": "You are a visual content transformer for social media creatives. Your task is to update the existing Industry Insight template image based on the provided data. Replace the top headline, supporting text, and data points in the circular charts. The number of data points may vary depending on user input — the template should automatically adjust to display all provided data values and labels while keeping the original layout, color scheme, typography, and style identical.\n\nGuidelines:\n- Keep the original alignment, spacing, and visual hierarchy consistent.\n- Replace or create only the data points provided by the user (label and value for each circle).\n- Maintain consistent circle size, color, and bar style for all data points.\n- Update the headline and supporting text as per input.\n- Update or remove the website/CTA element based on user input.\n- Do not add unrelated elements or change the design style.\n- Return only the final updated image without explanations, captions, or extra text.",
       "skip_template_analyzer": true,
