@@ -63,6 +63,15 @@
       "created_at": "2024-01-15T10:25:00Z",
       "updated_at": "2024-01-15T10:25:00Z",
       "created_by": "team"
+    },
+    "testimonial_1": {
+      "name": "Testimonial 1",
+      "description": "Customer testimonial template for visual content transformation",
+      "prompt": "You are a social media content transformer. Your task is to read the provided testimonial details and update the existing testimonial template image accordingly. Replace the reviewer's name, designation, rating, photo, testimonial text, and website with the new information provided by the user — while keeping all visual and stylistic elements identical to the original.\n\nGuidelines:\n\nKeep the original layout, alignment, and hierarchy the same.\nMaintain color scheme, typography, temperature, and proportions.\nOnly update text, reviewer image, testimonial, and website.\nDo not add or remove any design elements.\nReturn only the final updated image, without any explanations, captions, or additional text.",
+      "skip_template_analyzer": true,
+      "created_at": "2024-01-15T10:30:00Z",
+      "updated_at": "2024-01-15T10:30:00Z",
+      "created_by": "team"
     }
   },
   "settings": {
