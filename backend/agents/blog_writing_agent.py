@@ -309,15 +309,15 @@ class BlogWritingAgent:
                         logger.info("Generating standalone blog content")
                     else:
                         # Get site information for WordPress sites
-                    supabase_admin = self.get_supabase_admin()
-                    site_response = supabase_admin.table("platform_connections").select("*").eq("id", site_id).eq("platform", "wordpress").execute()
-                    
-                    if not site_response.data:
-                        logger.warning(f"Site not found: {site_id}")
-                        continue
-                    
-                    site_info = site_response.data[0]
-                    site_name = site_info.get("wordpress_site_name", site_info.get("page_name", "Unknown Site"))
+                        supabase_admin = self.get_supabase_admin()
+                        site_response = supabase_admin.table("platform_connections").select("*").eq("id", site_id).eq("platform", "wordpress").execute()
+                        
+                        if not site_response.data:
+                            logger.warning(f"Site not found: {site_id}")
+                            continue
+                        
+                        site_info = site_response.data[0]
+                        site_name = site_info.get("wordpress_site_name", site_info.get("page_name", "Unknown Site"))
                     
                     # Generate blog content
                     blog = await self._generate_blog_content(state, site_id, site_name)
@@ -785,13 +785,13 @@ class BlogWritingAgent:
                             error_msg = "No blogs were generated despite having sites available. This could be due to OpenAI API quota exceeded or other issues."
                             logger.warning(f"{error_msg}")
                             print(f"{error_msg}")
-                    return {
-                        "success": False,
-                        "error": error_msg,
-                        "blogs": [],
-                        "campaign": campaign_dict,
-                        "total_blogs": 0,
-                        "message": error_msg
+                            return {
+                                "success": False,
+                                "error": error_msg,
+                                "blogs": [],
+                                "campaign": campaign_dict,
+                                "total_blogs": 0,
+                                "message": error_msg
                             }
                     else:
                         # No sites available - this might be expected in some cases

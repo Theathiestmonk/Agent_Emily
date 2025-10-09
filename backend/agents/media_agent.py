@@ -42,6 +42,10 @@ class Size(str, Enum):
     LANDSCAPE_1792 = "1792x1024"
     PORTRAIT_1024 = "1024x1792"
 
+# Type aliases for backward compatibility
+ImageStyle = Style
+ImageSize = Size
+
 class MediaAgentState(TypedDict):
     user_id: str
     post_id: Optional[str]
@@ -81,9 +85,9 @@ class MediaAgent:
         
         # Add nodes
         workflow.add_node("load_post", self.load_post_data)
-        workflow.add_node("analyze_content", self.analyze_content_for_)
-        workflow.add_node("generate_prompt", self.generate__prompt)
-        workflow.add_node("generate_", self.generate_)
+        workflow.add_node("analyze_content", self.analyze_content_for_image)
+        workflow.add_node("generate_prompt", self.generate_image_prompt)
+        workflow.add_node("generate_image", self.generate_image)
         workflow.add_node("save_image", self.save_image_data)
         workflow.add_node("handle_error", self.handle_error)
         
