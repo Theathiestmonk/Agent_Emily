@@ -328,8 +328,42 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 # Prepare contents for Gemini API call
                 contents = []
                 
-                # Add text prompt
-                contents.append(image_prompt)
+                # Add structured text prompt for image generation
+                gemini_prompt = f"""
+You are a professional graphic designer and image generator. Create a high-quality social media post image based on the following requirements.
+
+IMAGE GENERATION PROMPT: {image_prompt}
+
+DESIGN REQUIREMENTS:
+1. Generate a NEW IMAGE that matches the prompt description
+2. Create a visually appealing, professional image suitable for social media
+3. Use high resolution and professional quality
+4. Ensure the image is engaging and eye-catching
+5. Apply modern design principles and good composition
+6. Use appropriate colors, lighting, and visual elements
+7. Make sure the image tells a story and conveys the intended message
+8. Ensure the image is optimized for social media platforms
+9. Create a cohesive and professional design
+10. OUTPUT: Return the final generated image, not text description
+
+TECHNICAL SPECIFICATIONS:
+- High resolution and professional quality
+- Suitable for social media posting
+- Engaging and visually appealing
+- Professional composition and lighting
+- Clear and impactful visual elements
+
+QUALITY CONTROL:
+✓ Image is high quality and professional
+✓ Composition is well-balanced and engaging
+✓ Colors and lighting are appropriate
+✓ Image conveys the intended message
+✓ Suitable for social media platforms
+
+OUTPUT: A single, professionally designed image that matches the prompt requirements with high visual quality.
+"""
+                
+                contents.append(gemini_prompt)
                 
                 # Add logo image if available
                 if logo_url:
@@ -338,7 +372,7 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                         if logo_image_data:
                             # Add logo as reference image
                             contents.append({
-                                "text": "Use this business logo as a reference and integrate it prominently into the generated image. Place it strategically - either as a watermark in the corner, integrated into the design, or as a central element depending on the content. Make sure the logo is clearly visible and well-positioned for brand recognition."
+                                "text": "LOGO INTEGRATION: Use this business logo as a reference and integrate it prominently into the generated image. Place it strategically - either as a watermark in the corner, integrated into the design, or as a central element depending on the content. Make sure the logo is clearly visible and well-positioned for brand recognition."
                             })
                             contents.append({
                                 "inline_data": {
@@ -357,18 +391,34 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 
                 # Extract the generated image from the response
                 image_data = None
+                logger.info(f"Gemini response received: {len(response.candidates) if response.candidates else 0} candidates")
+                
                 if response.candidates and len(response.candidates) > 0:
                     candidate = response.candidates[0]
+                    logger.info(f"Processing candidate with {len(candidate.content.parts) if candidate.content.parts else 0} parts")
                     
-                    for part in candidate.content.parts:
-                        if part.inline_data is not None:
+                    for i, part in enumerate(candidate.content.parts):
+                        logger.info(f"Part {i}: inline_data={part.inline_data is not None}, text={hasattr(part, 'text') and bool(part.text)}")
+                        if part.inline_data is not None and part.inline_data.data:
                             image_data = part.inline_data.data
+                            logger.info(f"Found image data in part {i}: {len(image_data)} bytes")
                             break
+                        elif hasattr(part, 'text') and part.text:
+                            logger.info(f"Part {i} contains text: {part.text[:100]}...")
                 else:
                     logger.warning("No candidates in Gemini response")
                 
                 if not image_data:
                     logger.error("No image data found in Gemini response")
+                    # Try to get any text response for debugging
+                    if response.candidates and len(response.candidates) > 0:
+                        candidate = response.candidates[0]
+                        if candidate.content.parts:
+                            text_content = ""
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'text') and part.text:
+                                    text_content += part.text
+                            logger.error(f"Gemini text response: {text_content[:500]}...")
                     raise Exception("No image data returned from Gemini")
                 
                 # Gemini returns image data as bytes, not base64
