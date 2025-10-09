@@ -1911,7 +1911,7 @@ const Onboarding = () => {
 
   return (
     <div className="min-h-screen bg-[#F6F6F6] flex flex-col">
-      {/* Header */}
+        {/* Header */}
       <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -1944,13 +1944,13 @@ const Onboarding = () => {
       <div className="flex-1 flex items-center justify-center py-8">
         <div className="max-w-4xl mx-auto px-4 w-full">
           {/* Welcome Section */}
-          <div className="text-center mb-8">
-            <div className="w-20 h-20 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl font-bold text-white">E</span>
-            </div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome to Emily!</h1>
-            <p className="text-gray-600">Let's get to know your business so I can provide personalized marketing assistance.</p>
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-3xl font-bold text-white">E</span>
           </div>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome to Emily!</h1>
+          <p className="text-gray-600">Let's get to know your business so I can provide personalized marketing assistance.</p>
+        </div>
 
         {/* Progress Bar */}
         <div className="mb-8">

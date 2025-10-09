@@ -1,6 +1,6 @@
 """
 Media Generation Agent using LangGraph
-Generates images for content posts using AI image generation
+Generates s for content posts using AI  generation
 """
 
 import json
@@ -25,7 +25,7 @@ import httpx
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class ImageStyle(str, Enum):
+class Style(str, Enum):
     REALISTIC = "realistic"
     ARTISTIC = "artistic"
     CARTOON = "cartoon"
@@ -36,7 +36,7 @@ class ImageStyle(str, Enum):
     WATERCOLOR = "watercolor"
     OIL_PAINTING = "oil_painting"
 
-class ImageSize(str, Enum):
+class Size(str, Enum):
     SQUARE_1024 = "1024x1024"
     SQUARE_512 = "512x512"
     LANDSCAPE_1792 = "1792x1024"
@@ -46,10 +46,10 @@ class MediaAgentState(TypedDict):
     user_id: str
     post_id: Optional[str]
     post_data: Optional[Dict[str, Any]]
-    image_prompt: Optional[str]
-    image_style: Optional[ImageStyle]
-    image_size: Optional[ImageSize]
-    generated_image_url: Optional[str]
+    _prompt: Optional[str]
+    _style: Optional[Style]
+    _size: Optional[Size]
+    generated__url: Optional[str]
     generation_cost: Optional[float]
     generation_time: Optional[int]
     generation_model: Optional[str]
@@ -72,7 +72,7 @@ class MediaAgent:
         # Configure Gemini API
         genai.configure(api_key=gemini_api_key)
         self.gemini_model = 'gemini-2.5-flash'  # Use stable model for text generation
-        self.gemini_image_model = 'gemini-2.5-flash-image-preview'  # Use image preview model for image generation
+        self.gemini__model = 'gemini-2.5-flash--preview'  # Use  preview model for  generation
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
@@ -81,9 +81,9 @@ class MediaAgent:
         
         # Add nodes
         workflow.add_node("load_post", self.load_post_data)
-        workflow.add_node("analyze_content", self.analyze_content_for_image)
-        workflow.add_node("generate_prompt", self.generate_image_prompt)
-        workflow.add_node("generate_image", self.generate_image)
+        workflow.add_node("analyze_content", self.analyze_content_for_)
+        workflow.add_node("generate_prompt", self.generate__prompt)
+        workflow.add_node("generate_", self.generate_)
         workflow.add_node("save_image", self.save_image_data)
         workflow.add_node("handle_error", self.handle_error)
         

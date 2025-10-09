@@ -493,6 +493,12 @@ class TemplateEditorAgent:
                 return 'behind_the_scenes'
             elif 'new_product' in template_id_lower:
                 return 'new_product'
+            elif 'success_story' in template_id_lower:
+                return 'success_story'
+            elif 'school_1' in template_id_lower:
+                return 'school_1'
+            elif 'insights' in template_id_lower:
+                return 'insights'
             else:
                 # Try to extract from the template_id pattern
                 # Assuming format like "social-media-Did_you_know-1" or "social-media-New Product"

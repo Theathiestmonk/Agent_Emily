@@ -2252,7 +2252,7 @@ const BlogDashboard = () => {
 
             {/* Modal Header */}
             <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white p-6">
-              <div className="text-center">
+            <div className="text-center">
                 <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
                   {generationProgress.step === 'Complete' ? (
                     <CheckCircle className="w-10 h-10 text-white" />
@@ -2271,7 +2271,7 @@ const BlogDashboard = () => {
                 
                 <p className="text-white/90 text-sm">{generationProgress.message}</p>
               </div>
-            </div>
+              </div>
 
             {/* Modal Content */}
             <div className="p-6">
@@ -2284,7 +2284,7 @@ const BlogDashboard = () => {
                       style={{ width: `${generationProgress.percentage}%` }}
                     >
                       <div className="absolute inset-0 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full animate-pulse"></div>
-                    </div>
+                  </div>
                   </div>
                   <div className="flex justify-between items-center mt-3">
                     <span className="text-sm font-medium text-gray-600">Progress</span>
