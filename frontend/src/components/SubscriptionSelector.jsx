@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Check, ArrowRight, Loader2, Home, HelpCircle, Settings, LogOut } from 'lucide-react';
+import { Check, ArrowRight, Loader2, Home, HelpCircle, Settings, LogOut, Clock, Gift } from 'lucide-react';
 import { subscriptionAPI } from '../services/subscription';
+import { trialAPI } from '../services/trial';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -11,21 +12,35 @@ const SubscriptionSelector = () => {
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [loadingPlan, setLoadingPlan] = useState(null); // Track which plan is loading
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [trialInfo, setTrialInfo] = useState(null);
+  const [loadingTrial, setLoadingTrial] = useState(true);
   const { logout } = useAuth();
 
   useEffect(() => {
-    const fetchPlans = async () => {
+    const fetchData = async () => {
       try {
-        const response = await subscriptionAPI.getPlans();
-        setPlans(response.data.plans);
+        // Fetch subscription plans
+        const plansResponse = await subscriptionAPI.getPlans();
+        setPlans(plansResponse.data.plans);
         setLoadingPlans(false);
+
+        // Fetch trial information
+        try {
+          const trialResponse = await trialAPI.getTrialInfo();
+          setTrialInfo(trialResponse.data.trial_info);
+        } catch (trialError) {
+          console.log('No trial information available:', trialError);
+          setTrialInfo(null);
+        }
       } catch (error) {
         console.error('Error fetching subscription plans:', error);
         setLoadingPlans(false);
+      } finally {
+        setLoadingTrial(false);
       }
     };
 
-    fetchPlans();
+    fetchData();
   }, []);
 
   const handleLogout = async () => {
@@ -82,14 +97,22 @@ const SubscriptionSelector = () => {
       
       console.log('📊 Subscription creation response:', response.data);
       
-      if (response.data.success && response.data.payment_url) {
-        console.log('✅ Payment URL received, redirecting to:', response.data.payment_url);
-        // Redirect to Razorpay payment page
-        window.location.href = response.data.payment_url;
+      if (response.data.success) {
+        if (response.data.payment_url) {
+          console.log('✅ Payment URL received, redirecting to:', response.data.payment_url);
+          // Redirect to Razorpay payment page for paid plans
+          window.location.href = response.data.payment_url;
+        } else {
+          console.log('✅ Free trial activated successfully!');
+          // For free trials, show success message and refresh page to show trial banner
+          alert('Free trial activated successfully!');
+          // Refresh the page to update subscription status and show trial banner
+          window.location.reload();
+        }
       } else {
-        console.error('❌ Failed to create subscription - no payment URL');
+        console.error('❌ Failed to create subscription');
         console.error('Response data:', response.data);
-        alert(`Failed to create subscription: ${response.data.message || 'No payment URL received'}`);
+        alert(`Failed to create subscription: ${response.data.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('💥 Error creating subscription:', error);
@@ -100,7 +123,7 @@ const SubscriptionSelector = () => {
     }
   };
 
-  if (loadingPlans) {
+  if (loadingPlans || loadingTrial) {
     return (
       <div className="min-h-screen bg-[#F6F6F6] flex items-center justify-center">
         <div className="text-center">
@@ -217,9 +240,82 @@ const SubscriptionSelector = () => {
           </div>
         </div>
 
+        {/* Trial Information Card */}
+        {trialInfo && trialInfo.trial_active && (
+          <div className="mb-8">
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl p-6 max-w-2xl mx-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                    <Gift className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">🎉 Free Trial Active!</h3>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold text-blue-600">Full access for 3 days</span> - You have <span className="font-semibold text-blue-600">{trialInfo.days_remaining}</span> days remaining
+                    </p>
+                    {trialInfo.trial_expires_at && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Expires on {new Date(trialInfo.trial_expires_at).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2 text-blue-600">
+                  <Clock className="w-4 h-4" />
+                  <span className="text-sm font-medium">Trial Period</span>
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-blue-200">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-600">
+                    Enjoy full access to all Emily features during your trial
+                  </p>
+                  <button
+                    onClick={() => window.location.href = '/onboarding'}
+                    className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-300"
+                  >
+                    Continue to Onboarding
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Trial Expired Message */}
+        {trialInfo && !trialInfo.trial_active && trialInfo.subscription_status === 'expired' && (
+          <div className="mb-8">
+            <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-xl p-6 max-w-2xl mx-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-red-600 rounded-full flex items-center justify-center">
+                    <Clock className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">⏰ Trial Expired</h3>
+                    <p className="text-sm text-gray-600">
+                      Your free trial has ended. Choose a plan to continue using Emily.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Plans Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-          {plans.map((plan) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          {plans
+            .sort((a, b) => {
+              // Define the order: trial, basic, pro
+              const order = { 'free_trial': 0, 'starter': 1, 'basic': 1, 'pro': 2 };
+              const aOrder = order[a.name] ?? 999;
+              const bOrder = order[b.name] ?? 999;
+              return aOrder - bOrder;
+            })
+            .map((plan) => {
             const price = billingCycle === 'monthly' ? plan.price_monthly : plan.price_yearly;
             const priceDisplay = billingCycle === 'monthly' 
               ? `₹${(price / 100).toFixed(0)}`
@@ -254,17 +350,49 @@ const SubscriptionSelector = () => {
                 </div>
                 
                 <div className="space-y-3 mb-6">
-                  {plan.features.slice(0, 4).map((feature, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <Check className={`w-4 h-4 ${isPro ? 'text-[#FF4D94]' : 'text-[#9E005C]'}`} />
-                      <span className="text-sm text-gray-700">{feature}</span>
-                    </div>
-                  ))}
-                  {plan.features.length > 4 && (
-                    <div className="text-xs text-gray-500 text-center">
-                      +{plan.features.length - 4} more features
-                    </div>
-                  )}
+                  {(() => {
+                    // Handle different feature structures
+                    let featuresArray = [];
+                    
+                    if (Array.isArray(plan.features)) {
+                      featuresArray = plan.features;
+                    } else if (typeof plan.features === 'object' && plan.features !== null) {
+                      if (plan.features.features && Array.isArray(plan.features.features)) {
+                        featuresArray = plan.features.features;
+                      } else if (plan.features.trial !== undefined) {
+                        // Handle nested object structure
+                        featuresArray = plan.features.features || [];
+                      }
+                    } else if (typeof plan.features === 'string') {
+                      featuresArray = [plan.features];
+                    }
+                    
+                    // Ensure we have a valid array
+                    if (!Array.isArray(featuresArray)) {
+                      featuresArray = [];
+                    }
+                    
+                    return (
+                      <>
+                        {featuresArray.slice(0, 4).map((feature, index) => (
+                          <div key={index} className="flex items-center space-x-2">
+                            <Check className={`w-4 h-4 ${isPro ? 'text-[#FF4D94]' : 'text-[#9E005C]'}`} />
+                            <span className="text-sm text-gray-700">{feature}</span>
+                          </div>
+                        ))}
+                        {featuresArray.length > 4 && (
+                          <div className="text-xs text-gray-500 text-center">
+                            +{featuresArray.length - 4} more features
+                          </div>
+                        )}
+                        {featuresArray.length === 0 && (
+                          <div className="text-sm text-gray-700">
+                            Features included in this plan
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
                 
                 <button

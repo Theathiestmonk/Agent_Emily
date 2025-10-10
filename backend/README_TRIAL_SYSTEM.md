@@ -268,3 +268,5 @@ For issues or questions about the trial system:
 2. Verify database schema is correct
 3. Test API endpoints individually
 4. Check Supabase permissions and configuration
+
+

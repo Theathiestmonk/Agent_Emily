@@ -1,6 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionAPI } from '../services/subscription';
+import { trialAPI } from '../services/trial';
 import { generateInvoicePDF, generateBillingHistoryPDF } from '../services/pdfGenerator';
 import SideNavbar from './SideNavbar';
 import { DashboardSkeleton, CardSkeleton } from './LazyLoadingSkeleton';
@@ -15,7 +16,8 @@ import {
   DollarSign,
   FileText,
   ArrowRight,
-  Loader2
+  Loader2,
+  Gift
 } from 'lucide-react';
 
 const BillingDashboard = () => {
@@ -23,6 +25,7 @@ const BillingDashboard = () => {
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [billingHistory, setBillingHistory] = useState([]);
   const [userProfile, setUserProfile] = useState(null);
+  const [trialInfo, setTrialInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -44,6 +47,15 @@ const BillingDashboard = () => {
       // Fetch billing history
       const historyResponse = await subscriptionAPI.getBillingHistory();
       setBillingHistory(historyResponse.data.billing_history || []);
+      
+      // Fetch trial information
+      try {
+        const trialResponse = await trialAPI.getTrialInfo();
+        setTrialInfo(trialResponse.data.trial_info);
+      } catch (trialError) {
+        console.log('No trial information available:', trialError);
+        setTrialInfo(null);
+      }
       
       // Fetch user profile
       await fetchUserProfile();
@@ -414,7 +426,82 @@ const BillingDashboard = () => {
               )}
             </div>
 
-            {/* Billing History */}
+            {/* Trial Status Card */}
+            {trialInfo && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold text-gray-900">Trial Status</h2>
+                  <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm font-medium ${
+                    trialInfo.trial_active 
+                      ? 'bg-blue-100 text-blue-800' 
+                      : trialInfo.subscription_status === 'expired'
+                      ? 'bg-orange-100 text-orange-800'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    <Gift className="w-4 h-4" />
+                    <span className="capitalize">
+                      {trialInfo.trial_active ? 'Active Trial' : 
+                       trialInfo.subscription_status === 'expired' ? 'Trial Expired' : 
+                       'No Trial'}
+                    </span>
+                  </div>
+                </div>
+
+                {trialInfo.trial_active ? (
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900">🎉 Free Trial Active</h3>
+                          <p className="text-sm text-gray-600">
+                            You have <span className="font-semibold text-blue-600">{trialInfo.days_remaining}</span> days remaining
+                          </p>
+                          {trialInfo.trial_expires_at && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Expires on {new Date(trialInfo.trial_expires_at).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-2 text-blue-600">
+                          <Clock className="w-5 h-5" />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-sm text-gray-600 mb-3">
+                        Enjoy full access to all Emily features during your trial
+                      </p>
+                      <button
+                        onClick={() => window.location.href = '/subscription'}
+                        className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-300"
+                      >
+                        Upgrade to Continue
+                      </button>
+                    </div>
+                  </div>
+                ) : trialInfo.subscription_status === 'expired' ? (
+                  <div className="text-center py-6">
+                    <Clock className="w-16 h-16 text-orange-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Trial Expired</h3>
+                    <p className="text-gray-500 mb-4">Your free trial has ended. Choose a plan to continue using Emily.</p>
+                    <button
+                      onClick={() => window.location.href = '/subscription'}
+                      className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-500 transition-all duration-300"
+                    >
+                      Choose Plan
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <Gift className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Trial Available</h3>
+                    <p className="text-gray-500 mb-4">You have already used your free trial or have an active subscription.</p>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">Billing History</h2>

@@ -46,3 +46,5 @@ BEGIN
     ORDER BY p.trial_expires_at ASC;
 END;
 $$ LANGUAGE plpgsql;
+
+

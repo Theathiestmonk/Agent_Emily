@@ -195,3 +195,5 @@ def create_trial_middleware(app: ASGIApp) -> TrialMiddleware:
     Create and return trial middleware instance
     """
     return TrialMiddleware(app)
+
+

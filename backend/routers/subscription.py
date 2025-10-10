@@ -275,6 +275,53 @@ async def create_subscription(
         plan = plan_result.data[0]
         logger.info(f"Found plan: {plan['name']}, monthly price: {plan['price_monthly']}, yearly price: {plan['price_yearly']}")
         
+        # Handle free trial differently - no Razorpay needed
+        if request.plan_name == "free_trial":
+            logger.info(f"Handling free trial activation for user {current_user.id}")
+            
+            # Ensure profile exists
+            profile_check = supabase.table("profiles").select("id").eq("id", current_user.id).execute()
+            
+            if not profile_check.data:
+                # Create basic profile if it doesn't exist
+                logger.info(f"Creating profile for user {current_user.id}")
+                supabase.table("profiles").insert({
+                    "id": current_user.id,
+                    "name": current_user.name,
+                    "onboarding_completed": False,
+                    "subscription_status": "trial",
+                    "migration_status": "trial_user"
+                }).execute()
+                logger.info(f"Profile created for user {current_user.id}")
+            
+            # Update user profile with trial info
+            from datetime import datetime, timedelta
+            now = datetime.utcnow()
+            trial_end = now + timedelta(days=3)
+            
+            logger.info(f"Activating trial for user {current_user.id}")
+            supabase.table("profiles").update({
+                "subscription_plan": "free_trial",
+                "subscription_status": "trial",
+                "subscription_start_date": now.isoformat(),
+                "subscription_end_date": trial_end.isoformat(),
+                "trial_activated_at": now.isoformat(),
+                "trial_expires_at": trial_end.isoformat(),
+                "has_had_trial": True,
+                "migration_status": "trial_user"
+            }).eq("id", current_user.id).execute()
+            
+            return JSONResponse(content={
+                "success": True,
+                "subscription_id": f"trial_{current_user.id[:8]}",
+                "customer_id": None,
+                "payment_url": None,
+                "message": "Free trial activated successfully"
+            })
+        
+        # Handle paid plans with Razorpay
+        logger.info(f"Handling paid plan subscription for user {current_user.id}")
+        
         # Create Razorpay customer
         logger.info(f"Creating Razorpay customer for user {current_user.id}")
         customer_id = await razorpay_service.create_customer({

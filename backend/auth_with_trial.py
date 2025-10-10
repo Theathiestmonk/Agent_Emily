@@ -217,3 +217,5 @@ def requires_subscription(user: User) -> bool:
     Check if user needs to subscribe (trial expired or no access)
     """
     return user.subscription_status in ["expired", "inactive"] or not user.trial_active
+
+

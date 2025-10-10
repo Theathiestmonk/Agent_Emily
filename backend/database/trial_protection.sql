@@ -14,3 +14,5 @@ WHERE subscription_status IN ('trial', 'expired', 'active');
 CREATE INDEX IF NOT EXISTS idx_profiles_has_had_trial 
 ON profiles(has_had_trial) 
 WHERE has_had_trial = TRUE;
+
+
