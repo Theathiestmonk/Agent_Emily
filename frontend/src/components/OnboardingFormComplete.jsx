@@ -160,7 +160,7 @@ const OnboardingForm = ({
   ]
 
   const postingFrequencies = [
-    'Daily', '3x/Week', 'Weekly', 'Bi-Weekly', 'Bi monthly', 'Monthly', 'Manual'
+    '3x/Week', 'Weekly', 'Bi-Weekly', 'Bi monthly', 'Monthly', 'Manual'
   ]
 
   const contentTypes = [

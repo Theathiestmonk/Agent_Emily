@@ -2,6 +2,7 @@ import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'rea
 import { onboardingAPI } from '../services/onboarding'
 import { ArrowLeft, ArrowRight, Check, X, Save } from 'lucide-react'
 import LogoUpload from './LogoUpload'
+import InfoTooltip from './InfoTooltip'
 
 const OnboardingForm = forwardRef(({ 
   initialData = null, 
@@ -366,7 +367,7 @@ const OnboardingForm = forwardRef(({
   ]
 
   const postingFrequencies = [
-    'Daily', '3x/Week', 'Weekly', 'Bi-Weekly', 'Bi monthly', 'Monthly', 'Manual'
+    '3x/Week', 'Weekly', 'Bi-Weekly', 'Bi monthly', 'Monthly', 'Manual'
   ]
 
   const contentTypes = [
@@ -815,7 +816,13 @@ const OnboardingForm = forwardRef(({
         return (
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Business Description *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Business Description *
+                <InfoTooltip 
+                  content="Describe your business in detail - what you offer, who your customers are, and how your products or services work. This helps Emily understand your brand and create tailored marketing content."
+                  className="ml-2"
+                />
+              </label>
               <textarea
                 value={formData.business_description}
                 onChange={(e) => handleInputChange('business_description', e.target.value)}
@@ -826,7 +833,13 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Business Logo (Optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Business Logo (Optional)
+                <InfoTooltip 
+                  content="Uploading your company logo is optional, but it helps the AI create branded visuals and maintain a consistent look across campaigns, making your marketing more professional and recognizable."
+                  className="ml-2"
+                />
+              </label>
               <LogoUpload
                 value={formData.logo_url}
                 onUploadSuccess={handleLogoUpload}
@@ -1112,7 +1125,13 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Unique Value Proposition *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Unique Value Proposition *
+                <InfoTooltip 
+                  content="Highlight your business's main strength or advantage that sets you apart. This helps the AI emphasize your key value in marketing content."
+                  className="ml-2"
+                />
+              </label>
               <textarea
                 value={formData.unique_value_proposition}
                 onChange={(e) => handleInputChange('unique_value_proposition', e.target.value)}
@@ -1571,7 +1590,13 @@ const OnboardingForm = forwardRef(({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Budget Range</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Monthly Marketing Budget
+                  <InfoTooltip 
+                    content="Enter the approximate amount you plan to spend on marketing each month. This helps Emily create campaigns that fit your budget."
+                    className="ml-2"
+                  />
+                </label>
                 <select
                   value={formData.monthly_budget_range}
                   onChange={(e) => handleInputChange('monthly_budget_range', e.target.value)}
@@ -1711,7 +1736,13 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Products or Services *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Products or Services *
+                <InfoTooltip 
+                  content="Provide a detailed description of one product or service you want to promote with this AI. Include features, benefits, and target customers so the AI can craft accurate content."
+                  className="ml-2"
+                />
+              </label>
               <textarea
                 value={formData.products_or_services}
                 onChange={(e) => handleInputChange('products_or_services', e.target.value)}
@@ -1745,7 +1776,13 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Planned Promotions or Campaigns</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Planned Promotions or Campaigns
+                <InfoTooltip 
+                  content="Share any upcoming promotions or campaigns you're planning. This helps Emily align content and strategy with your marketing goals."
+                  className="ml-2"
+                />
+              </label>
               <textarea
                 value={formData.planned_promotions_or_campaigns}
                 onChange={(e) => handleInputChange('planned_promotions_or_campaigns', e.target.value)}
@@ -1815,50 +1852,6 @@ const OnboardingForm = forwardRef(({
                 </div>
               )}
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Most Successful Campaigns</label>
-              <textarea
-                value={formData.successful_campaigns}
-                onChange={(e) => handleInputChange('successful_campaigns', e.target.value)}
-                rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="Describe any successful marketing campaigns you've run in the past..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags That Work Well</label>
-              <textarea
-                value={formData.hashtags_that_work_well}
-                onChange={(e) => handleInputChange('hashtags_that_work_well', e.target.value)}
-                rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="List hashtags that have performed well for your brand..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Customer Pain Points</label>
-              <textarea
-                value={formData.customer_pain_points}
-                onChange={(e) => handleInputChange('customer_pain_points', e.target.value)}
-                rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="What problems or pain points do your customers face that your business solves?"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Typical Customer Journey</label>
-              <textarea
-                value={formData.typical_customer_journey}
-                onChange={(e) => handleInputChange('typical_customer_journey', e.target.value)}
-                rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="Describe how customers typically discover, evaluate, and purchase from your business..."
-              />
-            </div>
           </div>
         )
 
@@ -1866,7 +1859,13 @@ const OnboardingForm = forwardRef(({
         return (
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Most Successful Campaigns</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Most Successful Campaigns
+                <InfoTooltip 
+                  content="Mention past campaigns that performed well. This helps the AI understand what works best for your audience and replicate success."
+                  className="ml-2"
+                />
+              </label>
               <textarea
                 value={formData.successful_campaigns}
                 onChange={(e) => handleInputChange('successful_campaigns', e.target.value)}
