@@ -50,10 +50,10 @@ class MediaAgentState(TypedDict):
     user_id: str
     post_id: Optional[str]
     post_data: Optional[Dict[str, Any]]
-    _prompt: Optional[str]
-    _style: Optional[Style]
-    _size: Optional[Size]
-    generated__url: Optional[str]
+    image_prompt: Optional[str]
+    image_style: Optional[Style]
+    image_size: Optional[Size]
+    generated_image_url: Optional[str]
     generation_cost: Optional[float]
     generation_time: Optional[int]
     generation_model: Optional[str]
@@ -76,7 +76,7 @@ class MediaAgent:
         # Configure Gemini API
         genai.configure(api_key=gemini_api_key)
         self.gemini_model = 'gemini-2.5-flash'  # Use stable model for text generation
-        self.gemini__model = 'gemini-2.5-flash--preview'  # Use  preview model for  generation
+        self.gemini_image_model = 'gemini-2.5-flash-image-preview'  # Use preview model for image generation
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
@@ -94,11 +94,34 @@ class MediaAgent:
         # Add edges
         workflow.set_entry_point("load_post")
         
+        # Normal flow
         workflow.add_edge("load_post", "analyze_content")
         workflow.add_edge("analyze_content", "generate_prompt")
         workflow.add_edge("generate_prompt", "generate_image")
         workflow.add_edge("generate_image", "save_image")
         workflow.add_edge("save_image", END)
+        
+        # Error handling - redirect to handle_error if any step fails
+        workflow.add_conditional_edges(
+            "load_post",
+            lambda state: "handle_error" if state.get("status") == "failed" else "analyze_content"
+        )
+        workflow.add_conditional_edges(
+            "analyze_content", 
+            lambda state: "handle_error" if state.get("status") == "failed" else "generate_prompt"
+        )
+        workflow.add_conditional_edges(
+            "generate_prompt",
+            lambda state: "handle_error" if state.get("status") == "failed" else "generate_image"
+        )
+        workflow.add_conditional_edges(
+            "generate_image",
+            lambda state: "handle_error" if state.get("status") == "failed" else "save_image"
+        )
+        workflow.add_conditional_edges(
+            "save_image",
+            lambda state: "handle_error" if state.get("status") == "failed" else END
+        )
         
         # Error handling
         workflow.add_edge("handle_error", END)
@@ -192,7 +215,7 @@ class MediaAgent:
                 return state
             content = post_data.get("content", "")
             platform = post_data.get("platform", "")
-            image_style = state["image_style"]
+            image_style = state.get("image_style", Style.REALISTIC)
             
             # Get user profile for context including logo
             user_profile = self._get_user_profile(state["user_id"])
@@ -252,8 +275,10 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                     state["image_prompt"] = image_prompt
                     state["status"] = "generating"
                     
+                    logger.info(f"Generated image prompt: {image_prompt[:100]}...")
                     return state
                 else:
+                    logger.error("Empty response from Gemini model")
                     raise Exception("Empty response from Gemini model")
                     
             except Exception as gemini_error:
@@ -262,7 +287,7 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 post_data = state["post_data"]
                 content = post_data.get("content", "Social media post")
                 platform = post_data.get("platform", "social media")
-                image_style = state["image_style"]
+                image_style = state.get("image_style", Style.REALISTIC)
                 
                 # Get user profile for fallback prompt
                 user_profile = self._get_user_profile(state["user_id"])
@@ -279,6 +304,7 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 state["status"] = "generating"
                 
                 logger.warning(f"Using fallback prompt due to Gemini error: {fallback_prompt}")
+                logger.info(f"Fallback prompt set successfully: {fallback_prompt[:100]}...")
                 return state
             
         except Exception as e:
@@ -318,7 +344,7 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 
                 logger.warning(f"Using fallback image prompt: {image_prompt}")
             
-            image_size = state["image_size"]
+            image_size = state.get("image_size", ImageSize.SQUARE_1024)
             
             start_time = datetime.now()
             
@@ -389,6 +415,9 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                         # Continue without logo if there's an error
                 
                 # Use Gemini's native image generation capability
+                logger.info(f"Calling Gemini model: {self.gemini_image_model}")
+                logger.info(f"Prompt length: {len(gemini_prompt)} characters")
+                
                 response = genai.GenerativeModel(self.gemini_image_model).generate_content(
                     contents=contents,
                 )
@@ -396,6 +425,7 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                 # Extract the generated image from the response
                 image_data = None
                 logger.info(f"Gemini response received: {len(response.candidates) if response.candidates else 0} candidates")
+                logger.info(f"Response type: {type(response)}")
                 
                 if response.candidates and len(response.candidates) > 0:
                     candidate = response.candidates[0]
@@ -414,12 +444,17 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                 
                 if not image_data:
                     logger.error("No image data found in Gemini response")
+                    logger.error(f"Response structure: candidates={len(response.candidates) if response.candidates else 0}")
+                    
                     # Try to get any text response for debugging
                     if response.candidates and len(response.candidates) > 0:
                         candidate = response.candidates[0]
+                        logger.error(f"Candidate structure: content={hasattr(candidate, 'content')}, parts={len(candidate.content.parts) if hasattr(candidate, 'content') and candidate.content.parts else 0}")
+                        
                         if candidate.content.parts:
                             text_content = ""
-                            for part in candidate.content.parts:
+                            for i, part in enumerate(candidate.content.parts):
+                                logger.error(f"Part {i}: inline_data={hasattr(part, 'inline_data') and part.inline_data is not None}, text={hasattr(part, 'text') and bool(part.text)}")
                                 if hasattr(part, 'text') and part.text:
                                     text_content += part.text
                             logger.error(f"Gemini text response: {text_content[:500]}...")
@@ -433,7 +468,9 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                     image_bytes = base64.b64decode(image_data)
                 
                 # Upload the image bytes directly to Supabase storage
+                logger.info(f"Uploading image bytes: {len(image_bytes)} bytes")
                 storage_url = await self._upload_image_bytes(image_bytes, state["post_id"])
+                logger.info(f"Image uploaded successfully: {storage_url}")
                 
             except Exception as api_error:
                 logger.error(f"Error generating image with Gemini: {str(api_error)}")
@@ -455,6 +492,10 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                         # Update metadata for DALL-E
                         state["generation_model"] = "dall-e-3"
                         state["generation_service"] = "openai_dalle"
+                        state["generated_image_url"] = storage_url
+                        state["generation_cost"] = self._calculate_generation_cost(image_size, "standard")
+                        state["generation_time"] = int((datetime.now() - start_time).total_seconds())
+                        state["status"] = "completed"
                     except Exception as dalle_error:
                         logger.error(f"DALL-E fallback also failed: {str(dalle_error)}")
                         # Final fallback to placeholder
@@ -463,6 +504,10 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                         # Update metadata for fallback
                         state["generation_model"] = "fallback_placeholder"
                         state["generation_service"] = "internal_fallback"
+                        state["generated_image_url"] = storage_url
+                        state["generation_cost"] = 0
+                        state["generation_time"] = int((datetime.now() - start_time).total_seconds())
+                        state["status"] = "completed"
             
             end_time = datetime.now()
             generation_time = int((end_time - start_time).total_seconds())
@@ -478,7 +523,9 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
             state["generation_time"] = generation_time
             state["generation_model"] = "gemini-2.5-flash-image-preview"
             state["generation_service"] = "google_gemini"
-            state["status"] = "saving"
+            state["status"] = "completed"
+            
+            logger.info(f"✅ Image generation completed successfully: {storage_url}")
             
             return state
             
@@ -499,10 +546,36 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
             
             # Validate required data before saving
             if not state.get("generated_image_url"):
-                raise Exception("No image URL to save")
+                logger.error("No image URL to save - image generation failed")
+                logger.error(f"State keys: {list(state.keys())}")
+                logger.error(f"Error message: {state.get('error_message', 'No error message')}")
+                
+                # Try to generate a fallback image
+                try:
+                    logger.warning("Attempting to generate fallback image...")
+                    fallback_url = await self._generate_fallback_image(
+                        state.get("image_prompt", "Social media post"), 
+                        state.get("image_size", ImageSize.SQUARE_1024), 
+                        post_data["id"]
+                    )
+                    state["generated_image_url"] = fallback_url
+                    state["generation_model"] = "fallback_placeholder"
+                    state["generation_service"] = "internal_fallback"
+                    logger.info(f"Fallback image generated: {fallback_url}")
+                except Exception as fallback_error:
+                    logger.error(f"Fallback image generation also failed: {fallback_error}")
+                    raise Exception("No image URL to save - all generation methods failed")
             
             if not state.get("image_prompt"):
-                raise Exception("No image prompt to save")
+                logger.warning("No image prompt found, creating fallback prompt...")
+                # Create a fallback prompt based on post data
+                post_content = post_data.get("content", "Social media post")
+                platform = post_data.get("platform", "social media")
+                business_name = post_data.get("business_name", "Business")
+                
+                fallback_prompt = f"Professional {platform} post image featuring: {post_content[:100]}"
+                state["image_prompt"] = fallback_prompt
+                logger.info(f"Created fallback prompt: {fallback_prompt}")
             
             # Check if image already exists for this post
             existing_images = self.supabase.table("content_images").select("id").eq("post_id", post_data["id"]).order("created_at", desc=True).limit(1).execute()
@@ -510,13 +583,13 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
             image_data = {
                 "image_url": state["generated_image_url"],
                 "image_prompt": state["image_prompt"],
-                "image_style": state["image_style"].value if state["image_style"] else "realistic",
-                "image_size": state["image_size"].value if state["image_size"] else "1024x1024",
+                "image_style": state.get("image_style", Style.REALISTIC).value if state.get("image_style") else "realistic",
+                "image_size": state.get("image_size", ImageSize.SQUARE_1024).value if state.get("image_size") else "1024x1024",
                 "image_quality": "standard",
                 "generation_model": state.get("generation_model", "unknown"),
                 "generation_service": state.get("generation_service", "unknown"),
-                "generation_cost": state["generation_cost"],
-                "generation_time": state["generation_time"],
+                "generation_cost": state.get("generation_cost", 0),
+                "generation_time": state.get("generation_time", 0),
                 "is_approved": False
             }
             
