@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { HelmetProvider } from 'react-helmet-async'
 // Emily Digital Marketing Agent - Main App Component
 import Login from './components/Login'
 import SignUp from './components/SignUp'
@@ -27,7 +28,7 @@ import { ContentCacheProvider } from './contexts/ContentCacheContext'
 import { SocialMediaCacheProvider } from './contexts/SocialMediaCacheContext'
 import { onboardingAPI } from './services/onboarding'
 import NotificationWindow from './components/NotificationWindow'
-// Landing Page Components
+//  Components
 import LandingPage from './pages/LandingPage.jsx'
 import PrivacyPolicy from './pages/PrivacyPolicy.jsx'
 import TermsAndConditions from './pages/TermsAndConditions.jsx'
@@ -131,7 +132,7 @@ function AppContent() {
   return (
     <Router>
       <Routes>
-        {/* Landing Page Routes */}
+        {/*  Routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsAndConditions />} />
@@ -269,17 +270,19 @@ function AppContent() {
 
 function App() {
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <NotificationProvider>
-          <ContentCacheProvider>
-            <SocialMediaCacheProvider>
-              <AppContent />
-            </SocialMediaCacheProvider>
-          </ContentCacheProvider>
-        </NotificationProvider>
-      </AuthProvider>
-    </ErrorBoundary>
+    <HelmetProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <NotificationProvider>
+            <ContentCacheProvider>
+              <SocialMediaCacheProvider>
+                <AppContent />
+              </SocialMediaCacheProvider>
+            </ContentCacheProvider>
+          </NotificationProvider>
+        </AuthProvider>
+      </ErrorBoundary>
+    </HelmetProvider>
   )
 }
 

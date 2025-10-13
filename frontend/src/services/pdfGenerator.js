@@ -5,7 +5,7 @@ export const generateInvoicePDF = (invoiceData, billingHistory, userProfile) => 
   try {
     const doc = new jsPDF();
     
-    // Set up colors (matching landing page gradient)
+    // Set up colors (matching  gradient)
     const primaryColor = '#9E005C'; // Start of gradient
     const secondaryColor = '#FF4D94'; // End of gradient
     const textColor = '#374151';
@@ -122,7 +122,7 @@ export const generateBillingHistoryPDF = (billingHistory, userProfile) => {
   try {
     const doc = new jsPDF();
     
-    // Set up colors (matching landing page gradient)
+    // Set up colors (matching  gradient)
     const primaryColor = '#9E005C'; // Start of gradient
     const secondaryColor = '#FF4D94'; // End of gradient
     const textColor = '#374151';

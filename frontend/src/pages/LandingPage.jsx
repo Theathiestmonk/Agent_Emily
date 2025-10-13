@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import SEO from '../components/SEO';
 import { 
   ArrowRight, 
   Check, 
@@ -12,7 +13,7 @@ import {
   X
 } from 'lucide-react';
 
-const LandingPage = () => {
+const Page = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('hero');
 
@@ -45,8 +46,50 @@ const LandingPage = () => {
     setIsMenuOpen(false);
   };
 
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "atsn ai",
+    "description": "Autonomous AI agents for digital marketing and business automation",
+    "url": "https://atsnai.com",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "offers": {
+      "@type": "Offer",
+      "price": "59",
+      "priceCurrency": "INR",
+      "priceSpecification": {
+        "@type": "PriceSpecification",
+        "price": "59",
+        "priceCurrency": "INR",
+        "billingDuration": "P1M"
+      }
+    },
+    "creator": {
+      "@type": "Organization",
+      "name": "atsn ai",
+      "url": "https://atsnai.com"
+    },
+    "featureList": [
+      "Autonomous AI Agents",
+      "Digital Marketing Automation",
+      "Content Creation",
+      "Social Media Management",
+      "Campaign Optimization",
+      "Analytics & Reporting"
+    ]
+  };
+
   return (
-    <div className="min-h-screen bg-[#F6F6F6] text-[#2E2E2E] overflow-hidden">
+    <>
+      <SEO
+        title="atsn ai | Autonomous AI Agents for Digital Marketing & Business Automation"
+        description="Meet Emily, your autonomous AI digital marketing agent. Create content, manage social media, optimize campaigns, and boost productivity with AI agents that work 24/7. Start your free trial today!"
+        keywords="AI agents, autonomous AI, digital marketing AI, Emily AI agent, AI content creation, social media automation, AI marketing, business automation, AI chatbot, AI consultancy, artificial intelligence"
+        structuredData={structuredData}
+      />
+      
+      <div className="min-h-screen bg-[#F6F6F6] text-[#2E2E2E] overflow-hidden">
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-xl border-b border-[#2E2E2E]/10">
         <div className="max-w-7xl mx-auto px-6 py-4">
@@ -578,8 +621,9 @@ const LandingPage = () => {
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </>
   );
 };
 
-export default LandingPage;
+export default Page;
