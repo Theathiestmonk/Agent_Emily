@@ -2,7 +2,7 @@
 Ads Router - Handle ad creation, management, and analytics
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -297,7 +297,7 @@ async def generate_ads(current_user: dict = Depends(get_current_user)):
         ads_agent = AdsCreationAgent(
             supabase_url=os.getenv("SUPABASE_URL"),
             supabase_key=os.getenv("SUPABASE_ANON_KEY"),
-            openai_api_key=os.getenv("OPENAI_API_KEY")
+            gemini_api_key=os.getenv("GEMINI_API_KEY")
         )
         
         # Generate ads
@@ -644,7 +644,7 @@ async def generate_ad_media(
         ads_media_agent = AdsMediaAgent(
             supabase_url=os.getenv("SUPABASE_URL"),
             supabase_key=os.getenv("SUPABASE_ANON_KEY"),
-            openai_api_key=os.getenv("OPENAI_API_KEY")
+            gemini_api_key=os.getenv("GEMINI_API_KEY")
         )
         
         # Generate media for the ad
@@ -664,6 +664,87 @@ async def generate_ad_media(
         logger.error(f"Error generating ad media: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/{ad_id}/upload-image")
+async def upload_ad_image(
+    ad_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload an image file for a specific ad"""
+    try:
+        logger.info(f"Ad image upload request - ad_id: {ad_id}, filename: {file.filename}")
+        
+        # Verify the ad belongs to the user
+        ad_response = supabase_admin.table("ad_copies").select("*").eq("id", ad_id).eq("user_id", current_user["id"]).execute()
+        
+        if not ad_response.data:
+            raise HTTPException(status_code=404, detail="Ad not found or access denied")
+        
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+        if file.content_type not in allowed_types:
+            raise HTTPException(status_code=400, detail="Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.")
+        
+        # Read file content
+        file_content = await file.read()
+        logger.info(f"File content read - size: {len(file_content)} bytes")
+        
+        # Generate filename
+        import uuid
+        file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
+        filename = f"{ad_id}-{uuid.uuid4().hex[:8]}.{file_ext}"
+        
+        # Upload to Supabase storage using user-uploads bucket (same as content manual uploads)
+        storage_response = supabase_admin.storage.from_("user-uploads").upload(
+            filename,
+            file_content,
+            file_options={"content-type": file.content_type}
+        )
+        
+        if hasattr(storage_response, 'error') and storage_response.error:
+            raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_response.error}")
+        
+        # Get public URL
+        public_url = supabase_admin.storage.from_("user-uploads").get_public_url(filename)
+        logger.info(f"Ad image uploaded successfully: {public_url}")
+        
+        # Update ad with media URL
+        update_response = supabase_admin.table("ad_copies").update({
+            "media_url": public_url,
+            "updated_at": datetime.now().isoformat()
+        }).eq("id", ad_id).execute()
+        
+        if not update_response.data:
+            raise HTTPException(status_code=500, detail="Failed to update ad with media URL")
+        
+        # Create ad image record
+        image_record = {
+            "ad_id": ad_id,
+            "image_url": public_url,
+            "image_prompt": "User uploaded image",
+            "image_style": "user_upload",
+            "image_size": "custom",
+            "image_quality": "custom",
+            "generation_model": "user_upload",
+            "is_approved": True,
+            "created_at": datetime.now().isoformat()
+        }
+        
+        image_response = supabase_admin.table("ad_images").insert(image_record).execute()
+        
+        if not image_response.data:
+            logger.warning("Failed to create ad image record")
+        
+        return {
+            "success": True,
+            "image_url": public_url,
+            "message": "Ad image uploaded successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error uploading ad image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading ad image: {str(e)}")
+
 @router.post("/campaigns/{campaign_id}/generate-media")
 async def generate_campaign_media(
     campaign_id: str,
@@ -675,7 +756,7 @@ async def generate_campaign_media(
         ads_media_agent = AdsMediaAgent(
             supabase_url=os.getenv("SUPABASE_URL"),
             supabase_key=os.getenv("SUPABASE_ANON_KEY"),
-            openai_api_key=os.getenv("OPENAI_API_KEY")
+            gemini_api_key=os.getenv("GEMINI_API_KEY")
         )
         
         # Generate media for the campaign

@@ -7,6 +7,7 @@ import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import SideNavbar from './SideNavbar'
 import { DashboardSkeleton, CardSkeleton } from './LazyLoadingSkeleton'
+import ChatbotImageEditor from './ChatbotImageEditor'
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -142,6 +143,13 @@ const AdsDashboard = () => {
     hashtags: []
   })
   const [saving, setSaving] = useState(false) // Saving state for edit
+  const [showUploadModal, setShowUploadModal] = useState(null) // Track which ad is showing upload modal
+  const [selectedFile, setSelectedFile] = useState(null) // Selected file for upload
+  const [uploadingImage, setUploadingImage] = useState(new Set()) // Track uploading state
+  const [lightboxImage, setLightboxImage] = useState(null) // Track which image to show in lightbox
+  const [lightboxLoading, setLightboxLoading] = useState(false) // Track lightbox image loading state
+  const [showImageEditor, setShowImageEditor] = useState(false) // Track if image editor is open
+  const [imageEditorData, setImageEditorData] = useState(null) // Data for image editor
 
   const platforms = [
     { id: 'facebook', name: 'Facebook', icon: Facebook, color: 'bg-blue-600' },
@@ -668,6 +676,162 @@ const AdsDashboard = () => {
     }
   }
 
+  const handleRegenerateMedia = async (ad) => {
+    try {
+      setGeneratingMedia(prev => new Set(prev).add(ad.id))
+      const authToken = await getAuthToken()
+      
+      const response = await fetch(`${API_BASE_URL}/api/ads/${ad.id}/generate-media`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      showSuccess('Media regenerated successfully!')
+      
+      // Update the ad with new media
+      setAds(prev => prev.map(a => 
+        a.id === ad.id 
+          ? { ...a, media_url: result.media_url }
+          : a
+      ))
+      
+    } catch (error) {
+      console.error('Error regenerating media:', error)
+      showError('Failed to regenerate media', error.message)
+    } finally {
+      setGeneratingMedia(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(ad.id)
+        return newSet
+      })
+    }
+  }
+
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0]
+    if (file) {
+      // Validate file type
+      const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm']
+      if (!validTypes.includes(file.type)) {
+        showError('Invalid file type', 'Please select an image (JPEG, PNG, GIF, WebP) or video (MP4, WebM) file')
+        return
+      }
+      
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        showError('File too large', 'Please select a file smaller than 10MB')
+        return
+      }
+      
+      setSelectedFile(file)
+    }
+  }
+
+  const handleUploadImage = async (adId) => {
+    if (!selectedFile) {
+      showError('No file selected', 'Please select a file to upload')
+      return
+    }
+
+    try {
+      setUploadingImage(prev => new Set(prev).add(adId))
+      const authToken = await getAuthToken()
+      
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      
+      const response = await fetch(`${API_BASE_URL}/api/ads/${adId}/upload-image`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      showSuccess('Image uploaded successfully!')
+      
+      // Update the ad with new media
+      setAds(prev => prev.map(a => 
+        a.id === adId 
+          ? { ...a, media_url: result.media_url }
+          : a
+      ))
+      
+      // Close modal and reset file
+      setShowUploadModal(null)
+      setSelectedFile(null)
+      
+    } catch (error) {
+      console.error('Error uploading image:', error)
+      showError('Failed to upload image', error.message)
+    } finally {
+      setUploadingImage(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(adId)
+        return newSet
+      })
+    }
+  }
+
+  // Handle image click to open lightbox
+  const handleImageClick = (imageUrl, adTitle) => {
+    console.log('🖼️ Opening lightbox for ad image:', imageUrl)
+    setLightboxLoading(true)
+    setLightboxImage({
+      url: imageUrl,
+      title: adTitle
+    })
+  }
+
+  // Close lightbox
+  const closeLightbox = () => {
+    setLightboxImage(null)
+    setLightboxLoading(false)
+  }
+
+  // Check if file is video
+  const isVideoFile = (url) => {
+    if (!url) return false
+    const videoExtensions = ['.mp4', '.webm', '.ogg', '.avi', '.mov', '.wmv']
+    return videoExtensions.some(ext => url.toLowerCase().includes(ext))
+  }
+
+  // Handle keyboard events for lightbox
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && lightboxImage) {
+        closeLightbox()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [lightboxImage])
+
+  // Prevent body scroll when lightbox is open
+  useEffect(() => {
+    if (lightboxImage) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+    
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
+  }, [lightboxImage])
 
   if (loading) {
     return (
@@ -871,9 +1035,6 @@ const AdsDashboard = () => {
         <div className="flex-1 p-6 pt-24">
           {/* Ads Grid/List */}
           <div className="bg-white rounded-lg shadow-sm border">
-          <div className="p-6 border-b">
-            <h2 className="text-xl font-semibold text-gray-900">Ads</h2>
-          </div>
           
           {filteredAds.length === 0 ? (
             <div className="p-12 text-center">
@@ -904,7 +1065,7 @@ const AdsDashboard = () => {
                 return (
                   <div 
                     key={ad.id} 
-                    className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm p-6 hover:shadow-lg transition-all duration-300 hover:scale-[1.02] cursor-pointer self-start`}
+                    className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 hover:scale-[1.02] cursor-pointer self-start"
                     onClick={() => toggleAdExpansion(ad.id)}
                   >
                     {!isExpanded ? (
@@ -941,12 +1102,123 @@ const AdsDashboard = () => {
                             {ad.status}
                           </div>
                         </div>
-                      
                         {ad.title && (
                           <h5 className="font-medium text-gray-900 mb-3">{ad.title}</h5>
                         )}
                         
-                        <p className="text-gray-600 text-sm mb-4 line-clamp-3">{ad.ad_copy}</p>
+                        {/* Media Display - Only show if ad has media */}
+                        {ad.media_url && (
+                          <div className="mb-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center space-x-1">
+                                <span className="text-xs font-medium text-purple-800">Media</span>
+                                <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">✓</span>
+                              </div>
+                            </div>
+                            <div className="relative w-full aspect-square bg-gray-200 rounded overflow-hidden">
+                              <img 
+                                src={ad.media_url} 
+                                alt="Ad media" 
+                                className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                loading="eager"
+                                onLoad={() => handleImageLoad(ad.id)}
+                                onError={() => handleImageError(ad.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleImageClick(ad.media_url, ad.title)
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                        
+                        <p className="text-gray-700 text-sm mb-4 line-clamp-3">{ad.ad_copy}</p>
+                        
+                        {ad.ad_copy && ad.ad_copy.length > 150 && (
+                          <button
+                            onClick={() => toggleAdExpansion(ad.id)}
+                            className="text-xs text-purple-600 hover:text-purple-800 font-medium"
+                          >
+                            Read more
+                          </button>
+                        )}
+                        
+                        {/* Media Action Buttons */}
+                        {!ad.media_url && (
+                          <div className="flex gap-2 mt-4 mb-6">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleGenerateMedia(ad)
+                              }}
+                              disabled={generatingMedia.has(ad.id)}
+                              className="flex-1 px-3 py-2 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center space-x-1"
+                            >
+                              {generatingMedia.has(ad.id) ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  <span>Generating...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>Generate Media</span>
+                                </>
+                              )}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setShowUploadModal(ad.id)
+                                setSelectedFile(null)
+                              }}
+                              className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-1"
+                            >
+                              <Image className="w-3 h-3" />
+                              <span>Upload Media</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Media Management Buttons - Show when media exists */}
+                        {ad.media_url && (
+                          <div className="flex gap-2 mt-4 mb-6">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRegenerateMedia(ad)
+                              }}
+                              disabled={generatingMedia.has(ad.id)}
+                              className="flex-1 px-3 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white text-xs rounded-lg hover:from-pink-600 hover:to-purple-500 transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-1"
+                            >
+                              {generatingMedia.has(ad.id) ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  <span>Regenerating...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="w-3 h-3" />
+                                  <span>Regenerate</span>
+                                </>
+                              )}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setImageEditorData({
+                                  postContent: ad.ad_copy,
+                                  inputImageUrl: ad.media_url
+                                })
+                                setShowImageEditor(true)
+                              }}
+                              className="flex-1 px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-300 flex items-center justify-center space-x-1"
+                            >
+                              <Edit className="w-3 h-3" />
+                              <span>Edit Image</span>
+                            </button>
+                          </div>
+                        )}
                         
                         <div className="flex items-center justify-between text-xs text-gray-500 mb-4">
                           <div className="flex items-center space-x-2">
@@ -1078,43 +1350,7 @@ const AdsDashboard = () => {
                           </div>
                         </div>
                         
-                        {ad.media_url && (
-                          <div className="mb-4">
-                            <img 
-                              src={ad.media_url} 
-                              alt="Ad media" 
-                              className="w-full h-48 object-cover rounded-lg"
-                              onLoad={() => handleImageLoad(ad.id)}
-                              onError={() => handleImageError(ad.id)}
-                            />
-                          </div>
-                        )}
-                        
-                        {!ad.media_url && ad.ad_type === 'image' && (
-                          <div className="mb-4">
-                            <div className="w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center">
-                              <div className="text-center">
-                                <Image className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                                <p className="text-gray-500 text-sm mb-3">No media generated yet</p>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleGenerateMedia(ad)
-                                  }}
-                                  disabled={generatingMedia.has(ad.id)}
-                                  className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 mx-auto"
-                                >
-                                  {generatingMedia.has(ad.id) ? (
-                                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                  ) : (
-                                    <Sparkles className="w-4 h-4 mr-2" />
-                                  )}
-                                  Generate Media
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                        {/* Media section moved to collapsed view */}
                         
                         {ad.hashtags && ad.hashtags.length > 0 && (
                           <div className="mb-4">
@@ -1152,6 +1388,46 @@ const AdsDashboard = () => {
                             </button>
                           </div>
                         </div>
+
+                        {/* Media Management Buttons - Show when media exists */}
+                        {ad.media_url && (
+                          <div className="flex gap-2 mt-4 mb-4">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRegenerateMedia(ad)
+                              }}
+                              disabled={generatingMedia.has(ad.id)}
+                              className="flex-1 px-3 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white text-xs rounded-lg hover:from-pink-600 hover:to-purple-500 transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-1"
+                            >
+                              {generatingMedia.has(ad.id) ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  <span>Regenerating...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="w-3 h-3" />
+                                  <span>Regenerate</span>
+                                </>
+                              )}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setImageEditorData({
+                                  postContent: ad.ad_copy,
+                                  inputImageUrl: ad.media_url
+                                })
+                                setShowImageEditor(true)
+                              }}
+                              className="flex-1 px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-300 flex items-center justify-center space-x-1"
+                            >
+                              <Edit className="w-3 h-3" />
+                              <span>Edit Image</span>
+                            </button>
+                          </div>
+                        )}
                         
                         {/* Approve/Reject buttons after content */}
                         <div className="flex items-center justify-center space-x-2 mt-4">
@@ -1160,7 +1436,7 @@ const AdsDashboard = () => {
                               e.stopPropagation()
                               handleApproveAd(ad.id)
                             }}
-                            className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                            className="flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-500 transition-all duration-300 text-sm"
                           >
                             <CheckCircle className="w-3 h-3" />
                             <span>Approve</span>
@@ -1170,7 +1446,7 @@ const AdsDashboard = () => {
                               e.stopPropagation()
                               handleRejectAd(ad.id)
                             }}
-                            className="flex items-center space-x-1 px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+                            className="flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-500 transition-all duration-300 text-sm"
                           >
                             <X className="w-3 h-3" />
                             <span>Reject</span>
@@ -1328,6 +1604,160 @@ const AdsDashboard = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Media</h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Image or Video
+              </label>
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={handleFileSelect}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              {selectedFile && (
+                <p className="text-sm text-gray-600 mt-2">
+                  Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowUploadModal(null)
+                  setSelectedFile(null)
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleUploadImage(showUploadModal)}
+                disabled={!selectedFile || uploadingImage.has(showUploadModal)}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {uploadingImage.has(showUploadModal) ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Image className="w-4 h-4" />
+                )}
+                <span>{uploadingImage.has(showUploadModal) ? 'Uploading...' : 'Upload'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Media Lightbox Modal */}
+      {lightboxImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6"
+          onClick={closeLightbox}
+        >
+            {/* Close button */}
+            <button
+              onClick={closeLightbox}
+            className="absolute top-6 right-6 z-10 bg-white bg-opacity-10 backdrop-blur-md text-white p-3 rounded-full shadow-xl hover:bg-opacity-20 transition-all duration-300 border border-white border-opacity-20"
+            >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+          {/* Media title - positioned above the image */}
+          {lightboxImage.title && (
+            <div className="mb-6 text-center">
+              <h3 className="text-2xl font-bold text-white mb-2 drop-shadow-lg">{lightboxImage.title}</h3>
+              <div className="w-16 h-1 bg-gradient-to-r from-purple-500 to-pink-500 mx-auto rounded-full"></div>
+            </div>
+          )}
+          
+          {/* Media Container - 70% of screen size */}
+          <div className="relative w-[70vw] h-[70vh] flex items-center justify-center">
+            {/* Loading spinner */}
+            {lightboxLoading && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex flex-col items-center space-y-4">
+                  <div className="relative">
+                    <RefreshCw className="w-12 h-12 text-white animate-spin" />
+                    <div className="absolute inset-0 w-12 h-12 border-2 border-purple-500 border-opacity-30 rounded-full"></div>
+                  </div>
+                  <p className="text-white text-lg font-medium">Loading image...</p>
+                </div>
+              </div>
+            )}
+            
+            {isVideoFile(lightboxImage.url) ? (
+              <video
+                src={lightboxImage.url}
+                className="w-full h-full object-contain rounded-2xl shadow-2xl border border-white border-opacity-20"
+                controls
+                autoPlay
+                muted
+                playsInline
+                onClick={(e) => e.stopPropagation()}
+                onLoadedData={() => setLightboxLoading(false)}
+                onError={() => setLightboxLoading(false)}
+              />
+            ) : (
+              <img
+                src={lightboxImage.url}
+                alt={lightboxImage.title}
+                className="w-full h-full object-contain rounded-2xl shadow-2xl border border-white border-opacity-20"
+                onClick={(e) => e.stopPropagation()}
+                onLoad={() => setLightboxLoading(false)}
+                onError={() => setLightboxLoading(false)}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Chatbot Image Editor Modal */}
+      {showImageEditor && imageEditorData && (
+        <ChatbotImageEditor
+          isOpen={showImageEditor}
+          onClose={() => {
+            setShowImageEditor(false)
+            setImageEditorData(null)
+            
+            // Refresh the ads dashboard after modal closes (with a small delay)
+            setTimeout(async () => {
+              try {
+                await fetchAds()
+              } catch (error) {
+                console.error('Error refreshing ads after modal close:', error)
+              }
+            }, 100) // Small delay to ensure modal is fully closed
+          }}
+          postContent={imageEditorData.postContent}
+          inputImageUrl={imageEditorData.inputImageUrl}
+          onImageSaved={async (newImageUrl) => {
+            // The image URL stays the same, but the content is replaced
+            // We need to refresh the ads data to show the updated image
+            try {
+              // Refresh the ads data to get the updated image
+              await fetchAds()
+              
+              // Show success message
+              showSuccess('Image saved successfully! The edited image has replaced the original.')
+            } catch (error) {
+              console.error('Error refreshing ads after image save:', error)
+              showError('Image saved but failed to refresh ads', 'Please refresh the page to see the updated image.')
+            }
+            
+            setShowImageEditor(false)
+            setImageEditorData(null)
+          }}
+        />
       )}
     </div>
   )
