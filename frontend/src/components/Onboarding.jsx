@@ -12,6 +12,7 @@ const Onboarding = () => {
   const [currentStep, setCurrentStep] = useState(0)
   const [completedSteps, setCompletedSteps] = useState(new Set())
   const [userNavigatedToStep0, setUserNavigatedToStep0] = useState(false)
+
   const [formData, setFormData] = useState({
     business_name: '',
     business_type: [],
@@ -81,6 +82,7 @@ const Onboarding = () => {
   const [logoError, setLogoError] = useState('')
   const [showCompletion, setShowCompletion] = useState(false)
   const [showConnections, setShowConnections] = useState(false)
+
 
   // Logo handling functions
   const handleLogoUpload = (url) => {
@@ -636,9 +638,33 @@ const Onboarding = () => {
     setError('')
 
     try {
+      // Define the fields that exist in the database schema
+      const validDatabaseFields = [
+        'business_name', 'business_type', 'industry', 'business_description', 'target_audience',
+        'unique_value_proposition', 'brand_voice', 'brand_tone', 'website_url', 'phone_number',
+        'street_address', 'city', 'state', 'country', 'timezone', 'social_media_platforms',
+        'primary_goals', 'key_metrics_to_track', 'monthly_budget_range', 'posting_frequency',
+        'preferred_content_types', 'content_themes', 'main_competitors', 'market_position',
+        'products_or_services', 'important_launch_dates', 'planned_promotions_or_campaigns',
+        'top_performing_content_types', 'best_time_to_post', 'successful_campaigns',
+        'hashtags_that_work_well', 'customer_pain_points', 'typical_customer_journey',
+        'automation_level', 'platform_specific_tone', 'current_presence', 'focus_areas',
+        'platform_details', 'facebook_page_name', 'instagram_profile_link', 'linkedin_company_link',
+        'youtube_channel_link', 'x_twitter_profile', 'google_business_profile', 'google_ads_account',
+        'whatsapp_business', 'email_marketing_platform', 'meta_ads_facebook', 'meta_ads_instagram'
+      ]
+
+      // Filter formData to only include valid database fields
+      const filteredFormData = Object.keys(formData)
+        .filter(key => validDatabaseFields.includes(key))
+        .reduce((obj, key) => {
+          obj[key] = formData[key]
+          return obj
+        }, {})
+
       // Prepare the data for submission
       const submissionData = {
-        ...formData,
+        ...filteredFormData,
         // Populate the general target_audience field with all selected target audience details
         target_audience: [
           ...formData.target_audience_age_groups,
@@ -648,18 +674,6 @@ const Onboarding = () => {
           ...formData.target_audience_buyer_behavior,
           ...(formData.target_audience_other ? [formData.target_audience_other] : [])
         ].filter(Boolean), // Remove any empty values
-        
-        // Include all "Other" input fields
-        business_type_other: otherInputs.businessTypeOther,
-        industry_other: otherInputs.industryOther,
-        social_platform_other: otherInputs.socialPlatformOther,
-        goal_other: otherInputs.goalOther,
-        metric_other: otherInputs.metricOther,
-        content_type_other: otherInputs.contentTypeOther,
-        content_theme_other: otherInputs.contentThemeOther,
-        posting_time_other: otherInputs.postingTimeOther,
-        current_presence_other: otherInputs.currentPresenceOther,
-        top_performing_content_type_other: otherInputs.topPerformingContentTypeOther,
         
         // Include Meta Ads sub-options
         meta_ads_facebook: metaAdsSubOptions.facebookAds,
@@ -715,7 +729,7 @@ const Onboarding = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Business Type *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 {businessTypes.map(type => (
                   <label key={type} className="flex items-center space-x-2">
                     <input
@@ -724,7 +738,7 @@ const Onboarding = () => {
                       onChange={(e) => handleArrayChange('business_type', type, e.target.checked)}
                       className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                     />
-                    <span className="text-sm text-gray-700">{type}</span>
+                    <span className="text-xs xs:text-sm text-gray-700 break-words">{type}</span>
                   </label>
                 ))}
               </div>
@@ -743,7 +757,7 @@ const Onboarding = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Industry *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 {industries.map(industry => (
                   <label key={industry} className="flex items-center space-x-2">
                     <input
@@ -838,7 +852,7 @@ const Onboarding = () => {
                    </button>
                    {expandedCards.ageGroups && (
                      <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-2 gap-2 pt-3">
+                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
                          {targetAudienceCategories.ageGroups.map(group => (
                            <label key={group} className="flex items-center space-x-2">
                              <input
@@ -847,7 +861,7 @@ const Onboarding = () => {
                                onChange={(e) => handleArrayChange('target_audience_age_groups', group, e.target.checked)}
                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                              />
-                             <span className="text-sm text-gray-700">{group}</span>
+                             <span className="text-xs xs:text-sm text-gray-700 break-words">{group}</span>
                            </label>
                          ))}
                        </div>
@@ -879,7 +893,7 @@ const Onboarding = () => {
                    </button>
                    {expandedCards.lifeStages && (
                      <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-2 gap-2 pt-3">
+                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
                          {targetAudienceCategories.lifeStages.map(stage => (
                            <label key={stage} className="flex items-center space-x-2">
                              <input
@@ -888,7 +902,7 @@ const Onboarding = () => {
                                onChange={(e) => handleArrayChange('target_audience_life_stages', stage, e.target.checked)}
                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                              />
-                             <span className="text-sm text-gray-700">{stage}</span>
+                             <span className="text-xs xs:text-sm text-gray-700 break-words">{stage}</span>
                            </label>
                          ))}
                        </div>
@@ -920,7 +934,7 @@ const Onboarding = () => {
                    </button>
                    {expandedCards.professionalTypes && (
                      <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-2 gap-2 pt-3">
+                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
                          {targetAudienceCategories.professionalTypes.map(type => (
                            <label key={type} className="flex items-center space-x-2">
                              <input
@@ -929,7 +943,7 @@ const Onboarding = () => {
                                onChange={(e) => handleArrayChange('target_audience_professional_types', type, e.target.checked)}
                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                              />
-                             <span className="text-sm text-gray-700">{type}</span>
+                             <span className="text-xs xs:text-sm text-gray-700 break-words">{type}</span>
                            </label>
                          ))}
                        </div>
@@ -961,7 +975,7 @@ const Onboarding = () => {
                    </button>
                    {expandedCards.lifestyleInterests && (
                      <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-2 gap-2 pt-3">
+                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
                          {targetAudienceCategories.lifestyleInterests.map(interest => (
                            <label key={interest} className="flex items-center space-x-2">
                              <input
@@ -970,7 +984,7 @@ const Onboarding = () => {
                                onChange={(e) => handleArrayChange('target_audience_lifestyle_interests', interest, e.target.checked)}
                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                              />
-                             <span className="text-sm text-gray-700">{interest}</span>
+                             <span className="text-xs xs:text-sm text-gray-700 break-words">{interest}</span>
                            </label>
                          ))}
                        </div>
@@ -1002,7 +1016,7 @@ const Onboarding = () => {
                    </button>
                    {expandedCards.buyerBehavior && (
                      <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-2 gap-2 pt-3">
+                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
                          {targetAudienceCategories.buyerBehavior.map(behavior => (
                            <label key={behavior} className="flex items-center space-x-2">
                              <input
@@ -1011,7 +1025,7 @@ const Onboarding = () => {
                                onChange={(e) => handleArrayChange('target_audience_buyer_behavior', behavior, e.target.checked)}
                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                              />
-                             <span className="text-sm text-gray-700">{behavior}</span>
+                             <span className="text-xs xs:text-sm text-gray-700 break-words">{behavior}</span>
                            </label>
                          ))}
                        </div>
@@ -1043,7 +1057,7 @@ const Onboarding = () => {
                    </button>
                    {expandedCards.other && (
                      <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-2 gap-2 pt-3">
+                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
                          {targetAudienceCategories.other.map(option => (
                            <label key={option} className="flex items-center space-x-2">
                              <input
@@ -1062,7 +1076,7 @@ const Onboarding = () => {
                                }}
                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                              />
-                             <span className="text-sm text-gray-700">{option}</span>
+                             <span className="text-xs xs:text-sm text-gray-700 break-words">{option}</span>
                            </label>
                          ))}
                        </div>
@@ -1105,7 +1119,7 @@ const Onboarding = () => {
       case 2:
         return (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Brand Voice *</label>
                 <select
@@ -1210,7 +1224,7 @@ const Onboarding = () => {
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Current Presence</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 {currentPresenceOptions.map(option => (
                   <label key={option} className="flex items-center space-x-2">
                     <input
@@ -1219,7 +1233,7 @@ const Onboarding = () => {
                       onChange={(e) => handleArrayChange('current_presence', option, e.target.checked)}
                       className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                     />
-                    <span className="text-sm text-gray-700">{option}</span>
+                    <span className="text-xs xs:text-sm text-gray-700 break-words">{option}</span>
                   </label>
                 ))}
               </div>
@@ -1424,7 +1438,7 @@ const Onboarding = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Focus Areas</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 {focusAreas.map(area => (
                   <label key={area} className="flex items-center space-x-2">
                     <input
@@ -1446,7 +1460,7 @@ const Onboarding = () => {
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Digital Marketing Platforms *</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 gap-2">
                 {socialPlatforms.map(platform => (
                   <label key={platform} className="flex items-center space-x-2">
                     <input
@@ -1474,7 +1488,7 @@ const Onboarding = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Primary Goals *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 {goals.map(goal => (
                   <label key={goal} className="flex items-center space-x-2">
                     <input
@@ -1502,7 +1516,7 @@ const Onboarding = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Key Metrics to Track *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 {metrics.map(metric => (
                   <label key={metric} className="flex items-center space-x-2">
                     <input
@@ -1533,7 +1547,7 @@ const Onboarding = () => {
       case 5:
         return (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Monthly Marketing Budget *
@@ -1570,7 +1584,7 @@ const Onboarding = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Content Types *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 {contentTypes.map(type => (
                   <label key={type} className="flex items-center space-x-2">
                     <input
@@ -1579,7 +1593,7 @@ const Onboarding = () => {
                       onChange={(e) => handleArrayChange('preferred_content_types', type, e.target.checked)}
                       className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                     />
-                    <span className="text-sm text-gray-700">{type}</span>
+                    <span className="text-xs xs:text-sm text-gray-700 break-words">{type}</span>
                   </label>
                 ))}
               </div>
@@ -1598,7 +1612,7 @@ const Onboarding = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Content Themes *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 {contentThemes.map(theme => (
                   <label key={theme} className="flex items-center space-x-2">
                     <input
@@ -1714,7 +1728,7 @@ const Onboarding = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Top Performing Content Types *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 {contentTypes.map(type => (
                   <label key={type} className="flex items-center space-x-2">
                     <input
@@ -1723,7 +1737,7 @@ const Onboarding = () => {
                       onChange={(e) => handleArrayChange('top_performing_content_types', type, e.target.checked)}
                       className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                     />
-                    <span className="text-sm text-gray-700">{type}</span>
+                    <span className="text-xs xs:text-sm text-gray-700 break-words">{type}</span>
                   </label>
                 ))}
               </div>
@@ -1742,7 +1756,7 @@ const Onboarding = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Best Time to Post *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 {postingTimes.map(time => (
                   <label key={time} className="flex items-center space-x-2">
                     <input
@@ -1968,27 +1982,27 @@ const Onboarding = () => {
     <div className="min-h-screen bg-[#F6F6F6] flex flex-col">
         {/* Header */}
       <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
             {/* Logo and Brand */}
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-xl">E</span>
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                <span className="text-white font-bold text-sm sm:text-xl">E</span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Emily</h1>
-                <p className="text-sm text-gray-500">AI Marketing Assistant</p>
+                <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Emily</h1>
+                <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">AI Marketing Assistant</p>
               </div>
             </div>
 
             {/* Header Buttons */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3">
               <button
                 onClick={logout}
-                className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
               >
                 <LogOut className="w-4 h-4" />
-                <span className="text-sm font-medium">Logout</span>
+                <span className="text-xs sm:text-sm font-medium hidden sm:inline">Logout</span>
               </button>
             </div>
           </div>
@@ -1996,43 +2010,43 @@ const Onboarding = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex items-center justify-center py-8">
-        <div className="max-w-4xl mx-auto px-4 w-full">
+      <div className="flex-1 flex items-center justify-center py-4 sm:py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 w-full">
           {/* Welcome Section */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl font-bold text-white">E</span>
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+            <span className="text-2xl sm:text-3xl font-bold text-white">E</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome to Emily!</h1>
-          <p className="text-gray-600">Let's get to know your business so I can provide personalized marketing assistance.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Welcome to Emily!</h1>
+          <p className="text-sm sm:text-base text-gray-600 px-4 sm:px-0">Let's get to know your business so I can provide personalized marketing assistance.</p>
         </div>
 
         {/* Progress Bar */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-gray-700">
-              Step {currentStep + 1} of {steps.length}
-            </span>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-500">
+        <div className="mb-4 sm:mb-6 lg:mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center space-x-2 xs:space-x-3 sm:space-x-4">
+              <span className="text-xs xs:text-sm font-medium text-gray-700">
+                Step {currentStep + 1} of {steps.length}
+              </span>
+              <span className="text-xs text-gray-500">
                 {Math.round(((currentStep + 1) / steps.length) * 100)}% Complete
               </span>
-              {/* Auto-saved Indicator */}
-              <div className="flex items-center text-sm text-gray-600">
-                <div className="w-2 h-2 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full mr-2 animate-pulse"></div>
-                <span className="font-medium">Auto-saved</span>
-              </div>
+            </div>
+            {/* Auto-saved Indicator */}
+            <div className="flex items-center text-xs text-gray-600">
+              <div className="w-2 h-2 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full mr-1 xs:mr-2 animate-pulse"></div>
+              <span className="font-medium">Auto-saved</span>
             </div>
           </div>
           
           {/* Step Navigation Dots */}
-          <div className="flex justify-center space-x-2 mb-4">
+          <div className="flex justify-start xs:justify-center space-x-0.5 xs:space-x-1 sm:space-x-2 mb-4 overflow-x-auto pb-2 px-1 xs:px-2">
             {steps.map((_, index) => (
               <button
                 key={index}
                 onClick={() => goToStep(index)}
                 disabled={!isStepAccessible(index)}
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-200 ${
+                className={`w-6 h-6 xs:w-7 xs:h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all duration-200 flex-shrink-0 ${
                   index === currentStep
                     ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
                     : isStepAccessible(index)
@@ -2042,7 +2056,7 @@ const Onboarding = () => {
                 title={`Step ${index + 1}: ${steps[index]}`}
               >
                 {hasStepData(index) ? (
-                  <Check className="w-4 h-4" />
+                  <Check className="w-2.5 h-2.5 xs:w-3 xs:h-3 sm:w-4 sm:h-4" />
                 ) : (
                   index + 1
                 )}
@@ -2059,12 +2073,12 @@ const Onboarding = () => {
         </div>
 
         {/* Step Content */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-2">
+        <div className="bg-white rounded-xl shadow-lg p-3 xs:p-4 sm:p-6 lg:p-8 mb-4 sm:mb-6 lg:mb-8">
+          <div className="mb-4 sm:mb-6">
+            <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-2">
               {steps[currentStep]}
             </h2>
-            <p className="text-gray-600">
+            <p className="text-sm sm:text-base text-gray-600">
               {currentStep === 0 && "Tell us about your business basics"}
               {currentStep === 1 && "Help us understand what you do"}
               {currentStep === 2 && "How should we represent your brand?"}
@@ -2079,17 +2093,17 @@ const Onboarding = () => {
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-6">
-              {error}
+            <div className="bg-red-50 border border-red-200 text-red-600 px-3 sm:px-4 py-2 sm:py-3 rounded-lg mb-4 sm:mb-6">
+              <p className="text-sm sm:text-base">{error}</p>
             </div>
           )}
 
           {/* Step Lock Warning */}
           {currentStep > 0 && !isStepAccessible(currentStep) && (
-            <div className="bg-amber-50 border border-amber-200 text-amber-600 px-4 py-3 rounded-lg mb-6">
+            <div className="bg-amber-50 border border-amber-200 text-amber-600 px-3 sm:px-4 py-2 sm:py-3 rounded-lg mb-4 sm:mb-6">
               <div className="flex items-center">
-                <Check className="w-5 h-5 text-amber-400 mr-2" />
-                <p>
+                <Check className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 mr-2 flex-shrink-0" />
+                <p className="text-sm sm:text-base">
                   This step is locked. Please complete the previous steps to continue.
                 </p>
               </div>
@@ -2100,14 +2114,14 @@ const Onboarding = () => {
         </div>
 
         {/* Navigation */}
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center gap-2 xs:gap-3">
           <button
             onClick={prevStep}
             disabled={currentStep === 0}
-            className="flex items-center px-6 py-3 bg-gray-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 transition-colors"
+            className="flex items-center justify-center px-3 xs:px-4 py-2 xs:py-2.5 bg-gray-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 transition-colors min-w-[80px] xs:min-w-[100px]"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Previous
+            <ArrowLeft className="w-3 h-3 xs:w-4 xs:h-4 mr-1 xs:mr-2" />
+            <span className="text-xs xs:text-sm">Previous</span>
           </button>
 
           {/* Next/Submit Button */}
@@ -2115,17 +2129,17 @@ const Onboarding = () => {
             <button
               onClick={handleSubmit}
               disabled={isSubmitting || !validateCurrentStep()}
-              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
+              className="flex items-center justify-center px-3 xs:px-4 py-2 xs:py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all min-w-[100px] xs:min-w-[140px]"
             >
               {isSubmitting ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Submitting...
+                  <div className="animate-spin rounded-full h-3 w-3 xs:h-4 xs:w-4 border-b-2 border-white mr-1 xs:mr-2"></div>
+                  <span className="text-xs xs:text-sm">Submitting...</span>
                 </>
               ) : (
                 <>
-                  <Check className="w-4 h-4 mr-2" />
-                  Complete Onboarding
+                  <Check className="w-3 h-3 xs:w-4 xs:h-4 mr-1 xs:mr-2" />
+                  <span className="text-xs xs:text-sm">Complete</span>
                 </>
               )}
             </button>
@@ -2133,10 +2147,10 @@ const Onboarding = () => {
             <button
               onClick={nextStep}
               disabled={!validateCurrentStep()}
-              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
+              className="flex items-center justify-center px-3 xs:px-4 py-2 xs:py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all min-w-[60px] xs:min-w-[80px]"
             >
-              Next
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <span className="text-xs xs:text-sm">Next</span>
+              <ArrowRight className="w-3 h-3 xs:w-4 xs:h-4 ml-1 xs:ml-2" />
             </button>
           )}
         </div>

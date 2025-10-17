@@ -7,8 +7,6 @@ import {
   FileText, 
   Settings, 
   LogOut, 
-  Menu, 
-  X,
   Sparkles,
   BarChart3,
   Share2,
@@ -23,7 +21,6 @@ const SideNavbar = () => {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [isCollapsed, setIsCollapsed] = useState(false)
   const [profile, setProfile] = useState(null)
   const [profileFetched, setProfileFetched] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState({})
@@ -176,9 +173,6 @@ const SideNavbar = () => {
     return profile?.name || user?.user_metadata?.name || user?.email || 'User'
   }, [profile, user])
 
-  const profileTitle = useMemo(() => {
-    return profile?.name || user?.user_metadata?.name || "Profile"
-  }, [profile, user])
 
   // Function to refresh profile cache (can be called from other components)
   const refreshProfileCache = useCallback(() => {
@@ -191,29 +185,17 @@ const SideNavbar = () => {
   }, [user])
 
   return (
-    <div className={`bg-white shadow-lg transition-all duration-300 fixed left-0 top-0 h-screen z-50 ${
-      isCollapsed ? 'w-16' : 'w-48 xl:w-64'
-    } flex flex-col overflow-hidden`} style={{position: 'fixed', zIndex: 50}}>
+    <div className="hidden md:block bg-white shadow-lg transition-all duration-300 fixed left-0 top-0 h-screen z-50 w-48 xl:w-64 flex flex-col overflow-hidden" style={{position: 'fixed', zIndex: 50}}>
       {/* Header */}
       <div className="p-3 lg:p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          {!isCollapsed && (
-            <div className="flex items-center">
-              <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mr-2 lg:mr-3">
-                <span className="text-white font-bold text-sm lg:text-lg">E</span>
-              </div>
-              <div>
-                <h1 className="text-base lg:text-lg font-bold text-gray-900">Emily</h1>
-                <p className="text-xs text-gray-500">AI Marketing</p>
-              </div>
-            </div>
-          )}
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            {isCollapsed ? <Menu className="w-5 h-5" /> : <X className="w-5 h-5" />}
-          </button>
+        <div className="flex items-center">
+          <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mr-2 lg:mr-3">
+            <span className="text-white font-bold text-sm lg:text-lg">E</span>
+          </div>
+          <div>
+            <h1 className="text-base lg:text-lg font-bold text-gray-900">Emily</h1>
+            <p className="text-xs text-gray-500">AI Marketing</p>
+          </div>
         </div>
       </div>
 
@@ -235,23 +217,19 @@ const SideNavbar = () => {
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                   }`}
                 >
-                  <Icon className={`w-5 h-5 ${isCollapsed ? 'mx-auto' : 'mr-3'}`} />
-                  {!isCollapsed && (
-                    <>
-                      <div className="flex-1 text-left">
-                        <div className="font-medium">{item.name}</div>
-                      </div>
-                      {isExpanded ? (
-                        <ChevronDown className="w-5 h-5" />
-                      ) : (
-                        <ChevronRight className="w-5 h-5" />
-                      )}
-                    </>
+                  <Icon className="w-5 h-5 mr-3" />
+                  <div className="flex-1 text-left">
+                    <div className="font-medium">{item.name}</div>
+                  </div>
+                  {isExpanded ? (
+                    <ChevronDown className="w-5 h-5" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5" />
                   )}
                 </button>
                 
                 {/* Submenu */}
-                {!isCollapsed && isExpanded && item.submenu && (
+                {isExpanded && item.submenu && (
                   <div className="ml-4 mt-2 space-y-1 lg:space-y-2">
                     {item.submenu.map((subItem) => {
                       const SubIcon = subItem.icon
@@ -291,12 +269,10 @@ const SideNavbar = () => {
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
               }`}
             >
-              <Icon className={`w-5 h-5 ${isCollapsed ? 'mx-auto' : 'mr-3'}`} />
-              {!isCollapsed && (
-                <div className="flex-1 text-left">
-                  <div className="font-medium">{item.name}</div>
-                </div>
-              )}
+              <Icon className="w-5 h-5 mr-3" />
+              <div className="flex-1 text-left">
+                <div className="font-medium">{item.name}</div>
+              </div>
             </button>
           )
         })}
@@ -304,63 +280,36 @@ const SideNavbar = () => {
 
       {/* User Section */}
       <div className="p-4 border-t border-gray-200 flex-shrink-0">
-        {!isCollapsed ? (
-          <div className="space-y-3">
-            <button
-              onClick={() => navigate('/profile')}
-              className="w-full flex items-center p-2 lg:p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
-            >
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mr-3 overflow-hidden">
-                {profile?.logo_url && (
-                  <img 
-                    src={profile.logo_url} 
-                    alt="Profile Logo" 
-                    className="w-full h-full object-cover rounded-full"
-                  />
-                )}
-              </div>
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {displayName}
-                </p>
-                <p className="text-xs text-gray-500">Click to view profile</p>
-              </div>
-            </button>
-            
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center p-2 lg:p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors group"
-            >
-              <LogOut className="w-5 h-5 mr-3" />
-              <span className="font-medium">Logout</span>
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <button
-              onClick={() => navigate('/profile')}
-              className="w-full flex items-center justify-center p-2 lg:p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-              title={profileTitle}
-            >
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center overflow-hidden">
-                {profile?.logo_url && (
-                  <img 
-                    src={profile.logo_url} 
-                    alt="Profile Logo" 
-                    className="w-full h-full object-cover rounded-full"
-                  />
-                )}
-              </div>
-            </button>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center p-2 lg:p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
-              title="Logout"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
-        )}
+        <div className="space-y-3">
+          <button
+            onClick={() => navigate('/profile')}
+            className="w-full flex items-center p-2 lg:p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
+          >
+            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mr-3 overflow-hidden">
+              {profile?.logo_url && (
+                <img 
+                  src={profile.logo_url} 
+                  alt="Profile Logo" 
+                  className="w-full h-full object-cover rounded-full"
+                />
+              )}
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {displayName}
+              </p>
+              <p className="text-xs text-gray-500">Click to view profile</p>
+            </div>
+          </button>
+          
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center p-2 lg:p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors group"
+          >
+            <LogOut className="w-5 h-5 mr-3" />
+            <span className="font-medium">Logout</span>
+          </button>
+        </div>
       </div>
     </div>
   )

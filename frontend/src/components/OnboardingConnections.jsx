@@ -262,24 +262,24 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto px-2 xs:px-4 py-4 xs:py-6 sm:py-8">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl font-bold text-white">E</span>
+        <div className="text-center mb-4 xs:mb-6 sm:mb-8">
+          <div className="w-16 h-16 xs:w-18 xs:h-18 sm:w-20 sm:h-20 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3 xs:mb-4">
+            <span className="text-2xl xs:text-3xl font-bold text-white">E</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Connect Your Platforms</h1>
-          <p className="text-gray-600">Connect the social media platforms you selected to get started with Emily</p>
+          <h1 className="text-xl xs:text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Connect Your Platforms</h1>
+          <p className="text-sm xs:text-base text-gray-600 px-2 xs:px-0">Connect the social media platforms you selected to get started with Emily</p>
         </div>
 
         {/* Progress Bar */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-gray-700">Step 2 of 2</span>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-500">50% Complete</span>
-              <div className="flex items-center text-sm text-gray-600">
-                <div className="w-2 h-2 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full mr-2 animate-pulse"></div>
+        <div className="mb-4 xs:mb-6 sm:mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <span className="text-xs xs:text-sm font-medium text-gray-700">Step 2 of 2</span>
+            <div className="flex items-center space-x-2 xs:space-x-4">
+              <span className="text-xs xs:text-sm text-gray-500">50% Complete</span>
+              <div className="flex items-center text-xs xs:text-sm text-gray-600">
+                <div className="w-2 h-2 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full mr-1 xs:mr-2 animate-pulse"></div>
                 <span className="font-medium">Auto-saved</span>
               </div>
             </div>
@@ -293,14 +293,14 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
         </div>
 
         {/* Connection Cards */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-2">Connect Your Selected Platforms</h2>
-            <p className="text-gray-600">Based on your onboarding form, connect these platforms to get started:</p>
+        <div className="bg-white rounded-xl shadow-lg p-4 xs:p-6 sm:p-8 mb-4 xs:mb-6 sm:mb-8">
+          <div className="mb-4 xs:mb-6">
+            <h2 className="text-lg xs:text-xl sm:text-2xl font-semibold text-gray-800 mb-2">Connect Your Selected Platforms</h2>
+            <p className="text-sm xs:text-base text-gray-600">Based on your onboarding form, connect these platforms to get started:</p>
           </div>
 
           {/* Selected Platforms Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 gap-3 xs:gap-4 sm:gap-6 mb-4 xs:mb-6 sm:mb-8">
             {selectedPlatforms.map(platform => {
               const config = platformConfigs[platform]
               if (!config) return null
@@ -312,20 +312,20 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
               return (
                 <div 
                   key={platform}
-                  className={`border-2 rounded-xl p-6 hover:shadow-lg transition-all duration-200 ${
+                  className={`border-2 rounded-xl p-3 xs:p-4 sm:p-6 hover:shadow-lg transition-all duration-200 ${
                     isConnected 
                       ? 'border-green-200 bg-green-50' 
                       : `${config.borderColor} ${config.bgColor}`
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-12 h-12 ${config.color} rounded-lg flex items-center justify-center`}>
-                        <IconComponent className="w-6 h-6 text-white" />
+                  <div className="flex items-center justify-between mb-3 xs:mb-4">
+                    <div className="flex items-center space-x-2 xs:space-x-3">
+                      <div className={`w-8 h-8 xs:w-10 xs:h-10 sm:w-12 sm:h-12 ${config.color} rounded-lg flex items-center justify-center`}>
+                        <IconComponent className="w-4 h-4 xs:w-5 xs:h-5 sm:w-6 sm:h-6 text-white" />
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-800">{platform}</h3>
-                        <p className="text-sm text-gray-600">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-gray-800 text-sm xs:text-base truncate">{platform}</h3>
+                        <p className="text-xs xs:text-sm text-gray-600 truncate">
                           {isConnected && connectionInfo?.account_name 
                             ? connectionInfo.account_name 
                             : config.description
@@ -333,29 +333,29 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
                         </p>
                       </div>
                     </div>
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                    <div className={`w-5 h-5 xs:w-6 xs:h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
                       isConnected ? 'bg-green-100' : 'bg-red-100'
                     }`}>
                       {isConnected ? (
-                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <CheckCircle className="w-3 h-3 xs:w-4 xs:h-4 text-green-600" />
                       ) : (
-                        <XCircle className="w-4 h-4 text-red-600" />
+                        <XCircle className="w-3 h-3 xs:w-4 xs:h-4 text-red-600" />
                       )}
                     </div>
                   </div>
                   
-                  <p className="text-sm text-gray-600 mb-4">
+                  <p className="text-xs xs:text-sm text-gray-600 mb-3 xs:mb-4">
                     {isConnected 
                       ? `✅ Connected! Ready to create and schedule posts`
                       : `Connect your ${platform} ${config.description.toLowerCase()} to start creating content`
                     }
                   </p>
                   
-                  <div className="space-y-2">
+                  <div className="space-y-1 xs:space-y-2">
                     <button 
                       onClick={() => isConnected ? handleDisconnect(config.id) : handleConnect(config.id)}
                       disabled={connecting === config.id}
-                      className={`w-full py-2 px-4 rounded-lg transition-colors ${
+                      className={`w-full py-2 xs:py-2.5 px-3 xs:px-4 rounded-lg transition-colors text-xs xs:text-sm ${
                         connecting === config.id
                           ? 'bg-gray-400 text-white cursor-not-allowed'
                           : isConnected
@@ -376,7 +376,7 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
                         <button 
                           onClick={() => handleConnect(config.id)}
                           disabled={connecting === config.id}
-                          className="w-full py-1 px-4 text-sm text-gray-600 hover:text-gray-800 underline"
+                          className="w-full py-1 px-2 xs:px-4 text-xs xs:text-sm text-gray-600 hover:text-gray-800 underline"
                         >
                           Reconnect
                         </button>
@@ -384,9 +384,9 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
                           <button 
                             onClick={() => handleConnect(config.id, true)}
                             disabled={connecting === config.id}
-                            className="w-full py-1 px-4 text-sm text-blue-600 hover:text-blue-800 underline"
+                            className="w-full py-1 px-2 xs:px-4 text-xs xs:text-sm text-blue-600 hover:text-blue-800 underline"
                           >
-                            🔄 Force Reconnect (Show Consent Screen)
+                            🔄 Force Reconnect
                           </button>
                         )}
                       </div>
@@ -398,18 +398,18 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
           </div>
 
           {/* Connection Status */}
-          <div className={`border rounded-lg p-4 mb-6 ${
+          <div className={`border rounded-lg p-3 xs:p-4 mb-4 xs:mb-6 ${
             status.type === 'warning' ? 'bg-amber-50 border-amber-200' :
             status.type === 'info' ? 'bg-blue-50 border-blue-200' :
             'bg-green-50 border-green-200'
           }`}>
-            <div className="flex items-center">
-              <AlertCircle className={`w-5 h-5 mr-2 ${
+            <div className="flex items-start">
+              <AlertCircle className={`w-4 h-4 xs:w-5 xs:h-5 mr-2 mt-0.5 flex-shrink-0 ${
                 status.type === 'warning' ? 'text-amber-600' :
                 status.type === 'info' ? 'text-blue-600' :
                 'text-green-600'
               }`} />
-              <p className={`${
+              <p className={`text-xs xs:text-sm ${
                 status.type === 'warning' ? 'text-amber-800' :
                 status.type === 'info' ? 'text-blue-800' :
                 'text-green-800'
@@ -421,7 +421,7 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
 
           {/* Skip Option */}
           <div className="text-center">
-            <p className="text-gray-600 mb-4">
+            <p className="text-xs xs:text-sm text-gray-600 mb-3 xs:mb-4 px-2 xs:px-0">
               {getConnectedCount() > 0 
                 ? "You can connect remaining platforms later in your settings."
                 : "Don't want to connect now? You can set up connections later in your settings."
@@ -429,7 +429,7 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
             </p>
             <button 
               onClick={onSkip}
-              className="text-gray-500 hover:text-gray-700 underline"
+              className="text-xs xs:text-sm text-gray-500 hover:text-gray-700 underline"
             >
               {getConnectedCount() > 0 ? 'Skip remaining - I\'ll connect later' : 'Skip for now - I\'ll connect later'}
             </button>
@@ -437,29 +437,32 @@ const OnboardingConnections = ({ selectedPlatforms, onComplete, onSkip, onBack }
         </div>
 
         {/* Navigation */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-wrap justify-between items-center gap-2 xs:gap-4">
           <button 
             onClick={onBack}
-            className="flex items-center px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+            className="flex items-center px-3 xs:px-4 sm:px-6 py-2 xs:py-2.5 sm:py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-xs xs:text-sm sm:text-base flex-shrink-0"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Onboarding
+            <ArrowLeft className="w-3 h-3 xs:w-4 xs:h-4 mr-1 xs:mr-2" />
+            <span className="hidden xs:inline">Back to Onboarding</span>
+            <span className="xs:hidden">Back</span>
           </button>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-2 xs:gap-4">
             <button 
               onClick={onSkip}
-              className="px-6 py-3 text-gray-600 hover:text-gray-800 underline"
+              className="px-2 xs:px-3 sm:px-6 py-2 xs:py-2.5 sm:py-3 text-gray-600 hover:text-gray-800 underline text-xs xs:text-sm sm:text-base flex-shrink-0"
             >
-              Skip & Complete Later
+              <span className="hidden xs:inline">Skip & Complete Later</span>
+              <span className="xs:hidden">Skip</span>
             </button>
             <button 
               onClick={onComplete}
               disabled={!canComplete()}
-              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center px-3 xs:px-4 sm:px-6 py-2 xs:py-2.5 sm:py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base flex-shrink-0"
             >
-              <Check className="w-4 h-4 mr-2" />
-              Complete Onboarding
+              <Check className="w-3 h-3 xs:w-4 xs:h-4 mr-1 xs:mr-2" />
+              <span className="hidden xs:inline">Complete Onboarding</span>
+              <span className="xs:hidden">Complete</span>
             </button>
           </div>
         </div>

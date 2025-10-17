@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { onboardingAPI } from '../services/onboarding'
 import SideNavbar from './SideNavbar'
+import MobileNavigation from './MobileNavigation'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import ConnectionCards from './ConnectionCards'
@@ -60,23 +61,31 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Mobile Navigation */}
+      <MobileNavigation 
+        setShowCustomContentChatbot={() => {}} // Dashboard doesn't have these functions
+        handleGenerateContent={() => {}}
+        generating={false}
+        fetchingFreshData={false}
+      />
+      
       {/* Side Navbar */}
       <SideNavbar />
       
       {/* Main Content */}
-      <div className="ml-48 xl:ml-64 flex flex-col min-h-screen">
+      <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen">
         {/* Fixed Header */}
-        <div className="fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+        <div className="fixed top-0 right-0 left-0 md:left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-4 lg:px-6 py-3 lg:py-4">
             <div className="flex justify-between items-center">
-              <div>
+              <div className="hidden md:block">
                 <h1 className="text-xl lg:text-2xl text-gray-900">
                   <span className="font-bold">Welcome,</span> {profile?.business_name || user?.user_metadata?.name || 'there'}
                 </h1>
               </div>
               
-              {/* Compact Social Media Connections */}
-              <div className="flex items-center space-x-2 lg:space-x-4">
+              {/* Compact Social Media Connections - Hidden on mobile */}
+              <div className="hidden md:flex items-center space-x-2 lg:space-x-4">
                 <div className="text-xs lg:text-sm text-gray-500 mr-2 lg:mr-4 hidden sm:block">Connected accounts:</div>
                 <div className="flex items-center space-x-1 lg:space-x-2">
                   <ConnectionCards compact={true} />
@@ -87,6 +96,7 @@ function Dashboard() {
         </div>
 
         {/* Main Content Area */}
+        <div className="pt-12 md:pt-0">
         {loading ? (
           <DashboardSkeleton />
         ) : (
@@ -103,10 +113,14 @@ function Dashboard() {
             </div>
           </div>
         )}
+        </div>
+      </div>
+
+      {/* Task Notification - Hidden on mobile, shown on tablet/desktop */}
+      <div className="hidden md:block">
+        <TaskNotification />
       </div>
       
-      {/* Task Notification */}
-      <TaskNotification />
     </div>
   )
 }

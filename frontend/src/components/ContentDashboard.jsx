@@ -11,6 +11,7 @@ import ContentGenerationModal from './ContentGenerationModal'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import SideNavbar from './SideNavbar'
+import MobileNavigation from './MobileNavigation'
 import CustomContentChatbot from './CustomContentChatbot'
 import ChatbotImageEditor from './ChatbotImageEditor'
 import MediaGenerationCelebration from './MediaGenerationCelebration'
@@ -1837,14 +1838,23 @@ const ContentDashboard = () => {
         </div>
       )}
       
+      {/* Mobile Navigation */}
+      <MobileNavigation 
+        setShowCustomContentChatbot={setShowCustomContentChatbot}
+        handleGenerateContent={handleGenerateContent}
+        generating={generating}
+        fetchingFreshData={fetchingFreshData}
+      />
+      
       {/* Side Navbar */}
       <SideNavbar />
       
       {/* Main Content */}
-      <div className={`ml-48 xl:ml-64 flex flex-col min-h-screen ${availableDates.length > 1 ? 'pb-20' : ''}`}>
-        {/* Fixed Header */}
-        <div className="fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
-          <div className="px-4 lg:px-6 py-3 lg:py-4">
+      <div className={`md:ml-48 xl:ml-64 flex flex-col min-h-screen ${availableDates.length > 1 ? 'pb-20' : ''}`}>
+        {/* Fixed Header - Desktop Only */}
+        <div className="hidden md:block fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+          <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4">
+            {/* Desktop Layout */}
             <div className="flex justify-between items-center">
               <div className="flex items-center space-x-4 lg:space-x-8">
                 {/* Content Date Header */}
@@ -1901,14 +1911,13 @@ const ContentDashboard = () => {
                     {generating ? 'Generating...' : fetchingFreshData ? 'Loading...' : 'Generate Content'}
                   </span>
                 </button>
-                
               </div>
             </div>
           </div>
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 p-4 lg:p-6 pt-20 lg:pt-24">
+        <div className="flex-1 p-4 lg:p-6 pt-16 md:pt-24">
           {loading ? (
             <ContentSkeleton />
           ) : (
@@ -2011,9 +2020,9 @@ const ContentDashboard = () => {
               </div>
             ) : (
               <div className="relative">
-                {/* Right arrow indicator - only show when there's more content to scroll */}
+                {/* Right arrow indicator - only show when there's more content to scroll (hidden on mobile) */}
                 {showScrollArrow && (
-                  <div className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 pointer-events-none">
+                  <div className="hidden sm:block absolute right-0 top-1/2 transform -translate-y-1/2 z-10 pointer-events-none">
                     <div className="bg-white rounded-full p-2 shadow-lg border border-gray-200">
                       <ChevronRight className="w-5 h-5 text-gray-400" />
                     </div>
@@ -2021,7 +2030,7 @@ const ContentDashboard = () => {
                 )}
                 
                 <div 
-                  className="flex gap-6 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-12"
+                  className="flex flex-col sm:flex-row gap-6 overflow-x-auto sm:overflow-x-auto overflow-y-visible pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-0 sm:pr-12"
                   onScroll={handleScroll}
                 >
                 {filteredContent.map((content) => {
@@ -2031,7 +2040,7 @@ const ContentDashboard = () => {
                     <div 
                       key={content.id} 
                       onClick={() => handleViewContent(content)}
-                      className={`${theme.bg} rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 hover:scale-[1.02] cursor-pointer flex-shrink-0 w-80`}
+                      className={`${theme.bg} rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 hover:scale-[1.02] cursor-pointer flex-shrink-0 w-full sm:w-80`}
                     >
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center space-x-3">
@@ -2621,26 +2630,26 @@ const ContentDashboard = () => {
         {/* Footer Navigation - Only show if there are multiple dates with content */}
         {availableDates.length > 1 && (
           <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
-            <div className="flex items-center justify-center space-x-4 py-4 px-6">
+            <div className="flex items-center justify-center space-x-2 sm:space-x-4 py-3 sm:py-4 px-4 sm:px-6">
               <button
                 onClick={navigateToPreviousDate}
                 disabled={currentDateIndex === 0}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 rounded-lg transition-all duration-200 ${
                   currentDateIndex === 0
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 hover:border-pink-300 hover:text-pink-600 shadow-sm hover:shadow-md'
                 }`}
               >
                 <ChevronLeft className="w-4 h-4" />
-                <span className="text-sm font-medium">Previous</span>
+                <span className="text-xs sm:text-sm font-medium">Previous</span>
               </button>
 
-              <div className="flex items-center space-x-2 px-4 py-2 bg-gray-50 rounded-lg">
-                <Calendar className="w-4 h-4 text-gray-500" />
-                <span className="text-sm font-medium text-gray-700">
+              <div className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 bg-gray-50 rounded-lg">
+                <Calendar className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500" />
+                <span className="text-xs sm:text-sm font-medium text-gray-700">
                   {currentDateIndex + 1} of {availableDates.length}
                 </span>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-gray-500 hidden sm:inline">
                   ({new Date(selectedDate).toLocaleDateString('en-US', { 
                     month: 'short', 
                     day: 'numeric',
@@ -2652,13 +2661,13 @@ const ContentDashboard = () => {
               <button
                 onClick={navigateToNextDate}
                 disabled={currentDateIndex === availableDates.length - 1}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 rounded-lg transition-all duration-200 ${
                   currentDateIndex === availableDates.length - 1
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 hover:border-pink-300 hover:text-pink-600 shadow-sm hover:shadow-md'
                 }`}
               >
-                <span className="text-sm font-medium">Next</span>
+                <span className="text-xs sm:text-sm font-medium">Next</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>

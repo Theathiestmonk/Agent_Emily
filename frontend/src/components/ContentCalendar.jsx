@@ -277,7 +277,7 @@ const ContentCalendar = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50">
         <SideNavbar />
-        <div className="ml-48 xl:ml-64 flex items-center justify-center min-h-screen">
+        <div className="md:ml-48 xl:ml-64 flex items-center justify-center min-h-screen">
           <DashboardSkeleton />
         </div>
       </div>
@@ -290,9 +290,89 @@ const ContentCalendar = () => {
       <SideNavbar />
       
       {/* Main Content */}
-      <div className="ml-48 xl:ml-64 flex flex-col min-h-screen">
-        {/* Fixed Header */}
-        <div className="fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+      <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen">
+        {/* Mobile Header */}
+        <div className="md:hidden fixed top-0 left-0 right-0 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+          <div className="px-4 py-3">
+            <div className="flex items-center justify-between">
+              {/* Back Button */}
+              <button
+                onClick={() => navigate('/content')}
+                className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-sm font-medium">Back to Content</span>
+              </button>
+              
+              {/* Month Navigation */}
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => navigateMonth('prev')}
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  title="Previous month"
+                >
+                  <ChevronLeft className="w-5 h-5 text-gray-600" />
+                </button>
+                
+                <div className="flex flex-col items-center relative month-selector">
+                  <button
+                    onClick={() => setShowMonthSelector(!showMonthSelector)}
+                    className="flex items-center space-x-1 hover:bg-gray-50 px-2 py-1 rounded-lg transition-colors"
+                  >
+                    <h2 className={`text-lg font-bold ${
+                      isCurrentMonth() ? 'text-pink-600' : 'text-gray-900'
+                    }`}>
+                      {getMonthName(currentDate)}
+                    </h2>
+                    <ChevronDown className="w-4 h-4 text-gray-500" />
+                  </button>
+                  
+                  {/* Month Selector Dropdown - Mobile */}
+                  {showMonthSelector && (
+                    <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto left-1/2 transform -translate-x-1/2 w-48">
+                      <div className="p-2">
+                        <div className="text-xs font-medium text-gray-500 mb-2 px-2">Select Month</div>
+                        {getAvailableMonths().map((monthData, index) => (
+                          <button
+                            key={index}
+                            onClick={() => goToMonth(monthData.month, monthData.year)}
+                            className={`w-full text-left px-3 py-2 rounded-md hover:bg-gray-100 transition-colors ${
+                              currentDate.getMonth() === monthData.month && 
+                              currentDate.getFullYear() === monthData.year
+                                ? 'bg-pink-100 text-pink-600 font-medium' 
+                                : 'text-gray-700'
+                            }`}
+                          >
+                            {monthData.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                <button
+                  onClick={() => navigateMonth('next')}
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  title="Next month"
+                >
+                  <ChevronRight className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+              
+              {/* Today Button */}
+              <button
+                onClick={() => setCurrentDate(new Date())}
+                className="px-3 py-2 bg-pink-500 text-white text-sm font-medium rounded-lg hover:bg-pink-600 transition-colors"
+              >
+                Today
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Fixed Header - Desktop Only */}
+        <div className="hidden md:block fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
@@ -372,15 +452,15 @@ const ContentCalendar = () => {
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 p-6 pt-24">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <div className="flex-1 p-3 sm:p-6 pt-20 md:pt-24">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-8">
           {/* Calendar */}
           <div className="lg:col-span-3">
             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
               {/* Calendar Header */}
               <div className="grid grid-cols-7 bg-gray-50 border-b">
                 {dayNames.map(day => (
-                  <div key={day} className="p-4 text-center text-sm font-medium text-gray-500">
+                  <div key={day} className="p-2 sm:p-4 text-center text-xs sm:text-sm font-medium text-gray-500">
                     {day}
                   </div>
                 ))}
@@ -396,7 +476,7 @@ const ContentCalendar = () => {
                   return (
                     <div
                       key={index}
-                      className={`min-h-[120px] border-r border-b border-gray-200 p-2 cursor-pointer transition-all duration-200 ${
+                      className={`min-h-[80px] sm:min-h-[120px] border-r border-b border-gray-200 p-1 sm:p-2 cursor-pointer transition-all duration-200 ${
                         day ? 'hover:bg-gray-50' : 'bg-gray-50'
                       } ${isCurrentDay ? 'bg-pink-50 border-pink-200' : ''} ${
                         isPast ? 'opacity-60' : ''
@@ -406,7 +486,7 @@ const ContentCalendar = () => {
                       {day && (
                         <>
                           {/* Date Number */}
-                          <div className={`text-sm font-medium mb-2 ${
+                          <div className={`text-xs sm:text-sm font-medium mb-1 sm:mb-2 ${
                             isCurrentDay ? 'text-pink-600' : 'text-gray-900'
                           }`}>
                             {day.getDate()}
@@ -414,7 +494,7 @@ const ContentCalendar = () => {
 
                           {/* Platform Icons */}
                           {platforms.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
+                            <div className="flex flex-wrap gap-0.5 sm:gap-1">
                               {platforms.map(platform => {
                                 const IconComponent = platformIcons[platform] || Hash
                                 const colorClass = platformColors[platform] || 'bg-gray-500'
@@ -422,10 +502,10 @@ const ContentCalendar = () => {
                                 return (
                                   <div
                                     key={platform}
-                                    className={`w-6 h-6 rounded-full ${colorClass} flex items-center justify-center group relative`}
+                                    className={`w-4 h-4 sm:w-6 sm:h-6 rounded-full ${colorClass} flex items-center justify-center group relative`}
                                     title={platform}
                                   >
-                                    <IconComponent className="w-3 h-3 text-white" />
+                                    <IconComponent className="w-2 h-2 sm:w-3 sm:h-3 text-white" />
                                     
                                     {/* Tooltip */}
                                     <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
@@ -454,22 +534,22 @@ const ContentCalendar = () => {
 
           {/* Sidebar */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Content Overview</h3>
+            <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Content Overview</h3>
               
               {/* Stats */}
-              <div className="space-y-4 mb-6">
+              <div className="space-y-3 sm:space-y-4 mb-6">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Total Campaigns</span>
-                  <span className="text-sm font-medium text-gray-900">{campaigns.length}</span>
+                  <span className="text-xs sm:text-sm text-gray-600">Total Campaigns</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900">{campaigns.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Total Posts</span>
-                  <span className="text-sm font-medium text-gray-900">{allContent.length}</span>
+                  <span className="text-xs sm:text-sm text-gray-600">Total Posts</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900">{allContent.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">This Month</span>
-                  <span className="text-sm font-medium text-gray-900">
+                  <span className="text-xs sm:text-sm text-gray-600">This Month</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900">
                     {allContent.filter(post => {
                       const scheduledDate = post.scheduled_date || post.scheduled_at
                       if (!scheduledDate) return false
@@ -483,7 +563,7 @@ const ContentCalendar = () => {
 
               {/* Platform Distribution */}
               <div className="mb-6">
-                <h4 className="text-sm font-medium text-gray-900 mb-3">Platform Distribution</h4>
+                <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-3">Platform Distribution</h4>
                 <div className="space-y-2">
                   {Object.entries(platformIcons).map(([platform, IconComponent]) => {
                     const count = allContent.filter(post => post.platform === platform).length
@@ -493,11 +573,11 @@ const ContentCalendar = () => {
                     
                     return (
                       <div key={platform} className="flex items-center space-x-2">
-                        <div className={`w-4 h-4 rounded-full ${colorClass} flex items-center justify-center`}>
-                          <IconComponent className="w-2 h-2 text-white" />
+                        <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full ${colorClass} flex items-center justify-center`}>
+                          <IconComponent className="w-1.5 h-1.5 sm:w-2 sm:h-2 text-white" />
                         </div>
-                        <span className="text-sm text-gray-600">{platform}</span>
-                        <span className="text-sm font-medium text-gray-900 ml-auto">{count}</span>
+                        <span className="text-xs sm:text-sm text-gray-600">{platform}</span>
+                        <span className="text-xs sm:text-sm font-medium text-gray-900 ml-auto">{count}</span>
                       </div>
                     )
                   })}
@@ -507,25 +587,25 @@ const ContentCalendar = () => {
               {/* Selected Date Content */}
               {selectedDate && (
                 <div>
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">
+                  <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-3">
                     {formatDate(selectedDate)}
                   </h4>
                   {selectedDateContent.length > 0 ? (
                     <div className="space-y-2">
                       {selectedDateContent.map(post => (
-                        <div key={post.id} className="p-3 bg-gray-50 rounded-lg">
+                        <div key={post.id} className="p-2 sm:p-3 bg-gray-50 rounded-lg">
                           <div className="flex items-center space-x-2 mb-2">
-                            <div className={`w-4 h-4 rounded-full ${platformColors[post.platform] || 'bg-gray-500'} flex items-center justify-center`}>
-                              {React.createElement(platformIcons[post.platform] || Hash, { className: "w-2 h-2 text-white" })}
+                            <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full ${platformColors[post.platform] || 'bg-gray-500'} flex items-center justify-center`}>
+                              {React.createElement(platformIcons[post.platform] || Hash, { className: "w-1.5 h-1.5 sm:w-2 sm:h-2 text-white" })}
                             </div>
-                            <span className="text-sm font-medium text-gray-900">{post.platform}</span>
+                            <span className="text-xs sm:text-sm font-medium text-gray-900">{post.platform}</span>
                           </div>
-                          <p className="text-sm text-gray-600 line-clamp-2">{post.title}</p>
+                          <p className="text-xs sm:text-sm text-gray-600 line-clamp-2">{post.title}</p>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">No content scheduled for this date</p>
+                    <p className="text-xs sm:text-sm text-gray-500">No content scheduled for this date</p>
                   )}
                 </div>
               )}
