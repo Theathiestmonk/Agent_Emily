@@ -2610,12 +2610,20 @@ const ContentDashboard = () => {
           </div>
         </div>
 
+        {/* Dark Background Overlay - Covers entire page */}
+        {showAddMenu && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-40"
+            onClick={() => setShowAddMenu(false)}
+          />
+        )}
+
         {/* Floating Add Button with Dropdown */}
         <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50">
           <div className="relative add-menu-container">
             {/* Dropdown Menu */}
             {showAddMenu && (
-              <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 mb-2 bg-white rounded-lg shadow-xl border border-gray-200 py-2 min-w-[280px]">
+              <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 mb-2 bg-white rounded-lg shadow-xl border border-gray-200 py-2 min-w-[280px] z-50">
                 <button
                   onClick={() => {
                     setShowCustomContentChatbot(true)
