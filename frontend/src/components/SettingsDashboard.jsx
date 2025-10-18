@@ -27,7 +27,6 @@ import SideNavbar from './SideNavbar'
 import MainContentLoader from './MainContentLoader'
 import DisconnectConfirmationModal from './DisconnectConfirmationModal'
 import WordPressInstructionsModal from './WordPressInstructionsModal'
-import { DashboardSkeleton } from './LazyLoadingSkeleton'
 // Using URL-based approach for logos
 
 const SettingsDashboard = () => {
@@ -896,9 +895,6 @@ const SettingsDashboard = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 p-6 pt-24">
-          {loading ? (
-            <DashboardSkeleton />
-          ) : (
             <>
 
               {/* Success/Error Messages */}

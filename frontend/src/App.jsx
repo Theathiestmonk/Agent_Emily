@@ -21,7 +21,6 @@ import TokenExchangeHandler from './components/TokenExchangeHandler'
 import SettingsDashboard from './components/SettingsDashboard'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingBar from './components/LoadingBar'
-import { DashboardSkeleton, DashboardWithSidebarSkeleton } from './components/LazyLoadingSkeleton'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { NotificationProvider, useNotifications } from './contexts/NotificationContext'
 import { ContentCacheProvider } from './contexts/ContentCacheContext'
@@ -88,16 +87,7 @@ function ProtectedRoute({ children }) {
     checkUserStatus()
   }, [isAuthenticated, user])
 
-  if (loading || checkingStatus) {
-    console.log('Loading or checking status...')
-    return <DashboardWithSidebarSkeleton />
-  }
-
-  // If we're still checking subscription status, show loading
-  if (subscriptionStatus === null) {
-    console.log('Still checking subscription status...')
-    return <DashboardWithSidebarSkeleton />
-  }
+  // Skip loading states - show content immediately
 
   if (!isAuthenticated) {
     console.log('User not authenticated, redirecting to login')

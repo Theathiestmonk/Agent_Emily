@@ -6,7 +6,6 @@ import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
-import { ContentSkeleton } from './LazyLoadingSkeleton'
 import { 
   Facebook, 
   Instagram, 
@@ -252,9 +251,6 @@ const SocialMediaDashboard = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 p-6 pt-24">
-          {loading || !dataLoaded ? (
-            <ContentSkeleton />
-          ) : (
             <>
 
           {platformsWithPosts.length === 0 ? (

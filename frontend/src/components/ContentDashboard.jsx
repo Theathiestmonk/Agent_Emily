@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
@@ -15,7 +15,6 @@ import MobileNavigation from './MobileNavigation'
 import CustomContentChatbot from './CustomContentChatbot'
 import ChatbotImageEditor from './ChatbotImageEditor'
 import MediaGenerationCelebration from './MediaGenerationCelebration'
-import { ContentSkeleton } from './LazyLoadingSkeleton'
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -113,6 +112,21 @@ const ContentDashboard = () => {
   const [editForm, setEditForm] = useState({}) // Edit form data
   const [saving, setSaving] = useState(false) // Saving state
   const [expandedContent, setExpandedContent] = useState(null) // Content being viewed/expanded
+  const [showAddMenu, setShowAddMenu] = useState(false) // Show add button dropdown menu
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showAddMenu && !event.target.closest('.add-menu-container')) {
+        setShowAddMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showAddMenu])
   const [generatingMedia, setGeneratingMedia] = useState(new Set()) // Track which content is generating media
   const [generatedImages, setGeneratedImages] = useState({}) // Store generated images by content ID
   const [uploadingImage, setUploadingImage] = useState(new Set()) // Track which content is uploading image
@@ -1888,41 +1902,14 @@ const ContentDashboard = () => {
                   <Calendar className="w-4 h-4" />
                   <span>View Calendar</span>
                 </button>
-                <button
-                  onClick={() => setShowCustomContentChatbot(true)}
-                  className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-300"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Create Custom Content</span>
-                </button>
-                <button
-                  onClick={handleGenerateContent}
-                  disabled={generating || fetchingFreshData}
-                  className="flex items-center space-x-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
-                >
-                  {generating ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : fetchingFreshData ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-4 h-4" />
-                  )}
-                  <span>
-                    {generating ? 'Generating...' : fetchingFreshData ? 'Loading...' : 'Generate Content'}
-                  </span>
-                </button>
               </div>
             </div>
           </div>
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 p-4 lg:p-6 pt-16 md:pt-24">
-          {loading ? (
-            <ContentSkeleton />
-          ) : (
-            <>
-              {/* Status Message - Only show error messages */}
+        <div className="flex-1 p-4 lg:p-6 pt-16 md:pt-20 flex flex-col justify-center min-h-screen">
+          {/* Status Message - Only show error messages */}
           {generationStatus === 'error' && (
             <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800">
               <div className="flex items-center">
@@ -2146,7 +2133,6 @@ const ContentDashboard = () => {
                                       src={getSmallThumbnailUrl(imageUrl)} 
                                       alt="Content thumbnail" 
                                 className="w-full h-48 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                                loading="lazy"
                                 onLoad={() => handleImageLoad(content.id)}
                                 onError={() => handleImageError(content.id)}
                                 onLoadStart={() => startImageLoading(content.id)}
@@ -2622,9 +2608,67 @@ const ContentDashboard = () => {
               </div>
             )}
           </div>
+        </div>
 
-            </>
-          )}
+        {/* Floating Add Button with Dropdown */}
+        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="relative add-menu-container">
+            {/* Dropdown Menu */}
+            {showAddMenu && (
+              <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 mb-2 bg-white rounded-lg shadow-xl border border-gray-200 py-2 min-w-[280px]">
+                <button
+                  onClick={() => {
+                    setShowCustomContentChatbot(true)
+                    setShowAddMenu(false)
+                  }}
+                  className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center space-x-3 transition-colors duration-200"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                    <Plus className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-900">Create Custom Content</div>
+                    <div className="text-sm text-gray-500">Write your own content</div>
+                  </div>
+                </button>
+                
+                <div className="border-t border-gray-100 my-1"></div>
+                
+                <button
+                  onClick={() => {
+                    handleGenerateContent()
+                    setShowAddMenu(false)
+                  }}
+                  disabled={generating || fetchingFreshData}
+                  className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center space-x-3 transition-colors duration-200 disabled:opacity-50"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-600 rounded-lg flex items-center justify-center">
+                    {generating ? (
+                      <RefreshCw className="w-4 h-4 text-white animate-spin" />
+                    ) : fetchingFreshData ? (
+                      <RefreshCw className="w-4 h-4 text-white animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4 text-white" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      {generating ? 'Generating...' : fetchingFreshData ? 'Loading...' : 'Generate Content'}
+                    </div>
+                    <div className="text-sm text-gray-500">AI-powered content creation</div>
+                  </div>
+                </button>
+              </div>
+            )}
+            
+            {/* Main + Button */}
+            <button
+              onClick={() => setShowAddMenu(!showAddMenu)}
+              className="w-14 h-14 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full shadow-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 flex items-center justify-center"
+            >
+              <Plus className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         {/* Footer Navigation - Only show if there are multiple dates with content */}
@@ -2818,7 +2862,6 @@ const ContentDashboard = () => {
                             src={getSmallThumbnailUrl(generatedImages[editForm.id].image_url)} 
                               alt="Current content media" 
                             className="w-full h-32 object-cover rounded-lg"
-                            loading="lazy"
                             onLoad={() => handleImageLoad(editForm.id)}
                             onError={() => handleImageError(editForm.id)}
                             onLoadStart={() => startImageLoading(editForm.id)}

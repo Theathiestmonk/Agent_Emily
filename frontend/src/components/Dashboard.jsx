@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
@@ -11,13 +11,9 @@ import ConnectionCards from './ConnectionCards'
 import Chatbot from './Chatbot'
 import RecentTasks from './RecentTasks'
 import TaskNotification from './TaskNotification'
-import { DashboardSkeleton } from './LazyLoadingSkeleton'
 import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar } from 'lucide-react'
 
-// Lazy load heavy components
-const LazyConnectionCards = lazy(() => import('./ConnectionCards'))
-const LazyChatbot = lazy(() => import('./Chatbot'))
-const LazyRecentTasks = lazy(() => import('./RecentTasks'))
+// Import components directly
 
 function Dashboard() {
   const { user, logout } = useAuth()
@@ -97,9 +93,6 @@ function Dashboard() {
 
         {/* Main Content Area */}
         <div className="pt-12 md:pt-0">
-        {loading ? (
-          <DashboardSkeleton />
-        ) : (
           <div className="flex-1 pt-20 lg:pt-24 p-4 lg:p-6 pl-4 lg:pl-6 pr-0 flex items-center">
             <div className="w-full">
               <div className="flex justify-center">
@@ -112,7 +105,6 @@ function Dashboard() {
               </div>
             </div>
           </div>
-        )}
         </div>
       </div>
 

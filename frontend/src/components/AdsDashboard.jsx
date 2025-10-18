@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
@@ -6,7 +6,6 @@ import { supabase } from '../lib/supabase'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import SideNavbar from './SideNavbar'
-import { DashboardSkeleton, CardSkeleton } from './LazyLoadingSkeleton'
 import ChatbotImageEditor from './ChatbotImageEditor'
 
 const API_BASE_URL = (() => {
@@ -886,10 +885,10 @@ const AdsDashboard = () => {
               </div>
 
               {/* Ads Grid Skeleton */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {[...Array(8)].map((_, i) => (
-                  <CardSkeleton key={i} className="h-64" />
-                ))}
+              <div className="flex items-center justify-center min-h-96">
+                <div className="text-center">
+                  <p className="text-gray-600">Ads content will appear here</p>
+                </div>
               </div>
             </div>
           </div>
