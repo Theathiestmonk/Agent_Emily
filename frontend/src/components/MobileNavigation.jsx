@@ -380,52 +380,22 @@ const MobileNavigation = ({
         <div className="px-3 py-2">
           {/* Single Row Layout */}
           <div className="flex items-center justify-between w-full">
-            {/* Logo/Brand */}
-            <div className="flex items-center">
-              <div className="w-6 h-6 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mr-2">
-                <span className="text-white font-bold text-xs">E</span>
+            {/* Logo/Brand - Clickable */}
+            <button 
+              onClick={() => navigate('/')}
+              className="flex items-center hover:opacity-80 transition-opacity duration-200"
+            >
+              <div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mr-3">
+                <span className="text-white font-bold text-sm">E</span>
               </div>
               <div>
-                <h1 className="text-sm font-bold text-gray-900">Emily</h1>
-                <p className="text-xs text-gray-500 hidden">AI Marketing</p>
+                <h1 className="text-lg font-bold text-gray-900">Emily</h1>
               </div>
-            </div>
+            </button>
 
             {/* Right Side - Action Buttons + Hamburger Menu */}
             <div className="flex items-center space-x-1">
-              {/* Action Buttons (only on content page) */}
-              {location.pathname === '/content' && (
-                <>
-                  <button
-                    onClick={() => navigate('/calendar')}
-                    className="flex items-center space-x-1 px-1.5 py-1 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded text-xs font-medium hover:from-indigo-600 hover:to-purple-500 transition-all duration-300"
-                  >
-                    <Calendar className="w-3 h-3" />
-                    <span className="hidden xs:inline">Calendar</span>
-                  </button>
-                  <button
-                    onClick={() => setShowCustomContentChatbot && setShowCustomContentChatbot(true)}
-                    className="flex items-center space-x-1 px-1.5 py-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded text-xs font-medium hover:from-blue-600 hover:to-blue-700 transition-all duration-300"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span className="hidden xs:inline">Custom</span>
-                  </button>
-                  <button
-                    onClick={() => handleGenerateContent && handleGenerateContent()}
-                    disabled={generating || fetchingFreshData}
-                    className="flex items-center space-x-1 px-1.5 py-1 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded text-xs font-medium hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
-                  >
-                    {generating ? (
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                    ) : fetchingFreshData ? (
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-3 h-3" />
-                    )}
-                    <span className="hidden xs:inline">Generate</span>
-                  </button>
-                </>
-              )}
+              {/* Action Buttons removed for mobile view */}
 
               {/* Task Notification Bell - Only on dashboard page */}
               {(location.pathname === '/' || location.pathname === '/dashboard') && (
