@@ -591,7 +591,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gradient-to-br from-white to-purple-50 rounded-2xl shadow-2xl w-full max-w-4xl aspect-[4/3] flex flex-col border border-purple-100">
+      <div className="bg-gradient-to-br from-white to-purple-50 rounded-2xl shadow-2xl w-full max-w-4xl md:aspect-[4/3] h-full md:h-auto flex flex-col border border-purple-100">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-purple-200 bg-gradient-to-r from-pink-50 to-purple-50 rounded-t-2xl">
           <div className="flex items-center space-x-4">
