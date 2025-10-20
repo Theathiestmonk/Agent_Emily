@@ -78,7 +78,7 @@ const GoogleDashboard = () => {
 
   const getAuthToken = async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('authToken')
       if (token) {
         return token
       }

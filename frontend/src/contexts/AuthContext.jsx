@@ -21,8 +21,9 @@ export function AuthProvider({ children }) {
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
         console.error('Error getting session:', error)
-        // Clear any invalid tokens
-        supabase.auth.signOut()
+        // Don't automatically sign out on session errors - let user stay logged in
+        // Only clear invalid tokens from localStorage
+        localStorage.removeItem('authToken')
       } else if (session) { 
         setUser(session.user)
         setIsAuthenticated(true)
@@ -53,10 +54,13 @@ export function AuthProvider({ children }) {
           })
         }
       } else {
-        setUser(null)
-        setIsAuthenticated(false)
-        // Remove token from localStorage
-        localStorage.removeItem('authToken')
+        // Only log out if this is an explicit sign out event, not initial load
+        if (event === 'SIGNED_OUT') {
+          setUser(null)
+          setIsAuthenticated(false)
+          // Remove token from localStorage
+          localStorage.removeItem('authToken')
+        }
       }
       setLoading(false)
     })
