@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import SideNavbar from './SideNavbar'
+import MobileNavigation from './MobileNavigation'
 import ChatbotImageEditor from './ChatbotImageEditor'
 
 const API_BASE_URL = (() => {
@@ -835,59 +836,59 @@ const AdsDashboard = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-white">
+        {/* Mobile Navigation */}
+        <MobileNavigation 
+          setShowCustomContentChatbot={() => {}}
+          handleGenerateContent={generateAds}
+          generating={generating}
+          fetchingFreshData={loading}
+        />
+        
         <SideNavbar />
         
         {/* Main Content */}
-        <div className="ml-48 xl:ml-64 flex flex-col min-h-screen">
+        <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen">
           {/* Fixed Header Skeleton */}
-          <div className="fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
-            <div className="px-6 py-4">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center space-x-8">
+          <div className="fixed top-[52px] md:top-0 right-0 left-0 md:left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+            <div className="px-2 md:px-6 lg:px-8 py-1.5 md:py-3 lg:py-4">
+              <div className="flex justify-between items-center gap-0.5 md:gap-4 overflow-x-auto">
+                <div className="flex items-center space-x-2 md:space-x-6">
                   {/* Stats Cards Skeleton */}
-                  <div className="flex items-center space-x-6">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="flex items-center space-x-2">
-                        <div className="w-8 h-8 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg animate-pulse"></div>
-                        <div>
-                          <div className="h-3 bg-gradient-to-r from-purple-200 to-pink-200 rounded w-16 mb-1 animate-pulse"></div>
-                          <div className="h-5 bg-gradient-to-r from-purple-200 to-pink-200 rounded w-8 animate-pulse"></div>
-                        </div>
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="flex items-center space-x-1 bg-white/80 backdrop-blur-sm rounded-lg px-1 md:px-1.5 py-0.5 md:py-1 lg:px-3 lg:py-2 shadow-sm flex-shrink-0">
+                      <div className="w-8 h-8 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg animate-pulse"></div>
+                      <div>
+                        <div className="h-3 bg-gradient-to-r from-purple-200 to-pink-200 rounded w-12 md:w-16 animate-pulse"></div>
+                        <div className="h-5 bg-gradient-to-r from-purple-200 to-pink-200 rounded w-8 animate-pulse"></div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
                 
                 {/* Generate Button Skeleton */}
-                <div className="flex items-center space-x-4">
-                  <div className="h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-32 animate-pulse"></div>
+                <div className="flex items-center space-x-2 md:space-x-4">
+                  <div className="h-8 md:h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-8 md:w-32 animate-pulse"></div>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Content Area Skeleton */}
-          <div className="flex-1 pt-24 p-6">
+          <div className="flex-1 pt-24 md:pt-28 p-3 md:p-6">
             <div className="max-w-7xl mx-auto">
               {/* Filters Skeleton */}
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center space-x-4">
-                    <div className="h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-48 animate-pulse"></div>
-                    <div className="h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-32 animate-pulse"></div>
-                    <div className="h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-32 animate-pulse"></div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="h-10 w-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg animate-pulse"></div>
-                    <div className="h-10 w-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg animate-pulse"></div>
-                  </div>
+              <div className="mb-4 md:mb-8">
+                <div className="flex flex-wrap items-center gap-2 md:gap-4">
+                  <div className="h-8 md:h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-full md:w-48 animate-pulse"></div>
+                  <div className="h-8 md:h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-full md:w-32 animate-pulse"></div>
+                  <div className="h-8 md:h-10 bg-gradient-to-r from-purple-200 to-pink-200 rounded-lg w-full md:w-32 animate-pulse"></div>
                 </div>
               </div>
 
               {/* Ads Grid Skeleton */}
               <div className="flex items-center justify-center min-h-96">
                 <div className="text-center">
-                  <p className="text-gray-600">Ads content will appear here</p>
+                  <p className="text-gray-600 text-sm md:text-base">Ads content will appear here</p>
                 </div>
               </div>
             </div>
@@ -898,152 +899,159 @@ const AdsDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50">
+      {/* Mobile Navigation */}
+      <MobileNavigation 
+        setShowCustomContentChatbot={() => {}}
+        handleGenerateContent={generateAds}
+        generating={generating}
+        fetchingFreshData={loading}
+      />
+      
       {/* Side Navbar */}
       <SideNavbar />
       
-      {/* Main Content */}
-      <div className="ml-48 xl:ml-64 flex flex-col min-h-screen">
+      {/* Main Content - No left margin on mobile, only on desktop */}
+      <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen w-full">
         {/* Fixed Header */}
-        <div className="fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
-          <div className="px-6 py-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center space-x-8">
-                {/* Stats Cards in Header */}
-                <div className="flex items-center space-x-6">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                      <Calendar className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-600">
-                        {selectedDate === new Date().toISOString().split('T')[0] ? "Today's Ads" : "Selected Date Ads"}
-                      </p>
-                      <p className="text-lg font-bold text-gray-900">{filteredAds.length}</p>
-                    </div>
+        <div className="fixed top-[52px] md:top-0 right-0 left-0 md:left-48 xl:left-64 bg-gradient-to-r from-pink-50 to-purple-50 shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+          <div className="px-2 md:px-6 lg:px-8 py-1.5 md:py-3 lg:py-4">
+            {/* Single Row for ALL Devices */}
+            <div className="flex items-center justify-between md:justify-between gap-0.5 md:gap-4 w-full overflow-x-auto">
+              
+              {/* Left Side - Stats */}
+              <div className="flex items-center gap-0.5 md:gap-3 flex-shrink-0">
+                {/* Total Ads Stats Card */}
+                <div className="flex items-center space-x-0.5 md:space-x-1 bg-white/80 backdrop-blur-sm rounded-lg px-1 md:px-1.5 py-0.5 md:py-1 lg:px-3 lg:py-2 xl:px-4 xl:py-2.5 shadow-sm">
+                  <div className="p-0.5 md:p-1 lg:p-1.5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-md flex-shrink-0">
+                    <Calendar className="w-2.5 h-2.5 md:w-3 md:h-3 lg:w-4 lg:h-5 text-white" />
                   </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center">
-                      <CheckCircle className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-600">Approved</p>
-                      <p className="text-lg font-bold text-gray-900">
-                        {ads.filter(ad => ad.status === 'approved').length}
-                      </p>
-                    </div>
+                  <div className="min-w-0">
+                    <p className="text-[7px] md:text-xs text-gray-600 whitespace-nowrap font-medium leading-tight">
+                      {selectedDate === new Date().toISOString().split('T')[0] ? "Today" : "Selected"}
+                    </p>
+                    <p className="text-[9px] md:text-sm lg:text-base font-bold text-gray-900 whitespace-nowrap leading-tight">{filteredAds.length}</p>
                   </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
-                      <Target className="w-4 h-4 text-white" />
-                    </div>
-              <div>
-                      <p className="text-xs font-medium text-gray-600">Platforms</p>
-                      <p className="text-lg font-bold text-gray-900">
-                        {new Set(filteredAds.map(ad => ad.platform)).size}
-                      </p>
-                    </div>
+                </div>
+
+                {/* Approved Stats Card */}
+                <div className="flex items-center space-x-0.5 md:space-x-1 bg-white/80 backdrop-blur-sm rounded-lg px-1 md:px-1.5 py-0.5 md:py-1 lg:px-3 lg:py-2 xl:px-4 xl:py-2.5 shadow-sm">
+                  <div className="p-0.5 md:p-1 lg:p-1.5 bg-gradient-to-r from-green-500 to-green-600 rounded-md flex-shrink-0">
+                    <CheckCircle className="w-2.5 h-2.5 md:w-3 md:h-3 lg:w-4 lg:h-5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[7px] md:text-xs text-gray-600 whitespace-nowrap font-medium leading-tight">Approved</p>
+                    <p className="text-[9px] md:text-sm lg:text-base font-bold text-gray-900 whitespace-nowrap leading-tight">
+                      {ads.filter(ad => ad.status === 'approved').length}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Platforms Stats Card */}
+                <div className="flex items-center space-x-0.5 md:space-x-1 bg-white/80 backdrop-blur-sm rounded-lg px-1 md:px-1.5 py-0.5 md:py-1 lg:px-3 lg:py-2 xl:px-4 xl:py-2.5 shadow-sm">
+                  <div className="p-0.5 md:p-1 lg:p-1.5 bg-gradient-to-r from-purple-500 to-purple-600 rounded-md flex-shrink-0">
+                    <Target className="w-2.5 h-2.5 md:w-3 md:h-3 lg:w-4 lg:h-5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[7px] md:text-xs text-gray-600 whitespace-nowrap font-medium leading-tight">Platforms</p>
+                    <p className="text-[9px] md:text-sm lg:text-base font-bold text-gray-900 whitespace-nowrap leading-tight">
+                      {new Set(filteredAds.map(ad => ad.platform)).size}
+                    </p>
                   </div>
                 </div>
               </div>
-              
-              <div className="flex items-center space-x-4">
+
+              {/* Right Side - Actions */}
+              <div className="flex items-center gap-0.5 md:gap-3 flex-shrink-0">
+                {/* Generate Button */}
                 <button
                   onClick={generateAds}
                   disabled={generating}
-                  className="flex items-center space-x-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
+                  className="flex items-center justify-center bg-gradient-to-r from-pink-500 to-purple-600 text-white px-1.5 py-1.5 md:px-4 md:py-2 lg:px-6 lg:py-3 rounded-md md:rounded-lg lg:rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 shadow-lg hover:shadow-xl h-8 w-8 md:w-auto md:h-auto flex-shrink-0"
                 >
                   {generating ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <RefreshCw className="w-3.5 h-3.5 md:w-4 md:h-5 animate-spin" />
                   ) : (
-                    <Sparkles className="w-4 h-4" />
+                    <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-5" />
                   )}
-                  <span>{generating ? 'Generating...' : 'Generate Ads'}</span>
+                  <span className="hidden md:inline ml-2 text-sm lg:text-base">{generating ? 'Generating...' : 'Generate Ads'}</span>
                 </button>
+
+                {/* Date Selector - Visible on all devices */}
+                <div className="flex items-center space-x-1 md:space-x-2">
+                  <Calendar className="w-3 h-3 md:w-4 md:h-4 text-gray-600 flex-shrink-0" />
+                  <input
+                    id="date-selector"
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="px-1.5 py-0.5 md:px-2 md:py-1 text-[8px] md:text-xs border border-gray-300 rounded-md md:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm min-w-[90px] md:min-w-[120px] h-7 md:h-auto"
+                    min="2025-01-01"
+                    max="2025-12-31"
+                  />
+                </div>
                 
-                {/* Filter and View Controls */}
-                <div className="flex items-center space-x-4">
-                  {/* Date Selector */}
-                  <div className="flex items-center space-x-3">
-                    <Calendar className="w-5 h-5 text-gray-600" />
-                    <div>
-                      <label htmlFor="date-selector" className="text-sm font-medium text-gray-700">
-                        Select Date:
-                      </label>
-                      <input
-                        id="date-selector"
-                        type="date"
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        className="ml-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
-                        min="2025-01-01"
-                        max="2025-12-31"
-                      />
-                    </div>
-                  </div>
-                  
-                  {/* Platform Filter */}
-                  <select
-                    value={filterPlatform}
-                    onChange={(e) => setFilterPlatform(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                {/* Platform Filter */}
+                <select
+                  value={filterPlatform}
+                  onChange={(e) => setFilterPlatform(e.target.value)}
+                  className="px-1 md:px-3 lg:px-4 py-1 md:py-2 text-[8px] md:text-sm border border-pink-200 rounded-md md:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm min-w-[60px] md:min-w-[120px] flex-shrink-0 h-8 md:h-auto"
+                >
+                  <option value="all">All Platforms</option>
+                  {platforms.map(platform => (
+                    <option key={platform.id} value={platform.id}>{platform.name}</option>
+                  ))}
+                </select>
+                
+                {/* Status Filter */}
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="px-1 md:px-3 lg:px-4 py-1 md:py-2 text-[8px] md:text-sm border border-pink-200 rounded-md md:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm min-w-[50px] md:min-w-[100px] flex-shrink-0 h-8 md:h-auto"
+                >
+                  <option value="all">All Status</option>
+                  <option value="draft">Draft</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="published">Published</option>
+                  <option value="paused">Paused</option>
+                </select>
+                
+                {/* View Mode Toggle - Hidden on mobile */}
+                <div className="hidden md:flex border border-pink-200 rounded-md md:rounded-lg overflow-hidden bg-white/80 backdrop-blur-sm shadow-sm flex-shrink-0">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`p-1 md:p-1.5 lg:p-2 ${viewMode === 'grid' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white' : 'text-gray-600 hover:bg-pink-50'} h-8 md:h-auto`}
                   >
-                    <option value="all">All Platforms</option>
-                    {platforms.map(platform => (
-                      <option key={platform.id} value={platform.id}>{platform.name}</option>
-                    ))}
-                  </select>
-                  
-                  {/* Status Filter */}
-                  <select
-                    value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                    <Grid className="w-3 h-3 md:w-3.5 md:h-3.5 lg:w-4 lg:h-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`p-1 md:p-1.5 lg:p-2 ${viewMode === 'list' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white' : 'text-gray-600 hover:bg-pink-50'} h-8 md:h-auto`}
                   >
-                    <option value="all">All Status</option>
-                    <option value="draft">Draft</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="published">Published</option>
-                    <option value="paused">Paused</option>
-                  </select>
-                  
-                  <div className="flex items-center space-x-1">
-                    <button
-                      onClick={() => setViewMode('grid')}
-                      className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      <Grid className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setViewMode('list')}
-                      className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      <List className="w-4 h-4" />
-                    </button>
-                  </div>
+                    <List className="w-3 h-3 md:w-3.5 md:h-3.5 lg:w-4 lg:h-4" />
+                  </button>
                 </div>
               </div>
+
             </div>
+
           </div>
         </div>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 p-6 pt-24">
-          {/* Ads Grid/List */}
-          <div className="bg-white rounded-lg shadow-sm border">
+        {/* Main Content Area */}
+        <div className="w-full px-3 md:px-6">
+          <div className="pt-24 md:pt-28">
           
           {filteredAds.length === 0 ? (
-            <div className="p-12 text-center">
-              <Megaphone className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No ads found</h3>
-              <p className="text-gray-500 mb-6">Generate your first ad campaign to get started</p>
+            <div className="p-6 md:p-12 text-center">
+              <Megaphone className="w-12 h-12 md:w-16 md:h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-base md:text-lg font-medium text-gray-900 mb-2">No ads found</h3>
+              <p className="text-sm md:text-base text-gray-500 mb-6">Generate your first ad campaign to get started</p>
               <button
                 onClick={generateAds}
                 disabled={generating}
-                className="flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-600 transition-all duration-300 disabled:opacity-50 mx-auto"
+                className="flex items-center px-4 md:px-6 py-2 md:py-3 text-sm md:text-base bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-600 transition-all duration-300 disabled:opacity-50 mx-auto"
               >
                 {generating ? (
                   <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
@@ -1054,7 +1062,9 @@ const AdsDashboard = () => {
               </button>
             </div>
           ) : (
-            <div className={`grid gap-6 items-start ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1'} p-6`}>
+            <div 
+              className={viewMode === 'grid' ? 'p-2 md:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6' : 'divide-y'}
+            >
               {filteredAds.map(ad => {
                 console.log('Rendering ad card:', ad.id, 'platform:', ad.platform, 'platform type:', typeof ad.platform)
                 const platform = ad.platform?.toLowerCase() || 'unknown'
@@ -1064,15 +1074,17 @@ const AdsDashboard = () => {
                 return (
                   <div 
                     key={ad.id} 
-                    className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 hover:scale-[1.02] cursor-pointer self-start"
+                    className={`${viewMode === 'grid' ? 'bg-white rounded-xl shadow-lg border border-gray-100 hover:shadow-xl hover:scale-105 transition-all duration-300 overflow-hidden cursor-pointer' : 'bg-white'} p-0`}
                     onClick={() => toggleAdExpansion(ad.id)}
                   >
+                    {/* Card Content */}
+                    <div className="p-5">
                     {!isExpanded ? (
                       // Collapsed View
                       <>
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center space-x-3">
-                            <div className={`w-12 h-12 ${theme.iconBg} rounded-xl flex items-center justify-center shadow-sm`}>
+                            <div className={`w-10 h-10 md:w-12 md:h-12 ${theme.iconBg} rounded-lg md:rounded-xl flex items-center justify-center shadow-sm`}>
                               {(() => {
                                 console.log('Platform for icon:', platform)
                                 
@@ -1093,16 +1105,16 @@ const AdsDashboard = () => {
                               })()}
                             </div>
                             <div>
-                              <h4 className={`font-semibold capitalize ${theme.text}`}>{platform || 'Unknown Platform'}</h4>
-                              <p className="text-sm text-gray-500">{ad.status}</p>
+                              <h4 className={`text-sm md:text-base font-semibold capitalize ${theme.text}`}>{platform || 'Unknown Platform'}</h4>
+                              <p className="text-xs md:text-sm text-gray-500">{ad.status}</p>
                             </div>
                           </div>
-                          <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(ad.status)}`}>
+                          <div className={`px-2 py-0.5 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-medium ${getStatusColor(ad.status)}`}>
                             {ad.status}
                           </div>
                         </div>
                         {ad.title && (
-                          <h5 className="font-medium text-gray-900 mb-3">{ad.title}</h5>
+                          <h5 className="font-medium text-sm md:text-base text-gray-900 mb-3">{ad.title}</h5>
                         )}
                         
                         {/* Media Display - Only show if ad has media */}
@@ -1131,11 +1143,14 @@ const AdsDashboard = () => {
                           </div>
                         )}
                         
-                        <p className="text-gray-700 text-sm mb-4 line-clamp-3">{ad.ad_copy}</p>
+                        <p className="text-gray-600 text-xs md:text-sm mb-4 line-clamp-3">{ad.ad_copy}</p>
                         
                         {ad.ad_copy && ad.ad_copy.length > 150 && (
                           <button
-                            onClick={() => toggleAdExpansion(ad.id)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleAdExpansion(ad.id)
+                            }}
                             className="text-xs text-purple-600 hover:text-purple-800 font-medium"
                           >
                             Read more
@@ -1219,27 +1234,27 @@ const AdsDashboard = () => {
                           </div>
                         )}
                         
-                        <div className="flex items-center justify-between text-xs text-gray-500 mb-4">
-                          <div className="flex items-center space-x-2">
+                        <div className="flex items-center justify-between text-[10px] md:text-xs text-gray-500 mb-4">
+                          <div className="flex items-center space-x-1 md:space-x-2">
                             <span className="flex items-center">
                               {getAdTypeIcon(ad.ad_type)}
-                              <span className="ml-1 capitalize">{ad.ad_type}</span>
+                              <span className="ml-0.5 md:ml-1 capitalize">{ad.ad_type}</span>
                             </span>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <Clock className="w-3 h-3" />
-                            <span>{new Date(ad.scheduled_at).toLocaleDateString()}</span>
+                          <div className="flex items-center space-x-1 md:space-x-2">
+                            <Clock className="w-2.5 h-2.5 md:w-3 md:h-3" />
+                            <span className="whitespace-nowrap">{new Date(ad.scheduled_at).toLocaleDateString()}</span>
                           </div>
                         </div>
                         
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center space-x-1 md:space-x-2">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleApproveAd(ad.id)
                               }}
-                              className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs"
+                              className="px-2 py-1 md:px-3 md:py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-[10px] md:text-xs"
                             >
                               Approve
                             </button>
@@ -1248,42 +1263,42 @@ const AdsDashboard = () => {
                                 e.stopPropagation()
                                 handleRejectAd(ad.id)
                               }}
-                              className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-xs"
+                              className="px-2 py-1 md:px-3 md:py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-[10px] md:text-xs"
                             >
                               Reject
                             </button>
                           </div>
                           
-                          <div className="flex items-center space-x-1">
+                          <div className="flex items-center space-x-0.5 md:space-x-1">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleEditAd(ad)
                               }}
-                              className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                              className="p-1 md:p-2 text-gray-400 hover:text-blue-600 transition-colors"
                               title="Edit Ad"
                             >
-                              <Edit className="w-4 h-4" />
+                              <Edit className="w-3.5 h-3.5 md:w-4 md:h-4" />
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleCopyAd(ad)
                               }}
-                              className="p-2 text-gray-400 hover:text-green-600 transition-colors"
+                              className="p-1 md:p-2 text-gray-400 hover:text-green-600 transition-colors"
                               title="Copy Ad"
                             >
-                              <Share2 className="w-4 h-4" />
+                              <Share2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
                             </button>
                           </div>
                         </div>
                       </>
                     ) : (
-                      // Expanded View
                       <>
+                      {/* Expanded View */}
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center space-x-3">
-                            <div className={`w-12 h-12 ${theme.iconBg} rounded-xl flex items-center justify-center shadow-sm`}>
+                            <div className={`w-10 h-10 md:w-12 md:h-12 ${theme.iconBg} rounded-lg md:rounded-xl flex items-center justify-center shadow-sm`}>
                               {(() => {
                                 switch (platform) {
                                   case 'facebook':
@@ -1302,12 +1317,12 @@ const AdsDashboard = () => {
                               })()}
                             </div>
                             <div>
-                              <h4 className={`font-semibold capitalize ${theme.text}`}>{platform || 'Unknown Platform'}</h4>
-                              <p className="text-sm text-gray-500">{ad.status}</p>
+                              <h4 className={`text-sm md:text-base font-semibold capitalize ${theme.text}`}>{platform || 'Unknown Platform'}</h4>
+                              <p className="text-xs md:text-sm text-gray-500">{ad.status}</p>
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(ad.status)}`}>
+                            <div className={`px-2 py-0.5 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-medium ${getStatusColor(ad.status)}`}>
                               {ad.status}
                             </div>
                             <button
@@ -1323,29 +1338,29 @@ const AdsDashboard = () => {
                         </div>
                         
                         {ad.title && (
-                          <h5 className="font-medium text-gray-900 mb-4">{ad.title}</h5>
+                          <h5 className="font-medium text-sm md:text-base text-gray-900 mb-4">{ad.title}</h5>
                         )}
                         
                         <div className="mb-4">
-                          <p className="text-gray-700 text-sm leading-relaxed">{ad.ad_copy}</p>
+                          <p className="text-gray-600 text-xs md:text-sm leading-relaxed">{ad.ad_copy}</p>
                         </div>
                         
-                        <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 mb-4 text-xs md:text-sm">
                           <div>
                             <span className="font-medium text-gray-600">Call to Action:</span>
-                            <p className="text-gray-800">{ad.call_to_action}</p>
+                            <p className="text-gray-800 break-words">{ad.call_to_action}</p>
                           </div>
                           <div>
                             <span className="font-medium text-gray-600">Target Audience:</span>
-                            <p className="text-gray-800">{ad.target_audience}</p>
+                            <p className="text-gray-800 break-words">{ad.target_audience}</p>
                           </div>
                           <div>
                             <span className="font-medium text-gray-600">Budget Range:</span>
-                            <p className="text-gray-800">{ad.budget_range}</p>
+                            <p className="text-gray-800 break-words">{ad.budget_range}</p>
                           </div>
                           <div>
                             <span className="font-medium text-gray-600">Campaign Objective:</span>
-                            <p className="text-gray-800">{ad.campaign_objective}</p>
+                            <p className="text-gray-800 break-words">{ad.campaign_objective}</p>
                           </div>
                         </div>
                         
@@ -1353,9 +1368,9 @@ const AdsDashboard = () => {
                         
                         {ad.hashtags && ad.hashtags.length > 0 && (
                           <div className="mb-4">
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-1.5 md:gap-2">
                               {ad.hashtags.map((tag, index) => (
-                                <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                                <span key={index} className="px-1.5 py-0.5 md:px-2 md:py-1 bg-blue-100 text-blue-800 text-[10px] md:text-xs rounded-full">
                                   #{tag}
                                 </span>
                               ))}
@@ -1370,20 +1385,20 @@ const AdsDashboard = () => {
                                 e.stopPropagation()
                                 handleEditAd(ad)
                               }}
-                              className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                              className="p-1.5 md:p-2 text-gray-400 hover:text-blue-600 transition-colors"
                               title="Edit Ad"
                             >
-                              <Edit className="w-4 h-4" />
+                              <Edit className="w-3.5 h-3.5 md:w-4 md:h-4" />
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleCopyAd(ad)
                               }}
-                              className="p-2 text-gray-400 hover:text-green-600 transition-colors"
+                              className="p-1.5 md:p-2 text-gray-400 hover:text-green-600 transition-colors"
                               title="Copy Ad"
                             >
-                              <Share2 className="w-4 h-4" />
+                              <Share2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
                             </button>
                           </div>
                         </div>
@@ -1429,13 +1444,13 @@ const AdsDashboard = () => {
                         )}
                         
                         {/* Approve/Reject buttons after content */}
-                        <div className="flex items-center justify-center space-x-2 mt-4">
+                        <div className="flex items-center justify-center space-x-1.5 md:space-x-2 mt-4 flex-wrap gap-2">
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
                               handleApproveAd(ad.id)
                             }}
-                            className="flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-500 transition-all duration-300 text-sm"
+                            className="flex items-center space-x-1 px-2.5 py-1.5 md:px-3 md:py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-500 transition-all duration-300 text-xs md:text-sm"
                           >
                             <CheckCircle className="w-3 h-3" />
                             <span>Approve</span>
@@ -1445,7 +1460,7 @@ const AdsDashboard = () => {
                               e.stopPropagation()
                               handleRejectAd(ad.id)
                             }}
-                            className="flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-500 transition-all duration-300 text-sm"
+                            className="flex items-center space-x-1 px-2.5 py-1.5 md:px-3 md:py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-500 transition-all duration-300 text-xs md:text-sm"
                           >
                             <X className="w-3 h-3" />
                             <span>Reject</span>
@@ -1453,6 +1468,7 @@ const AdsDashboard = () => {
                         </div>
                       </>
                     )}
+                    </div>
                   </div>
                 )
               })}
