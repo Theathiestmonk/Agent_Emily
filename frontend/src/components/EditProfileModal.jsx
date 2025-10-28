@@ -94,48 +94,49 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-1.5 sm:p-2 md:p-4">
+      <div className="bg-white rounded-lg sm:rounded-xl shadow-2xl max-w-6xl w-full max-h-[98vh] sm:max-h-[95vh] md:max-h-[90vh] overflow-hidden flex flex-col">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-          <div className="flex-1">
-            <div className="flex items-center space-x-3">
-            <h2 className="text-2xl font-bold text-gray-900">Edit Profile</h2>
+        <div className="flex items-start sm:items-center justify-between p-2.5 sm:p-3 md:p-4 lg:p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white gap-2 sm:gap-3">
+          {/* Left section - Title and Save indicator */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center space-x-2 flex-wrap gap-1">
+              <h2 className="text-base sm:text-lg md:text-2xl font-bold text-gray-900">Edit Profile</h2>
               {showSaveIndicator && (
-                <div className="flex items-center space-x-2 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                  <CheckCircle className="w-3 h-3" />
-                  Saved!
+                <div className="flex items-center space-x-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-green-100 text-green-700 rounded-full text-[10px] sm:text-xs font-medium whitespace-nowrap">
+                  <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                  <span className="hidden sm:inline">Saved!</span>
                 </div>
               )}
             </div>
-            <p className="text-gray-600 mt-1">Update your business information and preferences</p>
-          </div>
-          
-          {/* Action Buttons */}
-          <div className="flex items-center space-x-2 mr-4">
+            <p className="text-xs sm:text-sm md:text-base text-gray-600 mt-1">Update your business information and preferences</p>
           </div>
 
-          {/* Step Navigation */}
-          <div className="flex items-center space-x-4">
+          {/* Right section - Step Navigation and Close button */}
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+            {/* Step Navigation */}
             <div className="relative step-navigation">
               <button
                 onClick={() => setShowStepNavigation(!showStepNavigation)}
-                className="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors group"
+                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-xs sm:text-sm"
                 title="Click to navigate between steps"
               >
-                <Navigation className="w-4 h-4 text-gray-600" />
-                <span className="text-sm font-medium text-gray-700">
+                <Navigation className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600 flex-shrink-0" />
+                <span className="font-medium text-gray-700 hidden md:inline">
                   Step {currentStep + 1}: {steps[currentStep]}
                 </span>
-                <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform ${showStepNavigation ? 'rotate-180' : ''}`} />
+                <span className="font-medium text-gray-700 md:hidden">
+                  {currentStep + 1}/{steps.length}
+                </span>
+                <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-gray-600 transition-transform flex-shrink-0 ${showStepNavigation ? 'rotate-180' : ''}`} />
               </button>
               
               {/* Step Dropdown */}
               {showStepNavigation && (
-                <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-10 max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-50 hover:scrollbar-thumb-gray-400">
-                  <div className="p-3">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                <div className="absolute right-0 top-full mt-2 w-[280px] sm:w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-10 max-h-[50vh] sm:max-h-96 overflow-y-auto">
+                  <div className="p-2 sm:p-3">
+                    <div className="mb-2 sm:mb-3">
+                      <div className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wide">
                         Jump to Step
                       </div>
                     </div>
@@ -144,7 +145,7 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
                         <button
                           key={index}
                           onClick={() => handleStepChange(index)}
-                          className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-200 group ${
+                          className={`w-full text-left px-2 sm:px-3 py-1.5 sm:py-2 md:py-2.5 rounded-md text-xs sm:text-sm transition-all duration-200 ${
                             index === currentStep
                               ? 'bg-pink-100 text-pink-700 font-medium shadow-sm'
                               : completedSteps.has(index)
@@ -152,8 +153,8 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
                               : 'text-gray-700 hover:bg-gray-50 hover:shadow-sm'
                           }`}
                         >
-                          <div className="flex items-center space-x-3">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-colors ${
+                          <div className="flex items-center space-x-2">
+                            <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-medium transition-colors flex-shrink-0 ${
                               index === currentStep
                                 ? 'bg-pink-600 text-white'
                                 : completedSteps.has(index)
@@ -161,20 +162,18 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
                                 : 'bg-gray-200 text-gray-600'
                             }`}>
                               {completedSteps.has(index) ? (
-                                <CheckCircle className="w-3 h-3" />
+                                <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                               ) : (
                                 index + 1
                               )}
                             </div>
-                            <span className="flex-1">{step}</span>
-                            <div className="flex items-center space-x-2">
-                              {index === currentStep && (
-                                <div className="w-2 h-2 bg-pink-600 rounded-full"></div>
-                              )}
-                              {completedSteps.has(index) && (
-                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                              )}
-                            </div>
+                            <span className="flex-1 truncate">{step}</span>
+                            {index === currentStep && (
+                              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-pink-600 rounded-full flex-shrink-0"></div>
+                            )}
+                            {completedSteps.has(index) && (
+                              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full flex-shrink-0"></div>
+                            )}
                           </div>
                         </button>
                       ))}
@@ -182,38 +181,39 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
                   </div>
                 </div>
               )}
-          </div>
-            
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X className="w-6 h-6 text-gray-500" />
-          </button>
+            </div>
+              
+            {/* Close Button */}
+            <button
+              onClick={onClose}
+              className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+            >
+              <X className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-gray-500" />
+            </button>
           </div>
         </div>
 
         {/* Modal Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
+        <div className="p-2 sm:p-3 md:p-4 lg:p-6 overflow-y-auto max-h-[calc(98vh-170px)] sm:max-h-[calc(95vh-180px)] md:max-h-[calc(90vh-140px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-6 sm:py-8 md:py-12">
               <div className="text-center">
-                <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 </div>
-                <p className="text-gray-600">Loading your profile...</p>
+                <p className="text-gray-600 text-sm sm:text-base">Loading your profile...</p>
               </div>
             </div>
           ) : error ? (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <X className="w-8 h-8 text-red-600" />
+            <div className="text-center py-6 sm:py-8 md:py-12">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                <X className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Profile</h3>
-              <p className="text-gray-600 mb-4">{error}</p>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Error Loading Profile</h3>
+              <p className="text-gray-600 mb-3 sm:mb-4 text-sm sm:text-base">{error}</p>
               <button
                 onClick={fetchProfileData}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm sm:text-base"
               >
                 Try Again
               </button>

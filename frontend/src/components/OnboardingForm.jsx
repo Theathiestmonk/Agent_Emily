@@ -742,30 +742,30 @@ const OnboardingForm = forwardRef(({
     switch (currentStep) {
       case 0:
         return (
-          <div className="space-y-6">
+          <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Business Name *</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Business Name *</label>
               <input
                 type="text"
                 value={formData.business_name}
                 onChange={(e) => handleInputChange('business_name', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="Enter your business name"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                placeholder="Enter business name"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Business Type *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Business Type *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {businessTypes.map(type => (
-                  <label key={type} className="flex items-center space-x-2">
+                  <label key={type} className="flex items-center space-x-1.5 sm:space-x-2">
                     <input
                       type="checkbox"
                       checked={formData.business_type && formData.business_type.includes(type)}
                       onChange={(e) => handleArrayChange('business_type', type, e.target.checked)}
-                      className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                      className="rounded border-gray-300 text-pink-600 focus:ring-pink-500 flex-shrink-0"
                     />
-                    <span className="text-sm text-gray-700">{type}</span>
+                    <span className="text-xs sm:text-sm text-gray-700 break-words">{type}</span>
                   </label>
                 ))}
               </div>
@@ -775,7 +775,7 @@ const OnboardingForm = forwardRef(({
                     type="text"
                     value={otherInputs.businessTypeOther}
                     onChange={(e) => handleOtherInputChange('businessTypeOther', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Please specify your business type"
                   />
                 </div>
@@ -783,17 +783,17 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Industry *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Industry *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2">
                 {industries.map(industry => (
-                  <label key={industry} className="flex items-center space-x-2">
+                  <label key={industry} className="flex items-center space-x-1.5 sm:space-x-2">
                     <input
                       type="checkbox"
                       checked={formData.industry && formData.industry.includes(industry)}
                       onChange={(e) => handleArrayChange('industry', industry, e.target.checked)}
-                      className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                      className="rounded border-gray-300 text-pink-600 focus:ring-pink-500 flex-shrink-0"
                     />
-                    <span className="text-sm text-gray-700">{industry}</span>
+                    <span className="text-xs sm:text-sm text-gray-700 break-words">{industry}</span>
                   </label>
                 ))}
               </div>
@@ -803,7 +803,7 @@ const OnboardingForm = forwardRef(({
                     type="text"
                     value={otherInputs.industryOther}
                     onChange={(e) => handleOtherInputChange('industryOther', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Please specify your industry"
                   />
                 </div>
@@ -814,30 +814,30 @@ const OnboardingForm = forwardRef(({
 
       case 1:
         return (
-          <div className="space-y-6">
+          <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Business Description *
                 <InfoTooltip 
                   content="Describe your business in detail - what you offer, who your customers are, and how your products or services work. This helps Emily understand your brand and create tailored marketing content."
-                  className="ml-2"
+                  className="ml-0.5 sm:ml-1 md:ml-2"
                 />
               </label>
               <textarea
                 value={formData.business_description}
                 onChange={(e) => handleInputChange('business_description', e.target.value)}
-                rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                rows={3}
+                className="w-full px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 md:py-2.5 lg:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="Describe what your business does..."
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Business Logo (Optional)
                 <InfoTooltip 
                   content="Uploading your company logo is optional, but it helps the AI create branded visuals and maintain a consistent look across campaigns, making your marketing more professional and recognizable."
-                  className="ml-2"
+                  className="ml-0.5 sm:ml-1 md:ml-2"
                 />
               </label>
               <LogoUpload
@@ -853,7 +853,7 @@ const OnboardingForm = forwardRef(({
 
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience (Select all that apply) *</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Target Audience (Select all that apply) *</label>
               <div className="space-y-4">
                 {/* Age Groups Card */}
                 <div className="border border-gray-200 rounded-lg">
@@ -879,17 +879,17 @@ const OnboardingForm = forwardRef(({
                   </button>
                   {expandedCards.ageGroups && (
                     <div className="px-4 pb-4 border-t border-gray-100">
-                      <div className="grid grid-cols-2 gap-2 pt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-3">
                         {targetAudienceCategories.ageGroups.map(group => (
-                          <label key={group} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={formData.target_audience_age_groups && formData.target_audience_age_groups.includes(group)}
-                              onChange={(e) => handleArrayChange('target_audience_age_groups', group, e.target.checked)}
-                              className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                            />
-                            <span className="text-sm text-gray-700">{group}</span>
-                          </label>
+                           <label key={group} className="flex items-center space-x-1.5 sm:space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={formData.target_audience_age_groups && formData.target_audience_age_groups.includes(group)}
+                                onChange={(e) => handleArrayChange('target_audience_age_groups', group, e.target.checked)}
+                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500 flex-shrink-0"
+                              />
+                             <span className="text-xs sm:text-sm text-gray-700 break-words">{group}</span>
+                            </label>
                         ))}
                       </div>
                     </div>
@@ -920,17 +920,17 @@ const OnboardingForm = forwardRef(({
                   </button>
                   {expandedCards.lifeStages && (
                     <div className="px-4 pb-4 border-t border-gray-100">
-                      <div className="grid grid-cols-2 gap-2 pt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-3">
                         {targetAudienceCategories.lifeStages.map(stage => (
-                          <label key={stage} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={formData.target_audience_life_stages && formData.target_audience_life_stages.includes(stage)}
-                              onChange={(e) => handleArrayChange('target_audience_life_stages', stage, e.target.checked)}
-                              className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                            />
-                            <span className="text-sm text-gray-700">{stage}</span>
-                          </label>
+                           <label key={stage} className="flex items-center space-x-1.5 sm:space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={formData.target_audience_life_stages && formData.target_audience_life_stages.includes(stage)}
+                                onChange={(e) => handleArrayChange('target_audience_life_stages', stage, e.target.checked)}
+                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500 flex-shrink-0"
+                              />
+                             <span className="text-xs sm:text-sm text-gray-700 break-words">{stage}</span>
+                            </label>
                         ))}
                       </div>
                     </div>
@@ -961,16 +961,16 @@ const OnboardingForm = forwardRef(({
                   </button>
                   {expandedCards.professionalTypes && (
                     <div className="px-4 pb-4 border-t border-gray-100">
-                      <div className="grid grid-cols-2 gap-2 pt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-3">
                         {targetAudienceCategories.professionalTypes.map(type => (
-                          <label key={type} className="flex items-center space-x-2">
+                          <label key={type} className="flex items-center space-x-1.5 sm:space-x-2">
                             <input
                               type="checkbox"
                               checked={formData.target_audience_professional_types && formData.target_audience_professional_types.includes(type)}
                               onChange={(e) => handleArrayChange('target_audience_professional_types', type, e.target.checked)}
                               className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                             />
-                            <span className="text-sm text-gray-700">{type}</span>
+                            <span className="text-xs sm:text-sm text-gray-700 break-words">{type}</span>
                           </label>
                         ))}
                       </div>
@@ -1002,17 +1002,17 @@ const OnboardingForm = forwardRef(({
                   </button>
                   {expandedCards.lifestyleInterests && (
                     <div className="px-4 pb-4 border-t border-gray-100">
-                      <div className="grid grid-cols-2 gap-2 pt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-3">
                         {targetAudienceCategories.lifestyleInterests.map(interest => (
-                          <label key={interest} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={formData.target_audience_lifestyle_interests && formData.target_audience_lifestyle_interests.includes(interest)}
-                              onChange={(e) => handleArrayChange('target_audience_lifestyle_interests', interest, e.target.checked)}
-                              className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                            />
-                            <span className="text-sm text-gray-700">{interest}</span>
-                          </label>
+                           <label key={interest} className="flex items-center space-x-1.5 sm:space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={formData.target_audience_lifestyle_interests && formData.target_audience_lifestyle_interests.includes(interest)}
+                                onChange={(e) => handleArrayChange('target_audience_lifestyle_interests', interest, e.target.checked)}
+                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500 flex-shrink-0"
+                              />
+                             <span className="text-xs sm:text-sm text-gray-700 break-words">{interest}</span>
+                            </label>
                         ))}
                       </div>
                     </div>
@@ -1043,17 +1043,17 @@ const OnboardingForm = forwardRef(({
                   </button>
                   {expandedCards.buyerBehavior && (
                     <div className="px-4 pb-4 border-t border-gray-100">
-                      <div className="grid grid-cols-2 gap-2 pt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-3">
                         {targetAudienceCategories.buyerBehavior.map(behavior => (
-                          <label key={behavior} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={formData.target_audience_buyer_behavior && formData.target_audience_buyer_behavior.includes(behavior)}
-                              onChange={(e) => handleArrayChange('target_audience_buyer_behavior', behavior, e.target.checked)}
-                              className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                            />
-                            <span className="text-sm text-gray-700">{behavior}</span>
-                          </label>
+                           <label key={behavior} className="flex items-center space-x-1.5 sm:space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={formData.target_audience_buyer_behavior && formData.target_audience_buyer_behavior.includes(behavior)}
+                                onChange={(e) => handleArrayChange('target_audience_buyer_behavior', behavior, e.target.checked)}
+                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500 flex-shrink-0"
+                              />
+                             <span className="text-xs sm:text-sm text-gray-700 break-words">{behavior}</span>
+                            </label>
                         ))}
                       </div>
                     </div>
@@ -1084,9 +1084,9 @@ const OnboardingForm = forwardRef(({
                   </button>
                   {expandedCards.other && (
                     <div className="px-4 pb-4 border-t border-gray-100">
-                      <div className="grid grid-cols-2 gap-2 pt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-3">
                         {targetAudienceCategories.other.map(option => (
-                          <label key={option} className="flex items-center space-x-2">
+                          <label key={option} className="flex items-center space-x-1.5 sm:space-x-2">
                             <input
                               type="checkbox"
                               checked={formData.target_audience_other === option || (option === 'Other (please specify)' && formData.target_audience_other && formData.target_audience_other !== 'Not Sure')}
@@ -1101,9 +1101,9 @@ const OnboardingForm = forwardRef(({
                                   }
                                 }
                               }}
-                              className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                              className="rounded border-gray-300 text-pink-600 focus:ring-pink-500 flex-shrink-0"
                             />
-                            <span className="text-sm text-gray-700">{option}</span>
+                            <span className="text-xs sm:text-sm text-gray-700 break-words">{option}</span>
                           </label>
                         ))}
                       </div>
@@ -1113,7 +1113,7 @@ const OnboardingForm = forwardRef(({
                             type="text"
                             value={otherInputs.targetAudienceOther}
                             onChange={(e) => handleOtherInputChange('targetAudienceOther', e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                            className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                             placeholder="Please specify your target audience"
                           />
                         </div>
@@ -1125,18 +1125,18 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Unique Value Proposition *
                 <InfoTooltip 
                   content="Highlight your business's main strength or advantage that sets you apart. This helps the AI emphasize your key value in marketing content."
-                  className="ml-2"
+                  className="ml-0.5 sm:ml-1 md:ml-2"
                 />
               </label>
               <textarea
                 value={formData.unique_value_proposition}
                 onChange={(e) => handleInputChange('unique_value_proposition', e.target.value)}
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="What makes your business unique?"
               />
             </div>
@@ -1145,14 +1145,14 @@ const OnboardingForm = forwardRef(({
 
       case 2:
         return (
-          <div className="space-y-6">
+          <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Brand Voice *</label>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Brand Voice *</label>
                 <select
                   value={formData.brand_voice}
                   onChange={(e) => handleInputChange('brand_voice', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 >
                   <option value="">Select your brand voice</option>
                   {brandVoices.map(voice => (
@@ -1162,11 +1162,11 @@ const OnboardingForm = forwardRef(({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Brand Tone *</label>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Brand Tone *</label>
                 <select
                   value={formData.brand_tone}
                   onChange={(e) => handleInputChange('brand_tone', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 >
                   <option value="">Select your brand tone</option>
                   {brandTones.map(tone => (
@@ -1177,79 +1177,79 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Website URL</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Website URL</label>
               <input
                 type="url"
                 value={formData.website_url}
                 onChange={(e) => handleInputChange('website_url', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="https://yourwebsite.com"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Phone Number *</label>
               <input
                 type="tel"
                 value={formData.phone_number}
                 onChange={(e) => handleInputChange('phone_number', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="+1 (555) 123-4567"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Street Address *</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Street Address *</label>
               <input
                 type="text"
                 value={formData.street_address}
                 onChange={(e) => handleInputChange('street_address', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="123 Main Street"
               />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">City *</label>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">City *</label>
                 <input
                   type="text"
                   value={formData.city}
                   onChange={(e) => handleInputChange('city', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                   placeholder="New York"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">State/Province *</label>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">State/Province *</label>
                 <input
                   type="text"
                   value={formData.state}
                   onChange={(e) => handleInputChange('state', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                   placeholder="NY"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Country *</label>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Country *</label>
                 <input
                   type="text"
                   value={formData.country}
                   onChange={(e) => handleInputChange('country', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                   placeholder="United States"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Timezone</label>
               <select
                 value={formData.timezone}
                 onChange={(e) => handleInputChange('timezone', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
               >
                 <option value="">Select your timezone</option>
                 {timezones.map(tz => (
@@ -1262,19 +1262,19 @@ const OnboardingForm = forwardRef(({
 
       case 3:
         return (
-          <div className="space-y-6">
+          <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Current Online Presence (Select all that apply)</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Current Online Presence (Select all that apply)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {currentPresenceOptions.map(option => (
-                  <label key={option} className="flex items-center space-x-2">
+                  <label key={option} className="flex items-center space-x-1.5 sm:space-x-2">
                     <input
                       type="checkbox"
                       checked={formData.current_presence && formData.current_presence.includes(option)}
                       onChange={(e) => handleArrayChange('current_presence', option, e.target.checked)}
-                      className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                      className="rounded border-gray-300 text-pink-600 focus:ring-pink-500 flex-shrink-0"
                     />
-                    <span className="text-sm text-gray-700">{option}</span>
+                    <span className="text-xs sm:text-sm text-gray-700 break-words">{option}</span>
                   </label>
                 ))}
               </div>
@@ -1284,7 +1284,7 @@ const OnboardingForm = forwardRef(({
                     type="text"
                     value={otherInputs.currentPresenceOther}
                     onChange={(e) => handleOtherInputChange('currentPresenceOther', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Please specify your other online presence"
                   />
                 </div>
@@ -1292,8 +1292,8 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Focus Areas (Select all that apply)</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Focus Areas (Select all that apply)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {focusAreas.map(area => (
                   <label key={area} className="flex items-center space-x-2">
                     <input
@@ -1318,12 +1318,12 @@ const OnboardingForm = forwardRef(({
                   {/* Website */}
                   {formData.current_presence.includes('Website') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Website URL *</label>
+                      <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Website URL *</label>
                       <input
                         type="url"
                         value={formData.website_url}
                         onChange={(e) => handleInputChange('website_url', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                         placeholder="https://your-website.com"
                         required
                       />
@@ -1334,12 +1334,12 @@ const OnboardingForm = forwardRef(({
                   {/* Facebook Page */}
                   {formData.current_presence.includes('Facebook Page') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Facebook Page Name</label>
+                      <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Facebook Page Name</label>
                       <input
                         type="text"
                         value={formData.facebook_page_name}
                         onChange={(e) => handleInputChange('facebook_page_name', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                         placeholder="@yourpage or Your Page Name"
                       />
                     </div>
@@ -1348,12 +1348,12 @@ const OnboardingForm = forwardRef(({
                   {/* Instagram */}
                   {formData.current_presence.includes('Instagram') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Instagram Profile Link</label>
+                      <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Instagram Profile Link</label>
                       <input
                         type="url"
                         value={formData.instagram_profile_link}
                         onChange={(e) => handleInputChange('instagram_profile_link', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                         placeholder="https://instagram.com/yourprofile"
                       />
                     </div>
@@ -1362,12 +1362,12 @@ const OnboardingForm = forwardRef(({
                   {/* LinkedIn */}
                   {formData.current_presence.includes('LinkedIn') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">LinkedIn Company Link</label>
+                      <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">LinkedIn Company Link</label>
                       <input
                         type="url"
                         value={formData.linkedin_company_link}
                         onChange={(e) => handleInputChange('linkedin_company_link', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                         placeholder="https://linkedin.com/company/yourcompany"
                       />
                     </div>
@@ -1376,12 +1376,12 @@ const OnboardingForm = forwardRef(({
                   {/* YouTube */}
                   {formData.current_presence.includes('YouTube') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">YouTube Channel Link</label>
+                      <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">YouTube Channel Link</label>
                       <input
                         type="url"
                         value={formData.youtube_channel_link}
                         onChange={(e) => handleInputChange('youtube_channel_link', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                         placeholder="https://youtube.com/@yourchannel"
                       />
                     </div>
@@ -1390,12 +1390,12 @@ const OnboardingForm = forwardRef(({
                   {/* X (Twitter) */}
                   {formData.current_presence.includes('X (formerly Twitter)') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">X (Twitter) Profile</label>
+                      <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">X (Twitter) Profile</label>
                       <input
                         type="text"
                         value={formData.x_twitter_profile}
                         onChange={(e) => handleInputChange('x_twitter_profile', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                         placeholder="@yourhandle"
                       />
                     </div>
@@ -1404,12 +1404,12 @@ const OnboardingForm = forwardRef(({
                   {/* Google Business Profile */}
                   {formData.current_presence.includes('Google Business Profile') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Google Business Profile</label>
+                      <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Google Business Profile</label>
                       <input
                         type="url"
                         value={formData.google_business_profile}
                         onChange={(e) => handleInputChange('google_business_profile', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                         placeholder="https://business.google.com/yourbusiness"
                       />
                     </div>
@@ -1428,12 +1428,12 @@ const OnboardingForm = forwardRef(({
                       {/* Google Ads */}
                       {formData.current_presence.includes('Google Ads') && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Google Ads Account</label>
+                          <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Google Ads Account</label>
                           <input
                             type="text"
                             value={formData.google_ads_account}
                             onChange={(e) => handleInputChange('google_ads_account', e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                            className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                             placeholder="Account ID or Email"
                           />
                         </div>
@@ -1442,12 +1442,12 @@ const OnboardingForm = forwardRef(({
                       {/* WhatsApp Business */}
                       {formData.current_presence.includes('WhatsApp Business') && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">WhatsApp Business</label>
+                          <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">WhatsApp Business</label>
                           <input
                             type="text"
                             value={formData.whatsapp_business}
                             onChange={(e) => handleInputChange('whatsapp_business', e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                            className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                             placeholder="+1234567890"
                           />
                         </div>
@@ -1456,12 +1456,12 @@ const OnboardingForm = forwardRef(({
                       {/* Email Marketing Platform */}
                       {formData.current_presence.includes('Email Marketing Platform') && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Email Marketing Platform</label>
+                          <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Email Marketing Platform</label>
                           <input
                             type="text"
                             value={formData.email_marketing_platform}
                             onChange={(e) => handleInputChange('email_marketing_platform', e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                            className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                             placeholder="Mailchimp, Constant Contact, etc."
                           />
                         </div>
@@ -1503,10 +1503,10 @@ const OnboardingForm = forwardRef(({
 
       case 4:
         return (
-          <div className="space-y-6">
+          <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Digital Marketing Platforms (Select all that apply) *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Digital Marketing Platforms (Select all that apply) *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {socialPlatforms.map(platform => (
                   <label key={platform} className="flex items-center space-x-2">
                     <input
@@ -1525,7 +1525,7 @@ const OnboardingForm = forwardRef(({
                     type="text"
                     value={otherInputs.socialPlatformOther}
                     onChange={(e) => handleOtherInputChange('socialPlatformOther', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Please specify your other digital marketing platform"
                   />
                 </div>
@@ -1533,8 +1533,8 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Primary Goals (Select all that apply) *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Primary Goals (Select all that apply) *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {goals.map(goal => (
                   <label key={goal} className="flex items-center space-x-2">
                     <input
@@ -1553,7 +1553,7 @@ const OnboardingForm = forwardRef(({
                     type="text"
                     value={otherInputs.goalOther}
                     onChange={(e) => handleOtherInputChange('goalOther', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Please specify your other goal"
                   />
                 </div>
@@ -1561,8 +1561,8 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Key Metrics to Track (Select all that apply) *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Key Metrics to Track (Select all that apply) *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {metrics.map(metric => (
                   <label key={metric} className="flex items-center space-x-2">
                     <input
@@ -1581,7 +1581,7 @@ const OnboardingForm = forwardRef(({
                     type="text"
                     value={otherInputs.metricOther}
                     onChange={(e) => handleOtherInputChange('metricOther', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Please specify your other metric"
                   />
                 </div>
@@ -1590,17 +1590,17 @@ const OnboardingForm = forwardRef(({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                   Monthly Marketing Budget
                   <InfoTooltip 
                     content="Enter the approximate amount you plan to spend on marketing each month. This helps Emily create campaigns that fit your budget."
-                    className="ml-2"
+                    className="ml-0.5 sm:ml-1 md:ml-2"
                   />
                 </label>
                 <select
                   value={formData.monthly_budget_range}
                   onChange={(e) => handleInputChange('monthly_budget_range', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 >
                   <option value="">Select budget range</option>
                   {budgetRanges.map(range => (
@@ -1610,11 +1610,11 @@ const OnboardingForm = forwardRef(({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Posting Frequency</label>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Posting Frequency</label>
                 <select
                   value={formData.posting_frequency}
                   onChange={(e) => handleInputChange('posting_frequency', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 >
                   <option value="">Select posting frequency</option>
                   {postingFrequencies.map(frequency => (
@@ -1628,10 +1628,10 @@ const OnboardingForm = forwardRef(({
 
       case 5:
         return (
-          <div className="space-y-6">
+          <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Content Types (Select all that apply) *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Preferred Content Types (Select all that apply) *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {contentTypes.map(type => (
                   <label key={type} className="flex items-center space-x-2">
                     <input
@@ -1640,7 +1640,7 @@ const OnboardingForm = forwardRef(({
                       onChange={(e) => handleArrayChange('preferred_content_types', type, e.target.checked)}
                       className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                     />
-                    <span className="text-sm text-gray-700">{type}</span>
+                    <span className="text-xs sm:text-sm text-gray-700 break-words">{type}</span>
                   </label>
                 ))}
               </div>
@@ -1650,7 +1650,7 @@ const OnboardingForm = forwardRef(({
                     type="text"
                     value={otherInputs.contentTypeOther}
                     onChange={(e) => handleOtherInputChange('contentTypeOther', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Please specify your other content type"
                   />
                 </div>
@@ -1658,8 +1658,8 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Content Themes (Select all that apply) *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Content Themes (Select all that apply) *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {contentThemes.map(theme => (
                   <label key={theme} className="flex items-center space-x-2">
                     <input
@@ -1678,7 +1678,7 @@ const OnboardingForm = forwardRef(({
                     type="text"
                     value={otherInputs.contentThemeOther}
                     onChange={(e) => handleOtherInputChange('contentThemeOther', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Please specify your other content theme"
                   />
                 </div>
@@ -1686,8 +1686,8 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Best Time to Post (Select all that apply)</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Best Time to Post (Select all that apply)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {postingTimes.map(time => (
                   <label key={time} className="flex items-center space-x-2">
                     <input
@@ -1706,7 +1706,7 @@ const OnboardingForm = forwardRef(({
                     type="text"
                     value={otherInputs.postingTimeOther}
                     onChange={(e) => handleOtherInputChange('postingTimeOther', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Please specify your other posting time"
                   />
                 </div>
@@ -1717,13 +1717,13 @@ const OnboardingForm = forwardRef(({
 
       case 6:
         return (
-          <div className="space-y-6">
+          <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Market Position *</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Market Position *</label>
               <select
                 value={formData.market_position}
                 onChange={(e) => handleInputChange('market_position', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 required
               >
                 <option value="">Select your market position</option>
@@ -1736,7 +1736,7 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Products or Services *
                 <InfoTooltip 
                   content="Provide a detailed description of one product or service you want to promote with this AI. Include features, benefits, and target customers so the AI can craft accurate content."
@@ -1747,47 +1747,47 @@ const OnboardingForm = forwardRef(({
                 value={formData.products_or_services}
                 onChange={(e) => handleInputChange('products_or_services', e.target.value)}
                 rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="Describe your main products or services..."
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Main Competitors</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Main Competitors</label>
               <textarea
                 value={formData.main_competitors}
                 onChange={(e) => handleInputChange('main_competitors', e.target.value)}
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="List your main competitors and what makes them successful..."
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Important Launch Dates</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Important Launch Dates</label>
               <input
                 type="date"
                 value={formData.important_launch_dates}
                 onChange={(e) => handleInputChange('important_launch_dates', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="Select launch date"
               />
               <p className="text-xs text-gray-500 mt-1">Select the date for your important product launch or event</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Planned Promotions or Campaigns
                 <InfoTooltip 
                   content="Share any upcoming promotions or campaigns you're planning. This helps Emily align content and strategy with your marketing goals."
-                  className="ml-2"
+                  className="ml-0.5 sm:ml-1 md:ml-2"
                 />
               </label>
               <textarea
                 value={formData.planned_promotions_or_campaigns}
                 onChange={(e) => handleInputChange('planned_promotions_or_campaigns', e.target.value)}
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="Any upcoming promotions, sales, or marketing campaigns..."
               />
             </div>
@@ -1796,10 +1796,10 @@ const OnboardingForm = forwardRef(({
 
       case 7:
         return (
-          <div className="space-y-6">
+          <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Top Performing Content Types (Select all that apply) *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Top Performing Content Types (Select all that apply) *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {contentTypes.map(type => (
                   <label key={type} className="flex items-center space-x-2">
                     <input
@@ -1808,7 +1808,7 @@ const OnboardingForm = forwardRef(({
                       onChange={(e) => handleArrayChange('top_performing_content_types', type, e.target.checked)}
                       className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                     />
-                    <span className="text-sm text-gray-700">{type}</span>
+                    <span className="text-xs sm:text-sm text-gray-700 break-words">{type}</span>
                   </label>
                 ))}
               </div>
@@ -1818,7 +1818,7 @@ const OnboardingForm = forwardRef(({
                     type="text"
                     value={otherInputs.topPerformingContentTypeOther}
                     onChange={(e) => handleOtherInputChange('topPerformingContentTypeOther', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Please specify your other top performing content type"
                   />
                 </div>
@@ -1826,8 +1826,8 @@ const OnboardingForm = forwardRef(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Best Time to Post (Select all that apply) *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Best Time to Post (Select all that apply) *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {postingTimes.map(time => (
                   <label key={time} className="flex items-center space-x-2">
                     <input
@@ -1846,7 +1846,7 @@ const OnboardingForm = forwardRef(({
                     type="text"
                     value={otherInputs.postingTimeOther}
                     onChange={(e) => handleOtherInputChange('postingTimeOther', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Please specify your other posting time"
                   />
                 </div>
@@ -1857,53 +1857,53 @@ const OnboardingForm = forwardRef(({
 
       case 8:
         return (
-          <div className="space-y-6">
+          <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Most Successful Campaigns
                 <InfoTooltip 
                   content="Mention past campaigns that performed well. This helps the AI understand what works best for your audience and replicate success."
-                  className="ml-2"
+                  className="ml-0.5 sm:ml-1 md:ml-2"
                 />
               </label>
               <textarea
                 value={formData.successful_campaigns}
                 onChange={(e) => handleInputChange('successful_campaigns', e.target.value)}
                 rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="Describe any successful marketing campaigns you've run in the past..."
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags That Work Well *</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Hashtags That Work Well *</label>
               <textarea
                 value={formData.hashtags_that_work_well}
                 onChange={(e) => handleInputChange('hashtags_that_work_well', e.target.value)}
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="List hashtags that have performed well for your brand..."
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Customer Pain Points *</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Customer Pain Points *</label>
               <textarea
                 value={formData.customer_pain_points}
                 onChange={(e) => handleInputChange('customer_pain_points', e.target.value)}
                 rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="What problems or pain points do your customers face that your business solves?"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Typical Customer Journey *</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Typical Customer Journey *</label>
               <textarea
                 value={formData.typical_customer_journey}
                 onChange={(e) => handleInputChange('typical_customer_journey', e.target.value)}
                 rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="Describe how customers typically discover, evaluate, and purchase from your business..."
               />
             </div>
@@ -1912,13 +1912,13 @@ const OnboardingForm = forwardRef(({
 
       case 9:
         return (
-          <div className="space-y-6">
+          <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Automation Level *</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Automation Level *</label>
               <select
                 value={formData.automation_level}
                 onChange={(e) => handleInputChange('automation_level', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 required
               >
                 <option value="">Select your automation level</option>
@@ -1985,7 +1985,7 @@ const OnboardingForm = forwardRef(({
 
       case 10:
         return (
-          <div className="space-y-6">
+          <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
             <p className="text-gray-600">Please review all your information before submitting your profile.</p>
             
             <div className="bg-gray-50 p-6 rounded-lg">
@@ -2158,46 +2158,50 @@ const OnboardingForm = forwardRef(({
       </div>
 
       {/* Navigation */}
-      <div className="flex justify-between items-center pt-6 mt-8 border-t border-gray-200 bg-white sticky bottom-0">
-        <div className="flex items-center space-x-4">
+      <div className="flex justify-between items-center pt-3 sm:pt-4 md:pt-6 mt-4 sm:mt-6 md:mt-8 border-t border-gray-200 bg-white sticky bottom-0">
+        <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4">
         <button
           onClick={prevStep}
           disabled={currentStep === 0}
-          className="flex items-center px-6 py-3 bg-gray-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 transition-colors"
+          className="flex items-center px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 bg-gray-500 text-white rounded-md sm:rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 transition-colors text-xs sm:text-sm md:text-base"
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Previous
+          <ArrowLeft className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 mr-1 sm:mr-1.5 md:mr-2" />
+          <span className="hidden sm:inline">Previous</span>
+          <span className="sm:hidden">Prev</span>
         </button>
           
           {/* Data Persistence Indicator */}
           {!isEditMode && (
-            <div className="flex items-center text-sm text-gray-500">
-              <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-              Auto-saved
+            <div className="flex items-center text-[10px] sm:text-xs md:text-sm text-gray-500">
+              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full mr-1 sm:mr-1.5 md:mr-2 animate-pulse"></div>
+              <span className="hidden sm:inline">Auto-saved</span>
+              <span className="sm:hidden">Saved</span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4">
           {/* Step Status - Hidden in edit mode */}
           {!isEditMode && (
-            <div className="text-sm text-gray-600">
+            <div className="text-xs sm:text-sm text-gray-600">
               {isStepCompleted(currentStep) ? (
                 <span className="flex items-center text-green-600">
-                  <Check className="w-4 h-4 mr-1" />
-                  Step Complete
+                  <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 mr-0.5 sm:mr-1" />
+                  <span className="hidden sm:inline">Step Complete</span>
+                  <span className="sm:hidden">✓</span>
                 </span>
               ) : (
-                <span className="text-amber-600">Step Incomplete</span>
+                <span className="text-amber-600 hidden sm:inline">Step Incomplete</span>
               )}
             </div>
           )}
 
           {/* Save Success Indicator - Only in edit mode */}
           {isEditMode && saveSuccess && (
-            <div className="text-sm text-green-600 flex items-center">
-              <Check className="w-4 h-4 mr-1" />
-              Changes Saved Successfully!
+            <div className="text-xs sm:text-sm text-green-600 flex items-center">
+              <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 mr-0.5 sm:mr-1" />
+              <span className="hidden sm:inline">Changes Saved Successfully!</span>
+              <span className="sm:hidden">Saved!</span>
             </div>
           )}
 
@@ -2205,56 +2209,63 @@ const OnboardingForm = forwardRef(({
           <button
             onClick={handleSubmit}
               disabled={isSubmitting || (!isEditMode && !isStepCompleted(currentStep))}
-            className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
+            className="flex items-center px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-md sm:rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all text-xs sm:text-sm md:text-base"
           >
             {isSubmitting ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                {isEditMode ? 'Updating...' : 'Submitting...'}
+                <div className="animate-spin rounded-full h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 border-b-2 border-white mr-1 sm:mr-1.5 md:mr-2"></div>
+                <span className="hidden sm:inline">{isEditMode ? 'Updating...' : 'Submitting...'}</span>
+                <span className="sm:hidden">{isEditMode ? 'Updating' : 'Submitting'}</span>
               </>
             ) : (
               <>
-                <Check className="w-4 h-4 mr-2" />
-                {isEditMode ? 'Update Profile' : 'Complete Onboarding'}
+                <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 mr-1 sm:mr-1.5 md:mr-2" />
+                <span className="hidden lg:inline">{isEditMode ? 'Update Profile' : 'Complete Onboarding'}</span>
+                <span className="hidden sm:inline lg:hidden">{isEditMode ? 'Update' : 'Complete'}</span>
+                <span className="sm:hidden">Done</span>
               </>
             )}
           </button>
         ) : isEditMode ? (
           // In edit mode, show Save button for each step
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 md:space-x-3">
             <button
               onClick={handleSaveStep}
               disabled={isSaving}
-              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
+              className="flex items-center px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-md sm:rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all text-xs sm:text-sm md:text-base"
             >
               {isSaving ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Saving...
+                  <div className="animate-spin rounded-full h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 border-b-2 border-white mr-1 sm:mr-1.5 md:mr-2"></div>
+                  <span className="hidden sm:inline">Saving...</span>
+                  <span className="sm:hidden">Saving</span>
                 </>
               ) : (
                 <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Save
+                  <Save className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 mr-1 sm:mr-1.5 md:mr-2" />
+                  <span className="hidden sm:inline">Save</span>
+                  <span className="sm:hidden">Save</span>
                 </>
               )}
             </button>
             <button
               onClick={nextStep}
-              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all"
+              className="flex items-center px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-md sm:rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all text-xs sm:text-sm md:text-base"
             >
-              Next
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <span className="hidden sm:inline">Next</span>
+              <span className="sm:hidden">Next</span>
+              <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 ml-1 sm:ml-1.5 md:ml-2" />
             </button>
           </div>
         ) : (
           <button
             onClick={nextStep}
               disabled={!isEditMode && !isStepAccessible(currentStep + 1)}
-              className="flex items-center px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all"
+              className="flex items-center px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-md sm:rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all text-xs sm:text-sm md:text-base"
           >
-            Next
-            <ArrowRight className="w-4 h-4 ml-2" />
+            <span className="hidden sm:inline">Next</span>
+            <span className="sm:hidden">Next</span>
+            <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 ml-1 sm:ml-1.5 md:ml-2" />
           </button>
         )}
         </div>

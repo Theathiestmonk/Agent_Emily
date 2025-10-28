@@ -369,7 +369,7 @@ const Profile = () => {
     const value = Array.isArray(editForm[field]) ? editForm[field].join(', ') : editForm[field]
     return (
       <div className="group">
-        <label className="block text-sm font-semibold text-gray-800 mb-3">
+        <label className="block text-xs sm:text-sm font-semibold text-gray-800 mb-2 sm:mb-3">
           {label}
         </label>
         {editing ? (
@@ -377,23 +377,23 @@ const Profile = () => {
             type="text"
             value={value}
             onChange={(e) => handleArrayInputChange(field, e.target.value)}
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md"
+            className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md"
             placeholder="Enter values separated by commas"
           />
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
             {Array.isArray(profile?.[field]) && profile[field].length > 0 ? (
               profile[field].map((item, index) => (
                 <span
                   key={index}
-                  className="px-4 py-2 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-700 rounded-full text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 border border-pink-200"
+                  className="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-700 rounded-full text-[10px] sm:text-xs md:text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 border border-pink-200"
                 >
                   {item}
                 </span>
               ))
             ) : (
-              <div className="bg-gradient-to-r from-gray-50 to-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                <p className="text-gray-500 font-medium">Not specified</p>
+              <div className="bg-gradient-to-r from-gray-50 to-white p-3 sm:p-4 rounded-lg sm:rounded-xl border border-gray-100 shadow-sm">
+                <p className="text-xs sm:text-sm text-gray-500 font-medium">Not specified</p>
               </div>
             )}
           </div>
@@ -454,26 +454,26 @@ const Profile = () => {
 
     return (
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
           Current Presence
         </label>
         {editing ? (
-          <div className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg min-h-[40px] flex items-center">
+          <div className="text-xs sm:text-sm text-gray-900 bg-gray-50 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg min-h-[36px] sm:min-h-[40px] flex items-center">
             {processedPresence.join(', ') || 'Not specified'}
           </div>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
             {processedPresence.length > 0 ? (
               processedPresence.map((item, index) => (
                 <span
                   key={index}
-                  className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
+                  className="px-2 sm:px-3 py-0.5 sm:py-1 bg-purple-100 text-purple-800 rounded-full text-[10px] sm:text-xs md:text-sm"
                 >
                   {item}
                 </span>
               ))
             ) : (
-              <p className="text-gray-500">Not specified</p>
+              <p className="text-xs sm:text-sm text-gray-500">Not specified</p>
             )}
           </div>
         )}
@@ -484,7 +484,7 @@ const Profile = () => {
   const renderTextField = (label, field, icon, type = 'text', placeholder = '') => {
     return (
       <div className="group">
-        <label className="block text-sm font-semibold text-gray-800 mb-3">
+        <label className="block text-xs sm:text-sm font-semibold text-gray-800 mb-2 sm:mb-3">
           {label}
         </label>
         {editing ? (
@@ -493,7 +493,7 @@ const Profile = () => {
               value={editForm[field]}
               onChange={(e) => handleInputChange(field, e.target.value)}
               rows={3}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md"
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md"
               placeholder={placeholder}
             />
           ) : (
@@ -501,14 +501,14 @@ const Profile = () => {
               type={type}
               value={editForm[field]}
               onChange={(e) => handleInputChange(field, e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md"
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md"
               placeholder={placeholder}
             />
           )
         ) : (
-          <div className="bg-gradient-to-r from-gray-50 to-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200">
-            <p className="text-gray-800 flex items-center font-medium">
-              {icon && <span className="mr-3 text-gray-400">{icon}</span>}
+          <div className="bg-gradient-to-r from-gray-50 to-white p-3 sm:p-4 rounded-lg sm:rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200">
+            <p className="text-xs sm:text-sm text-gray-800 flex items-center font-medium">
+              {icon && <span className="mr-2 sm:mr-3 text-gray-400">{icon}</span>}
               {profile?.[field] || 'Not provided'}
             </p>
           </div>
@@ -578,66 +578,68 @@ const Profile = () => {
         {/* Header */}
         <div className="bg-white/80 backdrop-blur-sm shadow-lg border-b border-gray-200/50">
           <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center py-4 md:py-8 gap-4 md:gap-0">
-              <div className="flex items-center space-x-3 md:space-x-6">
-                <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg overflow-hidden flex-shrink-0">
+            <div className="flex justify-between items-center py-3 md:py-4 lg:py-8 gap-2 md:gap-0">
+              <div className="flex items-center space-x-2 md:space-x-3 lg:space-x-6 min-w-0 flex-1 pr-2">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 rounded-lg sm:rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg overflow-hidden flex-shrink-0">
                   {profile?.logo_url ? (
                     <img 
                       src={profile.logo_url} 
                       alt="Profile" 
-                      className="w-12 h-12 md:w-16 md:h-16 object-cover rounded-xl md:rounded-2xl"
+                      className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 object-cover rounded-lg sm:rounded-xl md:rounded-2xl"
                     />
                   ) : (
-                    <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl md:rounded-2xl flex items-center justify-center">
-                      <User className="w-6 h-6 md:w-8 md:h-8 text-white" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 bg-gradient-to-r from-pink-500 to-purple-600 rounded-lg sm:rounded-xl md:rounded-2xl flex items-center justify-center">
+                      <User className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 text-white" />
                     </div>
                   )}
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-xl md:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent truncate">
+                  <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent truncate">
                     {profile?.name || 'Your Profile'}
                   </h1>
-                  <p className="text-gray-600 text-sm md:text-base lg:text-lg hidden md:block">Manage your account and business information</p>
-                  <div className="flex items-center space-x-2 md:space-x-4 mt-2 flex-wrap gap-2">
-                    <span className="px-2 md:px-3 py-1 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-700 rounded-full text-xs md:text-sm font-medium truncate">
+                  <p className="text-gray-600 text-xs sm:text-sm md:text-base lg:text-lg hidden md:block">Manage your account and business information</p>
+                  <div className="flex items-center space-x-1.5 sm:space-x-2 md:space-x-4 mt-1 md:mt-2 flex-wrap gap-1 sm:gap-2">
+                    <span className="px-1.5 sm:px-2 md:px-3 py-0.5 sm:py-1 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-700 rounded-full text-[10px] sm:text-xs md:text-sm font-medium truncate max-w-[150px] sm:max-w-none">
                       {profile?.business_name || 'Business Account'}
                     </span>
-                    <span className="px-2 md:px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs md:text-sm font-medium">
+                    <span className="px-1.5 sm:px-2 md:px-3 py-0.5 sm:py-1 bg-green-100 text-green-700 rounded-full text-[10px] sm:text-xs md:text-sm font-medium whitespace-nowrap">
                       Active
                     </span>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center space-x-2 md:space-x-3 w-full md:w-auto justify-end">
+              <div className="flex items-center space-x-2 md:space-x-3 flex-shrink-0">
                 {!editing ? (
                   <button
                     onClick={handleEdit}
-                    className="group flex items-center space-x-1 md:space-x-2 px-3 md:px-6 py-2 md:py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg md:rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm md:text-base"
+                    className="group flex items-center space-x-1 px-2 sm:px-3 md:px-4 lg:px-6 py-1.5 sm:py-2 md:py-2.5 lg:py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-md sm:rounded-lg md:rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-xs sm:text-sm md:text-base whitespace-nowrap"
                   >
-                    <Edit className="w-4 h-4 md:w-5 md:h-5 group-hover:rotate-12 transition-transform" />
-                    <span className="font-medium hidden sm:inline">Edit Profile</span>
+                    <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 group-hover:rotate-12 transition-transform" />
+                    <span className="font-medium hidden lg:inline">Edit Profile</span>
+                    <span className="font-medium hidden sm:inline lg:hidden">Edit</span>
                     <span className="font-medium sm:hidden">Edit</span>
                   </button>
                 ) : (
-                  <div className="flex items-center space-x-2 md:space-x-3">
+                  <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3">
                     <button
                       onClick={handleCancel}
-                      className="flex items-center space-x-1 md:space-x-2 px-3 md:px-6 py-2 md:py-3 bg-gray-100 text-gray-700 rounded-lg md:rounded-xl hover:bg-gray-200 transition-all duration-200 border border-gray-200 text-sm md:text-base"
+                      className="flex items-center space-x-1 px-2 sm:px-3 md:px-4 lg:px-6 py-1.5 sm:py-2 md:py-2.5 lg:py-3 bg-gray-100 text-gray-700 rounded-md sm:rounded-lg md:rounded-xl hover:bg-gray-200 transition-all duration-200 border border-gray-200 text-xs sm:text-sm md:text-base whitespace-nowrap"
                     >
-                      <X className="w-4 h-4 md:w-5 md:h-5" />
-                      <span className="font-medium hidden sm:inline">Cancel</span>
+                      <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
+                      <span className="font-medium hidden md:inline">Cancel</span>
                     </button>
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="group flex items-center space-x-1 md:space-x-2 px-3 md:px-6 py-2 md:py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg md:rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none text-sm md:text-base"
+                      className="group flex items-center space-x-1 px-2 sm:px-3 md:px-4 lg:px-6 py-1.5 sm:py-2 md:py-2.5 lg:py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-md sm:rounded-lg md:rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none text-xs sm:text-sm md:text-base whitespace-nowrap"
                     >
                       {saving ? (
-                        <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
+                        <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 animate-spin" />
                       ) : (
-                        <Save className="w-4 h-4 md:w-5 md:h-5 group-hover:scale-110 transition-transform" />
+                        <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 group-hover:scale-110 transition-transform" />
                       )}
-                      <span className="font-medium hidden sm:inline">{saving ? 'Saving...' : 'Save Changes'}</span>
+                      <span className="font-medium hidden lg:inline">{saving ? 'Saving...' : 'Save Changes'}</span>
+                      <span className="font-medium hidden sm:inline lg:hidden">{saving ? 'Saving...' : 'Save'}</span>
                       <span className="font-medium sm:hidden">{saving ? 'Saving...' : 'Save'}</span>
                     </button>
                   </div>
@@ -678,8 +680,8 @@ const Profile = () => {
                   <Building2 className="w-5 h-5 md:w-6 md:h-6 text-white" />
                 </div>
                 <div className="ml-3 md:ml-4">
-                  <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Basic Business Information</h2>
-                  <p className="text-xs md:text-sm text-gray-600 hidden md:block">Your core business details and branding</p>
+                  <h2 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Basic Business Information</h2>
+                  <p className="text-xs sm:text-sm md:text-base text-gray-600 hidden md:block">Your core business details and branding</p>
                 </div>
               </div>
               
