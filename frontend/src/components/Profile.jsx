@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
+import MobileNavigation from './MobileNavigation'
 import EditProfileModal from './EditProfileModal'
 import LogoUpload from './LogoUpload'
 import ImageShowcaseModal from './ImageShowcaseModal'
@@ -520,7 +521,8 @@ const Profile = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex">
         <SideNavbar />
-        <div className="flex-1 ml-48 xl:ml-64 flex items-center justify-center">
+        <MobileNavigation />
+        <div className="flex-1 ml-0 md:ml-48 xl:ml-64 flex items-center justify-center p-4">
           <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8">
             <div className="flex items-center space-x-4">
               <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl flex items-center justify-center">
@@ -541,7 +543,8 @@ const Profile = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex">
         <SideNavbar />
-        <div className="flex-1 ml-48 xl:ml-64 flex items-center justify-center">
+        <MobileNavigation />
+        <div className="flex-1 ml-0 md:ml-48 xl:ml-64 flex items-center justify-center p-4">
           <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 text-center max-w-md">
             <div className="w-16 h-16 bg-gradient-to-r from-red-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -563,74 +566,79 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       {/* Sidebar */}
       <SideNavbar />
       
+      {/* Mobile Navigation */}
+      <MobileNavigation />
+      
       {/* Main Content */}
-      <div className="flex-1 ml-48 xl:ml-64">
+      <div className="flex-1 ml-0 md:ml-48 xl:ml-64 pt-16 md:pt-0">
         {/* Header */}
         <div className="bg-white/80 backdrop-blur-sm shadow-lg border-b border-gray-200/50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-8">
-              <div className="flex items-center space-x-6">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg overflow-hidden">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center py-4 md:py-8 gap-4 md:gap-0">
+              <div className="flex items-center space-x-3 md:space-x-6">
+                <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg overflow-hidden flex-shrink-0">
                   {profile?.logo_url ? (
                     <img 
                       src={profile.logo_url} 
                       alt="Profile" 
-                      className="w-16 h-16 object-cover rounded-2xl"
+                      className="w-12 h-12 md:w-16 md:h-16 object-cover rounded-xl md:rounded-2xl"
                     />
                   ) : (
-                    <div className="w-16 h-16 bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center">
-                      <User className="w-8 h-8 text-white" />
+                    <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl md:rounded-2xl flex items-center justify-center">
+                      <User className="w-6 h-6 md:w-8 md:h-8 text-white" />
                     </div>
                   )}
                 </div>
-                <div>
-                  <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                <div className="min-w-0">
+                  <h1 className="text-xl md:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent truncate">
                     {profile?.name || 'Your Profile'}
                   </h1>
-                  <p className="text-gray-600 text-lg">Manage your account and business information</p>
-                  <div className="flex items-center space-x-4 mt-2">
-                    <span className="px-3 py-1 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-700 rounded-full text-sm font-medium">
+                  <p className="text-gray-600 text-sm md:text-base lg:text-lg hidden md:block">Manage your account and business information</p>
+                  <div className="flex items-center space-x-2 md:space-x-4 mt-2 flex-wrap gap-2">
+                    <span className="px-2 md:px-3 py-1 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-700 rounded-full text-xs md:text-sm font-medium truncate">
                       {profile?.business_name || 'Business Account'}
                     </span>
-                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                    <span className="px-2 md:px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs md:text-sm font-medium">
                       Active
                     </span>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2 md:space-x-3 w-full md:w-auto justify-end">
                 {!editing ? (
                   <button
                     onClick={handleEdit}
-                    className="group flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    className="group flex items-center space-x-1 md:space-x-2 px-3 md:px-6 py-2 md:py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg md:rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm md:text-base"
                   >
-                    <Edit className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                    <span className="font-medium">Edit Profile</span>
+                    <Edit className="w-4 h-4 md:w-5 md:h-5 group-hover:rotate-12 transition-transform" />
+                    <span className="font-medium hidden sm:inline">Edit Profile</span>
+                    <span className="font-medium sm:hidden">Edit</span>
                   </button>
                 ) : (
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2 md:space-x-3">
                     <button
                       onClick={handleCancel}
-                      className="flex items-center space-x-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-all duration-200 border border-gray-200"
+                      className="flex items-center space-x-1 md:space-x-2 px-3 md:px-6 py-2 md:py-3 bg-gray-100 text-gray-700 rounded-lg md:rounded-xl hover:bg-gray-200 transition-all duration-200 border border-gray-200 text-sm md:text-base"
                     >
-                      <X className="w-5 h-5" />
-                      <span className="font-medium">Cancel</span>
+                      <X className="w-4 h-4 md:w-5 md:h-5" />
+                      <span className="font-medium hidden sm:inline">Cancel</span>
                     </button>
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="group flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none"
+                      className="group flex items-center space-x-1 md:space-x-2 px-3 md:px-6 py-2 md:py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg md:rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none text-sm md:text-base"
                     >
                       {saving ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
                       ) : (
-                        <Save className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        <Save className="w-4 h-4 md:w-5 md:h-5 group-hover:scale-110 transition-transform" />
                       )}
-                      <span className="font-medium">{saving ? 'Saving...' : 'Save Changes'}</span>
+                      <span className="font-medium hidden sm:inline">{saving ? 'Saving...' : 'Save Changes'}</span>
+                      <span className="font-medium sm:hidden">{saving ? 'Saving...' : 'Save'}</span>
                     </button>
                   </div>
                 )}
@@ -640,7 +648,7 @@ const Profile = () => {
         </div>
 
         {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 md:py-8">
           {/* Error Message */}
           {error && (
             <div className="mb-8 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-2xl p-6 shadow-sm">
@@ -662,20 +670,20 @@ const Profile = () => {
             </div>
           )}
           
-          <div className="space-y-8">
+          <div className="space-y-4 md:space-y-8">
             {/* Basic Business Information */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
-              <div className="flex items-center mb-8">
-                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Building2 className="w-6 h-6 text-white" />
+            <div className="bg-white/70 backdrop-blur-sm rounded-xl md:rounded-2xl shadow-xl border border-gray-200/50 p-4 md:p-6 lg:p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-4 md:mb-8">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                  <Building2 className="w-5 h-5 md:w-6 md:h-6 text-white" />
                 </div>
-                <div className="ml-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Basic Business Information</h2>
-                  <p className="text-gray-600">Your core business details and branding</p>
+                <div className="ml-3 md:ml-4">
+                  <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Basic Business Information</h2>
+                  <p className="text-xs md:text-sm text-gray-600 hidden md:block">Your core business details and branding</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {renderTextField('Name', 'name', <User className="w-4 h-4 text-gray-400" />)}
                 {renderTextField('Business Name', 'business_name', <Building2 className="w-4 h-4 text-gray-400" />)}
                 {renderArrayField('Business Type', 'business_type')}
@@ -734,18 +742,18 @@ const Profile = () => {
             </div>
 
             {/* Brand & Contact Information */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
-              <div className="flex items-center mb-8">
-                <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Globe className="w-6 h-6 text-white" />
+            <div className="bg-white/70 backdrop-blur-sm rounded-xl md:rounded-2xl shadow-xl border border-gray-200/50 p-4 md:p-6 lg:p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-4 md:mb-8">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                  <Globe className="w-5 h-5 md:w-6 md:h-6 text-white" />
                 </div>
-                <div className="ml-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Brand & Contact Information</h2>
-                  <p className="text-gray-600">Your brand voice and contact details</p>
+                <div className="ml-3 md:ml-4">
+                  <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Brand & Contact Information</h2>
+                  <p className="text-xs md:text-sm text-gray-600 hidden md:block">Your brand voice and contact details</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {renderTextField('Brand Voice', 'brand_voice', null, 'textarea', 'How does your brand communicate?')}
                 {renderTextField('Brand Tone', 'brand_tone', null, 'textarea', 'What tone does your brand use?')}
                 {renderTextField('Website URL', 'website_url', <Globe className="w-4 h-4 text-gray-400" />, 'url')}
@@ -759,18 +767,18 @@ const Profile = () => {
             </div>
 
             {/* Digital Marketing & Goals */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
-              <div className="flex items-center mb-8">
-                <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Target className="w-6 h-6 text-white" />
+            <div className="bg-white/70 backdrop-blur-sm rounded-xl md:rounded-2xl shadow-xl border border-gray-200/50 p-4 md:p-6 lg:p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-4 md:mb-8">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                  <Target className="w-5 h-5 md:w-6 md:h-6 text-white" />
                 </div>
-                <div className="ml-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Digital Marketing & Goals</h2>
-                  <p className="text-gray-600">Your social presence and objectives</p>
+                <div className="ml-3 md:ml-4">
+                  <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Digital Marketing & Goals</h2>
+                  <p className="text-xs md:text-sm text-gray-600 hidden md:block">Your social presence and objectives</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {renderArrayField('Social Media Platforms', 'social_media_platforms')}
                 {renderArrayField('Primary Goals', 'primary_goals')}
                 {renderArrayField('Key Metrics to Track', 'key_metrics_to_track')}
@@ -778,18 +786,18 @@ const Profile = () => {
             </div>
 
             {/* Content Strategy */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
-              <div className="flex items-center mb-8">
-                <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <BarChart3 className="w-6 h-6 text-white" />
+            <div className="bg-white/70 backdrop-blur-sm rounded-xl md:rounded-2xl shadow-xl border border-gray-200/50 p-4 md:p-6 lg:p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-4 md:mb-8">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                  <BarChart3 className="w-5 h-5 md:w-6 md:h-6 text-white" />
                 </div>
-                <div className="ml-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Content Strategy</h2>
-                  <p className="text-gray-600">Your content planning and preferences</p>
+                <div className="ml-3 md:ml-4">
+                  <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Content Strategy</h2>
+                  <p className="text-xs md:text-sm text-gray-600 hidden md:block">Your content planning and preferences</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {renderTextField('Monthly Marketing Budget', 'monthly_budget_range', null, 'text', 'e.g., ₹500-₹1000')}
                 {renderTextField('Posting Frequency', 'posting_frequency', null, 'text', 'e.g., Daily, Weekly')}
                 {renderArrayField('Preferred Content Types', 'preferred_content_types')}
@@ -798,18 +806,18 @@ const Profile = () => {
             </div>
 
             {/* Market & Competition */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
-              <div className="flex items-center mb-8">
-                <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Target className="w-6 h-6 text-white" />
+            <div className="bg-white/70 backdrop-blur-sm rounded-xl md:rounded-2xl shadow-xl border border-gray-200/50 p-4 md:p-6 lg:p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-4 md:mb-8">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-r from-red-500 to-pink-500 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                  <Target className="w-5 h-5 md:w-6 md:h-6 text-white" />
                 </div>
-                <div className="ml-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Market & Competition</h2>
-                  <p className="text-gray-600">Your market position and competitors</p>
+                <div className="ml-3 md:ml-4">
+                  <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Market & Competition</h2>
+                  <p className="text-xs md:text-sm text-gray-600 hidden md:block">Your market position and competitors</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {renderTextField('Main Competitors', 'main_competitors', null, 'textarea', 'List your main competitors')}
                 {renderTextField('Market Position', 'market_position', null, 'textarea', 'How do you position yourself in the market?')}
                 {renderTextField('Products or Services', 'products_or_services', null, 'textarea', 'Describe your products or services')}
@@ -817,18 +825,18 @@ const Profile = () => {
             </div>
 
             {/* Campaign Planning */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
-              <div className="flex items-center mb-8">
-                <div className="w-12 h-12 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Calendar className="w-6 h-6 text-white" />
+            <div className="bg-white/70 backdrop-blur-sm rounded-xl md:rounded-2xl shadow-xl border border-gray-200/50 p-4 md:p-6 lg:p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-4 md:mb-8">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                  <Calendar className="w-5 h-5 md:w-6 md:h-6 text-white" />
                 </div>
-                <div className="ml-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Campaign Planning</h2>
-                  <p className="text-gray-600">Your campaign strategy and timing</p>
+                <div className="ml-3 md:ml-4">
+                  <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Campaign Planning</h2>
+                  <p className="text-xs md:text-sm text-gray-600 hidden md:block">Your campaign strategy and timing</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {renderTextField('Important Launch Dates', 'important_launch_dates', null, 'textarea', 'Key dates for your business')}
                 {renderTextField('Planned Promotions or Campaigns', 'planned_promotions_or_campaigns', null, 'textarea', 'Upcoming campaigns')}
                 {renderArrayField('Top Performing Content Types', 'top_performing_content_types')}
@@ -837,18 +845,18 @@ const Profile = () => {
             </div>
 
             {/* Performance & Customer */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
-              <div className="flex items-center mb-8">
-                <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-rose-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <BarChart3 className="w-6 h-6 text-white" />
+            <div className="bg-white/70 backdrop-blur-sm rounded-xl md:rounded-2xl shadow-xl border border-gray-200/50 p-4 md:p-6 lg:p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-4 md:mb-8">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-r from-pink-500 to-rose-500 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                  <BarChart3 className="w-5 h-5 md:w-6 md:h-6 text-white" />
                 </div>
-                <div className="ml-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Performance & Customer</h2>
-                  <p className="text-gray-600">Your success metrics and customer insights</p>
+                <div className="ml-3 md:ml-4">
+                  <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Performance & Customer</h2>
+                  <p className="text-xs md:text-sm text-gray-600 hidden md:block">Your success metrics and customer insights</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {renderTextField('Successful Campaigns', 'successful_campaigns', null, 'textarea', 'Describe your successful campaigns')}
                 {renderTextField('Hashtags That Work Well', 'hashtags_that_work_well', null, 'textarea', 'List effective hashtags')}
                 {renderTextField('Customer Pain Points', 'customer_pain_points', null, 'textarea', 'What problems do your customers face?')}
@@ -857,18 +865,18 @@ const Profile = () => {
             </div>
 
             {/* Automation & Platform */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
-              <div className="flex items-center mb-8">
-                <div className="w-12 h-12 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Settings className="w-6 h-6 text-white" />
+            <div className="bg-white/70 backdrop-blur-sm rounded-xl md:rounded-2xl shadow-xl border border-gray-200/50 p-4 md:p-6 lg:p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-4 md:mb-8">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                  <Settings className="w-5 h-5 md:w-6 md:h-6 text-white" />
                 </div>
-                <div className="ml-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Automation & Platform</h2>
-                  <p className="text-gray-600">Your automation preferences and platform settings</p>
+                <div className="ml-3 md:ml-4">
+                  <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Automation & Platform</h2>
+                  <p className="text-xs md:text-sm text-gray-600 hidden md:block">Your automation preferences and platform settings</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {renderTextField('Automation Level', 'automation_level', null, 'text', 'e.g., Beginner, Intermediate, Advanced')}
                 {renderCurrentPresenceField()}
                 {renderArrayField('Focus Areas', 'focus_areas')}
@@ -876,18 +884,18 @@ const Profile = () => {
             </div>
 
             {/* Platform Links */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 hover:shadow-2xl transition-all duration-300">
-              <div className="flex items-center mb-8">
-                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Megaphone className="w-6 h-6 text-white" />
+            <div className="bg-white/70 backdrop-blur-sm rounded-xl md:rounded-2xl shadow-xl border border-gray-200/50 p-4 md:p-6 lg:p-8 hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center mb-4 md:mb-8">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                  <Megaphone className="w-5 h-5 md:w-6 md:h-6 text-white" />
                 </div>
-                <div className="ml-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Platform Links & Accounts</h2>
-                  <p className="text-gray-600">Your social media and platform connections</p>
+                <div className="ml-3 md:ml-4">
+                  <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Platform Links & Accounts</h2>
+                  <p className="text-xs md:text-sm text-gray-600 hidden md:block">Your social media and platform connections</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {renderTextField('Facebook Page Name', 'facebook_page_name', null, 'text')}
                 {renderTextField('Instagram Profile Link', 'instagram_profile_link', null, 'url')}
                 {renderTextField('LinkedIn Company Link', 'linkedin_company_link', null, 'url')}
