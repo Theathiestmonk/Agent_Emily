@@ -53,6 +53,8 @@ import SideNavbar from './SideNavbar'
 
 import MainContentLoader from './MainContentLoader'
 
+import MobileNavigation from './MobileNavigation'
+
 
 
 const BlogDashboard = () => {
@@ -1035,21 +1037,21 @@ const BlogDashboard = () => {
 
         <SideNavbar />
 
-        <div className="ml-48 xl:ml-64 p-6">
+        <div className="ml-0 md:ml-48 xl:ml-64 p-4 md:p-6">
 
-          <div className="text-center py-12">
+          <div className="text-center py-8 md:py-12">
 
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <AlertCircle className="w-12 h-12 md:w-16 md:h-16 text-red-500 mx-auto mb-4" />
 
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Blog Dashboard</h3>
+            <h3 className="text-base md:text-lg font-medium text-gray-900 mb-2">Error Loading Blog Dashboard</h3>
 
-            <p className="text-gray-500 mb-6">There was an error loading the blog dashboard. Please try refreshing the page.</p>
+            <p className="text-sm md:text-base text-gray-500 mb-6 px-4">There was an error loading the blog dashboard. Please try refreshing the page.</p>
 
             <button
 
               onClick={() => window.location.reload()}
 
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="px-4 md:px-6 py-2 md:py-3 text-sm md:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700"
 
             >
 
@@ -1089,203 +1091,115 @@ const BlogDashboard = () => {
 
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50">
 
+      {/* Mobile Navigation */}
+      <MobileNavigation 
+        setShowCustomContentChatbot={() => {}}
+        handleGenerateContent={generateBlogs}
+        generating={generating}
+        fetchingFreshData={loading}
+      />
+      
       {/* Side Navbar */}
-
       <SideNavbar />
 
-
-
-      {/* Main Content */}
-
-      <div className="ml-48 xl:ml-64 p-6">
-
+      {/* Main Content - No left margin on mobile, only on desktop */}
+      <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen w-full">
         {/* Header */}
-
-        <div className="fixed top-0 right-0 left-48 xl:left-64 bg-gradient-to-r from-pink-50 to-purple-50 shadow-lg border-b border-pink-200 z-30" style={{position: 'fixed', zIndex: 30}}>
-
-          <div className="px-6 py-4">
-
-            <div className="flex justify-between items-center">
-
-              <div className="flex items-center space-x-8">
-
-                {/* Stats Cards in Header */}
-
-                <div className="flex items-center space-x-6">
-
-                  <div className="flex items-center space-x-3 bg-white/80 backdrop-blur-sm rounded-xl p-3 shadow-sm">
-
-                    <div className="p-2 bg-gradient-to-r from-pink-500 to-purple-600 rounded-lg">
-
-                      <FileText className="w-5 h-5 text-white" />
-
-                    </div>
-
-                    <div>
-
-                      <p className="text-sm text-gray-600">Total Blogs</p>
-
-                      <p className="text-xl font-bold text-gray-900">{calculateStats().total_blogs}</p>
-
-                    </div>
-
-                  </div>
-
-                  
-                  
-                  <div className="flex items-center space-x-3 bg-white/80 backdrop-blur-sm rounded-xl p-3 shadow-sm">
-
-                    <div className="p-2 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg">
-
-                      <CheckCircle className="w-5 h-5 text-white" />
-
-                    </div>
-
-                    <div>
-
-                      <p className="text-sm text-gray-600">Published</p>
-
-                      <p className="text-xl font-bold text-gray-900">{calculateStats().published_blogs}</p>
-
-                    </div>
-
-                  </div>
-                  
-                  
-                  
-
-                    </div>
-
-              </div>
+        <div className="fixed top-[52px] md:top-0 right-0 left-0 md:left-48 xl:left-64 bg-gradient-to-r from-pink-50 to-purple-50 shadow-sm z-30" style={{position: 'fixed', zIndex: 30}}>
+          <div className="px-2 md:px-6 lg:px-8 py-1.5 md:py-3 lg:py-4">
+            {/* Single Row for ALL Devices */}
+            <div className="flex items-center justify-between md:justify-between gap-0.5 md:gap-4 w-full overflow-x-auto">
               
-              <div className="flex items-center space-x-4">
-                
-                <button
-
-                  onClick={generateBlogs}
-
-                  disabled={generating}
-
-                  className="flex items-center space-x-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 shadow-lg hover:shadow-xl"
-
-                >
-
-                  {generating ? (
-
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-
-                  ) : (
-
-                    <Plus className="w-4 h-4" />
-
-                  )}
-
-                  <span>{generating ? 'Generating...' : 'Generate Blogs'}</span>
-
-                </button>
-
-                
-                
-                {/* Filter and View Controls */}
-
-                <div className="flex items-center space-x-4">
-
-                  {/* Status Filter */}
-
-                  <select
-
-                    value={selectedStatus}
-
-                    onChange={(e) => setSelectedStatus(e.target.value)}
-
-                    className="px-4 py-2 border border-pink-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm"
-
-                  >
-
-                    <option value="all">All Status</option>
-
-                    <option value="draft">Draft</option>
-
-                    <option value="published">Published</option>
-
-                    <option value="scheduled">Scheduled</option>
-
-                  </select>
-
-                  
-                  
-
-                  
-                  
-                  {/* Search */}
-
-                  <div className="relative">
-
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-pink-400" />
-
-                    <input
-
-                      type="text"
-
-                      placeholder="Search blogs..."
-
-                      value={searchTerm}
-
-                      onChange={(e) => setSearchTerm(e.target.value)}
-
-                      className="pl-10 pr-4 py-2 border border-pink-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm"
-
-                    />
-
+              {/* Left Side - Stats */}
+              <div className="flex items-center gap-0.5 md:gap-3 flex-shrink-0">
+                {/* Total Blog Stats Card */}
+                <div className="flex items-center space-x-0.5 md:space-x-1 bg-white/80 backdrop-blur-sm rounded-lg px-1 md:px-1.5 py-0.5 md:py-1 lg:px-3 lg:py-2 xl:px-4 xl:py-2.5 shadow-sm">
+                  <div className="p-0.5 md:p-1 lg:p-1.5 bg-gradient-to-r from-pink-500 to-purple-600 rounded-md flex-shrink-0">
+                    <FileText className="w-2.5 h-2.5 md:w-3 md:h-3 lg:w-4 lg:h-5 xl:h-6 text-white" />
                   </div>
-
-                  
-                  
-                  {/* View Mode Toggle */}
-
-                  <div className="flex border border-pink-200 rounded-xl overflow-hidden bg-white/80 backdrop-blur-sm shadow-sm">
-
-                    <button
-
-                      onClick={() => setViewMode('grid')}
-
-                      className={`p-3 ${viewMode === 'grid' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white' : 'text-gray-600 hover:bg-pink-50'}`}
-
-                    >
-
-                      <BarChart3 className="w-4 h-4" />
-
-                    </button>
-
-                    <button
-
-                      onClick={() => setViewMode('list')}
-
-                      className={`p-3 ${viewMode === 'list' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white' : 'text-gray-600 hover:bg-pink-50'}`}
-
-                    >
-
-                      <BookOpen className="w-4 h-4" />
-
-                    </button>
-
+                  <div className="min-w-0">
+                    <p className="text-[7px] md:text-xs text-gray-600 whitespace-nowrap font-medium leading-tight">Total</p>
+                    <p className="text-[9px] md:text-sm lg:text-base font-bold text-gray-900 whitespace-nowrap leading-tight">{calculateStats().total_blogs}</p>
                   </div>
-
                 </div>
 
+                {/* Published Stats Card */}
+                <div className="flex items-center space-x-0.5 md:space-x-1 bg-white/80 backdrop-blur-sm rounded-lg px-1 md:px-1.5 py-0.5 md:py-1 lg:px-3 lg:py-2 xl:px-4 xl:py-2.5 shadow-sm">
+                  <div className="p-0.5 md:p-1 lg:p-1.5 bg-gradient-to-r from-green-500 to-emerald-600 rounded-md flex-shrink-0">
+                    <CheckCircle className="w-2.5 h-2.5 md:w-3 md:h-3 lg:w-4 lg:h-5 xl:h-6 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[7px] md:text-xs text-gray-600 whitespace-nowrap font-medium leading-tight">Published</p>
+                    <p className="text-[9px] md:text-sm lg:text-base font-bold text-gray-900 whitespace-nowrap leading-tight">{calculateStats().published_blogs}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Side - Actions */}
+              <div className="flex items-center gap-0.5 md:gap-3 flex-shrink-0">
+                {/* Generate Button */}
+                <button
+                  onClick={generateBlogs}
+                  disabled={generating}
+                  className="flex items-center justify-center bg-gradient-to-r from-pink-500 to-purple-600 text-white px-1.5 py-1.5 md:px-4 md:py-2 lg:px-6 lg:py-3 rounded-md md:rounded-lg lg:rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 shadow-lg hover:shadow-xl h-8 w-8 md:w-auto md:h-auto flex-shrink-0"
+                >
+                  {generating ? (
+                    <RefreshCw className="w-3.5 h-3.5 md:w-4 md:h-5 animate-spin" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5 md:w-4 md:h-5" />
+                  )}
+                  <span className="hidden md:inline ml-2 text-sm lg:text-base">{generating ? 'Generating...' : 'Generate Blogs'}</span>
+                </button>
+
+                {/* Status Filter */}
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  className="px-1 md:px-3 lg:px-4 py-1 md:py-2 text-[8px] md:text-sm border border-pink-200 rounded-md md:rounded-lg lg:rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm min-w-[45px] md:min-w-[100px] lg:min-w-[120px] flex-shrink-0 h-8 md:h-auto"
+                >
+                  <option value="all">All</option>
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                  <option value="scheduled">Scheduled</option>
+                </select>
+
+                {/* Search */}
+                <div className="relative min-w-0 flex-1 md:min-w-[150px] md:flex-none lg:min-w-[200px] xl:max-w-[250px] max-w-[120px] md:max-w-none">
+                  <Search className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 lg:w-4 lg:h-4 absolute left-2 md:left-3 top-1/2 transform -translate-y-1/2 text-pink-400" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-7 md:pl-9 lg:pl-10 pr-2 md:pr-3 lg:pr-4 py-1 md:py-2 text-[9px] md:text-sm border border-pink-200 rounded-md md:rounded-lg lg:rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm h-8 md:h-auto"
+                  />
+                </div>
+
+                {/* View Mode Toggle - Hidden on mobile */}
+                <div className="hidden md:flex border border-pink-200 rounded-md md:rounded-lg lg:rounded-xl overflow-hidden bg-white/80 backdrop-blur-sm shadow-sm flex-shrink-0">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`p-1 md:p-1.5 lg:p-2 ${viewMode === 'grid' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white' : 'text-gray-600 hover:bg-pink-50'} h-8 md:h-auto`}
+                  >
+                    <BarChart3 className="w-3 h-3 md:w-3.5 md:h-3.5 lg:w-4 lg:h-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`p-1 md:p-1.5 lg:p-2 ${viewMode === 'list' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white' : 'text-gray-600 hover:bg-pink-50'} h-8 md:h-auto`}
+                  >
+                    <BookOpen className="w-3 h-3 md:w-3.5 md:h-3.5 lg:w-4 lg:h-4" />
+                  </button>
+                </div>
               </div>
 
             </div>
 
           </div>
-
         </div>
 
-
-
         {/* Main Content Area */}
-
-        <div className="pt-24">
+        <div className="w-full px-3 md:px-6">
+          <div className="pt-24 md:pt-28">
 
           {loading ? (
 
@@ -1293,13 +1207,13 @@ const BlogDashboard = () => {
 
           ) : filteredBlogs.length === 0 ? (
 
-            <div className="p-12 text-center">
+            <div className="p-6 md:p-12 text-center">
 
-              <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <FileText className="w-12 h-12 md:w-16 md:h-16 text-gray-300 mx-auto mb-4" />
 
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No blogs found</h3>
+              <h3 className="text-base md:text-lg font-medium text-gray-900 mb-2">No blogs found</h3>
 
-              <div className="text-gray-500 mb-6">
+              <div className="text-sm md:text-base text-gray-500 mb-6">
                 <p>Generate your first blog post to get started!</p>
               </div>
 
@@ -1309,7 +1223,7 @@ const BlogDashboard = () => {
 
                   disabled={generating}
 
-                  className="flex items-center px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 mx-auto"
+                  className="flex items-center px-4 md:px-6 py-2 md:py-3 text-sm md:text-base bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 mx-auto"
 
                 >
 
@@ -1335,7 +1249,7 @@ const BlogDashboard = () => {
 
               data-testid="blogs-section"
 
-              className={viewMode === 'grid' ? 'p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6' : 'divide-y'}
+              className={viewMode === 'grid' ? 'p-2 md:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6' : 'divide-y'}
 
             >
 
@@ -1724,7 +1638,7 @@ const BlogDashboard = () => {
 
           {totalPages > 1 && (
 
-            <div className="flex justify-center items-center space-x-2 mt-8 mb-6">
+            <div className="flex flex-wrap justify-center items-center gap-2 mt-6 md:mt-8 mb-4 md:mb-6 px-4">
 
               <button
 
@@ -1732,17 +1646,17 @@ const BlogDashboard = () => {
 
                 disabled={currentPage === 1}
 
-                className="px-4 py-2 bg-white/80 backdrop-blur-sm border border-pink-200 rounded-xl text-gray-700 hover:bg-pink-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-sm"
+                className="px-3 md:px-4 py-2 text-xs md:text-sm bg-white/80 backdrop-blur-sm border border-pink-200 rounded-xl text-gray-700 hover:bg-pink-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-sm"
 
               >
 
-                ← Previous
+                ← Prev
 
               </button>
 
               
               
-              <div className="flex space-x-1">
+              <div className="flex flex-wrap gap-1 max-w-full">
 
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
 
@@ -1752,7 +1666,7 @@ const BlogDashboard = () => {
 
                     onClick={() => handlePageChange(page)}
 
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
+                    className={`px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-medium transition-all duration-300 min-w-[40px] ${
 
                       currentPage === page
 
@@ -1780,7 +1694,7 @@ const BlogDashboard = () => {
 
                 disabled={currentPage === totalPages}
 
-                className="px-4 py-2 bg-white/80 backdrop-blur-sm border border-pink-200 rounded-xl text-gray-700 hover:bg-pink-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-sm"
+                className="px-3 md:px-4 py-2 text-xs md:text-sm bg-white/80 backdrop-blur-sm border border-pink-200 rounded-xl text-gray-700 hover:bg-pink-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-sm"
 
               >
 
@@ -1791,8 +1705,7 @@ const BlogDashboard = () => {
             </div>
 
           )}
-
-
+          </div>
 
         </div>
 
@@ -1804,13 +1717,13 @@ const BlogDashboard = () => {
 
       {editingBlog && (
 
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4">
 
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg p-4 md:p-6 w-full max-w-[640px] md:max-w-2xl lg:max-w-4xl mx-2 md:mx-4 max-h-[95vh] md:max-h-[90vh] overflow-y-auto">
 
             <div className="flex items-center justify-between mb-4">
 
-              <h3 className="text-lg font-semibold text-gray-900">Edit Blog Post</h3>
+              <h3 className="text-base md:text-lg font-semibold text-gray-900">Edit Blog Post</h3>
 
               <button
 
@@ -1890,11 +1803,11 @@ const BlogDashboard = () => {
 
               
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 min-[640px]:grid-cols-2 gap-3 md:gap-4">
 
                 <div>
 
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Categories (comma-separated)</label>
+                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Categories (comma-separated)</label>
 
                   <input
 
@@ -1906,7 +1819,7 @@ const BlogDashboard = () => {
 
                     placeholder="Technology, Business, Lifestyle"
 
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 
                   />
 
@@ -1916,7 +1829,7 @@ const BlogDashboard = () => {
                 
                 <div>
 
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
 
                   <input
 
@@ -1928,7 +1841,7 @@ const BlogDashboard = () => {
 
                     placeholder="AI, Marketing, Innovation"
 
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 
                   />
 
@@ -1940,13 +1853,13 @@ const BlogDashboard = () => {
 
             
             
-            <div className="flex items-center justify-end space-x-3 mt-6">
+            <div className="flex flex-row items-center justify-end gap-3 mt-6">
 
               <button
 
                 onClick={handleCancelEdit}
 
-                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                className="px-4 py-2 text-sm md:text-base text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors whitespace-nowrap"
 
               >
 
@@ -1960,7 +1873,7 @@ const BlogDashboard = () => {
 
                 disabled={saving}
 
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="flex items-center justify-center space-x-2 px-4 py-2 text-sm md:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
 
               >
 
@@ -1984,25 +1897,25 @@ const BlogDashboard = () => {
 
       {showBlogModal && selectedBlog && (
 
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4">
 
-          <div className="bg-white rounded-lg w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-lg w-full max-w-4xl mx-2 md:mx-4 max-h-[95vh] md:max-h-[90vh] overflow-hidden flex flex-col">
 
             {/* Modal Header */}
 
-            <div className="flex items-center justify-between p-6 border-b">
+            <div className="flex items-center justify-between p-4 md:p-6 border-b">
 
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2 md:space-x-3 flex-1 min-w-0">
 
-                <div className="p-2 bg-blue-100 rounded-lg">
+                <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
 
-                  <FileText className="w-5 h-5 text-blue-600" />
+                  <FileText className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
 
                 </div>
 
-                <div>
+                <div className="min-w-0 flex-1">
 
-                  <h2 className="text-xl font-semibold text-gray-900">{selectedBlog.title}</h2>
+                  <h2 className="text-base md:text-xl font-semibold text-gray-900 truncate">{selectedBlog.title}</h2>
 
                   <div className="flex items-center space-x-2 mt-1">
 
@@ -2038,11 +1951,11 @@ const BlogDashboard = () => {
 
                 onClick={handleCloseBlogModal}
 
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md flex-shrink-0"
 
               >
 
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5 md:w-6 md:h-6" />
 
               </button>
 
@@ -2052,7 +1965,7 @@ const BlogDashboard = () => {
 
             {/* Modal Content */}
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6">
 
               {/* Blog Metadata */}
 
@@ -2198,13 +2111,13 @@ const BlogDashboard = () => {
 
             {/* Modal Footer */}
 
-            <div className="flex items-center justify-end space-x-3 p-6 border-t bg-gray-50">
+            <div className="flex flex-row items-center justify-end gap-3 p-4 md:p-6 border-t bg-gray-50">
 
               <button
 
                 onClick={handleCloseBlogModal}
 
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-sm md:text-base text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
 
               >
 
@@ -2222,7 +2135,7 @@ const BlogDashboard = () => {
 
                 }}
 
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                className="px-4 py-2 text-sm md:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
 
               >
 
@@ -2350,21 +2263,21 @@ const BlogDashboard = () => {
 
       {showBlogPreview && selectedBlog && (
 
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4">
 
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[95vh] md:max-h-[90vh] overflow-hidden shadow-2xl">
 
             {/* Popup Header */}
 
-            <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white p-6">
+            <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white p-4 md:p-6">
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
 
-                <div>
+                <div className="flex-1 min-w-0">
 
-                  <h2 className="text-xl font-bold mb-2">Blog Preview</h2>
+                  <h2 className="text-base md:text-xl font-bold mb-1 md:mb-2">Blog Preview</h2>
 
-                  <p className="text-white/90 text-sm">Preview your blog content before publishing</p>
+                  <p className="text-white/90 text-xs md:text-sm">Preview your blog content before publishing</p>
 
                 </div>
 
@@ -2372,11 +2285,11 @@ const BlogDashboard = () => {
 
                   onClick={handleCloseBlogPreview}
 
-                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors flex-shrink-0"
 
                 >
 
-                  <X className="w-6 h-6" />
+                  <X className="w-5 h-5 md:w-6 md:h-6" />
 
                 </button>
 
@@ -2388,7 +2301,7 @@ const BlogDashboard = () => {
 
             {/* Popup Content */}
 
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+            <div className="p-4 md:p-6 overflow-y-auto max-h-[calc(95vh-250px)] md:max-h-[calc(90vh-200px)]">
 
               {/* 1. Blog Image (if exists) */}
               {selectedBlog.featured_image && (
@@ -2418,17 +2331,17 @@ const BlogDashboard = () => {
               <div className="mb-6">
                 <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
                   {/* Blog Header */}
-                  <div className="p-6 border-b border-gray-100">
-                    <h1 className="text-2xl font-bold text-gray-900 mb-3">{selectedBlog.title}</h1>
+                  <div className="p-3 md:p-6 border-b border-gray-100">
+                    <h1 className="text-base md:text-xl lg:text-2xl font-bold text-gray-900 mb-2 md:mb-3">{selectedBlog.title}</h1>
                     {selectedBlog.excerpt && (
-                      <p className="text-gray-600 text-lg leading-relaxed">{selectedBlog.excerpt}</p>
+                      <p className="text-gray-600 text-sm md:text-lg leading-relaxed">{selectedBlog.excerpt}</p>
                     )}
                   </div>
                   
                   {/* Blog Content */}
-                  <div className="p-6">
+                  <div className="p-3 md:p-6">
                     <div 
-                      className="prose prose-lg max-w-none text-gray-700 leading-relaxed"
+                      className="prose prose-sm md:prose-lg max-w-none text-gray-700 leading-relaxed text-sm md:text-base"
                       dangerouslySetInnerHTML={{ __html: selectedBlog.content.replace(/\n/g, '<br>') }}
                                   />
                                 </div>
@@ -2436,48 +2349,48 @@ const BlogDashboard = () => {
                           </div>
 
               {/* 3. Insights and Categories */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
                 
                 {/* Insights Section */}
-                <div className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                    <BarChart3 className="w-5 h-5 mr-2 text-pink-600" />
+                <div className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-xl p-3 md:p-6">
+                  <h3 className="text-sm md:text-lg font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
+                    <BarChart3 className="w-4 h-4 md:w-5 md:h-5 mr-2 text-pink-600" />
                     Blog Insights
                   </h3>
                   
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-4 bg-white rounded-lg shadow-sm">
-                      <div className="text-2xl font-bold text-pink-600">{selectedBlog.reading_time}</div>
-                      <div className="text-sm text-gray-600">min read</div>
+                  <div className="grid grid-cols-2 gap-2 md:gap-4">
+                    <div className="text-center p-2 md:p-4 bg-white rounded-lg shadow-sm">
+                      <div className="text-lg md:text-2xl font-bold text-pink-600">{selectedBlog.reading_time}</div>
+                      <div className="text-xs md:text-sm text-gray-600">min read</div>
                         </div>
                     
-                    <div className="text-center p-4 bg-white rounded-lg shadow-sm">
-                      <div className="text-2xl font-bold text-purple-600">{selectedBlog.word_count}</div>
-                      <div className="text-sm text-gray-600">words</div>
+                    <div className="text-center p-2 md:p-4 bg-white rounded-lg shadow-sm">
+                      <div className="text-lg md:text-2xl font-bold text-purple-600">{selectedBlog.word_count}</div>
+                      <div className="text-xs md:text-sm text-gray-600">words</div>
               </div>
 
-                    <div className="text-center p-4 bg-white rounded-lg shadow-sm">
-                      <div className="text-2xl font-bold text-blue-600">{selectedBlog.seo_score}</div>
-                      <div className="text-sm text-gray-600">SEO score</div>
+                    <div className="text-center p-2 md:p-4 bg-white rounded-lg shadow-sm">
+                      <div className="text-lg md:text-2xl font-bold text-blue-600">{selectedBlog.seo_score}</div>
+                      <div className="text-xs md:text-sm text-gray-600">SEO score</div>
               </div>
 
-                    <div className="text-center p-4 bg-white rounded-lg shadow-sm">
-                      <div className="text-2xl font-bold text-gray-600">{formatDate(selectedBlog.scheduled_at)}</div>
-                      <div className="text-sm text-gray-600">scheduled</div>
+                    <div className="text-center p-2 md:p-4 bg-white rounded-lg shadow-sm">
+                      <div className="text-lg md:text-2xl font-bold text-gray-600">{formatDate(selectedBlog.scheduled_at)}</div>
+                      <div className="text-xs md:text-sm text-gray-600">scheduled</div>
                   </div>
                   </div>
                   
                   {/* Additional insights */}
-                  <div className="mt-4 space-y-2">
-                    <div className="flex justify-between items-center text-sm">
+                  <div className="mt-3 md:mt-4 space-y-1 md:space-y-2">
+                    <div className="flex justify-between items-center text-xs md:text-sm">
                       <span className="text-gray-600">Status:</span>
                       <span className="font-medium text-gray-800">{selectedBlog.status}</span>
                   </div>
-                    <div className="flex justify-between items-center text-sm">
+                    <div className="flex justify-between items-center text-xs md:text-sm">
                       <span className="text-gray-600">Site:</span>
                       <span className="font-medium text-gray-800">{selectedBlog.site_name || 'Standalone'}</span>
                     </div>
-                    <div className="flex justify-between items-center text-sm">
+                    <div className="flex justify-between items-center text-xs md:text-sm">
                       <span className="text-gray-600">Created:</span>
                       <span className="font-medium text-gray-800">{formatDate(selectedBlog.created_at)}</span>
                   </div>
@@ -2485,19 +2398,19 @@ const BlogDashboard = () => {
               </div>
 
                 {/* Categories and Tags Section */}
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                    <Target className="w-5 h-5 mr-2 text-blue-600" />
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-3 md:p-6">
+                  <h3 className="text-sm md:text-lg font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
+                    <Target className="w-4 h-4 md:w-5 md:h-5 mr-2 text-blue-600" />
                     Categories & Tags
                   </h3>
                   
                   {/* Categories */}
                   {selectedBlog.categories?.length > 0 && (
-                    <div className="mb-6">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-3">Categories</h4>
-                      <div className="flex flex-wrap gap-2">
+                    <div className="mb-3 md:mb-6">
+                      <h4 className="text-xs md:text-sm font-semibold text-gray-700 mb-2">Categories</h4>
+                      <div className="flex flex-wrap gap-1 md:gap-2">
                         {selectedBlog.categories.map((category, index) => (
-                          <span key={index} className="px-3 py-1 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-800 rounded-full text-sm font-medium">
+                          <span key={index} className="px-2 md:px-3 py-1 bg-gradient-to-r from-pink-100 to-purple-100 text-pink-800 rounded-full text-xs md:text-sm font-medium">
                             {category}
                           </span>
                         ))}
@@ -2508,10 +2421,10 @@ const BlogDashboard = () => {
                   {/* Tags */}
                   {selectedBlog.tags?.length > 0 && (
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-700 mb-3">Tags</h4>
-                      <div className="flex flex-wrap gap-2">
+                      <h4 className="text-xs md:text-sm font-semibold text-gray-700 mb-2">Tags</h4>
+                      <div className="flex flex-wrap gap-1 md:gap-2">
                         {selectedBlog.tags.map((tag, index) => (
-                          <span key={index} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
+                          <span key={index} className="px-2 md:px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs md:text-sm font-medium">
                             #{tag}
                           </span>
                         ))}
@@ -2521,9 +2434,9 @@ const BlogDashboard = () => {
                   
                   {/* No categories/tags message */}
                   {(!selectedBlog.categories?.length && !selectedBlog.tags?.length) && (
-                    <div className="text-center text-gray-500 py-8">
-                      <Target className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                      <p className="text-sm">No categories or tags assigned</p>
+                    <div className="text-center text-gray-500 py-4 md:py-8">
+                      <Target className="w-6 h-6 md:w-8 md:h-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-xs md:text-sm">No categories or tags assigned</p>
                 </div>
               )}
                 </div>
@@ -2535,9 +2448,9 @@ const BlogDashboard = () => {
 
             {/* Popup Footer */}
 
-            <div className="flex items-center justify-between p-6 bg-gray-50 border-t">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 md:p-6 bg-gray-50 border-t">
 
-              <div className="text-sm text-gray-600">
+              <div className="text-xs md:text-sm text-gray-600 hidden sm:block">
 
                 <span className="font-medium">Status:</span> {selectedBlog.status} • 
 
@@ -2545,7 +2458,15 @@ const BlogDashboard = () => {
 
               </div>
 
-              <div className="flex items-center space-x-3">
+              <div className="text-xs text-gray-600 block sm:hidden w-full">
+
+                <div><span className="font-medium">Status:</span> {selectedBlog.status}</div>
+
+                <div className="mt-1"><span className="font-medium">Scheduled:</span> {formatDate(selectedBlog.scheduled_at)}</div>
+
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
 
                 <button
 
@@ -2557,13 +2478,15 @@ const BlogDashboard = () => {
 
                   }}
 
-                  className="px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all duration-300 flex items-center space-x-2"
+                  className="px-3 md:px-4 py-2 text-xs md:text-sm bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all duration-300 flex items-center justify-center space-x-2 whitespace-nowrap"
 
                 >
 
                   <Edit className="w-4 h-4" />
 
-                  <span>Edit Blog</span>
+                  <span className="hidden sm:inline">Edit Blog</span>
+
+                  <span className="sm:hidden">Edit</span>
 
                 </button>
 
@@ -2574,7 +2497,7 @@ const BlogDashboard = () => {
                       handleCloseBlogPreview()
                     }}
                     disabled={publishingBlogs.has(selectedBlog.id)}
-                    className={`px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 ${
+                    className={`px-3 md:px-4 py-2 text-xs md:text-sm rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 whitespace-nowrap ${
                       publishingBlogs.has(selectedBlog.id)
                         ? 'bg-green-500 text-white cursor-not-allowed opacity-75 animate-pulse'
                         : 'bg-green-600 text-white hover:bg-green-700'
@@ -2595,24 +2518,12 @@ const BlogDashboard = () => {
                       handleCopyBlog(selectedBlog)
                       handleCloseBlogPreview()
                     }}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
+                    className="px-3 md:px-4 py-2 text-xs md:text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center space-x-2 whitespace-nowrap"
                   >
                     <Copy className="w-4 h-4" />
                     <span>Copy</span>
                   </button>
                 )}
-
-                <button
-
-                  onClick={handleCloseBlogPreview}
-
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-
-                >
-
-                  Close
-
-                </button>
 
               </div>
 

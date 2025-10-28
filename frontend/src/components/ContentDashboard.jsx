@@ -1923,8 +1923,8 @@ const ContentDashboard = () => {
           <div className="space-y-6">
             {filteredContent.length === 0 ? (
               <div className="text-center py-12">
-                <div className="w-24 h-24 bg-gradient-to-r from-pink-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Sparkles className="w-12 h-12 text-pink-500" />
+                <div className="w-24 h-24 bg-gradient-to-r from-pink-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6 relative">
+                  <Sparkles className="w-12 h-12 text-pink-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   {selectedDate === new Date().toISOString().split('T')[0] 
@@ -1956,21 +1956,21 @@ const ContentDashboard = () => {
                 <button
                   onClick={handleGenerateContent}
                   disabled={generating || fetchingFreshData}
-                    className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                    className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {generating ? (
                     <>
-                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <RefreshCw className="w-5 h-5 animate-spin flex-shrink-0" />
                       <span>Generating Content...</span>
                     </>
                   ) : fetchingFreshData ? (
                     <>
-                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <RefreshCw className="w-5 h-5 animate-spin flex-shrink-0" />
                       <span>Loading Content...</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-5 h-5" />
+                      <Sparkles className="w-5 h-5 flex-shrink-0" />
                       <span>Generate Content</span>
                     </>
                   )}
@@ -1985,9 +1985,9 @@ const ContentDashboard = () => {
                         await getAvailableDates() // Refresh available dates
                       }}
                       disabled={generating || fetchingFreshData}
-                      className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-blue-500 transition-all duration-300 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      <RefreshCw className="w-5 h-5" />
+                      <RefreshCw className="w-5 h-5 flex-shrink-0" />
                       <span>Refresh</span>
                     </button>
                   )}
@@ -1998,9 +1998,9 @@ const ContentDashboard = () => {
                       navigateToNextDate()
                     }}
                     disabled={generating || fetchingFreshData || currentDateIndex === availableDates.length - 1}
-                    className="bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 rounded-lg hover:from-green-600 hover:to-green-500 transition-all duration-300 disabled:opacity-50 flex items-center space-x-2 text-sm"
+                    className="bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 rounded-lg hover:from-green-600 hover:to-green-500 transition-all duration-300 disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-4 h-4 flex-shrink-0" />
                     <span>Next Content</span>
                 </button>
                 </div>
@@ -2672,9 +2672,9 @@ const ContentDashboard = () => {
             {/* Main + Button */}
             <button
               onClick={() => setShowAddMenu(!showAddMenu)}
-              className="w-14 h-14 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full shadow-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 flex items-center justify-center"
+              className="w-14 h-14 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full shadow-lg hover:from-purple-600 hover:to-pink-500 transition-all duration-300 relative flex items-center justify-center"
             >
-              <Plus className="w-6 h-6" />
+              <Plus className="w-6 h-6 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
             </button>
           </div>
         </div>
