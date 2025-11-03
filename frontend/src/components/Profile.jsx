@@ -69,6 +69,9 @@ const Profile = () => {
         // Brand & Contact
         brand_voice: data?.brand_voice || '',
         brand_tone: data?.brand_tone || '',
+        primary_color: data?.primary_color || '',
+        secondary_color: data?.secondary_color || '',
+        additional_colors: Array.isArray(data?.additional_colors) ? data.additional_colors : [],
         website_url: data?.website_url || '',
         phone_number: data?.phone_number || '',
         street_address: data?.street_address || '',
@@ -517,6 +520,161 @@ const Profile = () => {
     )
   }
 
+  const renderBrandColors = () => {
+    return (
+      <div className="group col-span-1 md:col-span-2">
+        <label className="block text-xs sm:text-sm font-semibold text-gray-800 mb-2 sm:mb-3">
+          Brand Colors
+        </label>
+        {editing ? (
+          <div className="space-y-4">
+            {/* Primary Color */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-2">Primary Color</label>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="color"
+                  value={editForm.primary_color || '#000000'}
+                  onChange={(e) => handleInputChange('primary_color', e.target.value)}
+                  className="w-16 h-10 border border-gray-300 rounded-lg cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={editForm.primary_color || ''}
+                  onChange={(e) => handleInputChange('primary_color', e.target.value)}
+                  className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm"
+                  placeholder="#000000"
+                  pattern="^#[0-9A-Fa-f]{6}$"
+                />
+              </div>
+            </div>
+
+            {/* Secondary Color */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-2">Secondary Color</label>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="color"
+                  value={editForm.secondary_color || '#000000'}
+                  onChange={(e) => handleInputChange('secondary_color', e.target.value)}
+                  className="w-16 h-10 border border-gray-300 rounded-lg cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={editForm.secondary_color || ''}
+                  onChange={(e) => handleInputChange('secondary_color', e.target.value)}
+                  className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm"
+                  placeholder="#000000"
+                  pattern="^#[0-9A-Fa-f]{6}$"
+                />
+              </div>
+            </div>
+
+            {/* Additional Colors */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-2">Additional Colors</label>
+              <div className="space-y-2">
+                {(editForm.additional_colors || []).map((color, index) => (
+                  <div key={index} className="flex items-center space-x-2">
+                    <input
+                      type="color"
+                      value={color || '#000000'}
+                      onChange={(e) => {
+                        const newColors = [...(editForm.additional_colors || [])]
+                        newColors[index] = e.target.value
+                        handleInputChange('additional_colors', newColors)
+                      }}
+                      className="w-16 h-10 border border-gray-300 rounded-lg cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={color || ''}
+                      onChange={(e) => {
+                        const newColors = [...(editForm.additional_colors || [])]
+                        newColors[index] = e.target.value
+                        handleInputChange('additional_colors', newColors)
+                      }}
+                      className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 bg-white/50 backdrop-blur-sm shadow-sm"
+                      placeholder="#000000"
+                      pattern="^#[0-9A-Fa-f]{6}$"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newColors = (editForm.additional_colors || []).filter((_, i) => i !== index)
+                        handleInputChange('additional_colors', newColors)
+                      }}
+                      className="px-3 py-2 text-red-600 hover:text-red-800 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange('additional_colors', [...(editForm.additional_colors || []), ''])
+                  }}
+                  className="text-xs sm:text-sm text-pink-600 hover:text-pink-800 font-medium flex items-center space-x-1"
+                >
+                  <span>+ Add Color</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-gradient-to-r from-gray-50 to-white p-3 sm:p-4 rounded-lg sm:rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="space-y-3">
+              {profile?.primary_color && (
+                <div className="flex items-center space-x-3">
+                  <div 
+                    className="w-12 h-12 rounded-lg border border-gray-300 shadow-sm"
+                    style={{ backgroundColor: profile.primary_color }}
+                  />
+                  <div>
+                    <p className="text-xs font-medium text-gray-600">Primary</p>
+                    <p className="text-xs sm:text-sm text-gray-800 font-medium">{profile.primary_color}</p>
+                  </div>
+                </div>
+              )}
+              {profile?.secondary_color && (
+                <div className="flex items-center space-x-3">
+                  <div 
+                    className="w-12 h-12 rounded-lg border border-gray-300 shadow-sm"
+                    style={{ backgroundColor: profile.secondary_color }}
+                  />
+                  <div>
+                    <p className="text-xs font-medium text-gray-600">Secondary</p>
+                    <p className="text-xs sm:text-sm text-gray-800 font-medium">{profile.secondary_color}</p>
+                  </div>
+                </div>
+              )}
+              {profile?.additional_colors && Array.isArray(profile.additional_colors) && profile.additional_colors.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-gray-600 mb-2">Additional Colors</p>
+                  <div className="flex flex-wrap gap-2">
+                    {profile.additional_colors.map((color, index) => (
+                      <div key={index} className="flex items-center space-x-2">
+                        <div 
+                          className="w-10 h-10 rounded-lg border border-gray-300 shadow-sm"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="text-xs text-gray-800">{color}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!profile?.primary_color && !profile?.secondary_color && (!profile?.additional_colors || profile.additional_colors.length === 0) && (
+                <p className="text-xs sm:text-sm text-gray-500">No brand colors set</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex">
@@ -758,6 +916,7 @@ const Profile = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 {renderTextField('Brand Voice', 'brand_voice', null, 'textarea', 'How does your brand communicate?')}
                 {renderTextField('Brand Tone', 'brand_tone', null, 'textarea', 'What tone does your brand use?')}
+                {renderBrandColors()}
                 {renderTextField('Website URL', 'website_url', <Globe className="w-4 h-4 text-gray-400" />, 'url')}
                 {renderTextField('Phone Number', 'phone_number', <Phone className="w-4 h-4 text-gray-400" />, 'tel')}
                 {renderTextField('Street Address', 'street_address', <MapPin className="w-4 h-4 text-gray-400" />)}

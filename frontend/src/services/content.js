@@ -129,7 +129,7 @@ class ContentAPI {
   }
 
   // Generate content
-  async generateContent() {
+  async generateContent(generateImages = false) {
     try {
       const authToken = await this.getAuthToken()
       console.log('Generating content with token:', authToken ? 'present' : 'missing')
@@ -139,7 +139,10 @@ class ContentAPI {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
-        }
+        },
+        body: JSON.stringify({
+          generate_images: generateImages
+        })
       })
 
       console.log('Generate content response status:', response.status)

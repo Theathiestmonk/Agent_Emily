@@ -217,10 +217,13 @@ class MediaAgent:
             platform = post_data.get("platform", "")
             image_style = state.get("image_style", Style.REALISTIC)
             
-            # Get user profile for context including logo
+            # Get user profile for context including logo and brand colors
             user_profile = self._get_user_profile(state["user_id"])
             logo_url = user_profile.get('logo_url', '')
             business_name = user_profile.get('business_name', 'Unknown')
+            primary_color = user_profile.get('primary_color', '')
+            secondary_color = user_profile.get('secondary_color', '')
+            additional_colors = user_profile.get('additional_colors', [])
             
             # Create prompt for image generation with logo integration
             logo_context = ""
@@ -238,6 +241,35 @@ class MediaAgent:
             The image should still be professional and branded for {business_name}.
             """
             
+            # Build brand colors context
+            brand_colors_context = ""
+            colors_list = []
+            if primary_color:
+                colors_list.append(f"Primary color: {primary_color}")
+            if secondary_color:
+                colors_list.append(f"Secondary color: {secondary_color}")
+            if additional_colors and isinstance(additional_colors, list):
+                for i, color in enumerate(additional_colors, 1):
+                    if color:
+                        colors_list.append(f"Additional color {i}: {color}")
+            
+            if colors_list:
+                brand_colors_context = f"""
+            CRITICAL BRAND COLOR REQUIREMENTS:
+            - The image MUST primarily use these brand colors: {', '.join(colors_list)}
+            - Primary color ({primary_color}) should be the dominant color in the design
+            - Secondary color ({secondary_color}) should be used as accent or complementary colors
+            - Additional colors: {', '.join([c for c in additional_colors if c]) if additional_colors else 'None'}
+            - Create a cohesive color palette using these brand colors
+            - Ensure brand colors are prominent and well-integrated throughout the design
+            - Use brand colors for backgrounds, text overlays, borders, or key visual elements
+            - Maintain brand consistency by adhering strictly to this color scheme
+            """
+            else:
+                brand_colors_context = """
+            Note: No specific brand colors have been set. Use appropriate colors that match the business and content.
+            """
+            
             prompt = f"""
             Create a detailed image prompt for a social media post on {platform}.
             
@@ -250,10 +282,13 @@ class MediaAgent:
             
             {logo_context}
             
+            {brand_colors_context}
+            
             Generate a detailed, specific prompt that will create an engaging image for this social media post.
             The prompt should be optimized for {image_style.value if image_style else 'realistic'} style and suitable for {platform} audience.
             Include specific visual elements, composition, lighting, and mood.
             If a logo is available, ensure it's prominently and tastefully integrated into the design.
+            CRITICALLY IMPORTANT: The image MUST use the specified brand colors as the primary color scheme.
             Keep it under 500 characters for API limits.
             """
             
@@ -293,12 +328,20 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 user_profile = self._get_user_profile(state["user_id"])
                 logo_url = user_profile.get('logo_url', '')
                 business_name = user_profile.get('business_name', 'Unknown')
+                primary_color = user_profile.get('primary_color', '')
+                secondary_color = user_profile.get('secondary_color', '')
                 
-                # Create fallback prompt with logo context
+                # Create fallback prompt with logo and brand colors context
+                color_context = ""
+                if primary_color:
+                    color_context = f" Use primary brand color {primary_color}"
+                if secondary_color:
+                    color_context += f" and secondary color {secondary_color}"
+                
                 if logo_url:
-                    fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image for {business_name} featuring: {content[:100]}. Include the business logo prominently positioned in the image."
+                    fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image for {business_name} featuring: {content[:100]}. Include the business logo prominently positioned in the image.{color_context}"
                 else:
-                    fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image for {business_name} featuring: {content[:100]}"
+                    fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image for {business_name} featuring: {content[:100]}.{color_context}"
                 
                 state["image_prompt"] = fallback_prompt
                 state["status"] = "generating"
@@ -335,12 +378,20 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 user_profile = self._get_user_profile(state["user_id"])
                 logo_url = user_profile.get('logo_url', '')
                 business_name = user_profile.get('business_name', 'Unknown')
+                primary_color = user_profile.get('primary_color', '')
+                secondary_color = user_profile.get('secondary_color', '')
                 
-                # Create fallback prompt with logo context
+                # Create fallback prompt with logo and brand colors context
+                color_context = ""
+                if primary_color:
+                    color_context = f" Use primary brand color {primary_color}"
+                if secondary_color:
+                    color_context += f" and secondary color {secondary_color}"
+                
                 if logo_url:
-                    image_prompt = f"Professional {platform} post image for {business_name} featuring: {content[:100]}. Include the business logo prominently positioned in the image."
+                    image_prompt = f"Professional {platform} post image for {business_name} featuring: {content[:100]}. Include the business logo prominently positioned in the image.{color_context}"
                 else:
-                    image_prompt = f"Professional {platform} post image for {business_name} featuring: {content[:100]}"
+                    image_prompt = f"Professional {platform} post image for {business_name} featuring: {content[:100]}.{color_context}"
                 
                 logger.warning(f"Using fallback image prompt: {image_prompt}")
             
@@ -351,6 +402,35 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             # Get user profile and logo for image generation
             user_profile = self._get_user_profile(state["user_id"])
             logo_url = user_profile.get('logo_url', '')
+            primary_color = user_profile.get('primary_color', '')
+            secondary_color = user_profile.get('secondary_color', '')
+            additional_colors = user_profile.get('additional_colors', [])
+            
+            # Build brand colors instruction
+            brand_colors_instruction = ""
+            if primary_color or secondary_color or (additional_colors and any([c for c in additional_colors if c])):
+                colors_section = []
+                if primary_color:
+                    colors_section.append(f"Primary: {primary_color}")
+                if secondary_color:
+                    colors_section.append(f"Secondary: {secondary_color}")
+                if additional_colors and isinstance(additional_colors, list):
+                    additional_list = [c for c in additional_colors if c]
+                    if additional_list:
+                        colors_section.append(f"Additional: {', '.join(additional_list)}")
+                
+                brand_colors_instruction = f"""
+CRITICAL BRAND COLOR REQUIREMENTS (MUST FOLLOW):
+- PRIMARY COLOR: Use {primary_color} as the dominant color in the design
+- SECONDARY COLOR: Use {secondary_color} as accent colors
+{f"- ADDITIONAL COLORS: {', '.join([c for c in additional_colors if c])}" if additional_colors and any([c for c in additional_colors if c]) else ""}
+- The image MUST primarily use these exact brand colors in the color palette
+- Primary color should dominate backgrounds, main elements, or key visual areas
+- Secondary color should be used for accents, highlights, borders, or complementary elements
+- Create visual harmony using this specific brand color scheme
+- Do NOT deviate from these brand colors - maintain strict brand consistency
+- Apply these colors to backgrounds, text, graphics, borders, or any visual elements as appropriate
+"""
             
             # Generate image using Gemini 2.5 Flash Image Preview
             
@@ -364,16 +444,18 @@ You are a professional graphic designer and image generator. Create a high-quali
 
 IMAGE GENERATION PROMPT: {image_prompt}
 
+{brand_colors_instruction}
+
 DESIGN REQUIREMENTS:
 1. Generate a NEW IMAGE that matches the prompt description
 2. Create a visually appealing, professional image suitable for social media
 3. Use high resolution and professional quality
 4. Ensure the image is engaging and eye-catching
 5. Apply modern design principles and good composition
-6. Use appropriate colors, lighting, and visual elements
+6. Use appropriate colors, lighting, and visual elements - MUST follow brand color requirements above
 7. Make sure the image tells a story and conveys the intended message
 8. Ensure the image is optimized for social media platforms
-9. Create a cohesive and professional design
+9. Create a cohesive and professional design that reflects the brand identity
 10. OUTPUT: Return the final generated image, not text description
 
 TECHNICAL SPECIFICATIONS:
@@ -382,15 +464,18 @@ TECHNICAL SPECIFICATIONS:
 - Engaging and visually appealing
 - Professional composition and lighting
 - Clear and impactful visual elements
+- Brand colors must be prominently and correctly applied
 
 QUALITY CONTROL:
 ✓ Image is high quality and professional
 ✓ Composition is well-balanced and engaging
+✓ Brand colors are correctly and prominently used throughout
 ✓ Colors and lighting are appropriate
 ✓ Image conveys the intended message
 ✓ Suitable for social media platforms
+✓ Brand consistency maintained through color usage
 
-OUTPUT: A single, professionally designed image that matches the prompt requirements with high visual quality.
+OUTPUT: A single, professionally designed image that matches the prompt requirements with high visual quality and strict adherence to brand colors.
 """
                 
                 contents.append(gemini_prompt)

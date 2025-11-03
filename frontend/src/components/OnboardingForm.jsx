@@ -27,6 +27,9 @@ const OnboardingForm = forwardRef(({
     unique_value_proposition: '',
     brand_voice: '',
     brand_tone: '',
+    primary_color: '',
+    secondary_color: '',
+    additional_colors: [],
     website_url: '',
     phone_number: '',
     street_address: '',
@@ -174,6 +177,9 @@ const OnboardingForm = forwardRef(({
         unique_value_proposition: '',
         brand_voice: '',
         brand_tone: '',
+        primary_color: '',
+        secondary_color: '',
+        additional_colors: [],
         website_url: '',
         phone_number: '',
         street_address: '',
@@ -250,7 +256,7 @@ const OnboardingForm = forwardRef(({
           'target_audience_life_stages', 'target_audience_professional_types',
           'target_audience_lifestyle_interests', 'target_audience_buyer_behavior',
           'platform_tone_instagram', 'platform_tone_facebook', 'platform_tone_linkedin',
-          'platform_tone_youtube', 'platform_tone_x'
+          'platform_tone_youtube', 'platform_tone_x', 'additional_colors'
         ]
         
         arrayFields.forEach(field => {
@@ -1173,6 +1179,104 @@ const OnboardingForm = forwardRef(({
                     <option key={tone} value={tone}>{tone}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            {/* Brand Colors Section */}
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <h4 className="text-sm font-semibold text-gray-800 mb-4">Brand Colors</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Primary Color</label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="color"
+                      value={formData.primary_color || '#000000'}
+                      onChange={(e) => handleInputChange('primary_color', e.target.value)}
+                      className="w-16 h-10 border border-gray-300 rounded-md cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={formData.primary_color}
+                      onChange={(e) => handleInputChange('primary_color', e.target.value)}
+                      className="flex-1 px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                      placeholder="#000000"
+                      pattern="^#[0-9A-Fa-f]{6}$"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Secondary Color</label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="color"
+                      value={formData.secondary_color || '#000000'}
+                      onChange={(e) => handleInputChange('secondary_color', e.target.value)}
+                      className="w-16 h-10 border border-gray-300 rounded-md cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={formData.secondary_color}
+                      onChange={(e) => handleInputChange('secondary_color', e.target.value)}
+                      className="flex-1 px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                      placeholder="#000000"
+                      pattern="^#[0-9A-Fa-f]{6}$"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Colors */}
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Additional Colors</label>
+                <div className="space-y-2">
+                  {formData.additional_colors && formData.additional_colors.map((color, index) => (
+                    <div key={index} className="flex items-center space-x-2">
+                      <input
+                        type="color"
+                        value={color || '#000000'}
+                        onChange={(e) => {
+                          const newColors = [...formData.additional_colors]
+                          newColors[index] = e.target.value
+                          handleInputChange('additional_colors', newColors)
+                        }}
+                        className="w-16 h-10 border border-gray-300 rounded-md cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={color}
+                        onChange={(e) => {
+                          const newColors = [...formData.additional_colors]
+                          newColors[index] = e.target.value
+                          handleInputChange('additional_colors', newColors)
+                        }}
+                        className="flex-1 px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm md:text-base border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                        placeholder="#000000"
+                        pattern="^#[0-9A-Fa-f]{6}$"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newColors = formData.additional_colors.filter((_, i) => i !== index)
+                          handleInputChange('additional_colors', newColors)
+                        }}
+                        className="px-3 py-2 text-red-600 hover:text-red-800 border border-red-300 rounded-md hover:bg-red-50 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleInputChange('additional_colors', [...(formData.additional_colors || []), ''])
+                    }}
+                    className="text-xs sm:text-sm text-pink-600 hover:text-pink-800 font-medium flex items-center space-x-1"
+                  >
+                    <span>+ Add Color</span>
+                  </button>
+                </div>
               </div>
             </div>
 

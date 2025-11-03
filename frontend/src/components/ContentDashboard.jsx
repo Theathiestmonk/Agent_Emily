@@ -91,6 +91,7 @@ const ContentDashboard = () => {
   const [showProgress, setShowProgress] = useState(false)
   const [showGenerationModal, setShowGenerationModal] = useState(false)
   const [showConfirmationModal, setShowConfirmationModal] = useState(false)
+  const [generateImagesWithContent, setGenerateImagesWithContent] = useState(false)
   const [fetchingFreshData, setFetchingFreshData] = useState(false)
   const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
   const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
@@ -431,6 +432,8 @@ const ContentDashboard = () => {
 
   const handleConfirmGeneration = async () => {
     setShowConfirmationModal(false)
+    const shouldGenerateImages = generateImagesWithContent
+    setGenerateImagesWithContent(false) // Reset checkbox
     
     try {
       setGenerating(true)
@@ -439,7 +442,7 @@ const ContentDashboard = () => {
       setShowGenerationModal(true)
       setFetchingFreshData(false) // Reset data fetching state
       
-      const result = await contentAPI.generateContent()
+      const result = await contentAPI.generateContent(shouldGenerateImages)
       
       if (result.data) {
         // Don't set generating to false here - let the modal handle it
@@ -1801,7 +1804,7 @@ const ContentDashboard = () => {
   }, [lightboxImage])
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="h-screen bg-white overflow-hidden">
       {/* Content Generation Modal */}
       <ContentGenerationModal 
         isVisible={showGenerationModal} 
@@ -1829,13 +1832,35 @@ const ContentDashboard = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Generate Fresh Content
               </h3>
-              <p className="text-sm text-gray-600 mb-6">
+              <p className="text-sm text-gray-600 mb-4">
                 This will delete your old content and create fresh content for all platforms. 
                 Are you sure you want to proceed?
               </p>
+              <div className="mb-6">
+                <label className="flex items-center space-x-2 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={generateImagesWithContent}
+                    onChange={(e) => setGenerateImagesWithContent(e.target.checked)}
+                    className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500 focus:ring-2"
+                  />
+                  <div className="flex items-center space-x-2">
+                    <Image className="w-4 h-4 text-gray-600" />
+                    <span className="text-sm text-gray-700 group-hover:text-gray-900">
+                      Also generate images for all content posts
+                    </span>
+                  </div>
+                </label>
+                <p className="text-xs text-gray-500 mt-1 ml-6">
+                  Images will be generated automatically using your brand colors after content is created
+                </p>
+              </div>
               <div className="flex space-x-3">
                 <button
-                  onClick={() => setShowConfirmationModal(false)}
+                  onClick={() => {
+                    setShowConfirmationModal(false)
+                    setGenerateImagesWithContent(false)
+                  }}
                   className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500"
                 >
                   Cancel
@@ -1864,9 +1889,9 @@ const ContentDashboard = () => {
       <SideNavbar />
       
       {/* Main Content */}
-      <div className={`md:ml-48 xl:ml-64 flex flex-col min-h-screen ${availableDates.length > 1 ? 'pb-20' : ''}`}>
-        {/* Fixed Header - Desktop Only */}
-        <div className="hidden md:block fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
+      <div className={`md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden ${availableDates.length > 1 ? 'pb-20' : ''}`}>
+        {/* Header - Desktop Only */}
+        <div className="hidden md:block bg-white shadow-sm border-b">
           <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4">
             {/* Desktop Layout */}
             <div className="flex justify-between items-center">
@@ -1908,7 +1933,7 @@ const ContentDashboard = () => {
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 p-4 lg:p-6 pt-16 md:pt-20 flex flex-col justify-center min-h-screen">
+        <div className="flex-1 p-4 lg:p-6 flex flex-col overflow-y-auto">
           {/* Status Message - Only show error messages */}
           {generationStatus === 'error' && (
             <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800">
@@ -2017,7 +2042,7 @@ const ContentDashboard = () => {
                 )}
                 
                 <div 
-                  className="flex flex-col sm:flex-row gap-6 overflow-x-auto sm:overflow-x-auto overflow-y-visible pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-0 sm:pr-12"
+                  className="flex flex-col sm:flex-row gap-6 overflow-x-auto sm:overflow-x-auto overflow-y-visible py-2 px-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
                   onScroll={handleScroll}
                 >
                 {filteredContent.map((content) => {
@@ -2027,11 +2052,11 @@ const ContentDashboard = () => {
                     <div 
                       key={content.id} 
                       onClick={() => handleViewContent(content)}
-                      className={`${theme.bg} rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 hover:scale-[1.02] cursor-pointer flex-shrink-0 w-full sm:w-80`}
+                      className={`${theme.bg} rounded-xl shadow-[0_0_8px_rgba(0,0,0,0.12),0_2px_4px_rgba(0,0,0,0.08)] p-4 hover:shadow-[0_0_16px_rgba(0,0,0,0.18),0_4px_8px_rgba(0,0,0,0.12)] transition-all duration-300 hover:scale-[1.02] cursor-pointer flex-shrink-0 w-full sm:w-80`}
                     >
-                      <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center space-x-3">
-                          <div className={`w-12 h-12 ${theme.iconBg} rounded-xl flex items-center justify-center shadow-sm`}>
+                          <div className={`w-10 h-10 ${theme.iconBg} rounded-xl flex items-center justify-center shadow-sm`}>
                             <div className="text-white">
                               {getPlatformIcon(content.platform)}
                             </div>
@@ -2083,7 +2108,7 @@ const ContentDashboard = () => {
                       </div>
                     
                     {content.title && (
-                      <h5 className="font-medium text-gray-900 mb-3">{content.title}</h5>
+                      <h5 className="font-medium text-gray-900 mb-2 text-sm">{content.title}</h5>
                     )}
                     
                     {expandedContent?.id === content.id ? (
@@ -2248,7 +2273,7 @@ const ContentDashboard = () => {
                       <div>
                         {/* Media Display - Only show if content has media */}
                         {((generatedImages[content.id] && generatedImages[content.id].image_url) || content.image_url) && (
-                        <div className="mb-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+                        <div className="mb-2 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center space-x-1">
                               <span className="text-xs font-medium text-purple-800">Media</span>
@@ -2402,12 +2427,12 @@ const ContentDashboard = () => {
                                   </div>
                                 )}
                         
-                        <p className="text-gray-700 text-sm mb-4 line-clamp-3">{cleanContentText(content.content)}</p>
+                        <p className="text-gray-700 text-sm mb-2 line-clamp-2">{cleanContentText(content.content)}</p>
                         
                         {cleanContentText(content.content).length > 150 && (
                           <button
                             onClick={() => handleViewContent(content)}
-                            className="text-xs text-purple-600 hover:text-purple-800 font-medium"
+                            className="text-xs text-purple-600 hover:text-purple-800 font-medium mb-2"
                           >
                             Read more
                           </button>
@@ -2415,7 +2440,7 @@ const ContentDashboard = () => {
                         
                         {/* Media Action Buttons */}
                         {(!generatedImages[content.id] || !generatedImages[content.id].image_url) && (
-                          <div className="flex gap-2 mt-4 mb-6">
+                          <div className="flex gap-2 mt-2 mb-3">
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
@@ -2467,15 +2492,15 @@ const ContentDashboard = () => {
                     )}
                     
                     {/* Inline Icons Row */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mt-2">
                       {/* Calendar Date Display */}
                       <div className="flex items-center space-x-3">
                         <div 
-                          className={`w-10 h-10 ${theme.accent} rounded-lg flex flex-col items-center justify-center ${theme.text} cursor-help`}
+                          className={`w-8 h-8 ${theme.accent} rounded-lg flex flex-col items-center justify-center ${theme.text} cursor-help`}
                           title={`Scheduled for ${formatDate(content.scheduled_at)}`}
                         >
-                          <Calendar className="w-4 h-4" />
-                          <span className="text-xs font-bold leading-none">
+                          <Calendar className="w-3 h-3" />
+                          <span className="text-[10px] font-bold leading-none">
                             {new Date(content.scheduled_at).getDate()}
                           </span>
                         </div>
@@ -2619,7 +2644,7 @@ const ContentDashboard = () => {
         )}
 
         {/* Floating Add Button with Dropdown */}
-        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50">
+        <div className="fixed bottom-20 left-1/2 md:left-[calc(50%+96px)] xl:left-[calc(50%+128px)] transform -translate-x-1/2 z-50">
           <div className="relative add-menu-container">
             {/* Dropdown Menu */}
             {showAddMenu && (

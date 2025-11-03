@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
@@ -823,10 +823,13 @@ async def get_onboarding_status(current_user: User = Depends(get_current_user)):
 @app.post("/content/generate")
 async def generate_content_for_user(
     background_tasks: BackgroundTasks,
+    request: Dict[str, Any] = Body(default={}),
     current_user: User = Depends(get_current_user)
 ):
     """Generate content for the current user"""
     try:
+        generate_images = request.get("generate_images", False)
+        
         # Initialize progress
         await update_progress(
             current_user.id,
@@ -838,10 +841,11 @@ async def generate_content_for_user(
         # Run content generation in background
         background_tasks.add_task(
             run_content_generation_with_progress,
-            current_user.id
+            current_user.id,
+            generate_images
         )
         
-        return {"message": "Content generation started", "user_id": current_user.id}
+        return {"message": "Content generation started", "user_id": current_user.id, "generate_images": generate_images}
         
     except Exception as e:
         raise HTTPException(
@@ -849,10 +853,10 @@ async def generate_content_for_user(
             detail=f"Failed to start content generation: {str(e)}"
         )
 
-async def run_content_generation_with_progress(user_id: str):
+async def run_content_generation_with_progress(user_id: str, generate_images: bool = False):
     """Run content generation with progress tracking"""
     try:
-        logger.info(f"Starting content generation for user: {user_id}")
+        logger.info(f"Starting content generation for user: {user_id}, generate_images: {generate_images}")
         
         # Update progress
         await update_progress(user_id, "starting", 5, "Initializing content generation...")
@@ -863,6 +867,75 @@ async def run_content_generation_with_progress(user_id: str):
         logger.info(f"Content generation result: {result}")
         
         if result['success']:
+            # If image generation is requested, generate images for all created posts
+            if generate_images:
+                await update_progress(user_id, "generating_images", 80, "Generating images for content posts...")
+                
+                try:
+                    # Get the most recent campaign for this user
+                    campaigns_response = supabase.table("content_campaigns").select("id").eq("user_id", user_id).order("created_at", desc=True).limit(1).execute()
+                    
+                    if campaigns_response.data:
+                        campaign_id = campaigns_response.data[0]['id']
+                        logger.info(f"Found campaign {campaign_id} for image generation")
+                        
+                        # Get all posts for this campaign
+                        posts_response = supabase.table("content_posts").select("id").eq("campaign_id", campaign_id).execute()
+                        
+                        if posts_response.data:
+                            post_ids = [post['id'] for post in posts_response.data]
+                            logger.info(f"Generating images for {len(post_ids)} posts")
+                            
+                            # Import media agent
+                            from agents.media_agent import create_media_agent
+                            import os
+                            
+                            gemini_api_key = os.getenv("GEMINI_API_KEY")
+                            if gemini_api_key:
+                                supabase_url = os.getenv("SUPABASE_URL")
+                                supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+                                
+                                media_agent = create_media_agent(
+                                    supabase_url,
+                                    supabase_service_key or os.getenv("SUPABASE_ANON_KEY"),
+                                    gemini_api_key
+                                )
+                                
+                                # Generate images for each post in a loop
+                                successful = 0
+                                failed = 0
+                                
+                                for i, post_id in enumerate(post_ids):
+                                    try:
+                                        await update_progress(
+                                            user_id,
+                                            "generating_images",
+                                            80 + int((i / len(post_ids)) * 15),
+                                            f"Generating image {i+1} of {len(post_ids)}..."
+                                        )
+                                        
+                                        image_result = await media_agent.generate_media_for_post(post_id, user_id)
+                                        if image_result.get('success'):
+                                            successful += 1
+                                            logger.info(f"Successfully generated image for post {post_id}")
+                                        else:
+                                            failed += 1
+                                            logger.warning(f"Failed to generate image for post {post_id}: {image_result.get('error')}")
+                                    except Exception as img_error:
+                                        failed += 1
+                                        logger.error(f"Error generating image for post {post_id}: {str(img_error)}")
+                                
+                                logger.info(f"Image generation completed: {successful} successful, {failed} failed")
+                            else:
+                                logger.warning("GEMINI_API_KEY not set, skipping image generation")
+                        else:
+                            logger.warning(f"No posts found for campaign {campaign_id}")
+                    else:
+                        logger.warning(f"No campaign found for user {user_id}")
+                except Exception as img_gen_error:
+                    logger.error(f"Error during image generation: {str(img_gen_error)}")
+                    # Don't fail the entire process if image generation fails
+                
             await update_progress(user_id, "completed", 100, "Content generation completed successfully!")
         else:
             await update_progress(user_id, "error", 0, f"Content generation failed: {result.get('message', 'Unknown error')}")
