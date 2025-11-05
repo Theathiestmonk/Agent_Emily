@@ -2,7 +2,7 @@ import React from 'react';
 import { Helmet } from 'react-helmet-async';
 
 const SEO = ({
-  title = "atsn ai | Autonomous AI Agents for Digital Marketing & Business Automation",
+  title = "atsn ai | Autonomous AI Agents, Custom AI Agents and Chatbots",
   description = "atsn ai creates autonomous AI agents, chatbots, and consultancy solutions. Meet Emily, your AI marketing teammate for smarter business automation.",
   keywords = "AI agents, autonomous AI, digital marketing AI, Emily AI agent, AI content creation, social media automation, AI marketing, business automation",
   image = "https://atsnai.com/emily_logo.png",

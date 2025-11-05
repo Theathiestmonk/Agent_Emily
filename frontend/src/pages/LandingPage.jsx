@@ -83,8 +83,8 @@ const Page = () => {
   return (
     <>
       <SEO
-        title="atsn ai | Autonomous AI Agents for Digital Marketing & Business Automation"
-        description="Meet Emily, your autonomous AI digital marketing agent. Create content, manage social media, optimize campaigns, and boost productivity with AI agents that work 24/7. Start your free trial today!"
+        title="atsn ai | Autonomous AI Agents, Custom AI Agents and Chatbots"
+        description="atsn ai creates autonomous AI agents, chatbots, and consultancy solutions. Meet Emily, your AI marketing teammate for smarter business automation."
         keywords="AI agents, autonomous AI, digital marketing AI, Emily AI agent, AI content creation, social media automation, AI marketing, business automation, AI chatbot, AI consultancy, artificial intelligence"
         structuredData={structuredData}
       />

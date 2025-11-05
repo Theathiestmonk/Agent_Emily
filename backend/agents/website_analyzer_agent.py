@@ -420,11 +420,39 @@ class WebsiteAnalyzerAgent:
             
             # Check sitemap
             sitemap_url = urljoin(url, '/sitemap.xml')
+            sitemap_info = {
+                'exists': False,
+                'url': sitemap_url,
+                'url_count': 0,
+                'last_modified': None,
+                'has_robots_reference': False
+            }
+            
             try:
                 sitemap_response = requests.get(sitemap_url, timeout=10)
-                has_sitemap = sitemap_response.status_code == 200
-            except:
-                has_sitemap = False
+                if sitemap_response.status_code == 200:
+                    sitemap_info['exists'] = True
+                    # Parse sitemap XML
+                    try:
+                        soup = BeautifulSoup(sitemap_response.content, 'xml')
+                        urls = soup.find_all('url')
+                        sitemap_info['url_count'] = len(urls)
+                        
+                        # Get last modified dates
+                        lastmods = [url.find('lastmod') for url in urls if url.find('lastmod')]
+                        if lastmods:
+                            # Get the most recent lastmod
+                            dates = [lastmod.text for lastmod in lastmods if lastmod.text]
+                            if dates:
+                                sitemap_info['last_modified'] = max(dates)
+                        
+                        # Check if robots.txt references sitemap
+                        if 'sitemap' in robots_txt.lower():
+                            sitemap_info['has_robots_reference'] = True
+                    except Exception as e:
+                        logger.warning(f"Error parsing sitemap XML: {e}")
+            except Exception as e:
+                logger.debug(f"Sitemap not found: {e}")
             
             return {
                 'ssl': ssl_info,
@@ -435,12 +463,10 @@ class WebsiteAnalyzerAgent:
                 'content_length': len(response.content),
                 'robots_txt': {
                     'exists': bool(robots_txt),
-                    'content': robots_txt[:500] if robots_txt else ""
+                    'content': robots_txt[:500] if robots_txt else "",
+                    'references_sitemap': 'sitemap' in robots_txt.lower() if robots_txt else False
                 },
-                'sitemap': {
-                    'exists': has_sitemap,
-                    'url': sitemap_url
-                },
+                'sitemap': sitemap_info,
                 'server_info': {
                     'server': headers.get('server', ''),
                     'powered_by': headers.get('x-powered-by', '')
