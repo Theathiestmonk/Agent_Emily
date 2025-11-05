@@ -10,6 +10,7 @@ import base64
 import jwt
 from cryptography.fernet import Fernet
 from supabase import create_client, Client
+import openai
 
 router = APIRouter(prefix="/api/social-media", tags=["social-media-connections"])
 
@@ -809,7 +810,9 @@ async def get_latest_posts(current_user: User = Depends(get_current_user)):
 async def fetch_instagram_posts_oauth(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from Instagram using OAuth connection (Facebook Graph API)"""
     try:
-        access_token = decrypt_token(connection.get('access_token', ''))
+        # OAuth connections use access_token_encrypted, token connections use access_token
+        encrypted_token = connection.get('access_token_encrypted') or connection.get('access_token', '')
+        access_token = decrypt_token(encrypted_token)
         page_id = connection.get('account_id', '')
         
         print(f"Instagram OAuth page_id: {page_id}")
@@ -880,6 +883,8 @@ async def fetch_instagram_posts_oauth(connection: dict, limit: int) -> List[Dict
                         'created_time': media.get('timestamp'),
                         'permalink_url': media.get('permalink'),
                         'media_url': media.get('media_url') or media.get('thumbnail_url'),
+                        'thumbnail_url': media.get('thumbnail_url'),
+                        'media_type': media.get('media_type', 'IMAGE'),
                         'likes_count': media.get('like_count', 0),
                         'comments_count': media.get('comments_count', 0),
                         'shares_count': 0  # Instagram doesn't provide shares count
@@ -899,7 +904,9 @@ async def fetch_instagram_posts_oauth(connection: dict, limit: int) -> List[Dict
 async def fetch_instagram_posts_new(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from Instagram using Basic Display API"""
     try:
-        access_token = decrypt_token(connection.get('access_token', ''))
+        # Token connections use access_token field
+        encrypted_token = connection.get('access_token', '')
+        access_token = decrypt_token(encrypted_token)
         account_id = connection.get('account_id')
         
         print(f"Instagram account_id: {account_id}")
@@ -934,6 +941,8 @@ async def fetch_instagram_posts_new(connection: dict, limit: int) -> List[Dict[s
                         'created_time': media.get('timestamp'),
                         'permalink_url': media.get('permalink'),
                         'media_url': media.get('media_url') or media.get('thumbnail_url'),
+                        'thumbnail_url': media.get('thumbnail_url'),
+                        'media_type': media.get('media_type', 'IMAGE'),
                         'likes_count': media.get('like_count', 0),
                         'comments_count': media.get('comments_count', 0),
                         'shares_count': 0  # Instagram doesn't provide shares count
@@ -953,7 +962,9 @@ async def fetch_instagram_posts_new(connection: dict, limit: int) -> List[Dict[s
 async def fetch_facebook_posts_oauth(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from Facebook using OAuth connection"""
     try:
-        access_token = decrypt_token(connection.get('access_token', ''))
+        # OAuth connections use access_token_encrypted, token connections use access_token
+        encrypted_token = connection.get('access_token_encrypted') or connection.get('access_token', '')
+        access_token = decrypt_token(encrypted_token)
         page_id = connection.get('account_id', '')
         
         print(f"Facebook OAuth page_id: {page_id}")
@@ -1014,7 +1025,9 @@ async def fetch_facebook_posts_oauth(connection: dict, limit: int) -> List[Dict[
 async def fetch_facebook_posts_new(connection: dict, limit: int) -> List[Dict[str, Any]]:
     """Fetch latest posts from Facebook"""
     try:
-        access_token = decrypt_token(connection.get('access_token', ''))
+        # Token connections use access_token field
+        encrypted_token = connection.get('access_token', '')
+        access_token = decrypt_token(encrypted_token)
         account_id = connection.get('account_id')
         
         print(f"Facebook account_id: {account_id}")
@@ -1165,3 +1178,460 @@ async def post_to_instagram_token(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to post to Instagram: {str(e)}"
         )
+
+@router.get("/post-insights")
+async def get_post_insights(
+    post_id: str,
+    platform: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get AI-powered insights for a specific post
+    Analyzes the current post, compares with previous 5 posts, and performs sentiment analysis
+    """
+    try:
+        user_id = current_user.id
+        
+        # Get authenticated Supabase client
+        supabase_client = get_supabase_client()
+        
+        # Get user's connections for the platform
+        oauth_result = supabase_client.table("platform_connections").select("*").eq(
+            "user_id", user_id
+        ).eq("platform", platform.lower()).eq("is_active", True).execute()
+        
+        token_result = supabase_client.table("social_media_connections").select("*").eq(
+            "user_id", user_id
+        ).eq("platform", platform.lower()).eq("is_active", True).execute()
+        
+        oauth_connections = oauth_result.data if oauth_result.data else []
+        token_connections = token_result.data if token_result.data else []
+        
+        if not oauth_connections and not token_connections:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No active connection found for {platform}"
+            )
+        
+        # Use first available connection
+        connection = oauth_connections[0] if oauth_connections else token_connections[0]
+        connection_type = 'oauth' if oauth_connections else 'token'
+        
+        # Normalize connection data for OAuth connections (similar to latest-posts endpoint)
+        if connection_type == 'oauth':
+            connection = {
+                **connection,
+                'access_token': connection.get('access_token_encrypted', ''),
+                'account_id': connection.get('page_id', connection.get('account_id', '')),
+                'account_name': connection.get('page_name', connection.get('account_name', ''))
+            }
+        
+        # Fetch current post with comments
+        current_post = None
+        comments = []
+        
+        if platform.lower() == 'instagram':
+            if connection_type == 'oauth':
+                current_post, comments = await fetch_instagram_post_with_comments_oauth(connection, post_id)
+            else:
+                current_post, comments = await fetch_instagram_post_with_comments_new(connection, post_id)
+        elif platform.lower() == 'facebook':
+            if connection_type == 'oauth':
+                current_post, comments = await fetch_facebook_post_with_comments_oauth(connection, post_id)
+            else:
+                current_post, comments = await fetch_facebook_post_with_comments_new(connection, post_id)
+        elif platform.lower() == 'twitter':
+            current_post, comments = await fetch_twitter_post_with_comments_new(connection, post_id)
+        elif platform.lower() == 'linkedin':
+            current_post, comments = await fetch_linkedin_post_with_comments_new(connection, post_id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported platform: {platform}"
+            )
+        
+        if not current_post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Post not found or could not be fetched. Please check if the post ID is correct and your {platform} connection is valid."
+            )
+        
+        # Fetch previous posts for comparison - fetch more to ensure we get 5 previous posts
+        # Fetch 20 posts to ensure we have enough after filtering out the current post
+        previous_posts = []
+        if platform.lower() == 'instagram':
+            if connection_type == 'oauth':
+                previous_posts = await fetch_instagram_posts_oauth(connection, 20)
+            else:
+                previous_posts = await fetch_instagram_posts_new(connection, 20)
+        elif platform.lower() == 'facebook':
+            if connection_type == 'oauth':
+                previous_posts = await fetch_facebook_posts_oauth(connection, 20)
+            else:
+                previous_posts = await fetch_facebook_posts_new(connection, 20)
+        elif platform.lower() == 'twitter':
+            previous_posts = await fetch_twitter_posts_new(connection, 20)
+        elif platform.lower() == 'linkedin':
+            previous_posts = await fetch_linkedin_posts_new(connection, 20)
+        
+        # Filter out current post from previous posts and take 5
+        # Use flexible matching for post IDs (handle different formats)
+        current_post_id = current_post.get('id', post_id)
+        previous_posts = [
+            p for p in previous_posts 
+            if p.get('id') != current_post_id 
+            and str(p.get('id', '')) != str(post_id)
+            and str(p.get('id', '')) != str(current_post_id)
+        ][:5]
+        
+        print(f"Found {len(previous_posts)} previous posts for comparison (current post ID: {current_post_id}, requested post_id: {post_id})")
+        
+        # Generate AI insights
+        insights = await generate_ai_insights(current_post, previous_posts, comments, platform)
+        
+        return {
+            "insights": insights,
+            "post_id": post_id,
+            "platform": platform,
+            "comments_analyzed": len(comments),
+            "previous_posts_compared": len(previous_posts)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating post insights: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate insights: {str(e)}"
+        )
+
+async def generate_ai_insights(current_post: Dict, previous_posts: List[Dict], comments: List[Dict], platform: str) -> str:
+    """Generate AI-powered insights using OpenAI"""
+    try:
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            return "AI insights unavailable: OpenAI API key not configured"
+        
+        client = openai.OpenAI(api_key=openai_api_key)
+        
+        # Prepare data for analysis
+        current_post_data = {
+            "content": current_post.get('message', current_post.get('text', current_post.get('caption', ''))),
+            "likes": current_post.get('likes_count', current_post.get('like_count', 0)),
+            "comments_count": current_post.get('comments_count', 0),
+            "shares": current_post.get('shares_count', 0),
+            "created_time": current_post.get('created_time', current_post.get('timestamp', ''))
+        }
+        
+        previous_posts_data = []
+        for post in previous_posts:
+            previous_posts_data.append({
+                "content": post.get('message', post.get('text', post.get('caption', ''))),
+                "likes": post.get('likes_count', post.get('like_count', 0)),
+                "comments_count": post.get('comments_count', 0),
+                "shares": post.get('shares_count', 0),
+                "created_time": post.get('created_time', post.get('timestamp', ''))
+            })
+        
+        # Calculate average metrics for previous posts
+        avg_likes = sum(p.get('likes_count', p.get('like_count', 0)) for p in previous_posts) / len(previous_posts) if previous_posts else 0
+        avg_comments = sum(p.get('comments_count', 0) for p in previous_posts) / len(previous_posts) if previous_posts else 0
+        avg_shares = sum(p.get('shares_count', 0) for p in previous_posts) / len(previous_posts) if previous_posts else 0
+        
+        # Prepare comments for sentiment analysis
+        comments_text = [comment.get('text', comment.get('message', '')) for comment in comments[:50]]  # Limit to 50 comments
+        
+        # Build previous posts summary
+        previous_posts_summary = ""
+        if previous_posts:
+            for i, post in enumerate(previous_posts, 1):
+                previous_posts_summary += f"\nPost {i}: {post.get('likes_count', post.get('like_count', 0))} likes, {post.get('comments_count', 0)} comments, {post.get('shares_count', 0)} shares"
+        else:
+            previous_posts_summary = "\nNo previous posts available for comparison."
+        
+        prompt = f"""You are a social media analytics expert. Analyze this {platform} post and provide comprehensive insights in a STRICT, STRUCTURED FORMAT.
+
+**IMPORTANT: You MUST format your response EXACTLY as shown below with these exact section headers. Do not deviate from this format.**
+
+---
+
+## Current Post Data:
+- Content: {current_post_data['content']}
+- Likes: {current_post_data['likes']}
+- Comments: {current_post_data['comments_count']}
+- Shares: {current_post_data['shares']}
+- Posted: {current_post_data['created_time']}
+
+## Previous Posts Average:
+- Average Likes: {avg_likes:.1f}
+- Average Comments: {avg_comments:.1f}
+- Average Shares: {avg_shares:.1f}
+
+## Previous Posts Details:
+{previous_posts_summary}
+
+## Comments Sample (for sentiment analysis):
+{chr(10).join(comments_text[:30]) if comments_text else 'No comments available'}
+
+---
+
+**REQUIRED OUTPUT FORMAT (use these exact section headers):**
+
+Performance Analysis:
+[Compare current post performance (likes, comments, shares) with previous posts. Calculate percentage changes. Mention if it's above/below average. Be specific with numbers.]
+
+Content Analysis:
+[Analyze the content quality, messaging style, engagement potential, and what makes it effective or ineffective. Discuss content length, tone, and appeal.]
+
+Sentiment Analysis:
+[Analyze comment sentiment - identify positive, negative, and neutral comments. Provide overall sentiment score context. Mention specific positive/negative themes if applicable. Use words like "positive", "negative", "good", "bad", "happy", "disappointed" to help sentiment calculation.]
+
+Trends & Patterns:
+[Identify trends or patterns compared to previous posts. Discuss engagement patterns, posting frequency impact, content type performance, time-based patterns if visible.]
+
+Recommendations:
+[Provide 3-5 actionable, specific recommendations to improve future posts. Be concrete and data-driven.]
+
+---
+
+**CRITICAL INSTRUCTIONS:**
+1. Always start each section with the exact header shown above (e.g., "Performance Analysis:")
+2. Do NOT use markdown formatting like ## or ###
+3. Keep each section focused and concise (2-4 sentences each)
+4. Use specific numbers and percentages when available
+5. If data is missing, state that clearly but still provide insights based on available data
+6. Ensure sentiment analysis mentions positive/negative keywords for accurate sentiment scoring
+7. Always provide all 5 sections, even if some data is limited"""
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "You are a social media analytics expert. You MUST always format your insights responses with these exact section headers: 'Performance Analysis:', 'Content Analysis:', 'Sentiment Analysis:', 'Trends & Patterns:', and 'Recommendations:'. Never deviate from this format. Be specific, data-driven, and actionable."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=2000,
+            temperature=0.5  # Lower temperature for more consistent output
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        print(f"Error generating AI insights: {e}")
+        return f"Error generating insights: {str(e)}"
+
+# Helper functions to fetch post with comments
+async def fetch_instagram_post_with_comments_oauth(connection: dict, post_id: str) -> tuple:
+    """Fetch Instagram post with comments"""
+    try:
+        # OAuth connections use access_token_encrypted, token connections use access_token
+        encrypted_token = connection.get('access_token_encrypted') or connection.get('access_token', '')
+        access_token = decrypt_token(encrypted_token)
+        
+        async with httpx.AsyncClient() as client:
+            # Fetch post
+            post_response = await client.get(
+                f"https://graph.facebook.com/v18.0/{post_id}",
+                params={
+                    "access_token": access_token,
+                    "fields": "id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count"
+                }
+            )
+            
+            if post_response.status_code != 200:
+                return None, []
+            
+            post_data = post_response.json()
+            post = {
+                'id': post_data.get('id'),
+                'caption': post_data.get('caption', ''),
+                'created_time': post_data.get('timestamp'),
+                'likes_count': post_data.get('like_count', 0),
+                'comments_count': post_data.get('comments_count', 0),
+                'permalink_url': post_data.get('permalink')
+            }
+            
+            # Fetch comments
+            comments_response = await client.get(
+                f"https://graph.facebook.com/v18.0/{post_id}/comments",
+                params={
+                    "access_token": access_token,
+                    "fields": "id,text,username,timestamp",
+                    "limit": 50
+                }
+            )
+            
+            comments = []
+            if comments_response.status_code == 200:
+                comments_data = comments_response.json()
+                comments = comments_data.get('data', [])
+            
+            return post, comments
+            
+    except Exception as e:
+        print(f"Error fetching Instagram post with comments: {e}")
+        return None, []
+
+async def fetch_instagram_post_with_comments_new(connection: dict, post_id: str) -> tuple:
+    """Fetch Instagram post with comments (new API)"""
+    return await fetch_instagram_post_with_comments_oauth(connection, post_id)
+
+async def fetch_facebook_post_with_comments_oauth(connection: dict, post_id: str) -> tuple:
+    """Fetch Facebook post with comments"""
+    try:
+        # OAuth connections use access_token_encrypted, token connections use access_token
+        encrypted_token = connection.get('access_token_encrypted') or connection.get('access_token', '')
+        access_token = decrypt_token(encrypted_token)
+        
+        async with httpx.AsyncClient() as client:
+            # Fetch post
+            post_response = await client.get(
+                f"https://graph.facebook.com/v18.0/{post_id}",
+                params={
+                    "access_token": access_token,
+                    "fields": "id,message,created_time,permalink_url,likes.summary(true),comments.summary(true),shares"
+                }
+            )
+            
+            if post_response.status_code != 200:
+                return None, []
+            
+            post_data = post_response.json()
+            post = {
+                'id': post_data.get('id'),
+                'message': post_data.get('message', ''),
+                'created_time': post_data.get('created_time'),
+                'likes_count': post_data.get('likes', {}).get('summary', {}).get('total_count', 0),
+                'comments_count': post_data.get('comments', {}).get('summary', {}).get('total_count', 0),
+                'shares_count': post_data.get('shares', {}).get('count', 0),
+                'permalink_url': post_data.get('permalink_url')
+            }
+            
+            # Fetch comments
+            comments_response = await client.get(
+                f"https://graph.facebook.com/v18.0/{post_id}/comments",
+                params={
+                    "access_token": access_token,
+                    "fields": "id,message,from,created_time",
+                    "limit": 50
+                }
+            )
+            
+            comments = []
+            if comments_response.status_code == 200:
+                comments_data = comments_response.json()
+                comments = comments_data.get('data', [])
+            
+            return post, comments
+            
+    except Exception as e:
+        print(f"Error fetching Facebook post with comments: {e}")
+        import traceback
+        traceback.print_exc()
+        return None, []
+
+async def fetch_facebook_post_with_comments_new(connection: dict, post_id: str) -> tuple:
+    """Fetch Facebook post with comments (new API)"""
+    try:
+        # Token connections use access_token field
+        encrypted_token = connection.get('access_token', '')
+        access_token = decrypt_token(encrypted_token)
+        
+        async with httpx.AsyncClient() as client:
+            # Fetch post
+            post_response = await client.get(
+                f"https://graph.facebook.com/v18.0/{post_id}",
+                params={
+                    "access_token": access_token,
+                    "fields": "id,message,created_time,permalink_url,likes.summary(true),comments.summary(true),shares"
+                }
+            )
+            
+            if post_response.status_code != 200:
+                return None, []
+            
+            post_data = post_response.json()
+            post = {
+                'id': post_data.get('id'),
+                'message': post_data.get('message', ''),
+                'created_time': post_data.get('created_time'),
+                'likes_count': post_data.get('likes', {}).get('summary', {}).get('total_count', 0),
+                'comments_count': post_data.get('comments', {}).get('summary', {}).get('total_count', 0),
+                'shares_count': post_data.get('shares', {}).get('count', 0),
+                'permalink_url': post_data.get('permalink_url')
+            }
+            
+            # Fetch comments
+            comments_response = await client.get(
+                f"https://graph.facebook.com/v18.0/{post_id}/comments",
+                params={
+                    "access_token": access_token,
+                    "fields": "id,message,from,created_time",
+                    "limit": 50
+                }
+            )
+            
+            comments = []
+            if comments_response.status_code == 200:
+                comments_data = comments_response.json()
+                comments = comments_data.get('data', [])
+            
+            return post, comments
+            
+    except Exception as e:
+        print(f"Error fetching Facebook post with comments (new API): {e}")
+        import traceback
+        traceback.print_exc()
+        return None, []
+
+async def fetch_twitter_post_with_comments_new(connection: dict, post_id: str) -> tuple:
+    """Fetch Twitter post with comments"""
+    try:
+        # Twitter API v2 doesn't support direct comment fetching easily
+        # We'll return the post and empty comments
+        access_token = decrypt_token(connection.get('access_token', ''))
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://api.twitter.com/2/tweets/{post_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={
+                    "tweet.fields": "created_at,public_metrics",
+                    "expansions": "author_id"
+                }
+            )
+            
+            if response.status_code != 200:
+                return None, []
+            
+            tweet_data = response.json()
+            tweet = tweet_data.get('data', {})
+            metrics = tweet.get('public_metrics', {})
+            
+            post = {
+                'id': tweet.get('id'),
+                'text': tweet.get('text', ''),
+                'created_time': tweet.get('created_at'),
+                'likes_count': metrics.get('like_count', 0),
+                'comments_count': metrics.get('reply_count', 0),
+                'shares_count': metrics.get('retweet_count', 0)
+            }
+            
+            return post, []  # Twitter doesn't easily provide comments via API
+            
+    except Exception as e:
+        print(f"Error fetching Twitter post: {e}")
+        return None, []
+
+async def fetch_linkedin_post_with_comments_new(connection: dict, post_id: str) -> tuple:
+    """Fetch LinkedIn post with comments"""
+    try:
+        # LinkedIn API is complex - simplified version
+        # Return post with empty comments for now
+        return None, []
+    except Exception as e:
+        print(f"Error fetching LinkedIn post: {e}")
+        return None, []
