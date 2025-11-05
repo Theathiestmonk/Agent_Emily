@@ -163,6 +163,33 @@ class ContentAPI {
     }
   }
 
+  // Update content
+  async updateContent(contentId, updateData) {
+    try {
+      const authToken = await this.getAuthToken()
+      
+      const response = await fetch(buildApiUrl(`/content/update/${contentId}`), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(updateData)
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}, ${errorText}`)
+      }
+
+      const data = await response.json()
+      return { success: true, data }
+    } catch (error) {
+      console.error('Error updating content:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
   // Update content status
   async updateContentStatus(contentId, status) {
     try {

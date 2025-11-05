@@ -217,29 +217,12 @@ class MediaAgent:
             platform = post_data.get("platform", "")
             image_style = state.get("image_style", Style.REALISTIC)
             
-            # Get user profile for context including logo and brand colors
+            # Get user profile for context including brand colors
             user_profile = self._get_user_profile(state["user_id"])
-            logo_url = user_profile.get('logo_url', '')
             business_name = user_profile.get('business_name', 'Unknown')
             primary_color = user_profile.get('primary_color', '')
             secondary_color = user_profile.get('secondary_color', '')
             additional_colors = user_profile.get('additional_colors', [])
-            
-            # Create prompt for image generation with logo integration
-            logo_context = ""
-            if logo_url:
-                logo_context = f"""
-            IMPORTANT: This business has a logo that should be prominently featured in the image.
-            Business logo URL: {logo_url}
-            The logo should be placed strategically in the image - either as a watermark in the corner, 
-            integrated into the design, or as a central element depending on the content.
-            Make sure the logo is clearly visible and well-positioned for brand recognition.
-            """
-            else:
-                logo_context = f"""
-            Note: This business ({business_name}) does not have a logo uploaded yet.
-            The image should still be professional and branded for {business_name}.
-            """
             
             # Build brand colors context
             brand_colors_context = ""
@@ -280,14 +263,11 @@ class MediaAgent:
             Industry: {', '.join(user_profile.get('industry', []))}
             Brand voice: {user_profile.get('brand_voice', 'Professional')}
             
-            {logo_context}
-            
             {brand_colors_context}
             
             Generate a detailed, specific prompt that will create an engaging image for this social media post.
             The prompt should be optimized for {image_style.value if image_style else 'realistic'} style and suitable for {platform} audience.
             Include specific visual elements, composition, lighting, and mood.
-            If a logo is available, ensure it's prominently and tastefully integrated into the design.
             CRITICALLY IMPORTANT: The image MUST use the specified brand colors as the primary color scheme.
             Keep it under 500 characters for API limits.
             """
@@ -295,12 +275,6 @@ class MediaAgent:
             try:
                 response = genai.GenerativeModel(self.gemini_model).generate_content(
                     contents=f"""You are an expert at creating detailed image prompts for AI image generation. Create specific, visual prompts that will generate high-quality images for social media content.
-
-IMPORTANT: When a business logo is available, you MUST include specific instructions about logo placement and integration in your generated prompt. The logo should be:
-1. Clearly visible and readable
-2. Strategically positioned (corner watermark, integrated into design, or central element)
-3. Appropriately sized for the image dimensions
-4. Consistent with the overall design aesthetic
 
 {prompt}"""
                 )
@@ -326,22 +300,18 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 
                 # Get user profile for fallback prompt
                 user_profile = self._get_user_profile(state["user_id"])
-                logo_url = user_profile.get('logo_url', '')
                 business_name = user_profile.get('business_name', 'Unknown')
                 primary_color = user_profile.get('primary_color', '')
                 secondary_color = user_profile.get('secondary_color', '')
                 
-                # Create fallback prompt with logo and brand colors context
+                # Create fallback prompt with brand colors context
                 color_context = ""
                 if primary_color:
                     color_context = f" Use primary brand color {primary_color}"
                 if secondary_color:
                     color_context += f" and secondary color {secondary_color}"
                 
-                if logo_url:
-                    fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image for {business_name} featuring: {content[:100]}. Include the business logo prominently positioned in the image.{color_context}"
-                else:
-                    fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image for {business_name} featuring: {content[:100]}.{color_context}"
+                fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image for {business_name} featuring: {content[:100]}.{color_context}"
                 
                 state["image_prompt"] = fallback_prompt
                 state["status"] = "generating"
@@ -376,22 +346,18 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
                 
                 # Get user profile for fallback prompt
                 user_profile = self._get_user_profile(state["user_id"])
-                logo_url = user_profile.get('logo_url', '')
                 business_name = user_profile.get('business_name', 'Unknown')
                 primary_color = user_profile.get('primary_color', '')
                 secondary_color = user_profile.get('secondary_color', '')
                 
-                # Create fallback prompt with logo and brand colors context
+                # Create fallback prompt with brand colors context
                 color_context = ""
                 if primary_color:
                     color_context = f" Use primary brand color {primary_color}"
                 if secondary_color:
                     color_context += f" and secondary color {secondary_color}"
                 
-                if logo_url:
-                    image_prompt = f"Professional {platform} post image for {business_name} featuring: {content[:100]}. Include the business logo prominently positioned in the image.{color_context}"
-                else:
-                    image_prompt = f"Professional {platform} post image for {business_name} featuring: {content[:100]}.{color_context}"
+                image_prompt = f"Professional {platform} post image for {business_name} featuring: {content[:100]}.{color_context}"
                 
                 logger.warning(f"Using fallback image prompt: {image_prompt}")
             
@@ -399,9 +365,8 @@ IMPORTANT: When a business logo is available, you MUST include specific instruct
             
             start_time = datetime.now()
             
-            # Get user profile and logo for image generation
+            # Get user profile for brand colors
             user_profile = self._get_user_profile(state["user_id"])
-            logo_url = user_profile.get('logo_url', '')
             primary_color = user_profile.get('primary_color', '')
             secondary_color = user_profile.get('secondary_color', '')
             additional_colors = user_profile.get('additional_colors', [])
@@ -479,25 +444,6 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
 """
                 
                 contents.append(gemini_prompt)
-                
-                # Add logo image if available
-                if logo_url:
-                    try:
-                        logo_image_data = await self._download_logo_image(logo_url)
-                        if logo_image_data:
-                            # Add logo as reference image
-                            contents.append({
-                                "text": "LOGO INTEGRATION: Use this business logo as a reference and integrate it prominently into the generated image. Place it strategically - either as a watermark in the corner, integrated into the design, or as a central element depending on the content. Make sure the logo is clearly visible and well-positioned for brand recognition."
-                            })
-                            contents.append({
-                                "inline_data": {
-                                    "mime_type": "image/png",
-                                    "data": logo_image_data
-                                }
-                            })
-                    except Exception as logo_error:
-                        logger.warning(f"Failed to include logo in image generation: {logo_error}")
-                        # Continue without logo if there's an error
                 
                 # Use Gemini's native image generation capability
                 logger.info(f"Calling Gemini model: {self.gemini_image_model}")

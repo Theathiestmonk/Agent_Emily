@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from pydantic import BaseModel
+import openai
 
 # Load environment variables
 load_dotenv()
@@ -35,16 +36,21 @@ class User(BaseModel):
 
 # Content update model
 class ContentUpdate(BaseModel):
-    title: str
-    content: str
-    hashtags: List[str]
-    scheduled_date: str
-    scheduled_time: str
-    status: str
+    title: Optional[str] = None
+    content: Optional[str] = None
+    hashtags: Optional[List[str]] = None
+    scheduled_date: Optional[str] = None
+    scheduled_time: Optional[str] = None
+    status: Optional[str] = None
 
 # Content status update model
 class ContentStatusUpdate(BaseModel):
     status: str
+
+# AI Edit request model
+class AIEditRequest(BaseModel):
+    content: str
+    instruction: str
 
 def get_current_user(authorization: str = Header(None)):
     """Get current user from Supabase JWT token"""
@@ -257,8 +263,8 @@ async def update_content(
 ):
     """Update content by ID"""
     try:
-        # Convert Pydantic model to dict
-        update_dict = update_data.dict()
+        # Convert Pydantic model to dict, excluding None values
+        update_dict = update_data.dict(exclude_unset=True, exclude_none=True)
         
         # First verify the content belongs to the user
         content_response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", content_id).eq("content_campaigns.user_id", current_user.id).execute()
@@ -269,15 +275,29 @@ async def update_content(
                 detail="Content not found or access denied"
             )
         
+        # Build update dict with only provided fields
+        update_fields = {}
+        if "title" in update_dict:
+            update_fields["title"] = update_dict["title"]
+        if "content" in update_dict:
+            update_fields["content"] = update_dict["content"]
+        if "hashtags" in update_dict:
+            update_fields["hashtags"] = update_dict["hashtags"]
+        if "scheduled_date" in update_dict:
+            update_fields["scheduled_date"] = update_dict["scheduled_date"]
+        if "scheduled_time" in update_dict:
+            update_fields["scheduled_time"] = update_dict["scheduled_time"]
+        if "status" in update_dict:
+            update_fields["status"] = update_dict["status"]
+        
+        if not update_fields:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No fields provided for update"
+            )
+        
         # Update the content
-        update_response = supabase_admin.table("content_posts").update({
-            "title": update_dict["title"],
-            "content": update_dict["content"],
-            "hashtags": update_dict["hashtags"],
-            "scheduled_date": update_dict["scheduled_date"],
-            "scheduled_time": update_dict["scheduled_time"],
-            "status": update_dict["status"]
-        }).eq("id", content_id).execute()
+        update_response = supabase_admin.table("content_posts").update(update_fields).eq("id", content_id).execute()
         
         if not update_response.data:
             raise HTTPException(
@@ -431,4 +451,72 @@ async def delete_content(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete content: {str(e)}"
+        )
+
+@router.post("/ai/edit-content")
+async def ai_edit_content(
+    request: AIEditRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Edit content using AI based on user instructions"""
+    try:
+        # Check if OpenAI API key is available
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OpenAI API key not configured"
+            )
+        
+        # Create OpenAI client
+        client = openai.OpenAI(api_key=openai_api_key)
+        
+        # Create the edit prompt
+        edit_prompt = f"""You are an expert content editor. Edit the following content based on the user's instructions.
+
+ORIGINAL CONTENT:
+{request.content}
+
+USER INSTRUCTIONS:
+{request.instruction}
+
+REQUIREMENTS:
+- Follow the user's instructions precisely
+- Maintain the core message and intent of the original content
+- Keep the same tone and style unless specifically requested to change it
+- Ensure the edited content is clear, engaging, and professional
+- Do not add any information that wasn't in the original or requested by the user
+- Return only the edited content, nothing else
+
+Return the edited content:"""
+        
+        # Call OpenAI to edit the content
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an expert content editor. Always return only the edited content without any explanations or additional text."},
+                {"role": "user", "content": edit_prompt}
+            ],
+            temperature=0.7,
+            max_tokens=2000
+        )
+        
+        edited_content = response.choices[0].message.content.strip()
+        
+        # Remove any markdown formatting if present
+        if edited_content.startswith("```"):
+            lines = edited_content.split("\n")
+            edited_content = "\n".join(lines[1:-1]) if len(lines) > 2 else edited_content
+        
+        return {
+            "success": True,
+            "edited_content": edited_content
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to edit content with AI: {str(e)}"
         )
