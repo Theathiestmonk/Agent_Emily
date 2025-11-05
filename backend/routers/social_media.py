@@ -375,6 +375,8 @@ async def fetch_instagram_posts(connection: dict, limit: int) -> List[Dict[str, 
                     'created_time': media.get('timestamp'),
                     'permalink_url': media.get('permalink'),
                     'media_url': media.get('media_url') or media.get('thumbnail_url'),
+                    'thumbnail_url': media.get('thumbnail_url'),
+                    'media_type': media.get('media_type', 'IMAGE'),
                     'likes_count': media.get('like_count', 0),
                     'comments_count': media.get('comments_count', 0),
                     'shares_count': 0  # Instagram doesn't provide shares count
