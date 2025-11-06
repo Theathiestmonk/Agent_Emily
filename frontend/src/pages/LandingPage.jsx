@@ -182,12 +182,12 @@ const Page = () => {
       )}
 
       {/* Hero Section */}
-      <section id="hero" className="relative min-h-screen flex items-center justify-center">
+      <section id="hero" className="relative min-h-[60vh] sm:min-h-[70vh] md:min-h-screen flex items-center justify-center py-8 sm:py-12 md:py-0">
         <div className="absolute inset-0 bg-gradient-to-br from-[#9E005C]/10 via-[#FF4D94]/10 to-[#3F2B96]/10"></div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(158,0,92,0.1),transparent_50%)]"></div>
         
-        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 text-center">
-          <h1 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold mb-4 sm:mb-6 md:mb-8 leading-tight px-2">
+        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 text-center pt-12 sm:pt-0">
+          <h1 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold mb-3 sm:mb-4 md:mb-6 lg:mb-8 leading-tight px-2">
             <div className="block">
               <span className="bg-gradient-to-r from-[#3F2B96] to-[#9E005C] bg-clip-text text-transparent whitespace-nowrap">
                 Autonomous AI Agents
@@ -200,12 +200,12 @@ const Page = () => {
             </div>
           </h1>
         
-          <p className="text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl text-[#2E2E2E]/70 mb-6 sm:mb-8 md:mb-10 lg:mb-12 max-w-3xl mx-auto leading-relaxed px-4">
+          <p className="text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl text-[#2E2E2E]/70 mb-4 sm:mb-6 md:mb-8 lg:mb-10 xl:mb-12 max-w-3xl mx-auto leading-relaxed px-4">
             Meet your AI teammates that work autonomously to automate tasks, 
             boost productivity, and transform how you work.
           </p>
           
-          <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6 px-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-6 px-4">
             <a
               href="/signup"
               className="group bg-[#9E005C] text-white px-6 sm:px-8 py-3 sm:py-4 rounded-full text-base sm:text-lg font-medium hover:bg-[#FF4D94] transition-all duration-300 transform hover:scale-105 flex items-center space-x-2"
