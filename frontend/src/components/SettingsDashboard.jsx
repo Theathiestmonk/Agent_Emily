@@ -1021,7 +1021,6 @@ const SettingsDashboard = () => {
                 )}
               </div>
             </>
-          )}
         </div>
       </div>
 
