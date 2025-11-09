@@ -36,6 +36,7 @@ const LeadsDashboard = () => {
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterPlatform, setFilterPlatform] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false)
   const [stats, setStats] = useState({
     total: 0,
     new: 0,
@@ -121,6 +122,20 @@ const LeadsDashboard = () => {
     }
   }, [filterStatus, filterPlatform, user])
 
+  // Close filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showFilterDropdown && !event.target.closest('.filter-dropdown-container')) {
+        setShowFilterDropdown(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showFilterDropdown])
+
   // Set up polling for new leads
   useEffect(() => {
     if (user) {
@@ -198,22 +213,94 @@ const LeadsDashboard = () => {
       <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen">
         {/* Header */}
         <div className="bg-white shadow-sm border-b sticky top-0 z-20">
-          <div className="px-4 lg:px-6 py-4 lg:py-5">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-              <div>
-                <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 flex items-center space-x-2">
-                  <Users className="w-7 h-7 lg:w-8 lg:h-8" />
-                  <span>Leads</span>
-                </h1>
-                <p className="text-sm text-gray-500 mt-1">
-                  Manage and track your leads from Facebook and Instagram ads
-                </p>
+          <div className="px-4 lg:px-6 py-3 lg:py-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
+              {/* Stats Cards - Inline with buttons */}
+              <div className="flex items-center gap-2 overflow-x-auto flex-1">
+                {statusFilters.map((filter) => (
+                  <div
+                    key={filter.value}
+                    onClick={() => setFilterStatus(filter.value)}
+                    className={`bg-gray-50 rounded-lg px-3 py-1.5 shadow-sm border-2 cursor-pointer transition-all whitespace-nowrap flex-shrink-0 min-w-[70px] text-center ${
+                      filterStatus === filter.value
+                        ? 'border-blue-500 shadow-md bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-lg font-bold text-gray-900">
+                      {filter.count}
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      {filter.label}
+                    </div>
+                  </div>
+                ))}
               </div>
               
-              <div className="flex items-center space-x-3">
+              {/* Search - Inline with Filter */}
+              <div className="flex-1 max-w-md relative filter-dropdown-container">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search by name, email, or phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <button
+                  onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                  className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-1 rounded transition-colors ${
+                    filterPlatform !== 'all' 
+                      ? 'text-blue-600' 
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  <Filter className="w-4 h-4" />
+                </button>
+                {showFilterDropdown && (
+                  <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('all')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg ${
+                        filterPlatform === 'all' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      }`}
+                    >
+                      All Platforms
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('facebook')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
+                        filterPlatform === 'facebook' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      }`}
+                    >
+                      Facebook
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('instagram')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 last:rounded-b-lg ${
+                        filterPlatform === 'instagram' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      }`}
+                    >
+                      Instagram
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-2 flex-shrink-0">
                 <button
                   onClick={() => setShowAddModal(true)}
-                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>Add Lead</span>
@@ -221,67 +308,12 @@ const LeadsDashboard = () => {
                 <button
                   onClick={handleRefresh}
                   disabled={loading}
-                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition-all duration-200 disabled:opacity-50 shadow-lg hover:shadow-xl"
                 >
                   <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                   <span>Refresh</span>
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="px-4 lg:px-6 py-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 lg:gap-4">
-            {statusFilters.map((filter) => (
-              <div
-                key={filter.value}
-                onClick={() => setFilterStatus(filter.value)}
-                className={`bg-white rounded-lg p-3 lg:p-4 shadow-sm border-2 cursor-pointer transition-all ${
-                  filterStatus === filter.value
-                    ? 'border-blue-500 shadow-md'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="text-2xl lg:text-3xl font-bold text-gray-900">
-                  {filter.count}
-                </div>
-                <div className="text-xs lg:text-sm text-gray-600 mt-1">
-                  {filter.label}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Filters and Search */}
-        <div className="px-4 lg:px-6 py-4 bg-white border-b">
-          <div className="flex flex-col md:flex-row md:items-center space-y-3 md:space-y-0 md:space-x-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search by name, email, or phone..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            {/* Platform Filter */}
-            <div className="flex items-center space-x-2">
-              <Filter className="w-5 h-5 text-gray-400" />
-              <select
-                value={filterPlatform}
-                onChange={(e) => setFilterPlatform(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Platforms</option>
-                <option value="facebook">Facebook</option>
-                <option value="instagram">Instagram</option>
-              </select>
             </div>
           </div>
         </div>
