@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Area, AreaChart
@@ -9,13 +9,8 @@ import {
   ExternalLink, Download, Trash2, Plus, User
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { LazyChart } from './LazyWrapper'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
-
-// Lazy load heavy chart components
-const LazyBarChart = lazy(() => Promise.resolve({ default: BarChart }));
-const LazyPieChart = lazy(() => Promise.resolve({ default: PieChart }));
 
 // Memoized chart data
 const useChartData = (analyses, summary) => {
@@ -287,29 +282,55 @@ const WebsiteAnalysisDashboard = () => {
 
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gradient-to-r from-purple-200 to-pink-200 rounded w-1/3 mb-4"></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg border border-purple-100 p-6">
-                <div className="h-4 bg-gradient-to-r from-purple-200 to-pink-200 rounded mb-2"></div>
-                <div className="h-8 bg-gradient-to-r from-purple-200 to-pink-200 rounded"></div>
-              </div>
-            ))}
-          </div>
+      <>
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes loading-dots {
+            0%, 20% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+          }
+          .loading-dot-1 {
+            animation: loading-dots 1.4s infinite 0s;
+          }
+          .loading-dot-2 {
+            animation: loading-dots 1.4s infinite 0.2s;
+          }
+          .loading-dot-3 {
+            animation: loading-dots 1.4s infinite 0.4s;
+          }
+        `}} />
+        <div className="flex items-center justify-center min-h-[400px]">
+          <p className="text-gray-600 text-lg">
+            Loading website analysis
+            <span className="inline-block w-6 ml-1">
+              <span className="loading-dot-1">.</span>
+              <span className="loading-dot-2">.</span>
+              <span className="loading-dot-3">.</span>
+            </span>
+          </p>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 transform scale-[0.8] origin-top-left" style={{ width: '125%', height: '125%' }}>
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-2xl font-bold text-gray-900">
-            Website analysis for {userWebsite || 'your website'}
+            Website analysis for {userWebsite ? (
+              <a 
+                href={userWebsite.startsWith('http') ? userWebsite : `https://${userWebsite}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-purple-600 hover:text-pink-600 underline transition-colors"
+              >
+                {userWebsite}
+              </a>
+            ) : (
+              'your website'
+            )}
           </h3>
         </div>
         <div className="flex space-x-3">
@@ -475,7 +496,7 @@ const WebsiteAnalysisDashboard = () => {
                     Score Distribution
                   </h3>
                 </div>
-                 <LazyChart height={300} className="h-[300px]">
+                 <div className="h-[300px]">
                    <ResponsiveContainer width="100%" height={300}>
                      <BarChart data={barChartData} margin={{ left: 0, right: 0, top: 5, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" opacity={0.3} />
@@ -501,7 +522,7 @@ const WebsiteAnalysisDashboard = () => {
                   <Bar dataKey="bestPractices" fill="#C44569" name="Best Practices" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            </LazyChart>
+            </div>
           </div>
 
           {/* Individual Scores - Horizontal Bar Chart */}
@@ -526,7 +547,7 @@ const WebsiteAnalysisDashboard = () => {
                 })().map((item, index) => (
                   <div key={index} className="flex flex-col items-center space-y-3">
                     <div className="relative w-32 h-32">
-                      <LazyChart height={128} className="w-32 h-32">
+                      <div className="w-32 h-32">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
@@ -547,7 +568,7 @@ const WebsiteAnalysisDashboard = () => {
                             </Pie>
                           </PieChart>
                         </ResponsiveContainer>
-                      </LazyChart>
+                      </div>
                       <div className="absolute inset-0 flex items-center justify-center">
                         <span className="text-lg font-bold text-gray-900">{Math.round(item.score)}</span>
                       </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useSocialMediaCache } from '../contexts/SocialMediaCacheContext'
@@ -7,10 +7,6 @@ import SideNavbar from './SideNavbar'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import WebsiteAnalysisDashboard from './WebsiteAnalysisDashboard'
-import { DashboardSkeleton } from './LazyLoadingSkeleton'
-
-// Lazy load heavy components
-const LazyWebsiteAnalysisDashboard = lazy(() => import('./WebsiteAnalysisDashboard'))
 import { 
   Facebook, 
   Instagram, 
@@ -279,27 +275,7 @@ const AnalyticsDashboard = () => {
         <div className="fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-6 py-4">
             <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h1>
-                <p className="text-sm text-gray-500">
-                  Performance insights and analytics for your social media channels and websites
-                </p>
-              </div>
-              
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={handleRefresh}
-                  disabled={refreshing}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all duration-200 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                  <span>Refresh</span>
-                </button>
-              </div>
-            </div>
-            
-            {/* Tabs */}
-            <div className="mt-4">
+              {/* Tabs */}
               <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
                 <button
                   onClick={() => setActiveTab('website')}
@@ -324,15 +300,54 @@ const AnalyticsDashboard = () => {
                   <span>Social Media</span>
                 </button>
               </div>
+              
+              {/* Refresh Button */}
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all duration-200 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                  <span>Refresh</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 pt-32 p-6">
+        <div className="flex-1 pt-24 p-6">
           {activeTab === 'social' ? (
             loading ? (
-              <DashboardSkeleton />
+              <>
+                <style dangerouslySetInnerHTML={{__html: `
+                  @keyframes loading-dots {
+                    0%, 20% { opacity: 0; }
+                    50% { opacity: 1; }
+                    100% { opacity: 0; }
+                  }
+                  .loading-dot-1 {
+                    animation: loading-dots 1.4s infinite 0s;
+                  }
+                  .loading-dot-2 {
+                    animation: loading-dots 1.4s infinite 0.2s;
+                  }
+                  .loading-dot-3 {
+                    animation: loading-dots 1.4s infinite 0.4s;
+                  }
+                `}} />
+                <div className="flex items-center justify-center min-h-[400px]">
+                  <p className="text-gray-600 text-lg">
+                    Loading social media analytics
+                    <span className="inline-block w-6 ml-1">
+                      <span className="loading-dot-1">.</span>
+                      <span className="loading-dot-2">.</span>
+                      <span className="loading-dot-3">.</span>
+                    </span>
+                  </p>
+                </div>
+              </>
             ) : (
               <>
                 {platformsWithPosts.length === 0 ? (

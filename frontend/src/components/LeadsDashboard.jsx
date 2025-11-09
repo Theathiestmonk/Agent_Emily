@@ -44,7 +44,8 @@ const LeadsDashboard = () => {
     responded: 0,
     qualified: 0,
     converted: 0,
-    lost: 0
+    lost: 0,
+    invalid: 0
   })
   const [lastFetchTime, setLastFetchTime] = useState(null)
   const [pollingInterval, setPollingInterval] = useState(null)
@@ -74,7 +75,8 @@ const LeadsDashboard = () => {
         responded: fetchedLeads.filter(l => l.status === 'responded').length,
         qualified: fetchedLeads.filter(l => l.status === 'qualified').length,
         converted: fetchedLeads.filter(l => l.status === 'converted').length,
-        lost: fetchedLeads.filter(l => l.status === 'lost').length
+        lost: fetchedLeads.filter(l => l.status === 'lost').length,
+        invalid: fetchedLeads.filter(l => l.status === 'invalid').length
       }
       setStats(newStats)
 
@@ -186,8 +188,71 @@ const LeadsDashboard = () => {
     { value: 'responded', label: 'Responded', count: stats.responded },
     { value: 'qualified', label: 'Qualified', count: stats.qualified },
     { value: 'converted', label: 'Converted', count: stats.converted },
-    { value: 'lost', label: 'Lost', count: stats.lost }
+    { value: 'lost', label: 'Lost', count: stats.lost },
+    { value: 'invalid', label: 'Invalid', count: stats.invalid }
   ]
+
+  const getStatusConfig = (status) => {
+    const configs = {
+      new: {
+        color: 'from-blue-500 to-blue-600',
+        bgColor: 'bg-blue-50',
+        textColor: 'text-blue-700',
+        borderColor: 'border-blue-200',
+        icon: AlertCircle,
+        label: 'New'
+      },
+      contacted: {
+        color: 'from-purple-500 to-purple-600',
+        bgColor: 'bg-purple-50',
+        textColor: 'text-purple-700',
+        borderColor: 'border-purple-200',
+        icon: MessageCircle,
+        label: 'Contacted'
+      },
+      responded: {
+        color: 'from-green-500 to-green-600',
+        bgColor: 'bg-green-50',
+        textColor: 'text-green-700',
+        borderColor: 'border-green-200',
+        icon: CheckCircle,
+        label: 'Responded'
+      },
+      qualified: {
+        color: 'from-orange-500 to-orange-600',
+        bgColor: 'bg-orange-50',
+        textColor: 'text-orange-700',
+        borderColor: 'border-orange-200',
+        icon: CheckCircle,
+        label: 'Qualified'
+      },
+      converted: {
+        color: 'from-emerald-500 to-emerald-600',
+        bgColor: 'bg-emerald-50',
+        textColor: 'text-emerald-700',
+        borderColor: 'border-emerald-200',
+        icon: CheckCircle,
+        label: 'Converted'
+      },
+      lost: {
+        color: 'from-gray-400 to-gray-500',
+        bgColor: 'bg-gray-50',
+        textColor: 'text-gray-700',
+        borderColor: 'border-gray-200',
+        icon: XCircle,
+        label: 'Lost'
+      },
+      invalid: {
+        color: 'from-red-500 to-red-600',
+        bgColor: 'bg-red-50',
+        textColor: 'text-red-700',
+        borderColor: 'border-red-200',
+        icon: XCircle,
+        label: 'Invalid'
+      }
+    }
+    return configs[status] || configs.new
+  }
 
   if (!user) {
     return (
@@ -238,7 +303,7 @@ const LeadsDashboard = () => {
               </div>
               
               {/* Search - Inline with Filter */}
-              <div className="flex-1 max-w-md relative filter-dropdown-container">
+              <div className="flex-1 max-w-xs relative filter-dropdown-container">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
@@ -318,8 +383,8 @@ const LeadsDashboard = () => {
           </div>
         </div>
 
-        {/* Leads Grid */}
-        <div className="flex-1 px-4 lg:px-6 py-6">
+        {/* Leads Board - Column Layout by Status */}
+        <div className="flex-1 px-4 lg:px-6 py-6 overflow-x-hidden">
           {loading ? (
             <MainContentLoader />
           ) : filteredLeads.length === 0 ? (
@@ -335,14 +400,50 @@ const LeadsDashboard = () => {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
-              {filteredLeads.map((lead) => (
-                <LeadCard
-                  key={lead.id}
-                  lead={lead}
-                  onClick={handleLeadClick}
-                />
-              ))}
+            <div className="flex gap-2 w-full">
+              {statusFilters
+                .filter(statusFilter => statusFilter.value !== 'all') // Exclude 'all' from column view
+                .map((statusFilter) => {
+                  const columnLeads = filteredLeads.filter(lead => lead.status === statusFilter.value)
+                  const statusConfig = getStatusConfig(statusFilter.value)
+                  const StatusIcon = statusConfig.icon
+                  
+                  return (
+                    <div key={statusFilter.value} className="flex-1 min-w-0">
+                      {/* Column Header */}
+                      <div className="mb-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-1.5">
+                            <StatusIcon className={`w-4 h-4 ${statusConfig.textColor}`} />
+                            <h3 className={`font-semibold text-sm ${statusConfig.textColor}`}>{statusFilter.label}</h3>
+                          </div>
+                          <span className={`text-sm font-medium ${statusConfig.textColor}`}>
+                            {columnLeads.length}
+                          </span>
+                        </div>
+                      </div>
+                      {/* Line after column title */}
+                      <div className={`mb-2 border-b ${statusConfig.borderColor}`}></div>
+                      
+                      {/* Column Cards */}
+                      <div className="space-y-1.5 max-h-[calc(100vh-180px)] overflow-y-auto pb-4">
+                        {columnLeads.length === 0 ? (
+                          <div className="text-center py-8 text-gray-400 text-sm">
+                            No {statusFilter.label.toLowerCase()} leads
+                          </div>
+                        ) : (
+                          columnLeads.map((lead) => (
+                            <LeadCard
+                              key={lead.id}
+                              lead={lead}
+                              onClick={handleLeadClick}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
             </div>
           )}
         </div>

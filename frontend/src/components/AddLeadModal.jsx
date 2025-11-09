@@ -296,6 +296,9 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess }) => {
                 <option value="contacted">Contacted</option>
                 <option value="responded">Responded</option>
                 <option value="qualified">Qualified</option>
+                <option value="converted">Converted</option>
+                <option value="lost">Lost</option>
+                <option value="invalid">Invalid</option>
               </select>
             </div>
 

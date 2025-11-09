@@ -152,7 +152,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
       description: `Lead captured from ${lead.source_platform}`,
       timestamp: lead.created_at,
       icon: UserCheck,
-      color: 'text-blue-600 bg-blue-50'
+      color: 'text-purple-600 bg-purple-50'
     },
     ...conversations.map(conv => ({
       type: conv.message_type,
@@ -160,7 +160,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
       description: conv.content.substring(0, 100) + (conv.content.length > 100 ? '...' : ''),
       timestamp: conv.created_at,
       icon: conv.message_type === 'email' ? MailIcon : MessageSquare,
-      color: conv.sender === 'agent' ? 'text-green-600 bg-green-50' : 'text-blue-600 bg-blue-50',
+      color: conv.sender === 'agent' ? 'text-purple-600 bg-purple-50' : 'text-pink-600 bg-pink-50',
       status: conv.status,
       fullContent: conv.content
     }))
@@ -173,7 +173,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
     <div className="fixed bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
       <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-xl">
+        <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white p-6 rounded-t-xl">
           <div className="flex items-start justify-between">
             <div className="flex items-center space-x-4">
               <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
@@ -211,13 +211,14 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
               <option value="qualified">Qualified</option>
               <option value="converted">Converted</option>
               <option value="lost">Lost</option>
+              <option value="invalid">Invalid</option>
             </select>
             {updatingStatus && <Loader2 className="w-4 h-4 animate-spin" />}
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 flex space-x-1 px-6 bg-gray-50">
+        <div className="border-b border-gray-200 flex space-x-1 px-6 bg-gradient-to-r from-pink-50 to-purple-50">
           {[
             { id: 'overview', label: 'Overview', icon: User },
             { id: 'timeline', label: 'Timeline', icon: Clock },
@@ -230,8 +231,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
                   activeTab === tab.id
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-600 hover:text-purple-600'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -250,8 +251,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {lead.email && (
-                    <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <Mail className="w-5 h-5 text-gray-400" />
+                    <div className="flex items-center space-x-3 p-3 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg border border-purple-200">
+                      <Mail className="w-5 h-5 text-purple-500" />
                       <div>
                         <div className="text-xs text-gray-500">Email</div>
                         <div className="text-sm font-medium text-gray-900">{lead.email}</div>
@@ -259,8 +260,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     </div>
                   )}
                   {lead.phone_number && (
-                    <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <Phone className="w-5 h-5 text-gray-400" />
+                    <div className="flex items-center space-x-3 p-3 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg border border-purple-200">
+                      <Phone className="w-5 h-5 text-purple-500" />
                       <div>
                         <div className="text-xs text-gray-500">Phone</div>
                         <div className="text-sm font-medium text-gray-900">{lead.phone_number}</div>
@@ -273,7 +274,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
               {/* Lead Metadata */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Lead Details</h3>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-4 space-y-2 border border-purple-200">
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Source Platform:</span>
                     <span className="text-sm font-medium text-gray-900 capitalize">{lead.source_platform}</span>
@@ -307,7 +308,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
               {lead.form_data && Object.keys(lead.form_data).length > 0 && (
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Form Responses</h3>
-                  <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                  <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-4 space-y-3 border border-purple-200">
                     {Object.entries(lead.form_data).map(([key, value]) => (
                       <div key={key} className="border-b border-gray-200 last:border-0 pb-3 last:pb-0">
                         <div className="text-xs text-gray-500 mb-1 capitalize">{key.replace(/_/g, ' ')}</div>
@@ -343,7 +344,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                         <div className={`relative z-10 w-8 h-8 rounded-full ${event.color} flex items-center justify-center flex-shrink-0`}>
                           <Icon className="w-4 h-4" />
                         </div>
-                        <div className="flex-1 bg-gray-50 rounded-lg p-4">
+                        <div className="flex-1 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-4 border border-purple-200">
                           <div className="flex items-center justify-between mb-1">
                             <h4 className="font-semibold text-gray-900">{event.title}</h4>
                             <span className="text-xs text-gray-500">{formatTimeAgo(event.timestamp)}</span>
@@ -352,9 +353,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                           {event.status && (
                             <div className="mt-2">
                               <span className={`text-xs px-2 py-1 rounded ${
-                                event.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+                                event.status === 'sent' ? 'bg-purple-100 text-purple-700' :
                                 event.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                                event.status === 'read' ? 'bg-purple-100 text-purple-700' :
+                                event.status === 'read' ? 'bg-pink-100 text-pink-700' :
                                 'bg-gray-100 text-gray-700'
                               }`}>
                                 {event.status}
@@ -373,7 +374,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
           {activeTab === 'conversations' && (
             <div className="space-y-6">
               {/* Send Message */}
-              <div className="bg-gray-50 rounded-lg p-4">
+              <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-4 border border-purple-200">
                 <h3 className="text-sm font-semibold text-gray-900 mb-3">Send Message</h3>
                 <div className="space-y-3">
                   <textarea
@@ -381,13 +382,13 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     onChange={(e) => setNewMessage(e.target.value)}
                     placeholder="Type your message..."
                     rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   />
                   <div className="flex space-x-2">
                     <button
                       onClick={() => handleSendMessage('whatsapp')}
                       disabled={sendingMessage || !newMessage.trim() || !lead.phone_number}
-                      className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                     >
                       {sendingMessage ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -401,7 +402,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     <button
                       onClick={() => handleSendMessage('email')}
                       disabled={sendingMessage || !newMessage.trim() || !lead.email}
-                      className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                     >
                       {sendingMessage ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -427,8 +428,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     {emailConversations.map((conv) => (
                       <div
                         key={conv.id}
-                        className={`p-4 rounded-lg ${
-                          conv.sender === 'agent' ? 'bg-blue-50 ml-8' : 'bg-gray-50 mr-8'
+                        className={`p-4 rounded-lg border ${
+                          conv.sender === 'agent' ? 'bg-gradient-to-r from-pink-100 to-purple-100 ml-8 border-purple-200' : 'bg-gray-50 mr-8 border-gray-200'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-2">
@@ -441,9 +442,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                         {conv.status && (
                           <div className="mt-2">
                             <span className={`text-xs px-2 py-1 rounded ${
-                              conv.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+                              conv.status === 'sent' ? 'bg-purple-100 text-purple-700' :
                               conv.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                              conv.status === 'read' ? 'bg-purple-100 text-purple-700' :
+                              conv.status === 'read' ? 'bg-pink-100 text-pink-700' :
                               'bg-gray-100 text-gray-700'
                             }`}>
                               {conv.status}
@@ -467,8 +468,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     {whatsappConversations.map((conv) => (
                       <div
                         key={conv.id}
-                        className={`p-4 rounded-lg ${
-                          conv.sender === 'agent' ? 'bg-green-50 ml-8' : 'bg-gray-50 mr-8'
+                        className={`p-4 rounded-lg border ${
+                          conv.sender === 'agent' ? 'bg-gradient-to-r from-pink-100 to-purple-100 ml-8 border-purple-200' : 'bg-gray-50 mr-8 border-gray-200'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-2">
@@ -481,9 +482,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                         {conv.status && (
                           <div className="mt-2">
                             <span className={`text-xs px-2 py-1 rounded ${
-                              conv.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+                              conv.status === 'sent' ? 'bg-purple-100 text-purple-700' :
                               conv.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                              conv.status === 'read' ? 'bg-purple-100 text-purple-700' :
+                              conv.status === 'read' ? 'bg-pink-100 text-pink-700' :
                               'bg-gray-100 text-gray-700'
                             }`}>
                               {conv.status}

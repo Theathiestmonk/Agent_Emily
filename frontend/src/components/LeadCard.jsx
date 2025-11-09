@@ -63,6 +63,14 @@ const LeadCard = ({ lead, onClick }) => {
         borderColor: 'border-gray-200',
         icon: XCircle,
         label: 'Lost'
+      },
+      invalid: {
+        color: 'from-red-500 to-red-600',
+        bgColor: 'bg-red-50',
+        textColor: 'text-red-700',
+        borderColor: 'border-red-200',
+        icon: XCircle,
+        label: 'Invalid'
       }
     }
     return configs[status] || configs.new
@@ -71,11 +79,11 @@ const LeadCard = ({ lead, onClick }) => {
   const getPlatformIcon = (platform) => {
     switch (platform?.toLowerCase()) {
       case 'facebook':
-        return <Facebook className="w-5 h-5" />
+        return <Facebook className="w-3.5 h-3.5" />
       case 'instagram':
-        return <Instagram className="w-5 h-5" />
+        return <Instagram className="w-3.5 h-3.5" />
       default:
-        return <User className="w-5 h-5" />
+        return <User className="w-3.5 h-3.5" />
     }
   }
 
@@ -118,23 +126,23 @@ const LeadCard = ({ lead, onClick }) => {
   return (
     <div
       onClick={() => onClick && onClick(lead)}
-      className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer border border-gray-200 transform hover:scale-[1.02]"
+      className={`bg-gradient-to-br from-white ${statusConfig.bgColor} rounded-lg shadow-md overflow-hidden cursor-pointer border ${statusConfig.borderColor}`}
     >
       {/* Header with gradient */}
-      <div className={`bg-gradient-to-r ${platformColor} p-4 text-white`}>
+      <div className={`bg-gradient-to-r ${statusConfig.color} p-2 text-white`}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
+          <div className="flex items-center space-x-1.5 flex-1 min-w-0">
+            <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm flex-shrink-0">
               {getPlatformIcon(lead.source_platform)}
             </div>
-            <div>
-              <h3 className="font-semibold text-lg">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-xs truncate">
                 {lead.name || 'Unknown Lead'}
               </h3>
-              <div className="flex items-center space-x-2 text-sm opacity-90">
-                <span className="capitalize">{lead.source_platform}</span>
+              <div className="flex items-center space-x-0.5 text-[10px] opacity-90">
+                <span className="capitalize truncate">{lead.source_platform}</span>
                 <span>•</span>
-                <span>{formatTimeAgo(lead.created_at)}</span>
+                <span className="truncate">{formatTimeAgo(lead.created_at)}</span>
               </div>
             </div>
           </div>
@@ -143,66 +151,28 @@ const LeadCard = ({ lead, onClick }) => {
               e.stopPropagation()
               onClick && onClick(lead)
             }}
-            className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+            className="p-1 bg-white/20 rounded flex-shrink-0 ml-0.5"
             title="View details"
           >
-            <Eye className="w-4 h-4" />
+            <Eye className="w-3 h-3" />
           </button>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="p-4 space-y-3">
-        {/* Contact Information */}
-        <div className="space-y-2">
-          {lead.email && (
-            <div className="flex items-center space-x-2 text-gray-700">
-              <Mail className="w-4 h-4 text-gray-400" />
-              <span className="text-sm truncate">{lead.email}</span>
-            </div>
-          )}
-          {lead.phone_number && (
-            <div className="flex items-center space-x-2 text-gray-700">
-              <Phone className="w-4 h-4 text-gray-400" />
-              <span className="text-sm">{lead.phone_number}</span>
-            </div>
-          )}
+      {/* Content - Only show if form data exists */}
+      {lead.form_data && Object.keys(lead.form_data).length > 0 && (
+        <div className="p-1.5">
+          <p className="text-[10px] text-gray-500">
+            {Object.keys(lead.form_data).length} form field{Object.keys(lead.form_data).length !== 1 ? 's' : ''} captured
+          </p>
         </div>
-
-        {/* Status Badge */}
-        <div className={`inline-flex items-center space-x-2 px-3 py-1.5 rounded-full ${statusConfig.bgColor} ${statusConfig.borderColor} border`}>
-          <StatusIcon className={`w-4 h-4 ${statusConfig.textColor}`} />
-          <span className={`text-xs font-medium ${statusConfig.textColor}`}>
-            {statusConfig.label}
-          </span>
-        </div>
-
-        {/* Quick Info */}
-        {lead.form_data && Object.keys(lead.form_data).length > 0 && (
-          <div className="pt-2 border-t border-gray-100">
-            <p className="text-xs text-gray-500">
-              {Object.keys(lead.form_data).length} form field{Object.keys(lead.form_data).length !== 1 ? 's' : ''} captured
-            </p>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Footer */}
-      <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <div className="flex items-center space-x-1">
-            <Clock className="w-3 h-3" />
-            <span>Created {formatTimeAgo(lead.created_at)}</span>
-          </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onClick && onClick(lead)
-            }}
-            className="text-blue-600 hover:text-blue-700 font-medium"
-          >
-            View Details →
-          </button>
+      <div className={`px-1.5 py-1.5 ${statusConfig.bgColor} border-t ${statusConfig.borderColor}`}>
+        <div className="flex items-center text-[10px] text-gray-500">
+          <Clock className="w-2.5 h-2.5 flex-shrink-0" />
+          <span className="truncate ml-0.5">{formatTimeAgo(lead.created_at)}</span>
         </div>
       </div>
     </div>
