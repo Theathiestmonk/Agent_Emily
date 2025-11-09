@@ -482,7 +482,7 @@ class CustomContentAgent:
             
             message = {
                 "role": "assistant",
-                "content": f"Great choice! Now tell me about your {content_type} for {platform}. What's in your mind to post? Describe your idea, key points, or any specific details you want to include:",
+                "content": f"Great choice! What's in your mind to post? Describe your idea, key points, or any specific details you want to include:",
                 "timestamp": datetime.now().isoformat()
             }
             state["conversation_messages"].append(message)

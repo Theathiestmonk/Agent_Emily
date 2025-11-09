@@ -42,7 +42,7 @@ import {
   RefreshCw,
   Edit,
   Edit3,
-  Share2,
+  Send,
   Download,
   Filter,
   ChevronDown,
@@ -1561,6 +1561,19 @@ const ContentDashboard = () => {
         }
       }))
       
+      // Update modal content if it's open
+      if (selectedContentForModal && selectedContentForModal.id === postId) {
+        setSelectedContentForModal(prev => ({
+          ...prev,
+          image_url: result.image_url
+        }))
+      }
+      
+      // Update allContent state
+      setAllContent(prev => prev.map(item => 
+        item.id === postId ? { ...item, image_url: result.image_url } : item
+      ))
+      
       // Close modal and reset
       setShowUploadModal(null)
       setSelectedFile(null)
@@ -1572,6 +1585,9 @@ const ContentDashboard = () => {
         : 'Your custom image has been added to the post'
       
       showSuccess(successMessage, successDescription)
+      
+      // Refresh images
+      await fetchPostImages(postId)
       
     } catch (error) {
       console.error('Error uploading image:', error)
@@ -1896,9 +1912,9 @@ const ContentDashboard = () => {
 
       {/* Confirmation Modal */}
       {showConfirmationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" />
-          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+        <div className="fixed z-50 flex items-center justify-center md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
+          <div className="fixed bg-black bg-opacity-50 backdrop-blur-sm md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 z-10">
             <div className="text-center">
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-orange-100 mb-4">
                 <svg className="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2435,7 +2451,7 @@ const ContentDashboard = () => {
                             {postingContent.has(content.id) ? (
                               <RefreshCw className="w-4 h-4 animate-spin" />
                             ) : (
-                              <Share2 className="w-4 h-4" />
+                              <Send className="w-4 h-4" />
                             )}
                           </button>
                           {hoveredButton === `${content.id}-post` && (
@@ -2612,7 +2628,6 @@ const ContentDashboard = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Image Section */}
                   <div className="space-y-4">
-                    <h4 className="text-lg font-semibold text-gray-900">Media</h4>
                     {((generatedImages[selectedContentForModal.id] && generatedImages[selectedContentForModal.id].image_url) || selectedContentForModal.image_url) ? (
                       <div className="relative">
                         {(() => {
@@ -2640,33 +2655,94 @@ const ContentDashboard = () => {
                             )
                           }
                         })()}
-                        <div className="absolute top-4 right-4">
+                        <div className="absolute bottom-4 right-4 flex gap-2">
                           {(generatedImages[selectedContentForModal.id]?.image_url || selectedContentForModal.image_url) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setImageEditorData({
-                                  postContent: selectedContentForModal.content,
-                                  inputImageUrl: generatedImages[selectedContentForModal.id]?.image_url || selectedContentForModal.image_url
-                                })
-                                setShowImageEditor(true)
-                                handleCloseModal()
-                              }}
-                              className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors"
-                            >
-                              Edit Image
-                            </button>
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setImageEditorData({
+                                    postContent: selectedContentForModal.content,
+                                    inputImageUrl: generatedImages[selectedContentForModal.id]?.image_url || selectedContentForModal.image_url
+                                  })
+                                  setShowImageEditor(true)
+                                  handleCloseModal()
+                                }}
+                                className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors"
+                              >
+                                Edit Image
+                              </button>
+                              <label className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors cursor-pointer inline-flex items-center space-x-1">
+                                <Upload className="w-4 h-4" />
+                                <span>Replace</span>
+                                <input
+                                  type="file"
+                                  accept="image/*,video/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files[0]
+                                    if (file) {
+                                      handleFileSelect(e)
+                                      setTimeout(() => {
+                                        handleUploadImage(selectedContentForModal.id)
+                                      }, 100)
+                                    }
+                                  }}
+                                  className="hidden"
+                                  disabled={uploadingImage.has(selectedContentForModal.id)}
+                                />
+                              </label>
+                            </>
                           )}
                         </div>
+                        {uploadingImage.has(selectedContentForModal.id) && (
+                          <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
+                            <div className="bg-white rounded-lg p-4 flex items-center space-x-3">
+                              <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
+                              <span className="text-gray-900 font-medium">Uploading...</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <div className="w-full h-80 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center">
-                        <div className="text-center">
-                          <Image className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                          <p className="text-gray-500">No image available</p>
-                        </div>
+                      <div className="w-full h-80 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center relative">
+                        {uploadingImage.has(selectedContentForModal.id) ? (
+                          <div className="text-center">
+                            <RefreshCw className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-2" />
+                            <p className="text-gray-700 font-medium">Uploading...</p>
+                          </div>
+                        ) : (
+                          <div className="text-center">
+                            <Image className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                            <p className="text-gray-500">No image available</p>
+                          </div>
+                        )}
                       </div>
                     )}
+                    
+                    {/* Media Header and Upload - Below image */}
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-lg font-semibold text-gray-900">Media</h4>
+                      <label className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 cursor-pointer text-sm font-medium transition-colors">
+                        <Upload className="w-4 h-4" />
+                        <span>Upload Image</span>
+                        <input
+                          type="file"
+                          accept="image/*,video/*"
+                          onChange={(e) => {
+                            const file = e.target.files[0]
+                            if (file) {
+                              handleFileSelect(e)
+                              // Upload immediately after selection
+                              setTimeout(() => {
+                                handleUploadImage(selectedContentForModal.id)
+                              }, 100)
+                            }
+                          }}
+                          className="hidden"
+                          disabled={uploadingImage.has(selectedContentForModal.id)}
+                        />
+                      </label>
+                    </div>
                     
                     {/* Hashtags - Moved below image */}
                     {selectedContentForModal.hashtags && selectedContentForModal.hashtags.length > 0 && (
@@ -2693,45 +2769,6 @@ const ContentDashboard = () => {
                   
                   {/* Text Content Section */}
                   <div className="space-y-6">
-                    {/* Status and Actions - Inline layout */}
-                    <div>
-                      <h4 className="text-lg font-semibold text-gray-900 mb-2">Status & Actions</h4>
-                      <div className="flex items-center justify-between">
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(selectedContentForModal.status)}`}>
-                          {selectedContentForModal.status}
-                        </span>
-                        
-                        {/* Action Buttons - Inline with status */}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleEditContent(selectedContentForModal)
-                              handleCloseModal()
-                            }}
-                            className="flex items-center space-x-1 px-2 py-1 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded text-xs hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-sm hover:shadow-md"
-                          >
-                            <Edit className="w-3 h-3" />
-                            <span>Edit</span>
-                          </button>
-                          
-                          {selectedContentForModal.status === 'draft' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleApprovePost(selectedContentForModal.id)
-                                handleCloseModal()
-                              }}
-                              className="flex items-center space-x-1 px-2 py-1 bg-gradient-to-r from-green-500 to-green-600 text-white rounded text-xs hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-sm hover:shadow-md"
-                            >
-                              <CheckCircle className="w-3 h-3" />
-                              <span>Approve</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
                     {/* Title */}
                     {selectedContentForModal.title && (
                       <div>
@@ -2867,6 +2904,56 @@ const ContentDashboard = () => {
                         )}
                       </div>
                     )}
+                    
+                    {/* Status and Actions at Bottom */}
+                    <div className="flex items-end justify-between pt-6 border-t border-gray-200 mt-6">
+                      {/* Status on Left */}
+                      <div>
+                        <h4 className="text-lg font-semibold text-gray-900 mb-2">Status & Actions</h4>
+                        <div className="flex items-end space-x-4">
+                          <select
+                            value={selectedContentForModal.status}
+                            onChange={(e) => {
+                              const newStatus = e.target.value
+                              handleStatusChange(selectedContentForModal.id, newStatus)
+                              // Update modal content immediately
+                              setSelectedContentForModal(prev => ({ ...prev, status: newStatus }))
+                            }}
+                            disabled={updatingStatus.has(selectedContentForModal.id)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium border-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                              getStatusColor(selectedContentForModal.status)
+                            } ${updatingStatus.has(selectedContentForModal.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            {statusOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          {updatingStatus.has(selectedContentForModal.id) && (
+                            <div className="flex items-center space-x-2 text-sm text-gray-500 pb-2">
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Updating...</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Approve Button on Right */}
+                      {selectedContentForModal.status === 'draft' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleApprovePost(selectedContentForModal.id)
+                            handleCloseModal()
+                          }}
+                          className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+                        >
+                          <CheckCircle className="w-5 h-5" />
+                          <span>Approve</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3656,7 +3743,7 @@ const ContentDashboard = () => {
                     onClick={handleGoToPost}
                     className="px-6 py-3 bg-white/20 hover:bg-white/30 text-white font-medium rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center space-x-2"
                   >
-                    <Share2 className="w-4 h-4" />
+                    <Send className="w-4 h-4" />
                     <span>Go to Post</span>
                   </button>
                 </div>

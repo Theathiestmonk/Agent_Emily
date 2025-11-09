@@ -14,7 +14,8 @@ import {
   BookOpen,
   CreditCard,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  UserPlus
 } from 'lucide-react'
 
 const SideNavbar = () => {
@@ -110,6 +111,11 @@ const SideNavbar = () => {
       name: 'Ads',
       href: '/ads',
       icon: Megaphone
+    },
+    {
+      name: 'Leads',
+      href: '/leads',
+      icon: UserPlus
     },
     {
       name: 'Settings',

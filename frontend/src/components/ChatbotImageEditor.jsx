@@ -80,11 +80,7 @@ const ChatbotImageEditor = ({
   const initializeChat = () => {
     const initialMessage = {
       role: 'assistant',
-      content: `Hey there! 👋 I'm excited to help you edit your image! I can see you've got some great content ready to work with.
-
-&nbsp;
-
-What would you like to do with your image today?`,
+      content: `Hey there! 👋 I'm excited to help you edit your image! What would you like to do with your image today?`,
       timestamp: new Date().toISOString(),
       buttons: [
         { text: 'Add My Logo', value: 'add logo', type: 'action', icon: 'Palette' },
@@ -340,27 +336,7 @@ What would you like to do next?`,
 
   const startManualInstructions = () => {
     addMessage('assistant', 
-      `Awesome! I love getting creative with images. Tell me what you'd like me to do with your image! 
-
-Here are some ideas to get you started:
-
-• "Make it more colorful and vibrant"
-
-• "Add a beautiful sunset background"
-
-• "Crop it to a square format"
-
-• "Add some text overlay"
-
-• "Convert to black and white with selective color"
-
-• "Add a vintage film effect"
-
-• "Create a dramatic lighting effect"
-
-• "Add a professional blur to the background"
-
-What's your vision for this image?`
+      `Awesome! What would you like me to do with your image? Here are some ideas: "Make it more colorful", "Add a sunset background", "Crop to square", "Add text overlay", "Convert to black and white", "Add vintage effect", "Create dramatic lighting", or "Add background blur".`
     );
     setCurrentStep('manual_input');
   };
@@ -454,19 +430,7 @@ What would you like to do next?`,
     }
     
     addMessage('assistant', 
-      `Perfect! I'm ready to make more changes to your image. What would you like me to do next?
-
-Here are some ideas:
-• "Make it more colorful and vibrant"
-• "Add a beautiful sunset background" 
-• "Crop it to a square format"
-• "Add some text overlay"
-• "Convert to black and white with selective color"
-• "Add a vintage film effect"
-• "Create a dramatic lighting effect"
-• "Add a professional blur to the background"
-
-What's your next creative vision?`
+      `Perfect! What would you like me to do next? Here are some ideas: "Make it more colorful", "Add a sunset background", "Crop to square", "Add text overlay", "Convert to black and white", "Add vintage effect", "Create dramatic lighting", or "Add background blur".`
     );
     setCurrentStep('manual_input');
   };
@@ -475,19 +439,7 @@ What's your next creative vision?`
     setCurrentWorkingImageUrl(inputImageUrl);
     setEditedImageUrl(null);
     addMessage('assistant', 
-      `No problem! Let's start fresh with your original image. What would you like me to do with it?
-
-Here are some ideas to get you started:
-• "Make it more colorful and vibrant"
-• "Add a beautiful sunset background"
-• "Crop it to a square format" 
-• "Add some text overlay"
-• "Convert to black and white with selective color"
-• "Add a vintage film effect"
-• "Create a dramatic lighting effect"
-• "Add a professional blur to the background"
-
-What's your vision for this image?`
+      `No problem! Let's start fresh. What would you like me to do? Here are some ideas: "Make it more colorful", "Add a sunset background", "Crop to square", "Add text overlay", "Convert to black and white", "Add vintage effect", "Create dramatic lighting", or "Add background blur".`
     );
     setCurrentStep('manual_input');
   };
@@ -603,7 +555,7 @@ What's your vision for this image?`
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
       <div className="bg-white rounded-2xl shadow-2xl w-[70vw] h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -763,7 +715,7 @@ What's your vision for this image?`
 
       {/* Full Image Modal */}
       {fullImageModal.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4">
+        <div className="fixed bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4 md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
           <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-2xl">
             {/* Header */}
             <div className="flex justify-between items-center p-4 border-b border-gray-200">

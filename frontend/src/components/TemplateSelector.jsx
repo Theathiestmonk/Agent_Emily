@@ -186,7 +186,7 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-transparent flex items-center justify-center z-50 p-4">
+    <div className="fixed bg-transparent flex items-center justify-center z-50 p-4 md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
       <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-6 text-white">
@@ -368,7 +368,7 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
 
       {/* Custom Template Upload Modal */}
       {showUpload && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60 p-4">
+        <div className="fixed bg-black bg-opacity-60 flex items-center justify-center z-60 p-4 md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
@@ -484,7 +484,7 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
 
       {/* Full Image Modal */}
       {showFullImage.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4">
+        <div className="fixed bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4 md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
           <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-2xl">
             {/* Header */}
             <div className="flex justify-between items-center p-4 border-b border-gray-200">
@@ -511,7 +511,7 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
 
       {/* Confirmation Popup */}
       {showConfirmation && templateToConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
+        <div className="fixed bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4 md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
