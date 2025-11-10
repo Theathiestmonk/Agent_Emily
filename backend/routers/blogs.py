@@ -2,6 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 import os
+import uuid
+import re
+import urllib.parse
 from datetime import datetime
 from supabase import create_client
 from pydantic import BaseModel
@@ -48,7 +51,7 @@ def decrypt_token(encrypted_token: str) -> str:
         raise
 
 # Security
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 class User(BaseModel):
     id: str
@@ -98,6 +101,57 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         )
 
 router = APIRouter(prefix="/api/blogs", tags=["blogs"])
+
+@router.get("/public")
+async def get_public_blogs(
+    status: Optional[str] = Query("published", description="Filter by status"),
+    limit: int = Query(50, description="Number of blogs to return"),
+    offset: int = Query(0, description="Number of blogs to skip")
+):
+    """Get public blogs - no authentication required"""
+    try:
+        logger.info(f"Fetching public blogs with status: {status}")
+        
+        # Get published blogs for public display
+        # Normalize status to lowercase for consistency
+        status_filter = (status or "published").lower()
+        
+        query = supabase_admin.table("blog_posts").select("*")
+        query = query.eq("status", status_filter)
+        query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
+        
+        response = query.execute()
+        blogs = response.data if response.data else []
+        
+        logger.info(f"Found {len(blogs)} public blogs with status '{status_filter}'")
+        logger.info(f"Sample blog statuses: {[b.get('status') for b in blogs[:3]]}")
+        return {"blogs": blogs, "total": len(blogs)}
+        
+    except Exception as e:
+        logger.error(f"Error fetching public blogs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch blogs: {str(e)}")
+
+@router.get("/public/all")
+async def get_all_blogs_public(
+    limit: int = Query(100, description="Number of blogs to return"),
+    offset: int = Query(0, description="Number of blogs to skip")
+):
+    """Get all blogs (published and draft) - public endpoint for admin page"""
+    try:
+        logger.info(f"Fetching all blogs (admin view)")
+        
+        query = supabase_admin.table("blog_posts").select("*")
+        query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
+        
+        response = query.execute()
+        blogs = response.data if response.data else []
+        
+        logger.info(f"Found {len(blogs)} total blogs")
+        return {"blogs": blogs, "total": len(blogs)}
+        
+    except Exception as e:
+        logger.error(f"Error fetching all blogs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch blogs: {str(e)}")
 
 @router.get("/")
 async def get_blogs(
@@ -176,6 +230,85 @@ async def get_blog_stats(
         logger.error(f"Error fetching blog stats: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch blog stats: {str(e)}")
 
+@router.get("/public/by-slug")
+async def get_public_blog_by_slug_query(
+    slug: str = Query(..., description="Blog slug")
+):
+    """Get a specific published blog by slug - public endpoint (query parameter version)
+    Uses query parameter to avoid issues with special characters in path
+    """
+    try:
+        # Decode the slug in case it's URL encoded
+        try:
+            decoded_slug = urllib.parse.unquote(urllib.parse.unquote(slug))
+            if decoded_slug == slug:
+                decoded_slug = urllib.parse.unquote(slug)
+        except:
+            decoded_slug = slug
+        
+        logger.info(f"Fetching public blog - received slug: '{slug}', decoded: '{decoded_slug}'")
+        
+        # Get all published blogs to find the matching one
+        all_published = supabase_admin.table("blog_posts").select("id, slug, title, status").eq("status", "published").execute()
+        logger.info(f"Total published blogs: {len(all_published.data or [])}")
+        
+        matching_blog = None
+        
+        if all_published.data:
+            logger.info(f"Available slugs in DB: {[b.get('slug') for b in all_published.data]}")
+            
+            # Try multiple matching strategies
+            for blog in all_published.data:
+                blog_slug = blog.get('slug', '')
+                # Try exact match (decoded)
+                if blog_slug == decoded_slug:
+                    matching_blog = blog
+                    logger.info(f"✓ Found exact match with decoded slug: {blog_slug}")
+                    break
+                # Try exact match (original as received)
+                if blog_slug == slug:
+                    matching_blog = blog
+                    logger.info(f"✓ Found exact match with original slug: {blog_slug}")
+                    break
+                # Try case-insensitive match
+                if blog_slug.lower() == decoded_slug.lower():
+                    matching_blog = blog
+                    logger.info(f"✓ Found case-insensitive match: {blog_slug}")
+                    break
+                # Try matching by removing question marks and timestamps (handles ? vs %3F differences)
+                # Remove timestamp suffix (e.g., -1762770338)
+                import re
+                blog_slug_base = re.sub(r'-\d+$', '', blog_slug)
+                decoded_slug_base = re.sub(r'-\d+$', '', decoded_slug)
+                blog_slug_clean = blog_slug_base.replace('?', '').replace('%3F', '').replace('&', '')
+                decoded_slug_clean = decoded_slug_base.replace('?', '').replace('%3F', '').replace('&', '')
+                if blog_slug_clean and decoded_slug_clean and blog_slug_clean == decoded_slug_clean:
+                    matching_blog = blog
+                    logger.info(f"✓ Found match after cleaning: {blog_slug} (cleaned: {blog_slug_clean})")
+                    break
+        
+        if not matching_blog:
+            logger.warning(f"✗ Blog not found with slug: '{decoded_slug}' (received: '{slug}')")
+            logger.warning(f"Available slugs: {[b.get('slug') for b in (all_published.data or [])]}")
+            raise HTTPException(status_code=404, detail=f"Blog not found. Searched for: {decoded_slug}")
+        
+        # Fetch full blog data
+        response = supabase_admin.table("blog_posts").select("*").eq("id", matching_blog['id']).execute()
+        
+        if not response.data or len(response.data) == 0:
+            logger.error(f"Failed to fetch full blog data for ID: {matching_blog['id']}")
+            raise HTTPException(status_code=404, detail="Blog not found")
+        
+        blog = response.data[0]
+        logger.info(f"✓ Blog found: {blog['title']} (ID: {blog['id']})")
+        return {"blog": blog}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching blog: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch blog: {str(e)}")
+
 @router.get("/{blog_id}")
 async def get_blog(
     blog_id: str,
@@ -199,6 +332,136 @@ async def get_blog(
     except Exception as e:
         logger.error(f"Error fetching blog: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch blog: {str(e)}")
+
+@router.post("/")
+async def create_blog(
+    blog_data: dict,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+):
+    """Create a new blog post manually - public endpoint"""
+    try:
+        # Try to get user if authenticated, otherwise use None
+        user_id = None
+        try:
+            if credentials and credentials.credentials:
+                response = supabase.auth.get_user(credentials.credentials)
+                if response and hasattr(response, 'user') and response.user:
+                    user_id = response.user.id
+                    logger.info(f"Creating blog for authenticated user: {user_id}")
+                else:
+                    logger.info("Creating blog without authentication")
+            else:
+                logger.info("Creating blog without authentication")
+        except Exception as auth_error:
+            logger.info(f"Creating blog without authentication: {auth_error}")
+        
+        # Generate slug from title if not provided
+        title = blog_data.get('title', 'Untitled')
+        # Create slug: lowercase, replace spaces/special chars with dashes, remove multiple dashes
+        if not blog_data.get('slug'):
+            slug = re.sub(r'[^\w\s-]', '', title.lower())  # Remove special characters
+            slug = re.sub(r'[-\s]+', '-', slug)  # Replace spaces and multiple dashes with single dash
+            slug = slug.strip('-')[:200]  # Remove leading/trailing dashes and limit length
+        else:
+            slug = blog_data.get('slug')
+        
+        # Ensure slug is unique by appending timestamp if needed
+        existing_slug_check = supabase_admin.table("blog_posts").select("id").eq("slug", slug).execute()
+        if existing_slug_check.data:
+            slug = f"{slug}-{int(datetime.now().timestamp())}"
+        
+        # Prepare blog data - make author_id optional if no user
+        # Get metadata and add featured_image to it if column doesn't exist
+        metadata = blog_data.get('metadata', {})
+        featured_image = blog_data.get('featured_image')
+        
+        # Store featured_image in metadata if column doesn't exist in schema
+        if featured_image:
+            metadata['featured_image'] = featured_image
+        
+        new_blog = {
+            "id": str(uuid.uuid4()),
+            "title": title,
+            "content": blog_data.get('content', ''),
+            "excerpt": blog_data.get('excerpt', ''),
+            "slug": slug,
+            "status": (blog_data.get('status', 'draft') or 'draft').lower(),  # Normalize to lowercase
+            "post_type": blog_data.get('post_type', 'post'),
+            "format": blog_data.get('format', 'standard'),
+            "categories": blog_data.get('categories', []),
+            "tags": blog_data.get('tags', []),
+            "wordpress_site_id": blog_data.get('wordpress_site_id'),
+            "scheduled_at": blog_data.get('scheduled_at'),
+            "published_at": blog_data.get('published_at'),
+            "wordpress_post_id": blog_data.get('wordpress_post_id'),
+            "meta_description": blog_data.get('meta_description', ''),
+            "meta_keywords": blog_data.get('meta_keywords', []),
+            "reading_time": blog_data.get('reading_time', 0),
+            "word_count": blog_data.get('word_count', 0),
+            "seo_score": blog_data.get('seo_score', 0),
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+            "metadata": metadata
+        }
+        
+        # Only include featured_image if column exists (try-catch will handle if it doesn't)
+        # For now, we'll store it in metadata to avoid schema issues
+        
+        # Only set author_id if user is authenticated - make it optional for public blogs
+        # This avoids foreign key constraint issues when no user is logged in
+        if user_id:
+            new_blog["author_id"] = user_id
+            logger.info(f"Creating blog for authenticated user: {user_id}")
+        else:
+            # Don't set author_id - let database handle it as NULL if column allows it
+            # If column requires it, we'll handle the error gracefully
+            logger.info("Creating blog without author_id (public blog)")
+            # Try to insert without author_id first
+            try:
+                # Remove author_id from new_blog if it exists
+                if "author_id" in new_blog:
+                    del new_blog["author_id"]
+            except:
+                pass
+        
+        # Insert blog into database
+        try:
+            response = supabase_admin.table("blog_posts").insert(new_blog).execute()
+            
+            if not response.data:
+                raise HTTPException(status_code=500, detail="Failed to create blog")
+            
+            logger.info(f"Blog created: {new_blog['id']}")
+            return {"message": "Blog created successfully", "blog": response.data[0]}
+        except Exception as insert_error:
+            # If insert fails due to author_id constraint, try with a valid system user
+            error_str = str(insert_error)
+            if "author_id" in error_str.lower() or "foreign key" in error_str.lower():
+                logger.warning(f"Insert failed due to author_id constraint: {insert_error}")
+                logger.info("Attempting to create blog with system user fallback")
+                
+                # Try to get any existing user from the database as fallback
+                try:
+                    # Get first user from profiles or users table
+                    user_fallback = supabase_admin.table("profiles").select("id").limit(1).execute()
+                    if user_fallback.data and len(user_fallback.data) > 0:
+                        new_blog["author_id"] = user_fallback.data[0]["id"]
+                        logger.info(f"Using fallback user: {new_blog['author_id']}")
+                        response = supabase_admin.table("blog_posts").insert(new_blog).execute()
+                        if response.data:
+                            logger.info(f"Blog created with fallback user: {new_blog['id']}")
+                            return {"message": "Blog created successfully", "blog": response.data[0]}
+                except Exception as fallback_error:
+                    logger.error(f"Fallback user approach also failed: {fallback_error}")
+            
+            # Re-raise the original error if we couldn't fix it
+            raise HTTPException(status_code=500, detail=f"Failed to create blog: {str(insert_error)}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating blog: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create blog: {str(e)}")
 
 @router.post("/generate")
 async def generate_blogs(
@@ -232,6 +495,67 @@ async def generate_blogs(
         logger.error(f"Error generating blogs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate blogs: {str(e)}")
 
+
+@router.put("/public/{blog_id}")
+async def update_blog_public(
+    blog_id: str,
+    blog_data: dict
+):
+    """Update a blog post - public endpoint for admin page"""
+    try:
+        logger.info(f"Updating blog {blog_id} (public endpoint)")
+        
+        # Check if blog exists
+        existing_response = supabase_admin.table("blog_posts").select("id").eq("id", blog_id).execute()
+        
+        if not existing_response.data:
+            raise HTTPException(status_code=404, detail="Blog not found")
+        
+        # Prepare update data
+        update_data = {}
+        
+        # Handle slug generation if title changed
+        if 'title' in blog_data:
+            title = blog_data.get('title', 'Untitled')
+            if not blog_data.get('slug'):
+                slug = re.sub(r'[^\w\s-]', '', title.lower())
+                slug = re.sub(r'[-\s]+', '-', slug)
+                slug = slug.strip('-')[:200]
+                update_data['slug'] = slug
+        
+        # Handle featured_image in metadata
+        if 'featured_image' in blog_data:
+            metadata = blog_data.get('metadata', {})
+            if not isinstance(metadata, dict):
+                metadata = {}
+            metadata['featured_image'] = blog_data.get('featured_image')
+            update_data['metadata'] = metadata
+            # Remove featured_image from update_data if it was there
+            if 'featured_image' in blog_data:
+                del blog_data['featured_image']
+        
+        # Normalize status to lowercase
+        if 'status' in blog_data:
+            blog_data['status'] = (blog_data.get('status') or 'draft').lower()
+        
+        # Merge all update data
+        update_data.update(blog_data)
+        update_data["updated_at"] = datetime.now().isoformat()
+        
+        # Update blog
+        response = supabase_admin.table("blog_posts").update(update_data).eq("id", blog_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to update blog")
+        
+        logger.info(f"Blog updated: {blog_id}")
+        return {"message": "Blog updated successfully", "blog": response.data[0]}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating blog: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update blog: {str(e)}")
 
 @router.put("/{blog_id}")
 async def update_blog(
@@ -268,6 +592,34 @@ async def update_blog(
     except Exception as e:
         logger.error(f"Error updating blog: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update blog: {str(e)}")
+
+@router.delete("/public/{blog_id}")
+async def delete_blog_public(
+    blog_id: str
+):
+    """Delete a blog post - public endpoint for admin page"""
+    try:
+        logger.info(f"Deleting blog {blog_id} (public endpoint)")
+        
+        # Get blog details
+        blog_response = supabase_admin.table("blog_posts").select("*").eq("id", blog_id).execute()
+        
+        if not blog_response.data:
+            raise HTTPException(status_code=404, detail="Blog not found")
+        
+        blog = blog_response.data[0]
+        
+        # Delete from Supabase
+        delete_response = supabase_admin.table("blog_posts").delete().eq("id", blog_id).execute()
+        
+        logger.info(f"Blog deleted: {blog_id}")
+        return {"message": "Blog deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting blog: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete blog: {str(e)}")
 
 @router.delete("/{blog_id}")
 async def delete_blog(

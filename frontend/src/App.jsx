@@ -35,6 +35,10 @@ import TermsAndConditions from './pages/TermsAndConditions.jsx'
 import CancellationAndRefunds from './pages/CancellationAndRefunds.jsx'
 import Shipping from './pages/Shipping.jsx'
 import ContactUs from './pages/ContactUs.jsx'
+import AddBlogPage from './pages/AddBlogPage.jsx'
+import BlogListingPage from './pages/BlogListingPage.jsx'
+import BlogDetailPage from './pages/BlogDetailPage.jsx'
+import BlogProtectedRoute from './components/BlogProtectedRoute.jsx'
 // Subscription Components
 import SubscriptionSelector from './components/SubscriptionSelector'
 import PaymentSuccess from './components/PaymentSuccess'
@@ -140,6 +144,16 @@ function AppContent() {
         <Route path="/cancellation-refunds" element={<CancellationAndRefunds />} />
         <Route path="/shipping" element={<Shipping />} />
         <Route path="/contact" element={<ContactUs />} />
+        <Route 
+          path="/add-blog" 
+          element={
+            <BlogProtectedRoute>
+              <AddBlogPage />
+            </BlogProtectedRoute>
+          } 
+        />
+        <Route path="/blog" element={<BlogListingPage />} />
+        <Route path="/blog/:slug" element={<BlogDetailPage />} />
         
         {/* App Routes */}
         <Route path="/login" element={<Login />} />

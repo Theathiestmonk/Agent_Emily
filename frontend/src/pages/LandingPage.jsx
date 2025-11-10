@@ -647,7 +647,7 @@ const Page = () => {
               <h4 className="text-white font-semibold mb-4">Company</h4>
               <ul className="space-y-2">
                 <li><a href="#" className="text-white/70 hover:text-[#FF4D94] transition-colors">About</a></li>
-                <li><a href="#" className="text-white/70 hover:text-[#FF4D94] transition-colors">Blog</a></li>
+                <li><Link to="/blog" className="text-white/70 hover:text-[#FF4D94] transition-colors">Blog</Link></li>
                 <li><a href="#" className="text-white/70 hover:text-[#FF4D94] transition-colors">Careers</a></li>
                 <li><Link to="/contact" className="text-white/70 hover:text-[#FF4D94] transition-colors">Contact</Link></li>
               </ul>

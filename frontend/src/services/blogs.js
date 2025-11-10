@@ -56,14 +56,28 @@ class BlogService {
     return token
   }
 
-  async makeRequest(endpoint, options = {}) {
+  async makeRequest(endpoint, options = {}, requireAuth = true) {
     const token = await this.getAuthToken()
     const url = `${API_URL}${endpoint}`
     
-    console.log('Blog service request:', { url, token: token ? 'present' : 'missing' })
+    console.log('Blog service request:', { url, token: token ? 'present' : 'missing', requireAuth })
     
-    if (!token) {
-      console.error('No authentication token found')
+    const defaultOptions = {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }
+    
+    // Only add auth token if available and required
+    if (token && requireAuth) {
+      defaultOptions.headers['Authorization'] = `Bearer ${token}`
+    } else if (token && !requireAuth) {
+      // Optional: include token if available even for public requests
+      defaultOptions.headers['Authorization'] = `Bearer ${token}`
+    }
+    
+    if (requireAuth && !token) {
+      console.error('No authentication token found for protected endpoint')
       // Clear any invalid tokens and redirect to login
       localStorage.removeItem('authToken')
       localStorage.removeItem('token')
@@ -72,13 +86,6 @@ class BlogService {
       // Redirect to login page
       window.location.href = '/login'
       throw new Error('Authentication required. Please log in.')
-    }
-    
-    const defaultOptions = {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
     }
 
     try {
@@ -90,7 +97,7 @@ class BlogService {
         console.error('Blog service error:', error)
         
         // Handle authentication errors specifically
-        if (response.status === 401) {
+        if (response.status === 401 && requireAuth) {
           console.error('Authentication failed, clearing tokens and redirecting to login')
           localStorage.removeItem('authToken')
           localStorage.removeItem('token')
@@ -128,6 +135,49 @@ class BlogService {
     return this.makeRequest(`/api/blogs/${blogId}`)
   }
 
+  async getBlogBySlug(slug) {
+    // Public endpoint - no auth required
+    // Use query parameter to avoid issues with special characters in path
+    const encodedSlug = encodeURIComponent(slug);
+    return this.makeRequest(`/api/blogs/public/by-slug?slug=${encodedSlug}`, {}, false)
+  }
+
+  async createBlog(blogData) {
+    // Public endpoint - no auth required
+    return this.makeRequest('/api/blogs', {
+      method: 'POST',
+      body: JSON.stringify(blogData)
+    }, false) // requireAuth = false
+  }
+
+  async getPublicBlogs(params = {}) {
+    const queryParams = new URLSearchParams()
+    
+    if (params.status) queryParams.append('status', params.status)
+    if (params.limit) queryParams.append('limit', params.limit)
+    if (params.offset) queryParams.append('offset', params.offset)
+    
+    const queryString = queryParams.toString()
+    const endpoint = `/api/blogs/public${queryString ? `?${queryString}` : ''}`
+    
+    // Public endpoint - no auth required
+    return this.makeRequest(endpoint, {}, false)
+  }
+
+  async getAllBlogs(params = {}) {
+    // Get all blogs (published and draft) for admin page
+    const queryParams = new URLSearchParams()
+    
+    if (params.limit) queryParams.append('limit', params.limit)
+    if (params.offset) queryParams.append('offset', params.offset)
+    
+    const queryString = queryParams.toString()
+    const endpoint = `/api/blogs/public/all${queryString ? `?${queryString}` : ''}`
+    
+    // Public endpoint - no auth required
+    return this.makeRequest(endpoint, {}, false)
+  }
+
   async generateBlogs() {
     return this.makeRequest('/api/blogs/generate', {
       method: 'POST'
@@ -141,10 +191,25 @@ class BlogService {
     })
   }
 
+  async updateBlogPublic(blogId, blogData) {
+    // Public endpoint for admin page
+    return this.makeRequest(`/api/blogs/public/${blogId}`, {
+      method: 'PUT',
+      body: JSON.stringify(blogData)
+    }, false)
+  }
+
   async deleteBlog(blogId) {
     return this.makeRequest(`/api/blogs/${blogId}`, {
       method: 'DELETE'
     })
+  }
+
+  async deleteBlogPublic(blogId) {
+    // Public endpoint for admin page
+    return this.makeRequest(`/api/blogs/public/${blogId}`, {
+      method: 'DELETE'
+    }, false)
   }
 
   async publishBlog(blogId) {
