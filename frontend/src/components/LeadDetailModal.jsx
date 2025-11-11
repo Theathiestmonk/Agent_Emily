@@ -18,7 +18,11 @@ import {
   ChevronRight,
   Mail as MailIcon,
   MessageSquare,
-  Loader2
+  Loader2,
+  Globe,
+  Users,
+  LogIn,
+  CalendarCheck
 } from 'lucide-react'
 import { leadsAPI } from '../services/leads'
 import { useNotifications } from '../contexts/NotificationContext'
@@ -36,11 +40,14 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const [statusRemarks, setStatusRemarks] = useState('')
   const [showRemarksInput, setShowRemarksInput] = useState(false)
   const [pendingStatus, setPendingStatus] = useState(null)
+  const [followUpAt, setFollowUpAt] = useState(lead.follow_up_at || '')
+  const [updatingFollowUp, setUpdatingFollowUp] = useState(false)
 
   useEffect(() => {
     fetchConversations()
     fetchStatusHistory()
-  }, [lead.id])
+    setFollowUpAt(lead.follow_up_at || '')
+  }, [lead.id, lead.follow_up_at])
 
   const fetchConversations = async () => {
     try {
@@ -125,6 +132,41 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
     // The select value will automatically reset to selectedStatus when pendingStatus is null
   }
 
+  const handleFollowUpChange = async (e) => {
+    const newFollowUpAt = e.target.value
+    setFollowUpAt(newFollowUpAt)
+    
+    try {
+      setUpdatingFollowUp(true)
+      const isoDateTime = newFollowUpAt ? new Date(newFollowUpAt).toISOString() : null
+      await leadsAPI.updateFollowUp(lead.id, isoDateTime)
+      showSuccess('Follow-up Updated', 'Follow-up date has been updated')
+      if (onUpdate) onUpdate()
+    } catch (error) {
+      console.error('Error updating follow-up:', error)
+      showError('Error', 'Failed to update follow-up date')
+      // Revert to previous value on error
+      setFollowUpAt(lead.follow_up_at || '')
+    } finally {
+      setUpdatingFollowUp(false)
+    }
+  }
+
+  const clearFollowUp = async () => {
+    try {
+      setUpdatingFollowUp(true)
+      await leadsAPI.updateFollowUp(lead.id, null)
+      setFollowUpAt('')
+      showSuccess('Follow-up Cleared', 'Follow-up date has been cleared')
+      if (onUpdate) onUpdate()
+    } catch (error) {
+      console.error('Error clearing follow-up:', error)
+      showError('Error', 'Failed to clear follow-up date')
+    } finally {
+      setUpdatingFollowUp(false)
+    }
+  }
+
   const formatTime = (dateString) => {
     if (!dateString) return 'Unknown'
     const date = new Date(dateString)
@@ -171,6 +213,19 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
         return <Facebook className="w-5 h-5" />
       case 'instagram':
         return <Instagram className="w-5 h-5" />
+      case 'walk_ins':
+      case 'walk-ins':
+        return <LogIn className="w-5 h-5" />
+      case 'referral':
+        return <Users className="w-5 h-5" />
+      case 'email':
+        return <Mail className="w-5 h-5" />
+      case 'website':
+        return <Globe className="w-5 h-5" />
+      case 'phone_call':
+      case 'phone-call':
+      case 'phone call':
+        return <Phone className="w-5 h-5" />
       default:
         return <User className="w-5 h-5" />
     }
@@ -317,6 +372,33 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                 </div>
               </div>
             )}
+            
+            {/* Follow-up Date & Time */}
+            <div className="flex items-center space-x-3">
+              <CalendarCheck className="w-4 h-4 text-white" />
+              <span className="text-sm font-medium text-white">Follow-up:</span>
+              <div className="flex items-center space-x-2 flex-1">
+                <input
+                  type="datetime-local"
+                  value={followUpAt ? new Date(followUpAt).toISOString().slice(0, 16) : ''}
+                  onChange={handleFollowUpChange}
+                  disabled={updatingFollowUp}
+                  className="flex-1 px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
+                  placeholder="Set follow-up date & time"
+                />
+                {followUpAt && (
+                  <button
+                    onClick={clearFollowUp}
+                    disabled={updatingFollowUp}
+                    className="px-2 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-xs font-medium transition-colors disabled:opacity-50"
+                    title="Clear follow-up"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+                {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-white" />}
+              </div>
+            </div>
           </div>
         </div>
 

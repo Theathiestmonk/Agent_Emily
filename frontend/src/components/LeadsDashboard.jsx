@@ -33,6 +33,7 @@ const LeadsDashboard = () => {
   const [selectedLead, setSelectedLead] = useState(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [importingCSV, setImportingCSV] = useState(false)
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterPlatform, setFilterPlatform] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -156,6 +157,72 @@ const LeadsDashboard = () => {
   const handleLeadClick = (lead) => {
     setSelectedLead(lead)
     setShowDetailModal(true)
+  }
+
+  const handleDeleteLead = async (lead) => {
+    if (!window.confirm(`Are you sure you want to delete "${lead.name || 'this lead'}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      await leadsAPI.deleteLead(lead.id)
+      showSuccess('Lead Deleted', 'Lead has been deleted successfully')
+      // Refresh leads list
+      await fetchLeads(false)
+      // Close modal if the deleted lead was selected
+      if (selectedLead && selectedLead.id === lead.id) {
+        setShowDetailModal(false)
+        setSelectedLead(null)
+      }
+    } catch (error) {
+      console.error('Error deleting lead:', error)
+      showError('Error', 'Failed to delete lead')
+    }
+  }
+
+  const handleCSVImport = async (file) => {
+    if (!file) {
+      showError('Error', 'Please select a CSV file')
+      return
+    }
+
+    if (!file.name.endsWith('.csv')) {
+      showError('Error', 'Please select a valid CSV file')
+      return
+    }
+
+    try {
+      setImportingCSV(true)
+      const response = await leadsAPI.importLeadsCSV(file)
+      const result = response.data || response
+      
+      if (result.success) {
+        if (result.errors > 0) {
+          showInfo(
+            'Import Completed with Errors',
+            `Successfully imported ${result.created} out of ${result.total_rows} leads. ${result.errors} errors occurred.`,
+            { duration: 5000 }
+          )
+          if (result.error_details && result.error_details.length > 0) {
+            console.warn('Import errors:', result.error_details)
+          }
+        } else {
+          showSuccess('Import Successful', `Successfully imported ${result.created} leads`)
+        }
+        
+        // Refresh leads list
+        await fetchLeads(false)
+        setShowImportModal(false)
+      } else {
+        showError('Import Failed', result.message || 'Failed to import leads')
+      }
+    } catch (error) {
+      console.error('Error importing CSV:', error)
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to import CSV file'
+      showError('Import Failed', errorMessage)
+    } finally {
+      setImportingCSV(false)
+    }
   }
 
   const handleCloseModal = () => {
@@ -323,7 +390,7 @@ const LeadsDashboard = () => {
                   <Filter className="w-4 h-4" />
                 </button>
                 {showFilterDropdown && (
-                  <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto">
                     <button
                       onClick={() => {
                         setFilterPlatform('all')
@@ -351,11 +418,66 @@ const LeadsDashboard = () => {
                         setFilterPlatform('instagram')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 last:rounded-b-lg ${
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
                         filterPlatform === 'instagram' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
                       }`}
                     >
                       Instagram
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('walk_ins')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
+                        filterPlatform === 'walk_ins' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      }`}
+                    >
+                      Walk Ins
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('referral')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
+                        filterPlatform === 'referral' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      }`}
+                    >
+                      Referral
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('email')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
+                        filterPlatform === 'email' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      }`}
+                    >
+                      Email
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('website')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
+                        filterPlatform === 'website' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      }`}
+                    >
+                      Website
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('phone_call')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 last:rounded-b-lg ${
+                        filterPlatform === 'phone_call' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      }`}
+                    >
+                      Phone Call
                     </button>
                   </div>
                 )}
@@ -437,6 +559,7 @@ const LeadsDashboard = () => {
                               key={lead.id}
                               lead={lead}
                               onClick={handleLeadClick}
+                              onDelete={handleDeleteLead}
                             />
                           ))
                         )}
@@ -462,9 +585,16 @@ const LeadsDashboard = () => {
       <AddLeadModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
-        onSuccess={() => {
-          fetchLeads()
-          setShowAddModal(false)
+        onSuccess={async (data) => {
+          if (data && data.type === 'csv') {
+            // Handle CSV import
+            await handleCSVImport(data.file)
+            setShowAddModal(false)
+          } else {
+            // Handle regular lead creation
+            await fetchLeads(false)
+            setShowAddModal(false)
+          }
         }}
       />
     </div>
