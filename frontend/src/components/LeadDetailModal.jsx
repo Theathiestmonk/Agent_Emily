@@ -33,6 +33,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const [sendingMessage, setSendingMessage] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState(lead.status)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [statusRemarks, setStatusRemarks] = useState('')
+  const [showRemarksInput, setShowRemarksInput] = useState(false)
+  const [pendingStatus, setPendingStatus] = useState(null)
 
   useEffect(() => {
     fetchConversations()
@@ -53,8 +56,14 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   }
 
   const fetchStatusHistory = async () => {
-    // Status history would come from a separate endpoint if available
-    // For now, we'll use the conversations to build a timeline
+    try {
+      const response = await leadsAPI.getStatusHistory(lead.id)
+      setStatusHistory(response.data || [])
+    } catch (error) {
+      console.error('Error fetching status history:', error)
+      // Don't show error notification, just log it
+      setStatusHistory([])
+    }
   }
 
   const handleSendMessage = async (messageType = 'whatsapp') => {
@@ -78,12 +87,27 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
     }
   }
 
-  const handleStatusUpdate = async (newStatus) => {
+  const handleStatusChange = (newStatus) => {
+    if (newStatus !== selectedStatus) {
+      setPendingStatus(newStatus)
+      setShowRemarksInput(true)
+      setStatusRemarks('')
+    }
+  }
+
+  const handleStatusUpdate = async () => {
+    if (!pendingStatus) return
+    
     try {
       setUpdatingStatus(true)
-      await leadsAPI.updateLeadStatus(lead.id, newStatus)
-      setSelectedStatus(newStatus)
-      showSuccess('Status Updated', `Lead status updated to ${newStatus}`)
+      await leadsAPI.updateLeadStatus(lead.id, pendingStatus, statusRemarks || null)
+      setSelectedStatus(pendingStatus)
+      setShowRemarksInput(false)
+      setPendingStatus(null)
+      setStatusRemarks('')
+      showSuccess('Status Updated', `Lead status updated to ${pendingStatus}`)
+      // Refresh status history to show the new status change with remarks
+      await fetchStatusHistory()
       if (onUpdate) onUpdate()
     } catch (error) {
       console.error('Error updating status:', error)
@@ -91,6 +115,14 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
     } finally {
       setUpdatingStatus(false)
     }
+  }
+
+  const handleCancelStatusUpdate = () => {
+    setShowRemarksInput(false)
+    setPendingStatus(null)
+    setStatusRemarks('')
+    // Reset dropdown to current status by forcing a re-render
+    // The select value will automatically reset to selectedStatus when pendingStatus is null
   }
 
   const formatTime = (dateString) => {
@@ -144,6 +176,29 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
     }
   }
 
+  // Deduplicate status history entries
+  // Remove duplicates based on ID (if available) or combination of old_status, new_status, and created_at
+  const deduplicatedStatusHistory = statusHistory.reduce((acc, current) => {
+    // If ID exists, use it for deduplication
+    if (current.id) {
+      const isDuplicate = acc.some(item => item.id === current.id)
+      if (!isDuplicate) {
+        acc.push(current)
+      }
+    } else {
+      // Fallback: use old_status, new_status, and created_at (within 1 second)
+      const isDuplicate = acc.some(item => 
+        item.old_status === current.old_status &&
+        item.new_status === current.new_status &&
+        Math.abs(new Date(item.created_at) - new Date(current.created_at)) < 1000 // Within 1 second
+      )
+      if (!isDuplicate) {
+        acc.push(current)
+      }
+    }
+    return acc
+  }, [])
+
   // Build timeline from conversations and status changes
   const timeline = [
     {
@@ -154,6 +209,17 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
       icon: UserCheck,
       color: 'text-purple-600 bg-purple-50'
     },
+    ...deduplicatedStatusHistory.map(history => ({
+      type: 'status_change',
+      title: `Status Changed: ${history.old_status} → ${history.new_status}`,
+      description: history.reason || 'Status updated',
+      remarks: history.reason,
+      timestamp: history.created_at,
+      icon: TrendingUp,
+      color: 'text-blue-600 bg-blue-50',
+      oldStatus: history.old_status,
+      newStatus: history.new_status
+    })),
     ...conversations.map(conv => ({
       type: conv.message_type,
       title: conv.sender === 'agent' ? `${conv.message_type === 'email' ? 'Email' : 'WhatsApp'} Sent` : 'Lead Responded',
@@ -197,23 +263,60 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
           </div>
 
           {/* Status Badge */}
-          <div className="mt-4 flex items-center space-x-3">
-            <span className="text-sm font-medium">Status:</span>
-            <select
-              value={selectedStatus}
-              onChange={(e) => handleStatusUpdate(e.target.value)}
-              disabled={updatingStatus}
-              className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50"
-            >
-              <option value="new">New</option>
-              <option value="contacted">Contacted</option>
-              <option value="responded">Responded</option>
-              <option value="qualified">Qualified</option>
-              <option value="converted">Converted</option>
-              <option value="lost">Lost</option>
-              <option value="invalid">Invalid</option>
-            </select>
-            {updatingStatus && <Loader2 className="w-4 h-4 animate-spin" />}
+          <div className="mt-4 space-y-3">
+            <div className="flex items-center space-x-3">
+              <span className="text-sm font-medium">Status:</span>
+              <select
+                value={pendingStatus || selectedStatus}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                disabled={updatingStatus || showRemarksInput}
+                className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50"
+              >
+                <option value="new">New</option>
+                <option value="contacted">Contacted</option>
+                <option value="responded">Responded</option>
+                <option value="qualified">Qualified</option>
+                <option value="converted">Converted</option>
+                <option value="lost">Lost</option>
+                <option value="invalid">Invalid</option>
+              </select>
+              {updatingStatus && <Loader2 className="w-4 h-4 animate-spin" />}
+            </div>
+            
+            {/* Remarks Input */}
+            {showRemarksInput && pendingStatus && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-white">
+                    Changing status to: <span className="capitalize font-semibold">{pendingStatus}</span>
+                  </label>
+                </div>
+                <label className="text-sm font-medium text-white">Remarks (Optional)</label>
+                <textarea
+                  value={statusRemarks}
+                  onChange={(e) => setStatusRemarks(e.target.value)}
+                  placeholder="Add remarks about this status change..."
+                  rows={3}
+                  className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 resize-none"
+                />
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleStatusUpdate}
+                    disabled={updatingStatus}
+                    className="flex-1 px-4 py-2 bg-white/20 hover:bg-white/30 border border-white/30 rounded-lg text-white font-medium transition-colors disabled:opacity-50"
+                  >
+                    {updatingStatus ? 'Updating...' : 'Save Status Change'}
+                  </button>
+                  <button
+                    onClick={handleCancelStatusUpdate}
+                    disabled={updatingStatus}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white font-medium transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -350,6 +453,12 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                             <span className="text-xs text-gray-500">{formatTimeAgo(event.timestamp)}</span>
                           </div>
                           <p className="text-sm text-gray-600">{event.description}</p>
+                          {event.type === 'status_change' && event.remarks && (
+                            <div className="mt-3 p-3 bg-white/60 rounded-lg border border-blue-200">
+                              <div className="text-xs font-semibold text-blue-700 mb-1">Remarks:</div>
+                              <p className="text-sm text-gray-700">{event.remarks}</p>
+                            </div>
+                          )}
                           {event.status && (
                             <div className="mt-2">
                               <span className={`text-xs px-2 py-1 rounded ${

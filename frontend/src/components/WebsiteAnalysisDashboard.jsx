@@ -308,7 +308,7 @@ const WebsiteAnalysisDashboard = () => {
               <span className="loading-dot-3">.</span>
             </span>
           </p>
-        </div>
+              </div>
       </>
     );
   }

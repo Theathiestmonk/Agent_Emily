@@ -103,7 +103,7 @@ class ConversationResponse(BaseModel):
 
 class UpdateLeadStatusRequest(BaseModel):
     status: str
-    reason: Optional[str] = None
+    remarks: Optional[str] = None
 
 class SendMessageRequest(BaseModel):
     message: str
@@ -509,7 +509,7 @@ async def update_lead_status(
             "old_status": lead.data[0]["status"],
             "new_status": request.status,
             "changed_by": "user",
-            "reason": request.reason
+            "reason": request.remarks  # Store remarks as reason in history
         }).execute()
         
         return {"success": True, "status": request.status}
@@ -518,6 +518,29 @@ async def update_lead_status(
         raise
     except Exception as e:
         logger.error(f"Error updating lead status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{lead_id}/status-history")
+async def get_status_history(
+    lead_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get status history for a lead"""
+    try:
+        # Verify lead belongs to user
+        lead = supabase_admin.table("leads").select("*").eq("id", lead_id).eq("user_id", current_user["id"]).execute()
+        if not lead.data:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Get status history
+        result = supabase_admin.table("lead_status_history").select("*").eq("lead_id", lead_id).order("created_at", desc=True).execute()
+        
+        return result.data if result.data else []
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting status history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Conversation Endpoints
