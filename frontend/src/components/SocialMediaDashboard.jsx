@@ -59,10 +59,21 @@ const SocialMediaDashboard = () => {
   const [loadingInsights, setLoadingInsights] = useState(false)
   const [selectedPostForInsights, setSelectedPostForInsights] = useState(null)
   const [expandedPlatform, setExpandedPlatform] = useState(null)
+  const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 768)
 
   useEffect(() => {
     setDataLoaded(false)
     fetchData()
+  }, [])
+
+  // Track window size for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      setIsLargeScreen(window.innerWidth >= 768)
+    }
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   const fetchData = async (forceRefresh = false) => {
@@ -375,7 +386,8 @@ const SocialMediaDashboard = () => {
                   {connectedPlatforms.map((connection) => {
                     const stats = platformStats[connection.platform] || {}
                     const theme = getPlatformCardTheme(connection.platform)
-                    const isExpanded = expandedPlatform === connection.platform
+                    // On larger devices (md and up), always show details. On smaller devices, use toggle
+                    const isExpanded = isLargeScreen ? true : expandedPlatform === connection.platform
                     
                     return (
                       <div 
@@ -385,10 +397,13 @@ const SocialMediaDashboard = () => {
                         {/* Platform Card */}
                         <button
                           onClick={() => {
-                            if (isExpanded) {
-                              setExpandedPlatform(null)
-                            } else {
-                              setExpandedPlatform(connection.platform)
+                            // Only toggle on smaller devices
+                            if (!isLargeScreen) {
+                              if (isExpanded) {
+                                setExpandedPlatform(null)
+                              } else {
+                                setExpandedPlatform(connection.platform)
+                              }
                             }
                           }}
                           className={`flex items-center bg-gray-50 rounded-lg hover:bg-gray-100 transition-all duration-300 ${
@@ -403,7 +418,7 @@ const SocialMediaDashboard = () => {
                             </div>
                           </div>
                           
-                          {/* Expanded Details */}
+                          {/* Expanded Details - Always show on md+ screens, toggle on smaller */}
                           {isExpanded && (
                             <>
                               <div className="min-w-0 flex-shrink-0 ml-2 sm:ml-3">
@@ -460,14 +475,23 @@ const SocialMediaDashboard = () => {
                 </div>
               </div>
               
-              {/* Refresh Button - Icon only, on same row */}
+              {/* Refresh Button - Icon only on smaller devices, icon + text on larger devices */}
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
-                className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-500 transition-all duration-300 disabled:opacity-50 flex-shrink-0"
+                className={`flex items-center justify-center bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-500 transition-all duration-300 disabled:opacity-50 flex-shrink-0 ${
+                  isLargeScreen 
+                    ? 'px-4 py-2 gap-2' 
+                    : 'w-10 h-10 sm:w-11 sm:h-11'
+                }`}
                 title={refreshing ? 'Refreshing...' : 'Refresh'}
               >
                 <RefreshCw className={`w-5 h-5 sm:w-6 sm:h-6 ${refreshing ? 'animate-spin' : ''}`} />
+                {isLargeScreen && (
+                  <span className="text-sm font-medium whitespace-nowrap">
+                    {refreshing ? 'Refreshing...' : 'Refresh'}
+                  </span>
+                )}
               </button>
             </div>
           </div>
