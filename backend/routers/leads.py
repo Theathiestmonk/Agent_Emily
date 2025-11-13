@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import os
 import hmac
@@ -494,30 +494,130 @@ async def import_leads_csv(
                 status = row.get('status', 'new').strip() or 'new'
                 follow_up_at = row.get('follow_up_at', '').strip() or None
                 
-                # Parse follow_up_at if provided
-                if follow_up_at:
+                # Validate and parse follow_up_at - MANDATORY field
+                if not follow_up_at:
+                    errors.append(f"Row {idx}: follow_up_at is required and cannot be empty")
+                    continue
+                
+                original_follow_up_at = follow_up_at
+                parsed = False
+                parsed_date = None
+                date_invalid_reason = None
+                
+                try:
+                    # Try to parse various date formats
                     try:
-                        # Try to parse various date formats
+                        from dateutil import parser
+                        parsed_date = parser.parse(follow_up_at)
+                        # Validate the parsed date is actually valid
+                        # dateutil.parser can sometimes parse invalid dates, so we validate
+                        if parsed_date:
+                            # Check if the date components are valid
+                            import calendar
+                            year, month, day = parsed_date.year, parsed_date.month, parsed_date.day
+                            days_in_month = calendar.monthrange(year, month)[1]
+                            if day > days_in_month:
+                                date_invalid_reason = f"Invalid date: day {day} exceeds days in month {month} (month {month} only has {days_in_month} days)"
+                                parsed_date = None
+                                parsed = False
+                            else:
+                                parsed = True
+                                logger.info(f"Row {idx}: Successfully parsed follow_up_at using dateutil: {parsed_date}")
+                        else:
+                            parsed = False
+                            date_invalid_reason = "Failed to parse date"
+                    except ImportError:
+                        logger.warning("dateutil not available, using fallback parsing")
+                    except Exception as e:
+                        logger.warning(f"dateutil parsing failed: {e}, trying fallback")
+                        parsed = False
+                    
+                    if not parsed:
+                        # Fallback to datetime if dateutil not available or failed
                         try:
-                            from dateutil import parser
-                            follow_up_at = parser.parse(follow_up_at).isoformat()
-                        except ImportError:
-                            # Fallback to datetime if dateutil not available
-                            try:
-                                # Try ISO format first
-                                follow_up_at = datetime.fromisoformat(follow_up_at.replace('Z', '+00:00')).isoformat()
-                            except:
-                                # Try common formats
-                                for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']:
-                                    try:
-                                        follow_up_at = datetime.strptime(follow_up_at, fmt).isoformat()
-                                        break
-                                    except:
+                            # Try ISO format first (handle both with and without timezone)
+                            if 'Z' in follow_up_at:
+                                parsed_date = datetime.fromisoformat(follow_up_at.replace('Z', '+00:00'))
+                            elif '+' in follow_up_at or follow_up_at.count('-') > 2:  # Has timezone info
+                                parsed_date = datetime.fromisoformat(follow_up_at)
+                            else:
+                                # No timezone, try parsing as naive datetime
+                                parsed_date = datetime.fromisoformat(follow_up_at)
+                            
+                            # Validate date components for ISO format
+                            import calendar
+                            year, month, day = parsed_date.year, parsed_date.month, parsed_date.day
+                            days_in_month = calendar.monthrange(year, month)[1]
+                            if day > days_in_month:
+                                date_invalid_reason = f"Invalid date: day {day} exceeds days in month {month} (month {month} only has {days_in_month} days)"
+                                parsed_date = None
+                                parsed = False
+                            else:
+                                parsed = True
+                                logger.info(f"Row {idx}: Successfully parsed follow_up_at using ISO format")
+                        except Exception as e:
+                            logger.warning(f"ISO format parsing failed: {e}, trying other formats")
+                            # Try common formats
+                            date_formats = [
+                                '%Y-%m-%d %H:%M:%S',
+                                '%Y-%m-%dT%H:%M:%S',
+                                '%Y-%m-%d %H:%M',
+                                '%Y-%m-%dT%H:%M',
+                                '%Y-%m-%d',
+                                '%m/%d/%Y %H:%M:%S',
+                                '%m/%d/%Y %H:%M',
+                                '%m/%d/%Y',
+                                '%d/%m/%Y %H:%M:%S',
+                                '%d/%m/%Y %H:%M',
+                                '%d/%m/%Y'
+                            ]
+                            for fmt in date_formats:
+                                try:
+                                    parsed_date = datetime.strptime(follow_up_at, fmt)
+                                    # Validate the date is actually valid (e.g., not Nov 31)
+                                    import calendar
+                                    year, month, day = parsed_date.year, parsed_date.month, parsed_date.day
+                                    days_in_month = calendar.monthrange(year, month)[1]
+                                    if day > days_in_month:
+                                        date_invalid_reason = f"Invalid date: day {day} exceeds days in month {month} (month {month} only has {days_in_month} days)"
+                                        parsed_date = None
                                         continue
-                                else:
-                                    follow_up_at = None
-                    except:
-                        follow_up_at = None
+                                    parsed = True
+                                    logger.info(f"Row {idx}: Successfully parsed follow_up_at using format {fmt}")
+                                    break
+                                except ValueError as ve:
+                                    logger.debug(f"Row {idx}: Format {fmt} failed: {ve}")
+                                    continue
+                                except Exception as e:
+                                    logger.debug(f"Row {idx}: Format {fmt} failed with error: {e}")
+                                    continue
+                            
+                            if not parsed:
+                                date_invalid_reason = f"Date format not recognized. Accepted formats: YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS, YYYY-MM-DD HH:MM:SS, MM/DD/YYYY, DD/MM/YYYY"
+                    
+                    # If date is invalid, skip this lead and add error
+                    if not parsed or not parsed_date:
+                        error_msg = f"Row {idx}: Invalid follow_up_at date '{original_follow_up_at}'. {date_invalid_reason or 'Please use a valid date format (e.g., 2024-12-31T10:00:00 or 2024-12-31)'}. Lead not imported."
+                        logger.error(error_msg)
+                        errors.append(error_msg)
+                        continue  # Skip this lead entirely
+                    
+                    # Ensure timezone-aware datetime for Supabase timestamptz
+                    # If no timezone info, assume UTC
+                    if parsed_date.tzinfo is None:
+                        parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+                        logger.info(f"Row {idx}: Added UTC timezone to naive datetime")
+                    
+                    # Convert to UTC and format as ISO string with timezone
+                    parsed_date_utc = parsed_date.astimezone(timezone.utc)
+                    follow_up_at = parsed_date_utc.isoformat()
+                    logger.info(f"Row {idx}: Final follow_up_at value: {follow_up_at}")
+                        
+                except Exception as e:
+                    error_msg = f"Row {idx}: Unexpected error parsing follow_up_at '{original_follow_up_at}': {str(e)}. Lead not imported."
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+                    continue  # Skip this lead entirely
                 
                 # Extract additional form data (any columns not in standard fields)
                 standard_fields = {'name', 'email', 'phone_number', 'phone', 'source_platform', 'status', 'follow_up_at'}
@@ -545,15 +645,26 @@ async def import_leads_csv(
                     }
                 }
                 
+                # Add follow_up_at if it was successfully parsed (it's already in ISO format with timezone)
                 if follow_up_at:
                     lead_data["follow_up_at"] = follow_up_at
+                    logger.info(f"Row {idx}: Adding follow_up_at to lead_data: {follow_up_at}")
+                else:
+                    logger.info(f"Row {idx}: No follow_up_at to add (value was None or parsing failed)")
                 
                 # Insert lead
+                logger.info(f"Row {idx}: Inserting lead with data keys: {list(lead_data.keys())}")
+                if 'follow_up_at' in lead_data:
+                    logger.info(f"Row {idx}: follow_up_at value before insert: {lead_data.get('follow_up_at')}")
+                
                 result = supabase_admin.table("leads").insert(lead_data).execute()
                 
                 if result.data:
-                    created_leads.append(result.data[0])
+                    inserted_lead = result.data[0]
+                    logger.info(f"Row {idx}: Lead inserted successfully. follow_up_at in response: {inserted_lead.get('follow_up_at')}")
+                    created_leads.append(inserted_lead)
                 else:
+                    logger.error(f"Row {idx}: Insert returned no data. Response: {result}")
                     errors.append(f"Row {idx}: Failed to create lead")
                     
             except Exception as e:
