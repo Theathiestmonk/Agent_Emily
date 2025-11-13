@@ -10,7 +10,10 @@ import {
   Play,
   ChevronDown,
   Menu,
-  X
+  X,
+  Facebook,
+  Youtube,
+  Linkedin
 } from 'lucide-react';
 
 const Page = () => {
@@ -620,16 +623,27 @@ const Page = () => {
               <p className="text-white/70 mb-4">
                 The future of autonomous AI agents that work for you.
               </p>
-              <div className="flex space-x-4">
-                <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-[#FF4D94] transition-colors">
-                  <span className="text-white text-sm">T</span>
-                </div>
-                <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-[#FF4D94] transition-colors">
-                  <span className="text-white text-sm">L</span>
-                </div>
-                <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-[#FF4D94] transition-colors">
-                  <span className="text-white text-sm">G</span>
-                </div>
+              <div className="flex space-x-3 sm:space-x-4">
+                <a href="https://www.facebook.com/profile.php?id=61571044832864" target="_blank" rel="noopener noreferrer" className="w-8 h-8 sm:w-10 sm:h-10 bg-white/10 border-2 border-white/50 rounded-full flex items-center justify-center hover:bg-[#1877F2] hover:border-[#1877F2] transition-all duration-300 cursor-pointer shadow-[0_0_8px_rgba(255,255,255,0.3)] hover:shadow-[0_0_12px_rgba(24,119,242,0.6)]">
+                  <Facebook className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                </a>
+                <a 
+                  href="https://www.instagram.com/atsn.ai/" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="w-8 h-8 sm:w-10 sm:h-10 bg-white/10 border-2 border-white/50 rounded-full flex items-center justify-center hover:bg-[#C2185B] hover:border-[#C2185B] transition-all duration-300 cursor-pointer shadow-[0_0_8px_rgba(255,255,255,0.3)] hover:shadow-[0_0_12px_rgba(194,24,91,0.6)]"
+                >
+                  <i className="fa-brands fa-instagram text-white text-lg sm:text-2xl"></i>
+                </a>
+                <a href="https://x.com/atsn_ai" target="_blank" rel="noopener noreferrer" className="w-8 h-8 sm:w-10 sm:h-10 bg-white/10 border-2 border-white/50 rounded-full flex items-center justify-center hover:bg-black hover:border-black transition-all duration-300 cursor-pointer shadow-[0_0_8px_rgba(255,255,255,0.3)] hover:shadow-[0_0_12px_rgba(0,0,0,0.6)]">
+                  <i className="fa-brands fa-x-twitter text-white text-base sm:text-xl"></i>
+                </a>
+                <a href="https://www.youtube.com/@ATSNAI" target="_blank" rel="noopener noreferrer" className="w-8 h-8 sm:w-10 sm:h-10 bg-white/10 border-2 border-white/50 rounded-full flex items-center justify-center hover:bg-[#FF0000] hover:border-[#FF0000] transition-all duration-300 cursor-pointer shadow-[0_0_8px_rgba(255,255,255,0.3)] hover:shadow-[0_0_12px_rgba(255,0,0,0.6)]">
+                  <Youtube className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                </a>
+                <a href="https://www.linkedin.com/company/atsn-ai/" target="_blank" rel="noopener noreferrer" className="w-8 h-8 sm:w-10 sm:h-10 bg-white/10 border-2 border-white/50 rounded-full flex items-center justify-center hover:bg-[#0077B5] hover:border-[#0077B5] transition-all duration-300 cursor-pointer shadow-[0_0_8px_rgba(255,255,255,0.3)] hover:shadow-[0_0_12px_rgba(0,119,181,0.6)]">
+                  <Linkedin className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                </a>
               </div>
             </div>
             

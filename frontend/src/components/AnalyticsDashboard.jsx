@@ -4,6 +4,7 @@ import { useNotifications } from '../contexts/NotificationContext'
 import { useSocialMediaCache } from '../contexts/SocialMediaCacheContext'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
+import MobileNavigation from './MobileNavigation'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import WebsiteAnalysisDashboard from './WebsiteAnalysisDashboard'
@@ -41,10 +42,21 @@ const AnalyticsDashboard = () => {
   const [insightsData, setInsightsData] = useState({})
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: null })
   const [activeTab, setActiveTab] = useState('website') // 'social' or 'website'
+  const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 768)
   const tooltipRef = useRef(null)
 
   useEffect(() => {
     fetchData()
+  }, [])
+
+  // Track window size for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      setIsLargeScreen(window.innerWidth >= 768)
+    }
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   const fetchData = async () => {
@@ -262,54 +274,66 @@ const AnalyticsDashboard = () => {
   const hasPosts = Object.keys(posts).length > 0
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white overflow-x-hidden">
       {/* Tooltip */}
       <Tooltip />
       
       {/* Side Navbar */}
       <SideNavbar />
+      <MobileNavigation />
       
       {/* Main Content */}
-      <div className="ml-48 xl:ml-64 flex flex-col min-h-screen">
-        {/* Fixed Header */}
-        <div className="fixed top-0 right-0 left-48 xl:left-64 bg-white shadow-sm border-b z-30" style={{position: 'fixed', zIndex: 30}}>
-          <div className="px-6 py-4">
-            <div className="flex justify-between items-center">
+      <div className="ml-0 md:ml-48 xl:ml-64 flex flex-col min-h-screen pt-16 md:pt-0 overflow-x-hidden max-w-full">
+        {/* Header - Not fixed on mobile, fixed on desktop */}
+        <div className="md:fixed md:top-0 md:right-0 md:left-48 xl:left-64 bg-white shadow-sm border-b md:z-30 max-w-full">
+          <div className="px-1.5 sm:px-2 md:px-4 lg:px-6 pb-1.5 sm:pb-2 md:pb-3 lg:pb-4 max-w-full">
+            <div className="flex flex-row items-center gap-1 sm:gap-1.5 md:gap-2 lg:gap-4 flex-nowrap max-w-full">
             {/* Tabs */}
-              <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
+              <div className="flex space-x-0.5 sm:space-x-0.5 md:space-x-1 bg-gray-100 p-0.5 sm:p-0.5 md:p-1 rounded-lg flex-shrink-0 min-w-0">
                 <button
                   onClick={() => setActiveTab('website')}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                  className={`flex items-center justify-center space-x-0.5 sm:space-x-1 md:space-x-2 px-1 sm:px-1.5 md:px-2 lg:px-4 py-1 sm:py-1.5 md:py-2 rounded-md text-[9px] sm:text-[10px] md:text-xs lg:text-sm font-medium transition-all duration-200 flex-shrink-0 ${
                     activeTab === 'website'
                       ? 'bg-white text-purple-600 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  <Globe className="w-4 h-4" />
-                  <span>Website Analysis</span>
+                  <Globe className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 flex-shrink-0" />
+                  <span className="hidden sm:inline md:hidden truncate">Website</span>
+                  <span className="hidden md:inline truncate">Website Analysis</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('social')}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                  className={`flex items-center justify-center space-x-0.5 sm:space-x-1 md:space-x-2 px-1 sm:px-1.5 md:px-2 lg:px-4 py-1 sm:py-1.5 md:py-2 rounded-md text-[9px] sm:text-[10px] md:text-xs lg:text-sm font-medium transition-all duration-200 flex-shrink-0 ${
                     activeTab === 'social'
                       ? 'bg-white text-purple-600 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  <BarChart3 className="w-4 h-4" />
-                  <span>Social Media</span>
+                  <BarChart3 className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 flex-shrink-0" />
+                  <span className="hidden sm:inline md:hidden truncate">Social</span>
+                  <span className="hidden md:inline truncate">Social Media</span>
                 </button>
               </div>
               
               {/* Refresh Button */}
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center flex-shrink-0 ml-auto min-w-0">
                 <button
                   onClick={handleRefresh}
                   disabled={refreshing}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all duration-200 disabled:opacity-50"
+                  className={`flex items-center justify-center bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 ${
+                    isLargeScreen 
+                      ? 'px-2 sm:px-2.5 md:px-3 lg:px-4 py-1 sm:py-1.5 md:py-1.5 lg:py-2 gap-1 sm:gap-1.5 md:gap-2' 
+                      : 'w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9'
+                  }`}
+                  title={refreshing ? 'Refreshing...' : 'Refresh'}
                 >
-                  <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                  <span>Refresh</span>
+                  <RefreshCw className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 flex-shrink-0" />
+                  {isLargeScreen && (
+                    <span className="text-[10px] sm:text-xs md:text-sm font-medium whitespace-nowrap">
+                      {refreshing ? 'Refreshing...' : 'Refresh'}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
@@ -317,7 +341,7 @@ const AnalyticsDashboard = () => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 pt-24 p-6">
+        <div className="flex-1 pt-0 md:pt-20 lg:pt-24 p-2 sm:p-3 md:p-4 lg:p-6 overflow-x-hidden max-w-full">
           {activeTab === 'social' ? (
             loading ? (
               <>
@@ -337,8 +361,8 @@ const AnalyticsDashboard = () => {
                     animation: loading-dots 1.4s infinite 0.4s;
                   }
                 `}} />
-                <div className="flex items-center justify-center min-h-[400px]">
-                  <p className="text-gray-600 text-lg">
+                <div className="flex items-center justify-center min-h-[300px] sm:min-h-[350px] md:min-h-[400px]">
+                  <p className="text-gray-600 text-xs sm:text-sm md:text-base lg:text-lg">
                     Loading social media analytics
                     <span className="inline-block w-6 ml-1">
                       <span className="loading-dot-1">.</span>
@@ -351,70 +375,70 @@ const AnalyticsDashboard = () => {
             ) : (
               <>
                 {platformsWithPosts.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-96">
-                    <BarChart3 className="w-16 h-16 text-gray-300 mb-4" />
-                    <h3 className="text-xl font-semibold text-gray-600 mb-2">No Analytics Data</h3>
-                    <p className="text-gray-500 text-center max-w-md">
+                  <div className="flex flex-col items-center justify-center h-64 sm:h-80 md:h-96 px-3 sm:px-4">
+                    <BarChart3 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 text-gray-300 mb-3 sm:mb-4" />
+                    <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-600 mb-1.5 sm:mb-2 text-center">No Analytics Data</h3>
+                    <p className="text-xs sm:text-sm md:text-base text-gray-500 text-center max-w-md px-2">
                       Connect your social media accounts to see performance insights and analytics.
                     </p>
                   </div>
                 ) : (
-            <div>
+            <div className="overflow-x-hidden max-w-full">
               {/* Performance Insights Cards */}
               {insightsData && Object.keys(insightsData).length > 0 && (
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-6">Performance Insights</h2>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                <div className="overflow-x-hidden max-w-full">
+                  <h2 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 mb-3 sm:mb-4 md:mb-6">Performance Insights</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 md:gap-5 lg:gap-6 max-w-full">
                     {Object.entries(insightsData).map(([platform, data]) => {
                       const theme = getPlatformCardTheme(platform)
                       const maxValue = Math.max(...data.metrics.flatMap(metric => metric.data))
                       
                       return (
-                        <div key={platform} className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm hover:shadow-lg transition-all duration-300`}>
+                        <div key={platform} className={`${theme.bg} ${theme.border} border rounded-lg sm:rounded-xl shadow-sm hover:shadow-lg transition-all duration-300`}>
                           {/* Card Header */}
-                          <div className="p-4 border-b border-gray-200">
+                          <div className="p-2 sm:p-2.5 md:p-3 lg:p-4 border-b border-gray-200">
                             <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-3">
-                                <div className={`w-10 h-10 ${theme.iconBg} rounded-lg flex items-center justify-center`}>
-                                  <div className="text-white">
+                              <div className="flex items-center space-x-1.5 sm:space-x-2 md:space-x-3 min-w-0 flex-1">
+                                <div className={`w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 lg:w-10 lg:h-10 ${theme.iconBg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                                  <div className="text-white scale-75 sm:scale-90 md:scale-100">
                                     {getPlatformIcon(platform)}
                                   </div>
                                 </div>
-                                <div>
-                                  <h3 className={`font-semibold capitalize ${theme.text}`}>
+                                <div className="min-w-0 flex-1">
+                                  <h3 className={`text-xs sm:text-sm md:text-base font-semibold capitalize ${theme.text} truncate`}>
                                     {platform} Insights
                                   </h3>
-                                  <p className="text-sm text-gray-500">Last 5 posts performance</p>
+                                  <p className="text-[10px] sm:text-xs md:text-sm text-gray-500 truncate">Last 5 posts performance</p>
                                 </div>
                               </div>
-                              <div className="flex items-center space-x-1">
-                                <BarChart3 className="w-4 h-4 text-gray-500" />
-                                <span className="text-xs text-gray-600">Analytics</span>
+                              <div className="flex items-center space-x-0.5 sm:space-x-1 flex-shrink-0 ml-1 sm:ml-2">
+                                <BarChart3 className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5 lg:w-4 lg:h-4 text-gray-500" />
+                                <span className="text-[9px] sm:text-[10px] md:text-xs text-gray-600 hidden sm:inline">Analytics</span>
                               </div>
                             </div>
                           </div>
 
                           {/* Bar Chart */}
-                          <div className="p-4">
+                          <div className="p-2 sm:p-2.5 md:p-3 lg:p-4">
                             {/* Grouped Bar Chart */}
-                            <div className="space-y-4">
+                            <div className="space-y-2 sm:space-y-2.5 md:space-y-3 lg:space-y-4">
                               <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-gray-700">Performance Metrics</span>
-                                <span className="text-xs text-gray-500">Last 5 posts</span>
+                                <span className="text-[10px] sm:text-xs md:text-sm font-medium text-gray-700">Performance Metrics</span>
+                                <span className="text-[9px] sm:text-[10px] md:text-xs text-gray-500">Last 5 posts</span>
                               </div>
                               
                               {/* Grouped Bar Chart */}
-                              <div className="space-y-2">
+                              <div className="space-y-1.5 sm:space-y-2">
                                 {/* Chart Container */}
-                                <div className="flex items-end space-x-2 h-32">
+                                <div className="flex items-end space-x-0.5 sm:space-x-1 md:space-x-1.5 lg:space-x-2 h-20 sm:h-24 md:h-28 lg:h-32 overflow-x-hidden max-w-full">
                                   {data.posts.map((post, postIndex) => {
                                     const maxValue = Math.max(...data.metrics.map(metric => Math.max(...metric.data)))
                                     const colors = ['bg-gradient-to-br from-purple-300 to-purple-400', 'bg-violet-500', 'bg-blue-500']
                                     
                                     return (
-                                      <div key={postIndex} className="flex-1 flex flex-col items-center space-y-1">
+                                      <div key={postIndex} className="flex-1 flex flex-col items-center space-y-0.5 sm:space-y-1 min-w-[35px] sm:min-w-[40px] md:min-w-[45px] lg:min-w-[50px]">
                                         {/* Bars for each metric */}
-                                        <div className="flex items-end space-x-1 h-24 w-full">
+                                        <div className="flex items-end space-x-0.5 sm:space-x-0.5 md:space-x-1 h-16 sm:h-20 md:h-22 lg:h-24 w-full">
                                           {data.metrics.map((metric, metricIndex) => {
                                             const value = metric.data[postIndex] || 0
                                             const height = maxValue > 0 ? (value / maxValue) * 100 : 0
@@ -437,7 +461,7 @@ const AnalyticsDashboard = () => {
                                         </div>
                                         
                                         {/* Post Date Label */}
-                                        <div className="text-xs text-gray-400 text-center">
+                                        <div className="text-[9px] sm:text-[10px] md:text-xs text-gray-400 text-center truncate w-full">
                                           {(() => {
                                             const postDate = post.created_time || post.created_at || post.published_at || post.scheduled_date || post.date || post.timestamp
                                             
@@ -463,13 +487,13 @@ const AnalyticsDashboard = () => {
                                 </div>
                                 
                                 {/* Legend */}
-                                <div className="flex justify-center space-x-4 mt-2">
+                                <div className="flex justify-center flex-wrap gap-1.5 sm:gap-2 md:gap-3 lg:gap-4 mt-1.5 sm:mt-2">
                                   {data.metrics.map((metric, index) => {
                                     const colors = ['bg-gradient-to-br from-purple-300 to-purple-400', 'bg-violet-500', 'bg-blue-500']
                                     return (
-                                      <div key={index} className="flex items-center space-x-1">
-                                        <div className={`w-3 h-3 ${colors[index]} rounded-sm`}></div>
-                                        <span className="text-xs text-gray-600">{metric.name}</span>
+                                      <div key={index} className="flex items-center space-x-0.5 sm:space-x-1">
+                                        <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 ${colors[index]} rounded-sm`}></div>
+                                        <span className="text-[9px] sm:text-[10px] md:text-xs text-gray-600">{metric.name}</span>
                                       </div>
                                     )
                                   })}
@@ -478,18 +502,18 @@ const AnalyticsDashboard = () => {
                             </div>
 
                             {/* Summary Stats */}
-                            <div className="mt-4 pt-4 border-t border-gray-200">
-                              <div className="grid grid-cols-3 gap-4 text-center">
+                            <div className="mt-2 sm:mt-2.5 md:mt-3 lg:mt-4 pt-2 sm:pt-2.5 md:pt-3 lg:pt-4 border-t border-gray-200">
+                              <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:gap-3 lg:gap-4 text-center">
                                 {data.metrics.map((metric, index) => {
                                   const total = metric.data.reduce((a, b) => a + b, 0)
                                   const avg = total / metric.data.length
                                   return (
-                                    <div key={index} className="space-y-1">
-                                      <div className="text-xs text-gray-500">{metric.name}</div>
-                                      <div className={`text-sm font-semibold ${theme.text}`}>
+                                    <div key={index} className="space-y-0.5 sm:space-y-0.5 md:space-y-1">
+                                      <div className="text-[9px] sm:text-[10px] md:text-xs text-gray-500 truncate">{metric.name}</div>
+                                      <div className={`text-[10px] sm:text-xs md:text-sm font-semibold ${theme.text}`}>
                                         {formatEngagement(Math.round(avg))}
                                       </div>
-                                      <div className="text-xs text-gray-400">avg</div>
+                                      <div className="text-[9px] sm:text-[10px] md:text-xs text-gray-400">avg</div>
                                     </div>
                                   )
                                 })}
@@ -505,9 +529,9 @@ const AnalyticsDashboard = () => {
             </div>
           )}
           
-          {/* Last Updated Timestamp - Bottom Right */}
+          {/* Last Updated Timestamp - Bottom Right - Hidden on mobile */}
           {lastRefresh && (
-            <div className="fixed bottom-4 right-4 text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border">
+            <div className="hidden sm:flex fixed bottom-4 right-4 text-xs sm:text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow-sm border">
               Last updated: {lastRefresh.toLocaleTimeString()}
             </div>
           )}
@@ -517,9 +541,9 @@ const AnalyticsDashboard = () => {
             <WebsiteAnalysisDashboard />
           )}
           
-          {/* Last Updated Timestamp - Bottom Right */}
+          {/* Last Updated Timestamp - Bottom Right - Hidden on mobile */}
           {lastRefresh && activeTab === 'social' && (
-            <div className="fixed bottom-4 right-4 text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border">
+            <div className="hidden sm:flex fixed bottom-4 right-4 text-xs sm:text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow-sm border">
               Last updated: {lastRefresh.toLocaleTimeString()}
             </div>
           )}
