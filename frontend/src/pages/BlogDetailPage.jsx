@@ -7,7 +7,6 @@ import {
   FolderOpen, 
   Clock,
   ArrowLeft,
-  Loader2,
   FileText
 } from 'lucide-react';
 
@@ -15,8 +14,8 @@ const BlogDetailPage = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
   const [blog, setBlog] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false);
 
   useEffect(() => {
     fetchBlog();
@@ -24,8 +23,8 @@ const BlogDetailPage = () => {
 
   const fetchBlog = async () => {
     try {
-      setLoading(true);
       setError(null);
+      setHasAttemptedFetch(false);
       // Decode the slug - React Router may have already decoded it, but handle both cases
       let decodedSlug = slug;
       try {
@@ -48,7 +47,7 @@ const BlogDetailPage = () => {
       console.error('Error fetching blog:', err);
       setError(err.message || 'Failed to load blog. Please try again later.');
     } finally {
-      setLoading(false);
+      setHasAttemptedFetch(true);
     }
   };
 
@@ -62,18 +61,8 @@ const BlogDetailPage = () => {
     });
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-[#9E005C] mx-auto mb-4" />
-          <p className="text-gray-600">Loading blog...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !blog) {
+  // Only show error if we've attempted to fetch and there's an error or no blog
+  if (hasAttemptedFetch && (error || !blog)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center max-w-md mx-auto px-4">
@@ -90,6 +79,64 @@ const BlogDetailPage = () => {
         </div>
       </div>
     );
+  }
+
+  // Skeleton loading component for blog detail
+  const BlogDetailSkeleton = () => (
+    <div className="min-h-screen bg-gray-50">
+      <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 w-full animate-pulse">
+        {/* Featured Image Skeleton */}
+        <div className="mb-8 rounded-lg overflow-hidden w-full h-64 bg-gradient-to-br from-[#9E005C]/20 to-[#FF4D94]/20"></div>
+        
+        {/* Title Skeleton */}
+        <div className="mb-4 sm:mb-6 space-y-3">
+          <div className="h-8 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded w-3/4"></div>
+          <div className="h-8 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded w-1/2"></div>
+        </div>
+        
+        {/* Meta Information Skeleton */}
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-6 sm:mb-8 pb-4 sm:pb-6 border-b border-gray-200">
+          <div className="h-4 w-32 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded"></div>
+          <div className="h-4 w-24 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded"></div>
+          <div className="h-4 w-20 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded"></div>
+        </div>
+        
+        {/* Excerpt Skeleton */}
+        <div className="mb-6 sm:mb-8 p-4 sm:p-6 bg-gradient-to-r from-[#9E005C]/10 to-[#FF4D94]/10 rounded-r-lg space-y-2">
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-full"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-5/6"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-4/6"></div>
+        </div>
+        
+        {/* Categories and Tags Skeleton */}
+        <div className="mb-8 flex flex-wrap gap-4">
+          <div className="h-6 w-24 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded"></div>
+          <div className="h-6 w-20 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded-full"></div>
+          <div className="h-6 w-16 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded-full"></div>
+        </div>
+        
+        {/* Content Skeleton */}
+        <div className="space-y-4">
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-full"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-full"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-5/6"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-full"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-4/6"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-full"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-3/4"></div>
+        </div>
+        
+        {/* Footer Skeleton */}
+        <div className="mt-12 pt-8 border-t border-gray-200">
+          <div className="h-6 w-32 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded"></div>
+        </div>
+      </article>
+    </div>
+  );
+
+  // Show skeleton while loading
+  if (!blog && !hasAttemptedFetch) {
+    return <BlogDetailSkeleton />;
   }
 
   return (

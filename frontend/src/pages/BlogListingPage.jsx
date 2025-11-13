@@ -7,7 +7,6 @@ import {
   FolderOpen, 
   Clock,
   Search,
-  Loader2,
   FileText,
   ChevronRight,
   Menu,
@@ -56,6 +55,9 @@ const BlogListingPage = () => {
   }, []);
 
   const fetchBlogs = async () => {
+    const startTime = Date.now();
+    const minLoadingTime = 2000; // Minimum 2 seconds for better UX
+    
     try {
       setLoading(true);
       setError(null);
@@ -71,10 +73,27 @@ const BlogListingPage = () => {
         console.log('Sample blog status:', response.blogs[0].status);
       }
       setBlogs(response.blogs || []);
+      
+      // Calculate elapsed time
+      const elapsedTime = Date.now() - startTime;
+      
+      // Ensure minimum loading time (500ms) for better UX, but don't delay if it already took longer
+      if (elapsedTime < minLoadingTime) {
+        const remainingTime = minLoadingTime - elapsedTime;
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+      }
+      
+      setLoading(false);
     } catch (err) {
       console.error('Error fetching blogs:', err);
       setError('Failed to load blogs. Please try again later.');
-    } finally {
+      
+      // Calculate elapsed time for error case too
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minLoadingTime) {
+        const remainingTime = minLoadingTime - elapsedTime;
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+      }
       setLoading(false);
     }
   };
@@ -106,23 +125,69 @@ const BlogListingPage = () => {
   const displayedBlogs = filteredBlogs.slice(0, displayCount);
   const hasMore = filteredBlogs.length > displayCount;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-[#9E005C] mx-auto mb-4" />
-          <p className="text-gray-600">Loading blogs...</p>
+  // Skeleton loading component
+  const BlogSkeleton = () => (
+    <article className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-100 animate-pulse">
+      {/* Image skeleton */}
+      <div className="h-40 sm:h-48 bg-gradient-to-br from-[#9E005C]/20 to-[#FF4D94]/20"></div>
+      
+      {/* Content skeleton */}
+      <div className="p-4 sm:p-5">
+        {/* Category skeleton */}
+        <div className="mb-2 sm:mb-3">
+          <div className="h-5 w-20 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded-full"></div>
         </div>
+        
+        {/* Title skeleton */}
+        <div className="mb-3 space-y-2">
+          <div className="h-5 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded w-full"></div>
+          <div className="h-5 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded w-3/4"></div>
+        </div>
+        
+        {/* Excerpt skeleton */}
+        <div className="mb-3 sm:mb-4 space-y-2">
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-full"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-5/6"></div>
+        </div>
+        
+        {/* Meta skeleton */}
+        <div className="flex items-center gap-3 mb-3 sm:mb-4">
+          <div className="h-4 w-24 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded"></div>
+          <div className="h-4 w-16 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded"></div>
+        </div>
+        
+        {/* Read more skeleton */}
+        <div className="h-4 w-20 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded"></div>
       </div>
-    );
-  }
+    </article>
+  );
 
   return (
     <div className="min-h-screen bg-[#F6F6F6] relative">
-      {/* Background Gradient - Same as Landing Page */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#9E005C]/10 via-[#FF4D94]/10 to-[#3F2B96]/10"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(158,0,92,0.1),transparent_50%)]"></div>
-      <div className="relative z-10">
+      {loading && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 sm:pt-24 pb-8">
+          {/* Search Bar Skeleton */}
+          <div className="mb-4 sm:mb-8 flex justify-center sm:justify-end">
+            <div className="relative w-full sm:w-64">
+              <div className="h-10 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded-full animate-pulse"></div>
+            </div>
+          </div>
+          
+          {/* Blog Grid Skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 pt-2 sm:pt-6">
+            {[...Array(9)].map((_, index) => (
+              <BlogSkeleton key={index} />
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {!loading && (
+        <>
+          {/* Background Gradient - Same as Landing Page */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#9E005C]/10 via-[#FF4D94]/10 to-[#3F2B96]/10"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(158,0,92,0.1),transparent_50%)]"></div>
+          <div className="relative z-10">
       {/* Navigation Header - Same as Landing Page */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-xl border-b border-[#2E2E2E]/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
@@ -372,6 +437,8 @@ const BlogListingPage = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
       </div>
       </div>
+        </>
+      )}
     </div>
   );
 };
