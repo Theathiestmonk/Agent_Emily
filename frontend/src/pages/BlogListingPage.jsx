@@ -127,7 +127,10 @@ const BlogListingPage = () => {
 
   // Skeleton loading component
   const BlogSkeleton = () => (
-    <article className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-100 animate-pulse">
+    <article className="bg-white/20 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden border border-white/30 animate-pulse" style={{
+      boxShadow: '0 8px 32px 0 rgba(158, 0, 92, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%)'
+    }}>
       {/* Image skeleton */}
       <div className="h-40 sm:h-48 bg-gradient-to-br from-[#9E005C]/20 to-[#FF4D94]/20"></div>
       
@@ -335,7 +338,11 @@ const BlogListingPage = () => {
             {displayedBlogs.map((blog) => (
               <article
                 key={blog.id}
-                className="bg-white rounded-lg shadow-md md:hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 group md:hover:scale-105 md:hover:-translate-y-2 relative z-0 md:group-hover:z-10"
+                className="bg-white/20 backdrop-blur-xl rounded-xl shadow-2xl md:hover:shadow-2xl transition-all duration-300 overflow-hidden border border-white/30 group md:hover:scale-105 md:hover:-translate-y-2 relative z-0 md:group-hover:z-10"
+                style={{
+                  boxShadow: '0 8px 32px 0 rgba(158, 0, 92, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%)'
+                }}
               >
                  {/* Featured Image or Placeholder */}
                  <div className="h-40 sm:h-48 overflow-hidden">
