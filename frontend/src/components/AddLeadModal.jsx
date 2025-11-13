@@ -1,11 +1,13 @@
 import React, { useState } from 'react'
-import { X, UserPlus, Mail, Phone, Globe, Loader2, AlertCircle } from 'lucide-react'
+import { X, UserPlus, Mail, Phone, Globe, Loader2, AlertCircle, Upload } from 'lucide-react'
 import { leadsAPI } from '../services/leads'
 import { useNotifications } from '../contexts/NotificationContext'
+import ImportLeadsModal from './ImportLeadsModal'
 
 const AddLeadModal = ({ isOpen, onClose, onSuccess }) => {
   const { showSuccess, showError } = useNotifications()
   const [loading, setLoading] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -171,6 +173,19 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess }) => {
               <X className="w-6 h-6" />
             </button>
           </div>
+          
+          {/* CSV Import Option */}
+          <div className="mt-4 pt-4 border-t border-white/20">
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              disabled={loading}
+              className="flex items-center space-x-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors disabled:opacity-50 text-sm font-medium"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Import from CSV</span>
+            </button>
+          </div>
         </div>
 
         {/* Form */}
@@ -276,6 +291,11 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess }) => {
                 <option value="manual">Manual Entry</option>
                 <option value="facebook">Facebook</option>
                 <option value="instagram">Instagram</option>
+                <option value="walk_ins">Walk Ins</option>
+                <option value="referral">Referral</option>
+                <option value="email">Email</option>
+                <option value="website">Website</option>
+                <option value="phone_call">Phone Call</option>
                 <option value="other">Other</option>
               </select>
             </div>
@@ -374,6 +394,20 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess }) => {
           </div>
         </form>
       </div>
+      
+      {/* Import CSV Modal */}
+      <ImportLeadsModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={async (file) => {
+          if (onSuccess) {
+            // Handle CSV import through parent component
+            // We'll need to pass this handler from LeadsDashboard
+            await onSuccess({ type: 'csv', file })
+          }
+          setShowImportModal(false)
+        }}
+      />
     </div>
   )
 }

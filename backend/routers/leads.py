@@ -2,7 +2,7 @@
 Leads Router - Handle lead management, webhooks, and conversations
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Request, Header, status
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Header, status, UploadFile, File
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -13,6 +13,8 @@ import os
 import hmac
 import hashlib
 import json
+import csv
+import io
 
 from agents.lead_management_agent import LeadManagementAgent
 from services.whatsapp_service import WhatsAppService
@@ -90,6 +92,7 @@ class LeadResponse(BaseModel):
     source_platform: str
     created_at: str
     updated_at: str
+    follow_up_at: Optional[str] = None
 
 class ConversationResponse(BaseModel):
     id: str
@@ -103,7 +106,7 @@ class ConversationResponse(BaseModel):
 
 class UpdateLeadStatusRequest(BaseModel):
     status: str
-    reason: Optional[str] = None
+    remarks: Optional[str] = None
 
 class SendMessageRequest(BaseModel):
     message: str
@@ -441,6 +444,137 @@ async def create_lead(
         logger.error(f"Error creating lead: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/import-csv")
+async def import_leads_csv(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Import leads from CSV file"""
+    try:
+        # Validate file type
+        if not file.filename.endswith('.csv'):
+            raise HTTPException(status_code=400, detail="File must be a CSV file")
+        
+        # Read file content
+        contents = await file.read()
+        file_content = contents.decode('utf-8')
+        
+        # Parse CSV
+        csv_reader = csv.DictReader(io.StringIO(file_content))
+        rows = list(csv_reader)
+        
+        if not rows:
+            raise HTTPException(status_code=400, detail="CSV file is empty or has no data rows")
+        
+        # Validate required columns
+        required_columns = ['name']
+        first_row = rows[0]
+        missing_columns = [col for col in required_columns if col not in first_row]
+        if missing_columns:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"CSV file is missing required columns: {', '.join(missing_columns)}"
+            )
+        
+        # Process rows and create leads
+        created_leads = []
+        errors = []
+        
+        for idx, row in enumerate(rows, start=2):  # Start at 2 because row 1 is header
+            try:
+                # Extract data from CSV row
+                name = row.get('name', '').strip()
+                if not name:
+                    errors.append(f"Row {idx}: Name is required")
+                    continue
+                
+                email = row.get('email', '').strip() or None
+                phone_number = row.get('phone_number', '').strip() or row.get('phone', '').strip() or None
+                source_platform = row.get('source_platform', 'manual').strip() or 'manual'
+                status = row.get('status', 'new').strip() or 'new'
+                follow_up_at = row.get('follow_up_at', '').strip() or None
+                
+                # Parse follow_up_at if provided
+                if follow_up_at:
+                    try:
+                        # Try to parse various date formats
+                        try:
+                            from dateutil import parser
+                            follow_up_at = parser.parse(follow_up_at).isoformat()
+                        except ImportError:
+                            # Fallback to datetime if dateutil not available
+                            try:
+                                # Try ISO format first
+                                follow_up_at = datetime.fromisoformat(follow_up_at.replace('Z', '+00:00')).isoformat()
+                            except:
+                                # Try common formats
+                                for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']:
+                                    try:
+                                        follow_up_at = datetime.strptime(follow_up_at, fmt).isoformat()
+                                        break
+                                    except:
+                                        continue
+                                else:
+                                    follow_up_at = None
+                    except:
+                        follow_up_at = None
+                
+                # Extract additional form data (any columns not in standard fields)
+                standard_fields = {'name', 'email', 'phone_number', 'phone', 'source_platform', 'status', 'follow_up_at'}
+                form_data = {k: v for k, v in row.items() if k not in standard_fields and v.strip()}
+                
+                # Validate that at least email or phone is provided
+                if not email and not phone_number:
+                    errors.append(f"Row {idx}: Either email or phone_number is required")
+                    continue
+                
+                # Create lead data
+                lead_data = {
+                    "user_id": current_user["id"],
+                    "name": name,
+                    "email": email,
+                    "phone_number": phone_number,
+                    "source_platform": source_platform,
+                    "status": status,
+                    "form_data": form_data,
+                    "metadata": {
+                        "created_manually": True,
+                        "imported_from_csv": True,
+                        "csv_filename": file.filename,
+                        "created_at": datetime.now().isoformat()
+                    }
+                }
+                
+                if follow_up_at:
+                    lead_data["follow_up_at"] = follow_up_at
+                
+                # Insert lead
+                result = supabase_admin.table("leads").insert(lead_data).execute()
+                
+                if result.data:
+                    created_leads.append(result.data[0])
+                else:
+                    errors.append(f"Row {idx}: Failed to create lead")
+                    
+            except Exception as e:
+                logger.error(f"Error processing row {idx}: {e}")
+                errors.append(f"Row {idx}: {str(e)}")
+        
+        return {
+            "success": True,
+            "total_rows": len(rows),
+            "created": len(created_leads),
+            "errors": len(errors),
+            "error_details": errors[:10],  # Limit error details to first 10
+            "message": f"Successfully imported {len(created_leads)} out of {len(rows)} leads"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error importing CSV: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to import CSV: {str(e)}")
+
 @router.get("", response_model=List[LeadResponse])
 async def get_leads(
     status: Optional[str] = Query(None),
@@ -509,7 +643,7 @@ async def update_lead_status(
             "old_status": lead.data[0]["status"],
             "new_status": request.status,
             "changed_by": "user",
-            "reason": request.reason
+            "reason": request.remarks  # Store remarks as reason in history
         }).execute()
         
         return {"success": True, "status": request.status}
@@ -518,6 +652,98 @@ async def update_lead_status(
         raise
     except Exception as e:
         logger.error(f"Error updating lead status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{lead_id}/status-history")
+async def get_status_history(
+    lead_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get status history for a lead"""
+    try:
+        # Verify lead belongs to user
+        lead = supabase_admin.table("leads").select("*").eq("id", lead_id).eq("user_id", current_user["id"]).execute()
+        if not lead.data:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Get status history
+        result = supabase_admin.table("lead_status_history").select("*").eq("lead_id", lead_id).order("created_at", desc=True).execute()
+        
+        return result.data if result.data else []
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting status history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class UpdateFollowUpRequest(BaseModel):
+    follow_up_at: Optional[str] = None  # ISO format datetime string
+
+@router.put("/{lead_id}/follow-up")
+async def update_follow_up(
+    lead_id: str,
+    request: UpdateFollowUpRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update follow-up date and time for a lead"""
+    try:
+        # Verify lead belongs to user
+        lead = supabase_admin.table("leads").select("*").eq("id", lead_id).eq("user_id", current_user["id"]).execute()
+        if not lead.data:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Update follow-up date
+        update_data = {
+            "updated_at": datetime.now().isoformat()
+        }
+        
+        if request.follow_up_at:
+            update_data["follow_up_at"] = request.follow_up_at
+        else:
+            update_data["follow_up_at"] = None
+        
+        result = supabase_admin.table("leads").update(update_data).eq("id", lead_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to update follow-up")
+        
+        return {"success": True, "follow_up_at": result.data[0].get("follow_up_at")}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating follow-up: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{lead_id}")
+async def delete_lead(
+    lead_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a lead"""
+    try:
+        # Verify lead belongs to user
+        lead = supabase_admin.table("leads").select("*").eq("id", lead_id).eq("user_id", current_user["id"]).execute()
+        if not lead.data:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Delete related data first (status history, conversations)
+        supabase_admin.table("lead_status_history").delete().eq("lead_id", lead_id).execute()
+        supabase_admin.table("lead_conversations").delete().eq("lead_id", lead_id).execute()
+        
+        # Delete the lead
+        result = supabase_admin.table("leads").delete().eq("id", lead_id).execute()
+        
+        if result.data:
+            return {"success": True, "message": "Lead deleted successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to delete lead")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting lead: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Conversation Endpoints

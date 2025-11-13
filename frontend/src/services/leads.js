@@ -66,16 +66,62 @@ export const leadsAPI = {
   },
 
   /**
+   * Get status history for a lead
+   * @param {string} leadId - Lead ID
+   * @returns {Promise} API response with status history array
+   */
+  getStatusHistory: (leadId) => {
+    return api.get(`/leads/${leadId}/status-history`)
+  },
+
+  /**
    * Update lead status
    * @param {string} leadId - Lead ID
    * @param {string} status - New status (new, contacted, responded, qualified, converted, lost)
-   * @param {string} reason - Optional reason for status change
+   * @param {string} remarks - Optional remarks for status change
    * @returns {Promise} API response
    */
-  updateLeadStatus: (leadId, status, reason = null) => {
+  updateLeadStatus: (leadId, status, remarks = null) => {
     return api.put(`/leads/${leadId}/status`, {
       status,
-      reason
+      remarks
+    })
+  },
+
+  /**
+   * Delete a lead
+   * @param {string} leadId - Lead ID
+   * @returns {Promise} API response
+   */
+  deleteLead: (leadId) => {
+    return api.delete(`/leads/${leadId}`)
+  },
+
+  /**
+   * Update follow-up date and time for a lead
+   * @param {string} leadId - Lead ID
+   * @param {string|null} followUpAt - ISO format datetime string or null to clear
+   * @returns {Promise} API response
+   */
+  updateFollowUp: (leadId, followUpAt) => {
+    return api.put(`/leads/${leadId}/follow-up`, {
+      follow_up_at: followUpAt
+    })
+  },
+
+  /**
+   * Import leads from CSV file
+   * @param {File} file - CSV file to import
+   * @returns {Promise} API response with import results
+   */
+  importLeadsCSV: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    return api.post('/leads/import-csv', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     })
   },
 

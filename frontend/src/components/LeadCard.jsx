@@ -10,10 +10,14 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Trash2,
+  Globe,
+  Users,
+  LogIn
 } from 'lucide-react'
 
-const LeadCard = ({ lead, onClick }) => {
+const LeadCard = ({ lead, onClick, onDelete }) => {
   const getStatusConfig = (status) => {
     const configs = {
       new: {
@@ -82,6 +86,19 @@ const LeadCard = ({ lead, onClick }) => {
         return <Facebook className="w-3.5 h-3.5" />
       case 'instagram':
         return <Instagram className="w-3.5 h-3.5" />
+      case 'walk_ins':
+      case 'walk-ins':
+        return <LogIn className="w-3.5 h-3.5" />
+      case 'referral':
+        return <Users className="w-3.5 h-3.5" />
+      case 'email':
+        return <Mail className="w-3.5 h-3.5" />
+      case 'website':
+        return <Globe className="w-3.5 h-3.5" />
+      case 'phone_call':
+      case 'phone-call':
+      case 'phone call':
+        return <Phone className="w-3.5 h-3.5" />
       default:
         return <User className="w-3.5 h-3.5" />
     }
@@ -93,6 +110,19 @@ const LeadCard = ({ lead, onClick }) => {
         return 'from-blue-600 to-blue-800'
       case 'instagram':
         return 'from-pink-500 via-purple-500 to-pink-600'
+      case 'walk_ins':
+      case 'walk-ins':
+        return 'from-green-500 to-green-700'
+      case 'referral':
+        return 'from-purple-500 to-purple-700'
+      case 'email':
+        return 'from-blue-400 to-blue-600'
+      case 'website':
+        return 'from-indigo-500 to-indigo-700'
+      case 'phone_call':
+      case 'phone-call':
+      case 'phone call':
+        return 'from-teal-500 to-teal-700'
       default:
         return 'from-gray-500 to-gray-700'
     }
@@ -170,9 +200,23 @@ const LeadCard = ({ lead, onClick }) => {
 
       {/* Footer */}
       <div className={`px-1.5 py-1.5 ${statusConfig.bgColor} border-t ${statusConfig.borderColor}`}>
-        <div className="flex items-center text-[10px] text-gray-500">
-          <Clock className="w-2.5 h-2.5 flex-shrink-0" />
-          <span className="truncate ml-0.5">{formatTimeAgo(lead.created_at)}</span>
+        <div className="flex items-center justify-between text-[10px] text-gray-500">
+          <div className="flex items-center flex-1 min-w-0">
+            <Clock className="w-2.5 h-2.5 flex-shrink-0" />
+            <span className="truncate ml-0.5">{formatTimeAgo(lead.created_at)}</span>
+          </div>
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(lead)
+              }}
+              className={`p-0.5 rounded transition-colors flex-shrink-0 ml-1 ${statusConfig.textColor} hover:opacity-80`}
+              title="Delete lead"
+            >
+              <Trash2 className="w-2.5 h-2.5" />
+            </button>
+          )}
         </div>
       </div>
     </div>
