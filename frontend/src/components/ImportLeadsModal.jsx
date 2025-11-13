@@ -67,9 +67,9 @@ const ImportLeadsModal = ({ isOpen, onClose, onImport }) => {
   const downloadTemplate = () => {
     // Create CSV template content
     const template = `name,email,phone_number,source_platform,status,follow_up_at
-John Doe,john@example.com,+1234567890,email,new,
+John Doe,john@example.com,1234567890,email,new,2024-12-31T10:00:00
 Jane Smith,jane@example.com,+1234567891,website,contacted,2024-12-31T10:00:00
-Bob Johnson,,+1234567892,phone_call,new,`
+Bob Johnson,,+1234567892,phone_call,new,2024-12-31T14:00:00`
 
     // Create blob and download
     const blob = new Blob([template], { type: 'text/csv' })
@@ -114,11 +114,20 @@ Bob Johnson,,+1234567892,phone_call,new,`
                 <span>CSV Format Requirements</span>
               </h3>
               <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-                <li><strong>Required columns:</strong> name</li>
-                <li><strong>Optional columns:</strong> email, phone_number (or phone), source_platform, status, follow_up_at</li>
+                <li><strong>Required columns:</strong> name, follow_up_at</li>
+                <li><strong>Optional columns:</strong> email, phone_number (or phone), source_platform, status</li>
                 <li><strong>Source platforms:</strong> manual, facebook, instagram, walk_ins, referral, email, website, phone_call</li>
                 <li><strong>Status options:</strong> new, contacted, responded, qualified, converted, lost, invalid</li>
-                <li><strong>Follow-up format:</strong> ISO datetime (e.g., 2024-12-31T10:00:00)</li>
+                <li><strong>Follow-up date (REQUIRED):</strong> Must be a valid date in one of these formats:
+                  <ul className="ml-4 mt-1 space-y-0.5">
+                    <li>• YYYY-MM-DD (e.g., 2024-12-31)</li>
+                    <li>• YYYY-MM-DDTHH:MM:SS (e.g., 2024-12-31T10:00:00)</li>
+                    <li>• YYYY-MM-DD HH:MM:SS (e.g., 2024-12-31 10:00:00)</li>
+                    <li>• MM/DD/YYYY (e.g., 12/31/2024)</li>
+                    <li>• DD/MM/YYYY (e.g., 31/12/2024)</li>
+                  </ul>
+                  <span className="text-red-600 font-semibold">⚠️ Invalid dates (e.g., Nov 31) will cause the lead to be rejected</span>
+                </li>
                 <li>At least one of email or phone_number must be provided for each lead</li>
               </ul>
             </div>

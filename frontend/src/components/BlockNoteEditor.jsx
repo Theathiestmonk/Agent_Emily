@@ -84,10 +84,35 @@ const BlockNoteEditor = forwardRef(({ onContentChange, onWordCountChange }, ref)
   useImperativeHandle(ref, () => ({
     getEditor: () => editor,
     getContent: async () => {
-      if (editor && editor.document) {
-        return await editor.blocksToHTMLLossy(editor.document);
+      if (!editor) {
+        console.warn('BlockNote editor not initialized');
+        return '';
       }
-      return '';
+      if (!editor.document) {
+        console.warn('BlockNote editor document not available');
+        return '';
+      }
+      try {
+        const html = await editor.blocksToHTMLLossy(editor.document);
+        return html || '';
+      } catch (err) {
+        console.error('Error converting blocks to HTML:', err);
+        return '';
+      }
+    },
+    loadHTML: async (htmlContent) => {
+      if (!editor || !htmlContent) return false;
+      try {
+        const blocks = await editor.tryParseHTMLToBlocks(htmlContent);
+        if (blocks && blocks.length > 0) {
+          editor.replaceBlocks(editor.document, blocks);
+          return true;
+        }
+        return false;
+      } catch (err) {
+        console.error('Error loading HTML into BlockNote editor:', err);
+        return false;
+      }
     }
   }));
 

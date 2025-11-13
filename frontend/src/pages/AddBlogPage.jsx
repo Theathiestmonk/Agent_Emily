@@ -53,6 +53,7 @@ const AddBlogPage = () => {
   const [previewContent, setPreviewContent] = useState('');
   const editorRef = React.useRef(null);
   const fileInputRef = React.useRef(null);
+  const lastHTMLContentRef = React.useRef(null); // Store last HTML content from BlockNote
   
   // Admin functionality states
   const [allBlogs, setAllBlogs] = useState([]);
@@ -91,7 +92,7 @@ const AddBlogPage = () => {
     setWordCount(count);
   };
 
-  const handleContentChange = (blocks) => {
+  const handleContentChange = async (blocks) => {
     // Content changed in BlockNote editor
     // Extract plain text and update content state (same as text editor)
     if (blocks && Array.isArray(blocks)) {
@@ -120,6 +121,162 @@ const AddBlogPage = () => {
       };
       extractText(blocks);
       setContent(plainText.trim());
+      
+      // Also update stored HTML content for editor switching
+      if (editorRef.current && editorRef.current.getContent) {
+        try {
+          const htmlContent = await editorRef.current.getContent();
+          if (htmlContent) {
+            lastHTMLContentRef.current = htmlContent;
+          }
+        } catch (err) {
+          console.error('Error updating HTML content ref:', err);
+        }
+      }
+    }
+  };
+
+  const handleEditorSwitch = async () => {
+    const switchingToBlockEditor = !useBlockEditor;
+    
+    if (switchingToBlockEditor) {
+      // Switching from text editor to BlockNote editor
+      // Get current text content and load it into BlockNote
+      const textContent = content || '';
+      
+      // First, check if we have stored HTML content from previous BlockNote session
+      let htmlContent = lastHTMLContentRef.current;
+      
+      if (!htmlContent && textContent.trim()) {
+        // No stored HTML, check if content is already HTML (contains HTML tags other than <br />)
+        const blockNoteTags = /<(?!br\s*\/?>)[a-z][\s\S]*>/i;
+        const isHTML = blockNoteTags.test(textContent);
+        
+        if (isHTML) {
+          // Content is already HTML, use it directly
+          htmlContent = textContent;
+        } else {
+          // Convert plain text to HTML (simple conversion)
+          htmlContent = textContent.split('\n').map(line => {
+            if (line.trim()) {
+              return `<p>${line.trim()}</p>`;
+            }
+            return '';
+          }).filter(p => p).join('');
+          
+          // If no paragraphs created, create empty paragraph
+          if (!htmlContent) {
+            htmlContent = '<p></p>';
+          }
+        }
+      } else if (!htmlContent) {
+        // No content at all
+        htmlContent = '<p></p>';
+      }
+      
+      // Enable block editor first
+      setUseBlockEditor(true);
+      setBlockEditorError(false);
+      
+      // Wait for editor to mount, then load content
+      const loadContent = async () => {
+        let attempts = 0;
+        const maxAttempts = 20; // Try for up to 2 seconds
+        
+        const tryLoad = async () => {
+          if (editorRef.current && editorRef.current.loadHTML) {
+            const success = await editorRef.current.loadHTML(htmlContent);
+            if (success) {
+              return true;
+            }
+          }
+          return false;
+        };
+        
+        // Try immediately
+        if (await tryLoad()) {
+          return;
+        }
+        
+        // Retry with interval
+        const interval = setInterval(async () => {
+          attempts++;
+          if (await tryLoad() || attempts >= maxAttempts) {
+            clearInterval(interval);
+            if (attempts >= maxAttempts) {
+              console.warn('Failed to load content into BlockNote after multiple attempts');
+            }
+          }
+        }, 100);
+      };
+      
+      setTimeout(loadContent, 150);
+    } else {
+      // Switching from BlockNote editor to text editor
+      // Extract content from BlockNote before switching
+      if (editorRef.current && editorRef.current.getContent) {
+        try {
+          // Get HTML content from BlockNote
+          const htmlContent = await editorRef.current.getContent();
+          
+          // Store HTML content for when switching back
+          lastHTMLContentRef.current = htmlContent;
+          
+          if (htmlContent && htmlContent.trim()) {
+            // Convert HTML to plain text for text editor
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            const plainText = tempDiv.textContent || tempDiv.innerText || '';
+            setContent(plainText);
+          } else {
+            setContent('');
+          }
+        } catch (err) {
+          console.error('Error extracting content from BlockNote:', err);
+          // If extraction fails, try to get plain text from blocks
+          if (editorRef.current && editorRef.current.getEditor) {
+            const editor = editorRef.current.getEditor();
+            if (editor && editor.document) {
+              let plainText = '';
+              const extractText = (blocks) => {
+                if (!blocks || !Array.isArray(blocks)) return;
+                blocks.forEach(block => {
+                  if (block.content) {
+                    if (typeof block.content === 'string') {
+                      plainText += block.content + '\n';
+                    } else if (Array.isArray(block.content)) {
+                      block.content.forEach(item => {
+                        if (typeof item === 'string') {
+                          plainText += item;
+                        } else if (item && typeof item === 'object' && item.text) {
+                          plainText += item.text;
+                        }
+                      });
+                      plainText += '\n';
+                    }
+                  }
+                  if (block.children && Array.isArray(block.children)) {
+                    extractText(block.children);
+                  }
+                });
+              };
+              extractText(editor.document);
+              setContent(plainText.trim());
+              // Try to get HTML as fallback
+              try {
+                const htmlContent = await editor.blocksToHTMLLossy(editor.document);
+                lastHTMLContentRef.current = htmlContent;
+              } catch (htmlErr) {
+                console.error('Error getting HTML from blocks:', htmlErr);
+              }
+            }
+          }
+        }
+      }
+      
+      // Switch to text editor
+      setUseBlockEditor(false);
+      setBlockEditorError(false);
     }
   };
 
@@ -149,25 +306,99 @@ const AddBlogPage = () => {
       // Convert content to HTML - preserve formatting for block editor
       let finalContent = content;
       
-      // For block editor, use HTML conversion to preserve formatting (bold, italic, images, etc.)
-      if (useBlockEditor && editorRef.current) {
-        try {
-          // Use BlockNote's HTML conversion to preserve all formatting
-          const htmlContent = await editorRef.current.getContent();
-          if (htmlContent) {
-            finalContent = htmlContent;
-          } else {
-            // Fallback to plain text if HTML conversion fails
-            finalContent = content.replace(/\n/g, '<br />');
+      // For block editor, ALWAYS get content from BlockNote editor (not from content state)
+      if (useBlockEditor) {
+        if (editorRef.current && editorRef.current.getContent) {
+          try {
+            // Use BlockNote's HTML conversion to preserve all formatting
+            const htmlContent = await editorRef.current.getContent();
+            if (htmlContent && htmlContent.trim()) {
+              finalContent = htmlContent;
+            } else {
+              // If BlockNote returns empty, try to get blocks directly
+              const editor = editorRef.current.getEditor();
+              if (editor && editor.document) {
+                try {
+                  const blocks = editor.document;
+                  if (blocks && blocks.length > 0) {
+                    finalContent = await editor.blocksToHTMLLossy(blocks);
+                  } else {
+                    throw new Error('Editor document is empty');
+                  }
+                } catch (blockErr) {
+                  console.error('Error converting blocks to HTML:', blockErr);
+                  // Fallback: use content state if available, otherwise empty
+                  finalContent = content || '';
+                  if (!finalContent) {
+                    throw new Error('No content available from BlockNote editor');
+                  }
+                }
+              } else {
+                throw new Error('BlockNote editor not available');
+              }
+            }
+          } catch (err) {
+            console.error('Error getting content from BlockNote editor:', err);
+            // Last resort fallback: try to get plain text from editor
+            try {
+              const editor = editorRef.current.getEditor();
+              if (editor && editor.document) {
+                // Extract plain text from blocks as fallback
+                let plainText = '';
+                const extractText = (blocks) => {
+                  if (!blocks || !Array.isArray(blocks)) return;
+                  blocks.forEach(block => {
+                    if (block.content) {
+                      if (typeof block.content === 'string') {
+                        plainText += block.content + '\n';
+                      } else if (Array.isArray(block.content)) {
+                        block.content.forEach(item => {
+                          if (typeof item === 'string') {
+                            plainText += item;
+                          } else if (item && typeof item === 'object' && item.text) {
+                            plainText += item.text;
+                          }
+                        });
+                        plainText += '\n';
+                      }
+                    }
+                    if (block.children && Array.isArray(block.children)) {
+                      extractText(block.children);
+                    }
+                  });
+                };
+                extractText(editor.document);
+                finalContent = plainText.trim() || content || '';
+              } else {
+                finalContent = content || '';
+              }
+            } catch (fallbackErr) {
+              console.error('Error in fallback content extraction:', fallbackErr);
+              finalContent = content || '';
+            }
+            
+            if (!finalContent) {
+              throw new Error('Unable to retrieve content from editor. Please try again.');
+            }
           }
-        } catch (err) {
-          console.error('Error converting block editor to HTML:', err);
-          // Use textarea content as fallback
-          finalContent = content.replace(/\n/g, '<br />');
+        } else {
+          // Editor ref not ready - use content state as fallback
+          console.warn('BlockNote editor ref not available, using content state');
+          finalContent = content || '';
+          if (!finalContent) {
+            throw new Error('Editor not ready. Please wait a moment and try again.');
+          }
         }
       } else {
         // Text editor: convert plain text to HTML
-        finalContent = content.replace(/\n/g, '<br />');
+        finalContent = content ? content.replace(/\n/g, '<br />') : '';
+      }
+
+      // Validate that we have content
+      if (!finalContent || !finalContent.trim()) {
+        setError('Please add some content to your blog post before saving.');
+        setSaving(false);
+        return;
       }
 
       // Map 'publish' to 'published' for backend compatibility
@@ -252,7 +483,6 @@ const AddBlogPage = () => {
       
       setEditingBlogId(blog.id);
       setTitle(blog.title || '');
-      setContent(blog.content || '');
       setExcerpt(blog.excerpt || '');
       setStatus(blog.status || 'draft');
       setCategories(blog.categories || []);
@@ -260,18 +490,68 @@ const AddBlogPage = () => {
       setFeaturedImagePreview(blog.featured_image || blog.metadata?.featured_image || null);
       setWordCount(blog.word_count || 0);
       
-      // Load content into BlockNote editor if available
-      if (useBlockEditor && editorRef.current && editorRef.current.getEditor) {
-        const editor = editorRef.current.getEditor();
-        if (editor && blog.content) {
-          try {
-            // Convert HTML to blocks
-            const blocks = await editor.tryParseHTMLToBlocks(blog.content);
-            editor.replaceBlocks(editor.document, blocks);
-          } catch (err) {
-            console.error('Error loading content into editor:', err);
+      // Check if content is HTML (from BlockNote editor)
+      // BlockNote generates HTML with tags like <p>, <strong>, <em>, <img>, <h1>, etc.
+      // Plain text editor only uses <br /> tags, so we check for BlockNote-specific tags
+      const blockNoteTags = /<(p|strong|em|h[1-6]|img|ul|ol|li|blockquote|a|code|pre|div)/i;
+      const isHTML = blog.content && blockNoteTags.test(blog.content);
+      
+      // Clear stored HTML content ref when loading a new blog
+      lastHTMLContentRef.current = null;
+      
+      if (isHTML) {
+        // Content is HTML - enable block editor and load it there
+        setUseBlockEditor(true);
+        setContent(''); // Clear text content state to avoid showing HTML in text editor
+        
+        // Store HTML content to load after editor mounts
+        const htmlContent = blog.content;
+        lastHTMLContentRef.current = htmlContent; // Store for editor switching
+        
+        // Wait for editor to mount, then load content
+        const loadContent = async () => {
+          let attempts = 0;
+          const maxAttempts = 20; // Try for up to 2 seconds (20 * 100ms)
+          
+          const tryLoad = async () => {
+            if (editorRef.current && editorRef.current.loadHTML) {
+              const success = await editorRef.current.loadHTML(htmlContent);
+              if (success) {
+                return true;
+              }
+            }
+            return false;
+          };
+          
+          // Try immediately
+          if (await tryLoad()) {
+            return;
           }
-        }
+          
+          // Retry with interval
+          const interval = setInterval(async () => {
+            attempts++;
+            if (await tryLoad() || attempts >= maxAttempts) {
+              clearInterval(interval);
+              if (attempts >= maxAttempts) {
+                // Fallback: extract plain text from HTML
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = htmlContent;
+                const plainText = tempDiv.textContent || tempDiv.innerText || '';
+                setContent(plainText);
+                setUseBlockEditor(false); // Fallback to text editor
+                console.warn('Failed to load HTML into BlockNote editor, using text editor');
+              }
+            }
+          }, 100);
+        };
+        
+        // Start loading after a short delay to ensure editor is mounted
+        setTimeout(loadContent, 150);
+      } else {
+        // Content is plain text - use text editor
+        setUseBlockEditor(false);
+        setContent(blog.content || '');
       }
       
       setShowBlogList(false);
@@ -318,6 +598,7 @@ const AddBlogPage = () => {
     setFeaturedImagePreview(null);
     setStatus('draft');
     setWordCount(0);
+    lastHTMLContentRef.current = null; // Clear stored HTML content
     if (editorRef.current && editorRef.current.getEditor) {
       const editor = editorRef.current.getEditor();
       if (editor) {
@@ -688,10 +969,7 @@ const AddBlogPage = () => {
                   {blockNoteAvailable && (
                     <div className="mt-2 text-right">
                       <button
-                        onClick={() => {
-                          setUseBlockEditor(!useBlockEditor);
-                          setBlockEditorError(false);
-                        }}
+                        onClick={handleEditorSwitch}
                         className="text-xs text-blue-600 hover:text-blue-700 underline"
                       >
                         {useBlockEditor ? 'Switch to text editor' : 'Switch to block editor (WordPress-style)'}

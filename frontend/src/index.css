@@ -174,12 +174,12 @@ body {
 
 /* Link styling */
 .bn-block-content a {
-  color: #2563eb;
+  color: #9E005C;
   text-decoration: underline;
 }
 
 .bn-block-content a:hover {
-  color: #1d4ed8;
+  color: #FF4D94;
 }
 
 /* Blockquote/Quote block styling - WordPress-like */
@@ -300,13 +300,16 @@ body {
   margin: 2rem 0;
 }
 
-.blog-content a {
-  color: #2563eb;
+/* Blog content link styling - pink/magenta */
+.blog-content a,
+.prose.blog-content a {
+  color: #9E005C !important;
   text-decoration: underline;
 }
 
-.blog-content a:hover {
-  color: #1d4ed8;
+.blog-content a:hover,
+.prose.blog-content a:hover {
+  color: #FF4D94 !important;
 }
 
 .blog-content code {

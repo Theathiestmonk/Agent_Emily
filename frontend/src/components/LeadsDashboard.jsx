@@ -212,7 +212,6 @@ const LeadsDashboard = () => {
         
         // Refresh leads list
         await fetchLeads(false)
-        setShowImportModal(false)
       } else {
         showError('Import Failed', result.message || 'Failed to import leads')
       }

@@ -62,13 +62,30 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS
-cors_origins = os.getenv("CORS_ORIGINS", "https://atsnai.com,https://www.atsnai.com,https://agentemily.vercel.app").split(",")
+# CORS configuration - MUST be before routers
+environment = os.getenv("ENVIRONMENT", "development")
+
+# Read CORS origins from environment variable
+cors_origins_env = os.getenv("CORS_ORIGINS", "")
+if cors_origins_env:
+    # Parse comma-separated origins from environment variable
+    cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+    logger.info(f"CORS origins loaded from environment: {cors_origins}")
+else:
+    # No CORS origins configured
+    if environment == "production":
+        # In production, CORS_ORIGINS must be set in environment variables
+        raise ValueError("CORS_ORIGINS environment variable must be set in production")
+    else:
+        # In development, allow all origins for flexibility
+        cors_origins = ["*"]
+        logger.warning("CORS origins set to '*' for development - this should not be used in production")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
+    allow_origins=cors_origins if cors_origins != ["*"] else ["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
 
@@ -95,33 +112,6 @@ app.include_router(leads_router)
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "environment": environment}
-
-# CORS configuration
-environment = os.getenv("ENVIRONMENT", "development")
-
-# Read CORS origins from environment variable
-cors_origins_env = os.getenv("CORS_ORIGINS", "")
-if cors_origins_env:
-    # Parse comma-separated origins from environment variable
-    cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
-    logger.info(f"CORS origins loaded from environment: {cors_origins}")
-else:
-    # No CORS origins configured
-    if environment == "production":
-        # In production, CORS_ORIGINS must be set in environment variables
-        raise ValueError("CORS_ORIGINS environment variable must be set in production")
-    else:
-        # In development, allow all origins for flexibility
-        cors_origins = ["*"]
-        logger.warning("CORS origins set to '*' for development - this should not be used in production")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
 
 # Security
 security = HTTPBearer()

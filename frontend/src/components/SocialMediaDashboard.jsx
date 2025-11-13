@@ -4,6 +4,7 @@ import { useNotifications } from '../contexts/NotificationContext'
 import { useSocialMediaCache } from '../contexts/SocialMediaCacheContext'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
+import MobileNavigation from './MobileNavigation'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import { 
@@ -57,10 +58,22 @@ const SocialMediaDashboard = () => {
   const [insightsData, setInsightsData] = useState(null)
   const [loadingInsights, setLoadingInsights] = useState(false)
   const [selectedPostForInsights, setSelectedPostForInsights] = useState(null)
+  const [expandedPlatform, setExpandedPlatform] = useState(null)
+  const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 768)
 
   useEffect(() => {
     setDataLoaded(false)
     fetchData()
+  }, [])
+
+  // Track window size for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      setIsLargeScreen(window.innerWidth >= 768)
+    }
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   const fetchData = async (forceRefresh = false) => {
@@ -359,95 +372,133 @@ const SocialMediaDashboard = () => {
     <div className="min-h-screen bg-white">
       {/* Side Navbar */}
       <SideNavbar />
+      <MobileNavigation />
       
       {/* Main Content */}
-      <div className="ml-48 xl:ml-64 flex flex-col min-h-screen">
+      <div className="ml-0 md:ml-48 xl:ml-64 flex flex-col min-h-screen pt-16 md:pt-0">
         {/* Header - Part of Main Content */}
         <div className="bg-white shadow-sm border-b">
-          <div className="px-6 py-3">
-            <div className="flex justify-between items-center">
+          <div className="px-3 sm:px-4 md:px-6 py-3 md:py-4">
+            <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-wrap">
               {/* Account Insights */}
-              <div className="flex-1">
-                <div className="flex flex-wrap gap-4">
+              <div className="flex-1 min-w-0 overflow-x-auto">
+                <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-nowrap">
                   {connectedPlatforms.map((connection) => {
                     const stats = platformStats[connection.platform] || {}
                     const theme = getPlatformCardTheme(connection.platform)
+                    // On larger devices (md and up), always show details. On smaller devices, use toggle
+                    const isExpanded = isLargeScreen ? true : expandedPlatform === connection.platform
                     
                     return (
-                      <div key={connection.platform} className="flex items-center space-x-3 px-4 py-2 bg-gray-50 rounded-lg">
-                        <div className={`w-8 h-8 ${theme.iconBg} rounded-lg flex items-center justify-center`}>
-                          <div className="text-white">
-                            {getPlatformIcon(connection.platform)}
+                      <div 
+                        key={connection.platform} 
+                        className="flex-shrink-0"
+                      >
+                        {/* Platform Card */}
+                        <button
+                          onClick={() => {
+                            // Only toggle on smaller devices
+                            if (!isLargeScreen) {
+                              if (isExpanded) {
+                                setExpandedPlatform(null)
+                              } else {
+                                setExpandedPlatform(connection.platform)
+                              }
+                            }
+                          }}
+                          className={`flex items-center bg-gray-50 rounded-lg hover:bg-gray-100 transition-all duration-300 ${
+                            isExpanded 
+                              ? 'space-x-2 sm:space-x-3 px-2 sm:px-3 md:px-4 py-2' 
+                              : 'justify-center p-2 sm:p-3'
+                          }`}
+                        >
+                          <div className={`${isExpanded ? 'w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8' : 'w-10 h-10 sm:w-12 sm:h-12'} ${theme.iconBg} rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-300`}>
+                            <div className="text-white text-xs sm:text-sm">
+                              {getPlatformIcon(connection.platform)}
+                            </div>
                           </div>
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm text-gray-900 capitalize">{connection.platform}</p>
-                          <p className="text-xs text-gray-500">{connection.page_name || connection.account_name}</p>
-                        </div>
-                        <div className="text-right ml-4">
-                          {connection.platform === 'instagram' && stats.followers_count && (
+                          
+                          {/* Expanded Details - Always show on md+ screens, toggle on smaller */}
+                          {isExpanded && (
                             <>
-                              <p className="text-sm font-semibold text-gray-900">{formatEngagement(stats.followers_count)}</p>
-                              <p className="text-xs text-gray-500">Followers</p>
+                              <div className="min-w-0 flex-shrink-0 ml-2 sm:ml-3">
+                                <p className="font-medium text-xs sm:text-sm text-gray-900 capitalize whitespace-nowrap">{connection.platform}</p>
+                                <p className="text-xs text-gray-500 truncate max-w-[120px] sm:max-w-[150px]">{connection.page_name || connection.account_name}</p>
+                              </div>
+                              <div className="text-right ml-2 sm:ml-3 flex-shrink-0">
+                                {connection.platform === 'instagram' && stats.followers_count && (
+                                  <>
+                                    <p className="text-xs sm:text-sm font-semibold text-gray-900 whitespace-nowrap">{formatEngagement(stats.followers_count)}</p>
+                                    <p className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Followers</p>
+                                  </>
+                                )}
+                                {connection.platform === 'facebook' && stats.fan_count && (
+                                  <>
+                                    <p className="text-xs sm:text-sm font-semibold text-gray-900 whitespace-nowrap">{formatEngagement(stats.fan_count)}</p>
+                                    <p className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Page Likes</p>
+                                  </>
+                                )}
+                                {connection.platform === 'linkedin' && stats.follower_count && (
+                                  <>
+                                    <p className="text-xs sm:text-sm font-semibold text-gray-900 whitespace-nowrap">{formatEngagement(stats.follower_count)}</p>
+                                    <p className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Followers</p>
+                                  </>
+                                )}
+                                {connection.platform === 'twitter' && stats.followers_count && (
+                                  <>
+                                    <p className="text-xs sm:text-sm font-semibold text-gray-900 whitespace-nowrap">{formatEngagement(stats.followers_count)}</p>
+                                    <p className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Followers</p>
+                                  </>
+                                )}
+                                {connection.platform === 'youtube' && stats.subscriber_count && (
+                                  <>
+                                    <p className="text-xs sm:text-sm font-semibold text-gray-900 whitespace-nowrap">{formatEngagement(stats.subscriber_count)}</p>
+                                    <p className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Subscribers</p>
+                                  </>
+                                )}
+                                {!stats.followers_count && !stats.fan_count && !stats.follower_count && !stats.subscriber_count && (
+                                  <p className="text-xs sm:text-sm text-gray-400 whitespace-nowrap">No data</p>
+                                )}
+                              </div>
                             </>
                           )}
-                          {connection.platform === 'facebook' && stats.fan_count && (
-                            <>
-                              <p className="text-sm font-semibold text-gray-900">{formatEngagement(stats.fan_count)}</p>
-                              <p className="text-xs text-gray-500">Page Likes</p>
-                            </>
-                          )}
-                          {connection.platform === 'linkedin' && stats.follower_count && (
-                            <>
-                              <p className="text-sm font-semibold text-gray-900">{formatEngagement(stats.follower_count)}</p>
-                              <p className="text-xs text-gray-500">Followers</p>
-                            </>
-                          )}
-                          {connection.platform === 'twitter' && stats.followers_count && (
-                            <>
-                              <p className="text-sm font-semibold text-gray-900">{formatEngagement(stats.followers_count)}</p>
-                              <p className="text-xs text-gray-500">Followers</p>
-                            </>
-                          )}
-                          {connection.platform === 'youtube' && stats.subscriber_count && (
-                            <>
-                              <p className="text-sm font-semibold text-gray-900">{formatEngagement(stats.subscriber_count)}</p>
-                              <p className="text-xs text-gray-500">Subscribers</p>
-                            </>
-                          )}
-                          {!stats.followers_count && !stats.fan_count && !stats.follower_count && !stats.subscriber_count && (
-                            <p className="text-sm text-gray-400">No data</p>
-                          )}
-                        </div>
+                        </button>
                       </div>
                     )
                   })}
                   
                   {connectedPlatforms.length === 0 && (
-                    <div className="text-center py-4 px-4">
+                    <div className="text-center py-4 px-4 flex-shrink-0">
                       <p className="text-gray-500 text-sm">No connected accounts</p>
                     </div>
                   )}
                 </div>
               </div>
               
-              <div className="flex items-center space-x-4 ml-6">
-                {/* Refresh Button */}
-                <button
-                  onClick={handleRefresh}
-                  disabled={refreshing}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-500 transition-all duration-300 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                  <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-                </button>
-              </div>
+              {/* Refresh Button - Icon only on smaller devices, icon + text on larger devices */}
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className={`flex items-center justify-center bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-500 transition-all duration-300 disabled:opacity-50 flex-shrink-0 ${
+                  isLargeScreen 
+                    ? 'px-4 py-2 gap-2' 
+                    : 'w-10 h-10 sm:w-11 sm:h-11'
+                }`}
+                title={refreshing ? 'Refreshing...' : 'Refresh'}
+              >
+                <RefreshCw className={`w-5 h-5 sm:w-6 sm:h-6 ${refreshing ? 'animate-spin' : ''}`} />
+                {isLargeScreen && (
+                  <span className="text-sm font-medium whitespace-nowrap">
+                    {refreshing ? 'Refreshing...' : 'Refresh'}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-3 sm:p-4 md:p-6">
           {loading || !dataLoaded ? (
             <>
               <style dangerouslySetInnerHTML={{__html: `
@@ -492,9 +543,9 @@ const SocialMediaDashboard = () => {
               </button>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {/* Posts Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                 {/* Posts */}
                 {platformsWithPosts.map((platform) => {
                   const platformPosts = posts[platform] || []
@@ -641,8 +692,9 @@ const SocialMediaDashboard = () => {
           
           {/* Last Updated Timestamp - Bottom Right */}
           {lastRefresh && (
-            <div className="fixed bottom-4 right-4 text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border">
-              Last updated: {lastRefresh.toLocaleTimeString()}
+            <div className="fixed bottom-4 right-2 sm:right-4 text-xs sm:text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-2 sm:px-3 py-2 rounded-lg shadow-sm border">
+              <span className="hidden sm:inline">Last updated: </span>
+              {lastRefresh.toLocaleTimeString()}
             </div>
           )}
         </div>
@@ -651,22 +703,22 @@ const SocialMediaDashboard = () => {
       {/* Insights Modal */}
       {showInsightsModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4"
           onClick={handleCloseInsightsModal}
         >
           <div 
-            className="relative max-w-3xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            className="relative max-w-3xl w-full bg-white rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[95vh] sm:max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-white" />
+            <div className="flex items-center justify-between p-3 sm:p-4 md:p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
+              <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">AI Post Insights</h3>
-                  <p className="text-sm text-gray-600">
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">AI Post Insights</h3>
+                  <p className="text-xs sm:text-sm text-gray-600 truncate">
                     {selectedPostForInsights?.platform && (
                       <span className="capitalize">{selectedPostForInsights.platform}</span>
                     )}
@@ -675,14 +727,14 @@ const SocialMediaDashboard = () => {
               </div>
               <button
                 onClick={handleCloseInsightsModal}
-                className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full flex items-center justify-center transition-colors"
+                className="w-7 h-7 sm:w-8 sm:h-8 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ml-2"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
               {loadingInsights ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center">
@@ -699,13 +751,13 @@ const SocialMediaDashboard = () => {
                   ) : (
                     <>
                       {/* Analysis Summary Card */}
-                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-6">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
-                            <BarChart3 className="w-5 h-5 text-white" />
+                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-4 sm:mb-6">
+                        <div className="flex items-center space-x-2 sm:space-x-3">
+                          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                           </div>
-                          <div>
-                            <p className="text-sm font-semibold text-blue-900">Analysis Summary</p>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs sm:text-sm font-semibold text-blue-900">Analysis Summary</p>
                             <p className="text-xs text-blue-700">
                               Analyzed {insightsData.comments_analyzed} comments • Compared with {insightsData.previous_posts_compared} previous posts
                             </p>
@@ -731,15 +783,15 @@ const SocialMediaDashboard = () => {
                         }
 
                         return (
-                          <div className="grid grid-cols-1 gap-4">
+                          <div className="grid grid-cols-1 gap-3 sm:gap-4">
                             {/* Performance Analysis Card */}
                             {parsed.performance && (
-                              <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex items-center space-x-3 mb-3">
-                                  <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
-                                    <TrendingUp className="w-5 h-5 text-white" />
+                              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow">
+                                <div className="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-3">
+                                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                                   </div>
-                                  <h4 className="text-lg font-semibold text-gray-900">Performance Analysis</h4>
+                                  <h4 className="text-base sm:text-lg font-semibold text-gray-900">Performance Analysis</h4>
                                 </div>
                                 <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
                                   {parsed.performance}
@@ -749,12 +801,12 @@ const SocialMediaDashboard = () => {
 
                             {/* Content Analysis Card */}
                             {parsed.content && (
-                              <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex items-center space-x-3 mb-3">
-                                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                                    <FileText className="w-5 h-5 text-white" />
+                              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow">
+                                <div className="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-3">
+                                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                                   </div>
-                                  <h4 className="text-lg font-semibold text-gray-900">Content Analysis</h4>
+                                  <h4 className="text-base sm:text-lg font-semibold text-gray-900">Content Analysis</h4>
                                 </div>
                                 <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
                                   {parsed.content}
@@ -764,12 +816,12 @@ const SocialMediaDashboard = () => {
 
                             {/* Sentiment Analysis Card with Spectrum */}
                             {parsed.sentiment && (
-                              <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex items-center space-x-3 mb-3">
-                                  <div className="w-10 h-10 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center">
-                                    <Heart className="w-5 h-5 text-white" />
+                              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow">
+                                <div className="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-3">
+                                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                                   </div>
-                                  <h4 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h4>
+                                  <h4 className="text-base sm:text-lg font-semibold text-gray-900">Sentiment Analysis</h4>
                                 </div>
                                 {(() => {
                                   const sentimentScore = calculateSentimentScore(parsed.sentiment)
@@ -809,12 +861,12 @@ const SocialMediaDashboard = () => {
 
                             {/* Trends & Patterns Card */}
                             {parsed.trends && (
-                              <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex items-center space-x-3 mb-3">
-                                  <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center">
-                                    <Activity className="w-5 h-5 text-white" />
+                              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow">
+                                <div className="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-3">
+                                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                                   </div>
-                                  <h4 className="text-lg font-semibold text-gray-900">Trends & Patterns</h4>
+                                  <h4 className="text-base sm:text-lg font-semibold text-gray-900">Trends & Patterns</h4>
                                 </div>
                                 <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
                                   {parsed.trends}
@@ -824,12 +876,12 @@ const SocialMediaDashboard = () => {
 
                             {/* Recommendations Card */}
                             {parsed.recommendations && (
-                              <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex items-center space-x-3 mb-3">
-                                  <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg flex items-center justify-center">
-                                    <Target className="w-5 h-5 text-white" />
+                              <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-3 sm:p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow">
+                                <div className="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-3">
+                                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <Target className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                                   </div>
-                                  <h4 className="text-lg font-semibold text-gray-900">Recommendations</h4>
+                                  <h4 className="text-base sm:text-lg font-semibold text-gray-900">Recommendations</h4>
                                 </div>
                                 <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
                                   {parsed.recommendations}

@@ -7,7 +7,6 @@ import {
   FolderOpen, 
   Clock,
   ArrowLeft,
-  Loader2,
   FileText
 } from 'lucide-react';
 
@@ -15,8 +14,8 @@ const BlogDetailPage = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
   const [blog, setBlog] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false);
 
   useEffect(() => {
     fetchBlog();
@@ -24,8 +23,8 @@ const BlogDetailPage = () => {
 
   const fetchBlog = async () => {
     try {
-      setLoading(true);
       setError(null);
+      setHasAttemptedFetch(false);
       // Decode the slug - React Router may have already decoded it, but handle both cases
       let decodedSlug = slug;
       try {
@@ -48,7 +47,7 @@ const BlogDetailPage = () => {
       console.error('Error fetching blog:', err);
       setError(err.message || 'Failed to load blog. Please try again later.');
     } finally {
-      setLoading(false);
+      setHasAttemptedFetch(true);
     }
   };
 
@@ -62,20 +61,14 @@ const BlogDetailPage = () => {
     });
   };
 
-  if (loading) {
+  // Only show error if we've attempted to fetch and there's an error or no blog
+  if (hasAttemptedFetch && (error || !blog)) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-[#9E005C] mx-auto mb-4" />
-          <p className="text-gray-600">Loading blog...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !blog) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F6F6] relative flex items-center justify-center">
+        {/* Background Gradient - Same as Blog Listing Page */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#9E005C]/10 via-[#FF4D94]/10 to-[#3F2B96]/10"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(158,0,92,0.1),transparent_50%)]"></div>
+        <div className="relative z-10">
         <div className="text-center max-w-md mx-auto px-4">
           <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Blog Not Found</h2>
@@ -88,14 +81,95 @@ const BlogDetailPage = () => {
             Back to Blog
           </Link>
         </div>
+        </div>
       </div>
     );
   }
 
+  // Skeleton loading component for blog detail
+  const BlogDetailSkeleton = () => (
+    <div className="min-h-screen bg-[#F6F6F6] relative">
+      {/* Background Gradient with Glassy Effect - Same as Blog Listing Page */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#9E005C]/10 via-[#FF4D94]/10 to-[#3F2B96]/10 backdrop-blur-xl animate-pulse" style={{
+        background: 'linear-gradient(135deg, rgba(158, 0, 92, 0.1) 0%, rgba(255, 77, 148, 0.1) 50%, rgba(63, 43, 150, 0.1) 100%)'
+      }}></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(158,0,92,0.1),transparent_50%)] backdrop-blur-sm"></div>
+      <div className="relative z-10">
+      <div className="max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 w-full">
+        {/* White Card Skeleton with Glassy Effect */}
+        <article className="bg-white/90 backdrop-blur-md rounded-xl shadow-2xl border border-white/40 p-6 sm:p-8 md:p-10 animate-pulse" style={{
+          boxShadow: '0 8px 32px 0 rgba(158, 0, 92, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.2)'
+        }}>
+        {/* Featured Image Skeleton */}
+        <div className="mb-8 rounded-lg overflow-hidden w-full h-64 bg-gradient-to-br from-[#9E005C]/20 to-[#FF4D94]/20"></div>
+        
+        {/* Title Skeleton */}
+        <div className="mb-4 sm:mb-6 space-y-3">
+          <div className="h-8 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded w-3/4"></div>
+          <div className="h-8 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded w-1/2"></div>
+        </div>
+        
+        {/* Meta Information Skeleton */}
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-6 sm:mb-8 pb-4 sm:pb-6 border-b border-gray-200">
+          <div className="h-4 w-32 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded"></div>
+          <div className="h-4 w-24 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded"></div>
+          <div className="h-4 w-20 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded"></div>
+        </div>
+        
+        {/* Excerpt Skeleton */}
+        <div className="mb-6 sm:mb-8 p-4 sm:p-6 bg-gradient-to-r from-[#9E005C]/10 to-[#FF4D94]/10 rounded-r-lg space-y-2">
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-full"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-5/6"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-4/6"></div>
+        </div>
+        
+        {/* Categories and Tags Skeleton */}
+        <div className="mb-8 flex flex-wrap gap-4">
+          <div className="h-6 w-24 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded"></div>
+          <div className="h-6 w-20 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded-full"></div>
+          <div className="h-6 w-16 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded-full"></div>
+        </div>
+        
+        {/* Content Skeleton */}
+        <div className="space-y-4">
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-full"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-full"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-5/6"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-full"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-4/6"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-full"></div>
+          <div className="h-4 bg-gradient-to-r from-[#9E005C]/20 to-[#FF4D94]/20 rounded w-3/4"></div>
+        </div>
+        
+        {/* Footer Skeleton */}
+        <div className="mt-12 pt-8 border-t border-gray-200">
+          <div className="h-6 w-32 bg-gradient-to-r from-[#9E005C]/30 to-[#FF4D94]/30 rounded"></div>
+        </div>
+        </article>
+      </div>
+      </div>
+    </div>
+  );
+
+  // Show skeleton while loading
+  if (!blog && !hasAttemptedFetch) {
+    return <BlogDetailSkeleton />;
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Main Content */}
-      <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 w-full">
+    <div className="min-h-screen bg-[#F6F6F6] relative">
+      {/* Background Gradient with Glassy Effect - Same as Blog Listing Page */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#9E005C]/10 via-[#FF4D94]/10 to-[#3F2B96]/10 backdrop-blur-xl" style={{
+        background: 'linear-gradient(135deg, rgba(158, 0, 92, 0.1) 0%, rgba(255, 77, 148, 0.1) 50%, rgba(63, 43, 150, 0.1) 100%)'
+      }}></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(158,0,92,0.1),transparent_50%)] backdrop-blur-sm"></div>
+      <div className="relative z-10">
+      {/* Main Content - Increased width for desktop */}
+      <div className="max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 w-full">
+        {/* White Card with Glassy Effect */}
+        <article className="bg-white/90 backdrop-blur-md rounded-xl shadow-2xl border border-white/40 p-6 sm:p-8 md:p-10" style={{
+          boxShadow: '0 8px 32px 0 rgba(158, 0, 92, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.2)'
+        }}>
         {/* Featured Image */}
         {(blog.featured_image || blog.metadata?.featured_image) && (
           <div className="mb-8 rounded-lg overflow-hidden w-full max-w-full">
@@ -191,7 +265,9 @@ const BlogDetailPage = () => {
             Back to All Blogs
           </Link>
         </div>
-      </article>
+        </article>
+      </div>
+      </div>
     </div>
   );
 };

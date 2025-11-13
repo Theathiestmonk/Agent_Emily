@@ -14,7 +14,8 @@ import {
   Trash2,
   Globe,
   Users,
-  LogIn
+  LogIn,
+  Calendar
 } from 'lucide-react'
 
 const LeadCard = ({ lead, onClick, onDelete }) => {
@@ -200,22 +201,30 @@ const LeadCard = ({ lead, onClick, onDelete }) => {
 
       {/* Footer */}
       <div className={`px-1.5 py-1.5 ${statusConfig.bgColor} border-t ${statusConfig.borderColor}`}>
-        <div className="flex items-center justify-between text-[10px] text-gray-500">
-          <div className="flex items-center flex-1 min-w-0">
-            <Clock className="w-2.5 h-2.5 flex-shrink-0" />
-            <span className="truncate ml-0.5">{formatTimeAgo(lead.created_at)}</span>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between text-[10px] text-gray-500">
+            <div className="flex items-center flex-1 min-w-0">
+              <Clock className="w-2.5 h-2.5 flex-shrink-0" />
+              <span className="truncate ml-0.5">Created: {formatTimeAgo(lead.created_at)}</span>
+            </div>
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(lead)
+                }}
+                className={`p-0.5 rounded transition-colors flex-shrink-0 ml-1 ${statusConfig.textColor} hover:opacity-80`}
+                title="Delete lead"
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+              </button>
+            )}
           </div>
-          {onDelete && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete(lead)
-              }}
-              className={`p-0.5 rounded transition-colors flex-shrink-0 ml-1 ${statusConfig.textColor} hover:opacity-80`}
-              title="Delete lead"
-            >
-              <Trash2 className="w-2.5 h-2.5" />
-            </button>
+          {lead.follow_up_at && (
+            <div className="flex items-center text-[10px] text-gray-600">
+              <Calendar className="w-2.5 h-2.5 flex-shrink-0 mr-0.5" />
+              <span className="truncate">Follow-up: {formatTimeAgo(lead.follow_up_at)}</span>
+            </div>
           )}
         </div>
       </div>
