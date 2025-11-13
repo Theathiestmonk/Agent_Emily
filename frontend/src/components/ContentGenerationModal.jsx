@@ -117,8 +117,10 @@ const ContentGenerationModal = ({ isVisible, onClose, onComplete }) => {
         onClick={isGenerating ? undefined : onClose}
       />
       
-      {/* Modal Content */}
-      <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+      {/* Modal Content - Centered relative to main content area (accounting for sidebar) */}
+      <div 
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden md:left-[calc(50%+96px)] xl:left-[calc(50%+128px)]"
+      >
         {/* Header */}
         <div className="bg-gradient-to-r from-pink-500 to-purple-600 px-6 py-4">
           <div className="flex items-center justify-between">

@@ -312,27 +312,40 @@ class ContentCreationAgent:
         return state
     
     async def cleanup_existing_content(self, user_id: str) -> None:
-        """Delete all existing content for the user before generating new content"""
+        """Delete existing content for the user, but only delete draft posts. Preserve all other statuses (approved, scheduled, published, etc.)"""
         try:
-            
             # Get all campaigns for the user
             campaigns_response = self.supabase.table("content_campaigns").select("id").eq("user_id", user_id).execute()
             
             if campaigns_response.data:
                 campaign_ids = [campaign["id"] for campaign in campaigns_response.data]
                 
-                # Delete all posts for these campaigns
+                # Only delete posts with 'draft' status. Preserve all other statuses.
                 for campaign_id in campaign_ids:
-                    posts_response = self.supabase.table("content_posts").delete().eq("campaign_id", campaign_id).execute()
+                    # Get all draft posts for this campaign
+                    draft_posts_response = self.supabase.table("content_posts").select("id, status").eq("campaign_id", campaign_id).eq("status", "draft").execute()
+                    
+                    if draft_posts_response.data:
+                        posts_to_delete = [post["id"] for post in draft_posts_response.data]
+                        
+                        if posts_to_delete:
+                            logger.info(f"Deleting {len(posts_to_delete)} draft posts for campaign {campaign_id}")
+                            
+                            # Delete draft posts
+                            self.supabase.table("content_posts").delete().in_("id", posts_to_delete).execute()
+                            
+                            # Delete associated images for deleted posts
+                            self.supabase.table("content_images").delete().in_("post_id", posts_to_delete).execute()
                 
-                # Delete all campaigns
-                campaigns_delete_response = self.supabase.table("content_campaigns").delete().eq("user_id", user_id).execute()
-                
-                # Delete any associated images
+                # Delete campaigns that have no posts remaining (only if all posts were drafts)
                 for campaign_id in campaign_ids:
-                    images_response = self.supabase.table("content_images").delete().in_("post_id", 
-                        self.supabase.table("content_posts").select("id").eq("campaign_id", campaign_id).execute().data or []
-                    ).execute()
+                    # Check if campaign has any posts remaining (any status)
+                    remaining_posts_response = self.supabase.table("content_posts").select("id").eq("campaign_id", campaign_id).execute()
+                    
+                    if not remaining_posts_response.data:
+                        # No posts remaining, safe to delete the campaign
+                        logger.info(f"Deleting campaign {campaign_id} as it has no posts remaining")
+                        self.supabase.table("content_campaigns").delete().eq("id", campaign_id).execute()
             
         except Exception as e:
             logger.error(f"Error cleaning up existing content: {e}")
@@ -965,21 +978,55 @@ class ContentCreationAgent:
                 })
         
         elif freq == "3 posts a week" or freq == "3 posts per week" or freq == "3/week":
-            # Generate 12 posts for the month (3 posts per week)
+            # Generate 12 posts for the month (3 posts per week × 4 weeks)
+            # Schedule on specific days: Mon/Wed/Fri or Tue/Thu/Sat or Wed/Fri/Sun pattern
             posts_per_week = 3
             weeks_in_month = 4
-            total_posts = posts_per_week * weeks_in_month
+            total_posts = posts_per_week * weeks_in_month  # 12 posts
             
-            for i in range(total_posts):
-                # Distribute posts across the month
-                days_apart = 30 // total_posts
-                post_date = today + timedelta(days=i * days_apart)
-                schedule.append({
-                    "post_index": i,
-                    "scheduled_date": post_date.strftime('%Y-%m-%d'),
-                    "scheduled_time": self.get_optimal_time("facebook"),
-                    "day_of_month": post_date.day
-                })
+            # Determine posting pattern based on today's day of week
+            # 0=Monday, 1=Tuesday, 2=Wednesday, 3=Thursday, 4=Friday, 5=Saturday, 6=Sunday
+            today_weekday = today.weekday()
+            
+            # Choose pattern: Mon/Wed/Fri (0,2,4), Tue/Thu/Sat (1,3,5), or Wed/Fri/Sun (2,4,6)
+            if today_weekday in [0, 2, 4]:  # If today is Mon/Wed/Fri, use Mon/Wed/Fri pattern
+                posting_days = [0, 2, 4]  # Monday, Wednesday, Friday
+            elif today_weekday in [1, 3, 5]:  # If today is Tue/Thu/Sat, use Tue/Thu/Sat pattern
+                posting_days = [1, 3, 5]  # Tuesday, Thursday, Saturday
+            else:  # If today is Sunday, use Wed/Fri/Sun pattern
+                posting_days = [2, 4, 6]  # Wednesday, Friday, Sunday
+            
+            post_index = 0
+            
+            # Generate posts for 4 weeks (12 posts total)
+            for week in range(weeks_in_month):
+                # Calculate the start of this week (Monday of the week)
+                # Find Monday of the current week, then add weeks
+                days_since_monday = today.weekday()  # 0=Monday, so this is days since Monday
+                monday_of_current_week = today - timedelta(days=days_since_monday)
+                week_start = monday_of_current_week + timedelta(days=week * 7)
+                
+                for day_offset in posting_days:
+                    # Calculate the date for this posting day in the current week
+                    post_date = week_start + timedelta(days=day_offset)
+                    
+                    # Only schedule if the date is today or in the future
+                    if post_date >= today:
+                        # Make sure we don't exceed 30 days from today
+                        if (post_date - today).days < 30:
+                            schedule.append({
+                                "post_index": post_index,
+                                "scheduled_date": post_date.strftime('%Y-%m-%d'),
+                                "scheduled_time": self.get_optimal_time("facebook"),
+                                "day_of_month": post_date.day
+                            })
+                            post_index += 1
+                            
+                            if post_index >= total_posts:
+                                break
+                
+                if post_index >= total_posts:
+                    break
         
         elif freq == "weekly" or freq == "once a week" or freq == "1/week":
             # Generate 4 posts for the month (weekly)

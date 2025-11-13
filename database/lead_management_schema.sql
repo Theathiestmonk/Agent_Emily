@@ -12,3 +12,4 @@ WHERE follow_up_at IS NOT NULL;
 -- Add comment for documentation
 COMMENT ON COLUMN leads.follow_up_at IS 'Scheduled date and time for following up with the lead';
 
+
