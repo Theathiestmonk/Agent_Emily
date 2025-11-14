@@ -4,7 +4,7 @@ import { leadsAPI } from '../services/leads'
 import { useNotifications } from '../contexts/NotificationContext'
 import ImportLeadsModal from './ImportLeadsModal'
 
-const AddLeadModal = ({ isOpen, onClose, onSuccess }) => {
+const AddLeadModal = ({ isOpen, onClose, onSuccess, isImporting = false }) => {
   const { showSuccess, showError } = useNotifications()
   const [loading, setLoading] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -131,7 +131,12 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess }) => {
       
     } catch (error) {
       console.error('Error creating lead:', error)
-      showError('Error', error.response?.data?.detail || 'Failed to create lead. Please try again.')
+      // Handle duplicate lead error (409 Conflict)
+      if (error.response?.status === 409) {
+        showError('Duplicate Lead', error.response?.data?.detail || 'This lead already exists. Duplicate leads are not allowed.')
+      } else {
+        showError('Error', error.response?.data?.detail || 'Failed to create lead. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -407,6 +412,7 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess }) => {
           }
           setShowImportModal(false)
         }}
+        isImporting={isImporting}
       />
     </div>
   )

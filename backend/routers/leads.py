@@ -410,6 +410,56 @@ async def _process_whatsapp_status(status_data: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Error processing WhatsApp status: {e}")
 
+# Helper function to normalize email and phone for duplicate checking
+def normalize_email(email: Optional[str]) -> Optional[str]:
+    """Normalize email for duplicate checking (lowercase, strip)"""
+    if not email:
+        return None
+    return email.strip().lower() if email.strip() else None
+
+def normalize_phone(phone: Optional[str]) -> Optional[str]:
+    """Normalize phone number for duplicate checking (remove spaces, dashes, parentheses)"""
+    if not phone:
+        return None
+    # Remove common formatting characters
+    normalized = phone.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "").replace(".", "")
+    return normalized if normalized else None
+
+# Helper function to check for duplicate leads
+def check_duplicate_lead(user_id: str, email: Optional[str] = None, phone_number: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Check if a lead with the same email or phone number already exists for the user"""
+    try:
+        # Normalize inputs
+        normalized_email = normalize_email(email)
+        normalized_phone = normalize_phone(phone_number)
+        
+        if not normalized_email and not normalized_phone:
+            return None
+        
+        # Fetch all leads for this user once (optimized)
+        all_leads_result = supabase_admin.table("leads").select("*").eq("user_id", user_id).execute()
+        
+        if not all_leads_result.data:
+            return None
+        
+        # Check for duplicate by email or phone (case-insensitive and normalized)
+        for lead in all_leads_result.data:
+            lead_email = normalize_email(lead.get("email"))
+            lead_phone = normalize_phone(lead.get("phone_number"))
+            
+            # Check if email matches
+            if normalized_email and lead_email and lead_email == normalized_email:
+                return lead
+            
+            # Check if phone matches
+            if normalized_phone and lead_phone and lead_phone == normalized_phone:
+                return lead
+        
+        return None
+    except Exception as e:
+        logger.error(f"Error checking for duplicate lead: {e}")
+        return None
+
 # Lead CRUD Endpoints
 @router.post("", response_model=LeadResponse)
 async def create_lead(
@@ -418,6 +468,25 @@ async def create_lead(
 ):
     """Create a new lead manually"""
     try:
+        # Check for duplicate lead
+        duplicate = check_duplicate_lead(
+            user_id=current_user["id"],
+            email=request.email,
+            phone_number=request.phone_number
+        )
+        
+        if duplicate:
+            duplicate_info = []
+            if request.email and duplicate.get("email") == request.email:
+                duplicate_info.append("email")
+            if request.phone_number and duplicate.get("phone_number") == request.phone_number:
+                duplicate_info.append("phone number")
+            
+            raise HTTPException(
+                status_code=409,
+                detail=f"Lead already exists with the same {', '.join(duplicate_info)}. Duplicate leads are not allowed."
+            )
+        
         lead_data = {
             "user_id": current_user["id"],
             "name": request.name,
@@ -440,6 +509,8 @@ async def create_lead(
         
         return result.data[0]
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating lead: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -479,6 +550,7 @@ async def import_leads_csv(
         # Process rows and create leads
         created_leads = []
         errors = []
+        duplicates = []
         
         for idx, row in enumerate(rows, start=2):  # Start at 2 because row 1 is header
             try:
@@ -628,6 +700,23 @@ async def import_leads_csv(
                     errors.append(f"Row {idx}: Either email or phone_number is required")
                     continue
                 
+                # Check for duplicate lead
+                duplicate = check_duplicate_lead(
+                    user_id=current_user["id"],
+                    email=email,
+                    phone_number=phone_number
+                )
+                
+                if duplicate:
+                    duplicate_info = []
+                    if email and duplicate.get("email") == email:
+                        duplicate_info.append("email")
+                    if phone_number and duplicate.get("phone_number") == phone_number:
+                        duplicate_info.append("phone number")
+                    
+                    duplicates.append(f"Row {idx}: Lead already exists with the same {', '.join(duplicate_info)} (Name: {name})")
+                    continue  # Skip this duplicate lead
+                
                 # Create lead data
                 lead_data = {
                     "user_id": current_user["id"],
@@ -675,9 +764,11 @@ async def import_leads_csv(
             "success": True,
             "total_rows": len(rows),
             "created": len(created_leads),
+            "duplicates": len(duplicates),
             "errors": len(errors),
             "error_details": errors[:10],  # Limit error details to first 10
-            "message": f"Successfully imported {len(created_leads)} out of {len(rows)} leads"
+            "duplicate_details": duplicates[:10],  # Limit duplicate details to first 10
+            "message": f"Successfully imported {len(created_leads)} out of {len(rows)} leads. {len(duplicates)} duplicate(s) skipped."
         }
         
     except HTTPException:

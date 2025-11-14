@@ -197,10 +197,34 @@ const LeadsDashboard = () => {
       const result = response.data || response
       
       if (result.success) {
-        if (result.errors > 0) {
+        const hasErrors = result.errors > 0
+        const hasDuplicates = result.duplicates > 0
+        
+        if (hasErrors && hasDuplicates) {
+          showInfo(
+            'Import Completed with Warnings',
+            `Successfully imported ${result.created} out of ${result.total_rows} leads. ${result.duplicates} duplicate(s) skipped, ${result.errors} error(s) occurred.`,
+            { duration: 6000 }
+          )
+          if (result.error_details && result.error_details.length > 0) {
+            console.warn('Import errors:', result.error_details)
+          }
+          if (result.duplicate_details && result.duplicate_details.length > 0) {
+            console.warn('Duplicate leads:', result.duplicate_details)
+          }
+        } else if (hasDuplicates) {
+          showInfo(
+            'Import Completed',
+            `Successfully imported ${result.created} out of ${result.total_rows} leads. ${result.duplicates} duplicate(s) skipped.`,
+            { duration: 5000 }
+          )
+          if (result.duplicate_details && result.duplicate_details.length > 0) {
+            console.warn('Duplicate leads:', result.duplicate_details)
+          }
+        } else if (hasErrors) {
           showInfo(
             'Import Completed with Errors',
-            `Successfully imported ${result.created} out of ${result.total_rows} leads. ${result.errors} errors occurred.`,
+            `Successfully imported ${result.created} out of ${result.total_rows} leads. ${result.errors} error(s) occurred.`,
             { duration: 5000 }
           )
           if (result.error_details && result.error_details.length > 0) {
@@ -595,6 +619,7 @@ const LeadsDashboard = () => {
             setShowAddModal(false)
           }
         }}
+        isImporting={importingCSV}
       />
     </div>
   )

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 import { X, Upload, FileText, AlertCircle, CheckCircle, Loader2, Download } from 'lucide-react'
 import { useNotifications } from '../contexts/NotificationContext'
 
-const ImportLeadsModal = ({ isOpen, onClose, onImport }) => {
+const ImportLeadsModal = ({ isOpen, onClose, onImport, isImporting = false }) => {
   const { showError } = useNotifications()
   const [selectedFile, setSelectedFile] = useState(null)
   const [dragActive, setDragActive] = useState(false)
@@ -57,6 +57,9 @@ const ImportLeadsModal = ({ isOpen, onClose, onImport }) => {
   }
 
   const handleClose = () => {
+    if (isImporting) {
+      return // Prevent closing while importing
+    }
     setSelectedFile(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -97,7 +100,8 @@ Bob Johnson,,+1234567892,phone_call,new,2024-12-31T14:00:00`
             </div>
             <button
               onClick={handleClose}
-              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              disabled={isImporting}
+              className="p-2 hover:bg-white/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <X className="w-6 h-6" />
             </button>
@@ -224,17 +228,27 @@ Bob Johnson,,+1234567892,phone_call,new,2024-12-31T14:00:00`
         <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
           <button
             onClick={handleClose}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+            disabled={isImporting}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
           <button
             onClick={handleImport}
-            disabled={!selectedFile || !selectedFile.name.endsWith('.csv')}
+            disabled={!selectedFile || !selectedFile.name.endsWith('.csv') || isImporting}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
-            <Upload className="w-4 h-4" />
-            <span>Import Leads</span>
+            {isImporting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Importing...</span>
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4" />
+                <span>Import Leads</span>
+              </>
+            )}
           </button>
         </div>
       </div>
