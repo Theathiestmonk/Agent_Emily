@@ -1197,7 +1197,7 @@ const BlogDashboard = () => {
 
   return (
 
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50 overflow-x-hidden">
 
       {/* Mobile Navigation */}
       <MobileNavigation 
@@ -1211,12 +1211,12 @@ const BlogDashboard = () => {
       <SideNavbar />
 
       {/* Main Content - No left margin on mobile, only on desktop */}
-      <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen w-full">
+      <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen w-full overflow-x-hidden">
         {/* Header */}
-        <div className="fixed top-[52px] md:top-0 right-0 left-0 md:left-48 xl:left-64 bg-gradient-to-r from-pink-50 to-purple-50 shadow-sm z-30" style={{position: 'fixed', zIndex: 30}}>
-          <div className="px-2 md:px-6 lg:px-8 py-1.5 md:py-3 lg:py-4">
+        <div className="fixed top-[52px] md:top-0 right-0 left-0 md:left-48 xl:left-64 bg-gradient-to-r from-pink-50 to-purple-50 shadow-sm z-30 overflow-x-hidden" style={{position: 'fixed', zIndex: 30}}>
+          <div className="px-2 md:px-6 lg:px-8 py-1.5 md:py-3 lg:py-4 overflow-x-hidden">
             {/* Single Row for ALL Devices */}
-            <div className="flex items-center justify-between md:justify-between gap-0.5 md:gap-4 w-full overflow-x-auto">
+            <div className="flex items-center justify-between md:justify-between gap-0.5 md:gap-4 w-full overflow-x-hidden max-w-full">
               
               {/* Left Side - Stats */}
               <div className="flex items-center gap-0.5 md:gap-3 flex-shrink-0">
@@ -1244,7 +1244,7 @@ const BlogDashboard = () => {
               </div>
 
               {/* Right Side - Actions */}
-              <div className="flex items-center gap-0.5 md:gap-3 flex-shrink-0">
+              <div className="flex items-center gap-0.5 md:gap-3 flex-shrink-0 min-w-0">
                 {/* Generate Button */}
                 <button
                   onClick={generateBlogs}
@@ -1272,7 +1272,7 @@ const BlogDashboard = () => {
                 </select>
 
                 {/* Search */}
-                <div className="relative min-w-0 flex-1 md:min-w-[150px] md:flex-none lg:min-w-[200px] xl:max-w-[250px] max-w-[120px] md:max-w-none">
+                <div className="relative min-w-0 flex-1 md:min-w-[150px] md:flex-none lg:min-w-[200px] xl:max-w-[250px] max-w-[100px] sm:max-w-[120px] md:max-w-none">
                   <Search className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 lg:w-4 lg:h-4 absolute left-2 md:left-3 top-1/2 transform -translate-y-1/2 text-pink-400" />
                   <input
                     type="text"
@@ -1306,7 +1306,7 @@ const BlogDashboard = () => {
         </div>
 
         {/* Main Content Area */}
-        <div className="w-full px-3 md:px-6">
+        <div className="w-full px-3 md:px-6 overflow-x-hidden">
           <div className="pt-24 md:pt-28">
 
           {loading ? (
@@ -1357,7 +1357,7 @@ const BlogDashboard = () => {
 
               data-testid="blogs-section"
 
-              className={viewMode === 'grid' ? 'p-2 md:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6' : 'divide-y'}
+              className={viewMode === 'grid' ? 'p-2 sm:p-3 md:p-4 lg:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 lg:gap-6' : 'divide-y'}
 
             >
 
@@ -1373,7 +1373,7 @@ const BlogDashboard = () => {
 
                     key={blog.id} 
 
-                    className={`${viewMode === 'grid' ? 'bg-white rounded-xl shadow-lg border border-gray-100 hover:shadow-xl hover:scale-105 transition-all duration-300 overflow-hidden cursor-pointer' : 'bg-white'} p-0`}
+                    className={`${viewMode === 'grid' ? 'bg-white rounded-lg sm:rounded-xl shadow-md sm:shadow-lg border border-gray-100 hover:shadow-xl hover:scale-[1.02] sm:hover:scale-105 transition-all duration-300 overflow-hidden cursor-pointer flex flex-col h-full' : 'bg-white'} p-0`}
 
                     onClick={() => {
 
@@ -1431,7 +1431,7 @@ const BlogDashboard = () => {
 
                     {/* Blog Image Header */}
 
-                    <div className="relative h-44 bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 overflow-hidden">
+                    <div className="relative h-32 sm:h-40 md:h-44 lg:h-48 bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 overflow-hidden flex-shrink-0">
 
                       {(blog.metadata?.featured_image || blog.featured_image) ? (
                         <img 
@@ -1463,10 +1463,10 @@ const BlogDashboard = () => {
                         </>
                       )}
 
-                      <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
-                        <span className={`px-3 py-1 text-xs rounded-full ${statusColors[blog.status]} flex items-center space-x-1 backdrop-blur-sm`}>
-                          <StatusIcon className="w-3 h-3" />
-                          <span className="capitalize font-medium">{blog.status}</span>
+                      <div className="absolute top-2 sm:top-3 md:top-4 left-2 sm:left-3 md:left-4 right-2 sm:right-3 md:right-4 flex items-center justify-between">
+                        <span className={`px-2 sm:px-2.5 md:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs rounded-full ${statusColors[blog.status]} flex items-center space-x-1 backdrop-blur-sm`}>
+                          <StatusIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                          <span className="capitalize font-medium hidden xs:inline">{blog.status}</span>
                         </span>
                         
                         {/* Quick Generate Image Button on Image Area */}
@@ -1476,7 +1476,7 @@ const BlogDashboard = () => {
                             handleGenerateImage(blog, e)
                           }}
                           disabled={generatingImages.has(blog.id)}
-                          className={`p-2 rounded-lg backdrop-blur-sm transition-all duration-200 ${
+                          className={`p-1.5 sm:p-2 rounded-lg backdrop-blur-sm transition-all duration-200 ${
                             generatingImages.has(blog.id)
                               ? 'text-blue-300 bg-blue-900/50 cursor-not-allowed'
                               : 'text-white/90 bg-black/30 hover:bg-black/50 hover:text-white'
@@ -1484,32 +1484,32 @@ const BlogDashboard = () => {
                           title={generatingImages.has(blog.id) ? "Generating image..." : "Generate blog image with AI"}
                         >
                           {generatingImages.has(blog.id) ? (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                           ) : (
-                            <ImageIcon className="w-4 h-4" />
+                            <ImageIcon className="w-3 h-3 sm:w-4 sm:h-4" />
                           )}
                         </button>
                       </div>
 
-                      <div className="absolute bottom-4 left-4 right-4">
+                      <div className="absolute bottom-2 sm:bottom-3 md:bottom-4 left-2 sm:left-3 md:left-4 right-2 sm:right-3 md:right-4">
 
                         <div className="flex items-center justify-between">
 
-                          <div className="flex items-center space-x-2 text-white/90">
+                          <div className="flex items-center space-x-1.5 sm:space-x-2 text-white/90">
 
-                            <Globe className="w-4 h-4" />
+                            <Globe className="w-3 h-3 sm:w-4 sm:h-4" />
 
-                            <span className="text-sm font-medium">{blog.site_name || 'Unknown Site'}</span>
+                            <span className="text-xs sm:text-sm font-medium truncate max-w-[100px] sm:max-w-none">{blog.site_name || 'Unknown Site'}</span>
 
                           </div>
 
                           {blog.status === 'published' && (
 
-                            <div className="flex items-center space-x-1 bg-green-500/80 backdrop-blur-sm px-2 py-1 rounded-full">
+                            <div className="flex items-center space-x-1 bg-green-500/80 backdrop-blur-sm px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full flex-shrink-0">
 
-                              <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse"></div>
+                              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-300 rounded-full animate-pulse"></div>
 
-                              <span className="text-xs font-medium text-white">LIVE</span>
+                              <span className="text-[10px] sm:text-xs font-medium text-white">LIVE</span>
 
                             </div>
 
@@ -1525,25 +1525,25 @@ const BlogDashboard = () => {
 
                     {/* Card Content */}
 
-                    <div className="p-5">
+                    <div className="p-3 sm:p-4 md:p-5 flex-1 flex flex-col">
 
                       {/* Author and Meta Info */}
 
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center justify-between mb-2 sm:mb-3 md:mb-4">
 
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
 
-                          <div className="w-6 h-6 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-xs">
+                          <div className="w-5 h-5 sm:w-6 sm:h-6 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-[10px] sm:text-xs flex-shrink-0">
 
                             A
 
                           </div>
 
-                          <div>
+                          <div className="min-w-0 flex-1">
 
-                            <div className="text-base font-semibold text-gray-900">Admin</div>
+                            <div className="text-sm sm:text-base font-semibold text-gray-900 truncate">Admin</div>
 
-                            <div className="text-sm text-gray-500">
+                            <div className="text-xs sm:text-sm text-gray-500 truncate">
 
                               {blog.published_at ? formatDate(blog.published_at) : formatDate(blog.scheduled_at)}
 
@@ -1553,15 +1553,15 @@ const BlogDashboard = () => {
 
                         </div>
 
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
 
-                          <div className="text-sm bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
+                          <div className="text-xs sm:text-sm bg-gray-100 text-gray-600 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full whitespace-nowrap">
 
-                            {blog.reading_time || 5} min read
+                            {blog.reading_time || 5} min
 
                           </div>
 
-                          <div className="text-gray-400 cursor-pointer hover:text-gray-600">
+                          <div className="text-gray-400 cursor-pointer hover:text-gray-600 hidden sm:block">
 
                             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
 
@@ -1579,15 +1579,15 @@ const BlogDashboard = () => {
                       
                       {/* Blog Title */}
 
-                      <h3 className="font-bold text-gray-900 text-lg mb-3 line-clamp-2 leading-tight">{blog.title}</h3>
+                      <h3 className="font-bold text-gray-900 text-sm sm:text-base md:text-lg mb-2 sm:mb-3 line-clamp-2 leading-tight">{blog.title}</h3>
 
                       
                       
                       {/* Blog Content Preview */}
 
-                      <div className="mb-4">
+                      <div className="mb-2 sm:mb-3 md:mb-4 flex-1">
 
-                        <p className="text-gray-600 text-sm leading-relaxed line-clamp-2">
+                        <p className="text-gray-600 text-xs sm:text-sm leading-relaxed line-clamp-2 sm:line-clamp-3">
 
                           {blog.excerpt || blog.meta_description || blog.content.substring(0, 150) + '...'}
 
@@ -1599,19 +1599,25 @@ const BlogDashboard = () => {
                       
                       {/* Categories and Tags */}
 
-                      <div className="mb-4">
+                      <div className="mb-2 sm:mb-3 md:mb-4">
 
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
 
-                          {blog.categories && blog.categories.map((category, index) => (
+                          {blog.categories && blog.categories.slice(0, 2).map((category, index) => (
 
-                            <span key={index} className="text-xs bg-gradient-to-r from-pink-100 to-purple-100 text-pink-800 px-3 py-1 rounded-full font-medium">
+                            <span key={index} className="text-[10px] sm:text-xs bg-gradient-to-r from-pink-100 to-purple-100 text-pink-800 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full font-medium truncate max-w-full">
 
                               {category}
 
                             </span>
 
                           ))}
+
+                          {blog.categories && blog.categories.length > 2 && (
+                            <span className="text-[10px] sm:text-xs bg-gray-100 text-gray-600 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full font-medium">
+                              +{blog.categories.length - 2}
+                            </span>
+                          )}
 
                         </div>
 
@@ -1621,15 +1627,15 @@ const BlogDashboard = () => {
 
                       {/* Card Footer with Stats and Actions */}
 
-                      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                      <div className="flex items-center justify-between pt-2 sm:pt-3 md:pt-4 border-t border-gray-100 mt-auto">
 
                         {blog.status === 'published' ? (
 
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-2 sm:space-x-3">
 
-                            <div className="flex items-center space-x-2 text-gray-500">
+                            <div className="flex items-center space-x-1 sm:space-x-2 text-gray-500">
 
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
 
@@ -1637,19 +1643,19 @@ const BlogDashboard = () => {
 
                               </svg>
 
-                              <span className="text-sm font-medium">{Math.floor(Math.random() * 5000) + 1000} views</span>
+                              <span className="text-xs sm:text-sm font-medium hidden sm:inline">{Math.floor(Math.random() * 5000) + 1000} views</span>
 
                             </div>
 
-                            <div className="flex items-center space-x-2 text-gray-500">
+                            <div className="flex items-center space-x-1 sm:space-x-2 text-gray-500">
 
-                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
 
                                 <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
 
                               </svg>
 
-                              <span className="text-sm font-medium">{Math.floor(Math.random() * 100) + 10}</span>
+                              <span className="text-xs sm:text-sm font-medium">{Math.floor(Math.random() * 100) + 10}</span>
 
                             </div>
 
@@ -1661,7 +1667,7 @@ const BlogDashboard = () => {
 
                         )}
 
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-1.5 sm:space-x-2 md:space-x-3 flex-shrink-0">
 
                           {/* Only show edit/publish buttons for non-published blogs */}
 
@@ -1679,13 +1685,13 @@ const BlogDashboard = () => {
 
                                 }}
 
-                                className="p-3 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition-colors"
+                                className="p-2 sm:p-2.5 md:p-3 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition-colors"
 
                                 title="Edit blog"
 
                               >
 
-                                <Edit className="w-5 h-5" />
+                                <Edit className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5" />
 
                               </button>
 
@@ -1696,7 +1702,7 @@ const BlogDashboard = () => {
                                     handlePublishBlog(blog.id)
                                   }}
                                   disabled={publishingBlogs.has(blog.id)}
-                                  className={`p-3 rounded-lg transition-all duration-200 ${
+                                  className={`p-2 sm:p-2.5 md:p-3 rounded-lg transition-all duration-200 ${
                                     publishingBlogs.has(blog.id)
                                       ? 'text-green-600 bg-green-100 cursor-not-allowed animate-pulse'
                                       : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
@@ -1704,9 +1710,9 @@ const BlogDashboard = () => {
                                   title={publishingBlogs.has(blog.id) ? "Publishing to WordPress..." : "Publish to WordPress"}
                                 >
                                   {publishingBlogs.has(blog.id) ? (
-                                    <RefreshCw className="w-5 h-5 animate-spin" />
+                                    <RefreshCw className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5 animate-spin" />
                                   ) : (
-                                  <Send className="w-5 h-5" />
+                                  <Send className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5" />
                                   )}
                                 </button>
                               )}
@@ -1717,10 +1723,10 @@ const BlogDashboard = () => {
                                     e.stopPropagation()
                                     handleCopyBlog(blog)
                                   }}
-                                  className="p-3 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                  className="p-2 sm:p-2.5 md:p-3 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                                   title="Copy blog content"
                                 >
-                                  <Copy className="w-5 h-5" />
+                                  <Copy className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5" />
                                 </button>
                               )}
 
@@ -1735,7 +1741,7 @@ const BlogDashboard = () => {
                               handleGenerateImage(blog, e)
                             }}
                             disabled={generatingImages.has(blog.id)}
-                            className={`p-3 rounded-lg transition-all duration-200 ${
+                            className={`p-2 sm:p-2.5 md:p-3 rounded-lg transition-all duration-200 ${
                               generatingImages.has(blog.id)
                                 ? 'text-blue-600 bg-blue-100 cursor-not-allowed animate-pulse'
                                 : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
@@ -1743,9 +1749,9 @@ const BlogDashboard = () => {
                             title={generatingImages.has(blog.id) ? "Generating image..." : "Generate blog image with AI"}
                           >
                             {generatingImages.has(blog.id) ? (
-                              <RefreshCw className="w-5 h-5 animate-spin" />
+                              <RefreshCw className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5 animate-spin" />
                             ) : (
-                              <ImageIcon className="w-5 h-5" />
+                              <ImageIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5" />
                             )}
                           </button>
 
@@ -1756,10 +1762,10 @@ const BlogDashboard = () => {
                                 e.stopPropagation()
                                 handleDownloadImage(blog, e)
                               }}
-                              className="p-3 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              className="p-2 sm:p-2.5 md:p-3 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                               title="Download blog image"
                             >
-                              <Download className="w-5 h-5" />
+                              <Download className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5" />
                             </button>
                           )}
 
@@ -1775,7 +1781,7 @@ const BlogDashboard = () => {
 
                             disabled={deletingBlogs.has(blog.id)}
 
-                            className={`p-3 rounded-lg transition-colors ${
+                            className={`p-2 sm:p-2.5 md:p-3 rounded-lg transition-colors ${
                               deletingBlogs.has(blog.id) 
                                 ? 'text-gray-300 cursor-not-allowed bg-gray-100' 
                                 : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
@@ -1786,9 +1792,9 @@ const BlogDashboard = () => {
                           >
 
                             {deletingBlogs.has(blog.id) ? (
-                              <RefreshCw className="w-5 h-5 animate-spin" />
+                              <RefreshCw className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5 animate-spin" />
                             ) : (
-                            <Trash2 className="w-5 h-5" />
+                            <Trash2 className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5" />
                             )}
 
                           </button>
