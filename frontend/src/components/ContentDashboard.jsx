@@ -62,8 +62,10 @@ import {
   Upload,
   X,
   CheckCircle,
+  XCircle,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Share2
 } from 'lucide-react'
 
 const ContentDashboard = () => {
@@ -93,11 +95,16 @@ const ContentDashboard = () => {
   const [showConfirmationModal, setShowConfirmationModal] = useState(false)
   const [generateImagesWithContent, setGenerateImagesWithContent] = useState(false)
   const [fetchingFreshData, setFetchingFreshData] = useState(false)
+  const [fetchingContent, setFetchingContent] = useState(false) // Track if content is being fetched for selected channel
+  const [loadingAllContent, setLoadingAllContent] = useState(false) // Track if loading all content
+  const [hasMoreContent, setHasMoreContent] = useState(false) // Track if there's more content to load
+  const [allDatesCount, setAllDatesCount] = useState(0) // Total number of dates found
   const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
   const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
   const [selectedChannel, setSelectedChannel] = useState(null) // Current selected channel (null = not set yet, will default to first channel)
-  const [availableChannels, setAvailableChannels] = useState([]) // Available channels from content
+  const [availableChannels, setAvailableChannels] = useState([]) // Available channels from profile
   const [allContent, setAllContent] = useState([]) // All content fetched from API
+  const [profile, setProfile] = useState(null) // User profile data
   const [editingContent, setEditingContent] = useState(null) // Content being edited
   const [editForm, setEditForm] = useState({}) // Edit form data
   const [saving, setSaving] = useState(false) // Saving state
@@ -173,12 +180,87 @@ const ContentDashboard = () => {
     }
   }, [statusDropdownOpen])
 
-  // Refresh content when generation completes
+  // Fetch profile to get available channels (Digital Marketing Platforms)
   useEffect(() => {
-    if (!generating && !fetchingFreshData) {
+    const fetchProfile = async () => {
+      try {
+        if (!user?.id) return
+        
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('social_media_platforms')
+          .eq('id', user.id)
+          .single()
+        
+        if (error) {
+          console.error('Error fetching profile:', error)
+          return
+        }
+        
+        if (data) {
+          setProfile(data)
+          // Extract channels from profile's social_media_platforms
+          const platforms = data.social_media_platforms || []
+          
+          // Map profile platform names to content platform format
+          const platformMapping = {
+            'instagram': 'instagram',
+            'facebook': 'facebook',
+            'linkedin': 'linkedin',
+            'youtube': 'youtube',
+            'pinterest': 'pinterest',
+            'x (twitter)': 'twitter',
+            'x': 'twitter',
+            'twitter': 'twitter',
+            'tiktok': 'tiktok',
+            'whatsapp business': 'whatsapp',
+            'whatsapp': 'whatsapp',
+            'google business profile': 'google business profile',
+            'google business': 'google business profile',
+            'snapchat': 'snapchat',
+            'quora': 'quora',
+            'reddit': 'reddit'
+          }
+          
+          // Normalize platform names to match content platform format
+          const normalizedPlatforms = platforms.map(p => {
+            const platformKey = p.toLowerCase().trim()
+            // Check if we have a mapping
+            if (platformMapping[platformKey]) {
+              return platformMapping[platformKey]
+            }
+            // Fallback: use lowercase version
+            return platformKey
+          })
+          
+          // Remove duplicates and sort
+          const uniquePlatforms = Array.from(new Set(normalizedPlatforms)).sort()
+          setAvailableChannels(uniquePlatforms)
+          console.log('Channels from profile:', uniquePlatforms)
+          console.log('Original platforms from profile:', platforms)
+          
+          // Set first channel as default if no channel is selected
+          if (uniquePlatforms.length > 0 && selectedChannel === null) {
+            setSelectedChannel(uniquePlatforms[0])
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error)
+      }
+    }
+    
+    fetchProfile()
+  }, [user])
+
+  // Refresh content when generation completes or channel changes
+  useEffect(() => {
+    if (!generating && !fetchingFreshData && selectedChannel) {
+      // Reset load more state when channel changes
+      setHasMoreContent(false)
+      setLoadingAllContent(false)
       fetchAllContent()
     }
-  }, [generating, fetchingFreshData])
+  }, [generating, fetchingFreshData, selectedChannel])
 
   // Set first channel as default when channels become available
   useEffect(() => {
@@ -217,37 +299,141 @@ const ContentDashboard = () => {
     }
   }
 
-  // Fetch all content and extract available channels
+  // Fetch content only for the selected channel
+  // Only fetch content for 8 oldest dates (from bottom) to optimize performance
   const fetchAllContent = async () => {
     try {
-      console.log('Fetching all content...')
-      const result = await contentAPI.getAllContent(1000, 0) // Get all content
+      // Don't fetch if no channel is selected
+      if (!selectedChannel) {
+        console.log('No channel selected, skipping content fetch')
+        setFetchingContent(false)
+        return
+      }
       
-      console.log('Fetched all content:', result.data?.length, 'items')
+      // If "all" is selected, don't fetch (or fetch for all channels - but user wants only selected channel)
+      if (selectedChannel === 'all') {
+        console.log('"All" channel selected - not fetching content (only fetch for specific channel)')
+        setAllContent([])
+        setFetchingContent(false)
+        return
+      }
       
-      if (result.data) {
-        setAllContent(result.data)
+      // Set loading state
+      setFetchingContent(true)
+      console.log(`Fetching content for channel "${selectedChannel}" - 8 oldest dates (from bottom)...`)
+      
+      const allDates = new Set()
+      const allDateToContentMap = new Map() // Map date -> array of content (all dates)
+      const contentWithoutDates = []
+      let offset = 0
+      const batchSize = 50
+      const maxDates = 8
+      let hasMoreData = true
+      
+      // Normalize selected channel for comparison
+      const normalizedSelectedChannel = selectedChannel.toLowerCase()
+      
+      // Fetch in batches to collect dates
+      // Since backend returns newest first (desc), we fetch enough to likely get 8 oldest dates
+      // We'll fetch a reasonable number of batches (enough to cover date range)
+      const maxBatches = 10 // Fetch up to 10 batches (500 items) to ensure we get enough date coverage
+      let batchCount = 0
+      
+      while (hasMoreData && batchCount < maxBatches) {
+        const result = await contentAPI.getAllContent(batchSize, offset)
         
-        // Extract unique channels from content
-        const channels = new Set()
-        result.data.forEach(content => {
-          if (content.platform) {
-            channels.add(content.platform)
-          }
-        })
-        
-        // Convert to sorted array
-        const channelsArray = Array.from(channels).sort()
-        setAvailableChannels(channelsArray)
-        console.log('Available channels:', channelsArray)
-        
-        // Set first channel as default if no channel is selected yet
-        if (selectedChannel === null && channelsArray.length > 0) {
-          setSelectedChannel(channelsArray[0])
+        if (!result.data || result.data.length === 0) {
+          hasMoreData = false
+          break
         }
         
-        // Load images immediately for all content (with error handling)
+        console.log(`Fetched batch ${batchCount + 1}: ${result.data.length} items, offset: ${offset}`)
+        console.log(`Looking for channel: "${normalizedSelectedChannel}"`)
+        console.log(`Platforms in this batch:`, [...new Set(result.data.map(c => c.platform?.toLowerCase().trim()).filter(Boolean))])
+        
+        // Process this batch and track all dates - ONLY for selected channel
+        let matchedInBatch = 0
         for (const content of result.data) {
+          // Filter by selected channel - normalize platform name for comparison
+          const contentPlatform = content.platform?.toLowerCase().trim() || ''
+          
+          // Skip content that doesn't match the selected channel
+          // Handle variations: "x (twitter)" -> "twitter", "whatsapp business" -> "whatsapp", etc.
+          let matchesChannel = false
+          if (contentPlatform === normalizedSelectedChannel) {
+            matchesChannel = true
+          } else if (normalizedSelectedChannel === 'twitter' && (contentPlatform === 'x' || contentPlatform === 'x (twitter)')) {
+            matchesChannel = true
+          } else if (normalizedSelectedChannel === 'whatsapp' && contentPlatform.includes('whatsapp')) {
+            matchesChannel = true
+          } else if (normalizedSelectedChannel === 'google business profile' && contentPlatform.includes('google')) {
+            matchesChannel = true
+          }
+          
+          if (!matchesChannel) {
+            continue
+          }
+          
+          matchedInBatch++
+          
+          if (content.scheduled_at) {
+            // Extract date from scheduled_at (format: "YYYY-MM-DDTHH:mm:ss" or "YYYY-MM-DD")
+            const dateStr = content.scheduled_at.split('T')[0]
+            allDates.add(dateStr)
+            
+            // Group content by date (store all dates)
+            if (!allDateToContentMap.has(dateStr)) {
+              allDateToContentMap.set(dateStr, [])
+            }
+            allDateToContentMap.get(dateStr).push(content)
+          } else {
+            // Store content without dates separately (only if it matches the channel)
+            contentWithoutDates.push(content)
+          }
+        }
+        
+        console.log(`Matched ${matchedInBatch} items in batch ${batchCount + 1} for channel "${normalizedSelectedChannel}"`)
+        
+        // If we got fewer items than batch size, we're done
+        if (result.data.length < batchSize) {
+          hasMoreData = false
+        } else {
+          offset += batchSize
+          batchCount++
+        }
+      }
+      
+      // Sort all dates in ascending order (oldest first) and take the 8 oldest
+      const sortedDates = Array.from(allDates).sort()
+      const selectedDates = sortedDates.slice(0, maxDates)
+      
+      // Track if there's more content to load
+      setAllDatesCount(sortedDates.length)
+      setHasMoreContent(sortedDates.length > maxDates)
+      
+      console.log(`Found ${allDates.size} unique dates for channel "${selectedChannel}", selecting 8 oldest:`, selectedDates)
+      
+      // Collect content from the 8 oldest dates
+      const filteredContent = []
+      for (const date of selectedDates) {
+        const contentForDate = allDateToContentMap.get(date) || []
+        filteredContent.push(...contentForDate)
+      }
+      
+      // Add content without dates at the end
+      filteredContent.push(...contentWithoutDates)
+      
+      console.log(`Filtered to ${filteredContent.length} items from ${selectedDates.length} dates for channel "${selectedChannel}"`)
+      console.log('Selected dates (oldest first):', selectedDates)
+      console.log('Sample content platforms:', filteredContent.slice(0, 3).map(c => ({ id: c.id, platform: c.platform })))
+      
+      if (filteredContent.length > 0) {
+        setAllContent(filteredContent)
+        console.log(`✅ Set allContent with ${filteredContent.length} items for channel "${selectedChannel}"`)
+        
+        // Only load images for the filtered content (8 dates worth)
+        console.log('Loading images for filtered content...')
+        for (const content of filteredContent) {
           try {
             await fetchPostImages(content.id)
           } catch (error) {
@@ -255,14 +441,159 @@ const ContentDashboard = () => {
             console.debug('Image loading failed for content:', content.id)
           }
         }
+        console.log('Finished loading images for filtered content')
       } else {
         setAllContent([])
-        setAvailableChannels([])
+        console.log(`No content found for channel "${selectedChannel}"`)
       }
+      
+      // Set loading state to false after fetch completes
+      setFetchingContent(false)
     } catch (error) {
       console.error('Error fetching all content:', error)
       setAllContent([])
-      setAvailableChannels([])
+      setFetchingContent(false)
+    }
+  }
+
+  // Load all content for the selected channel (all dates, not just 8)
+  const loadAllContent = async () => {
+    try {
+      // Don't fetch if no channel is selected
+      if (!selectedChannel) {
+        console.log('No channel selected, skipping content fetch')
+        return
+      }
+      
+      // If "all" is selected, don't fetch
+      if (selectedChannel === 'all') {
+        console.log('"All" channel selected - not fetching content')
+        return
+      }
+      
+      // Set loading state
+      setLoadingAllContent(true)
+      console.log(`Loading all content for channel "${selectedChannel}"...`)
+      
+      const allDates = new Set()
+      const allDateToContentMap = new Map() // Map date -> array of content
+      const contentWithoutDates = []
+      let offset = 0
+      const batchSize = 50
+      let hasMoreData = true
+      
+      // Normalize selected channel for comparison
+      const normalizedSelectedChannel = selectedChannel.toLowerCase()
+      
+      // Fetch in batches to collect all dates
+      const maxBatches = 20 // Fetch up to 20 batches (1000 items) to get all content
+      let batchCount = 0
+      
+      while (hasMoreData && batchCount < maxBatches) {
+        const result = await contentAPI.getAllContent(batchSize, offset)
+        
+        if (!result.data || result.data.length === 0) {
+          hasMoreData = false
+          break
+        }
+        
+        console.log(`Fetched batch ${batchCount + 1}: ${result.data.length} items, offset: ${offset}`)
+        
+        // Process this batch and track all dates - ONLY for selected channel
+        let matchedInBatch = 0
+        for (const content of result.data) {
+          // Filter by selected channel - normalize platform name for comparison
+          const contentPlatform = content.platform?.toLowerCase().trim() || ''
+          
+          // Skip content that doesn't match the selected channel
+          let matchesChannel = false
+          if (contentPlatform === normalizedSelectedChannel) {
+            matchesChannel = true
+          } else if (normalizedSelectedChannel === 'twitter' && (contentPlatform === 'x' || contentPlatform === 'x (twitter)')) {
+            matchesChannel = true
+          } else if (normalizedSelectedChannel === 'whatsapp' && contentPlatform.includes('whatsapp')) {
+            matchesChannel = true
+          } else if (normalizedSelectedChannel === 'google business profile' && contentPlatform.includes('google')) {
+            matchesChannel = true
+          }
+          
+          if (!matchesChannel) {
+            continue
+          }
+          
+          matchedInBatch++
+          
+          if (content.scheduled_at) {
+            // Extract date from scheduled_at
+            const dateStr = content.scheduled_at.split('T')[0]
+            allDates.add(dateStr)
+            
+            // Group content by date
+            if (!allDateToContentMap.has(dateStr)) {
+              allDateToContentMap.set(dateStr, [])
+            }
+            allDateToContentMap.get(dateStr).push(content)
+          } else {
+            // Store content without dates separately
+            contentWithoutDates.push(content)
+          }
+        }
+        
+        console.log(`Matched ${matchedInBatch} items in batch ${batchCount + 1} for channel "${normalizedSelectedChannel}"`)
+        
+        // If we got fewer items than batch size, we're done
+        if (result.data.length < batchSize) {
+          hasMoreData = false
+        } else {
+          offset += batchSize
+          batchCount++
+        }
+      }
+      
+      // Sort all dates in ascending order (oldest first) - load ALL dates
+      const sortedDates = Array.from(allDates).sort()
+      
+      console.log(`Found ${allDates.size} unique dates for channel "${selectedChannel}", loading all dates`)
+      
+      // Collect content from ALL dates
+      const allFilteredContent = []
+      for (const date of sortedDates) {
+        const contentForDate = allDateToContentMap.get(date) || []
+        allFilteredContent.push(...contentForDate)
+      }
+      
+      // Add content without dates at the end
+      allFilteredContent.push(...contentWithoutDates)
+      
+      console.log(`Loaded ${allFilteredContent.length} items from ${sortedDates.length} dates for channel "${selectedChannel}"`)
+      
+      if (allFilteredContent.length > 0) {
+        setAllContent(allFilteredContent)
+        setHasMoreContent(false) // No more content to load
+        setAllDatesCount(sortedDates.length)
+        console.log(`✅ Set allContent with ${allFilteredContent.length} items for channel "${selectedChannel}"`)
+        
+        // Load images for all content
+        console.log('Loading images for all content...')
+        for (const content of allFilteredContent) {
+          try {
+            await fetchPostImages(content.id)
+          } catch (error) {
+            console.debug('Image loading failed for content:', content.id)
+          }
+        }
+        console.log('Finished loading images for all content')
+      } else {
+        setAllContent([])
+        console.log(`No content found for channel "${selectedChannel}"`)
+      }
+      
+      // Set loading state to false after fetch completes
+      setLoadingAllContent(false)
+    } catch (error) {
+      console.error('Error loading all content:', error)
+      setAllContent([])
+      setLoadingAllContent(false)
     }
   }
 
@@ -427,6 +758,7 @@ const ContentDashboard = () => {
   })
   
   // Filter content by selected channel
+  // Note: fetchAllContent already filters by channel, but we do a final check here for safety
   const filteredContent = contentToDisplay
     .filter(content => {
       if (!selectedChannel) {
@@ -435,7 +767,27 @@ const ContentDashboard = () => {
       if (selectedChannel === 'all') {
         return true // Show all content when 'all' is selected
       }
-      return content.platform === selectedChannel
+      // Case-insensitive comparison with platform name variations
+      const contentPlatform = content.platform?.toLowerCase().trim() || ''
+      const normalizedChannel = selectedChannel.toLowerCase().trim()
+      
+      // Direct match
+      if (contentPlatform === normalizedChannel) {
+        return true
+      }
+      
+      // Handle variations
+      if (normalizedChannel === 'twitter' && (contentPlatform === 'x' || contentPlatform === 'x (twitter)')) {
+        return true
+      }
+      if (normalizedChannel === 'whatsapp' && contentPlatform.includes('whatsapp')) {
+        return true
+      }
+      if (normalizedChannel === 'google business profile' && contentPlatform.includes('google')) {
+        return true
+      }
+      
+      return false
     })
     .sort((a, b) => {
       // Sort by scheduled_at in ascending order (earliest dates first)
@@ -1370,8 +1722,10 @@ const ContentDashboard = () => {
         // Update local content cache first
         updateContentInCache(contentId, { status: 'scheduled' })
         
-        // Close the expanded content
-        setExpandedContent(null)
+        // Close the modal if this content is currently open
+        if (selectedContentForModal && selectedContentForModal.id === contentId) {
+          setSelectedContentForModal(null)
+        }
         
         // Show success message immediately
         showSuccess('Post approved and scheduled successfully!')
@@ -1388,6 +1742,37 @@ const ContentDashboard = () => {
     } catch (error) {
       console.error('Error approving post:', error)
       showError('Failed to approve post', error.message)
+    }
+  }
+
+  const handleDisapprovePost = async (contentId) => {
+    try {
+      const result = await contentAPI.updateContentStatus(contentId, 'draft')
+      
+      if (result.success) {
+        // Update local content cache first
+        updateContentInCache(contentId, { status: 'draft' })
+        
+        // Update the modal content if it's currently open
+        if (selectedContentForModal && selectedContentForModal.id === contentId) {
+          setSelectedContentForModal({ ...selectedContentForModal, status: 'draft' })
+        }
+        
+        // Show success message immediately
+        showSuccess('Post disapproved and moved back to draft!')
+        
+        // Add a small delay to ensure the status update is processed
+        setTimeout(async () => {
+          // Force refresh the content data to get updated status
+          await fetchData(true)
+        }, 500)
+        
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error disapproving post:', error)
+      showError('Failed to disapprove post', error.message)
     }
   }
 
@@ -1786,6 +2171,22 @@ const ContentDashboard = () => {
     return null
   }
 
+  // Get optimized card thumbnail for fast loading in content cards
+  // Note: Supabase Storage doesn't support query parameter transformations by default
+  // We'll use the original image but optimize loading with proper attributes
+  const getCardThumbnailUrl = (imageUrl) => {
+    if (!imageUrl) return null
+    
+    // For now, return the original URL - browser and CSS will handle sizing
+    // The image will be displayed at 96-112px (w-24 to w-28) so even large images
+    // will be rendered at that size, and modern browsers optimize this
+    return imageUrl
+    
+    // TODO: If you have Supabase Image Transformation enabled, you can use:
+    // return `${imageUrl}?width=150&height=150&resize=cover&quality=40&format=webp`
+    // Or use Supabase's image transformation service if configured
+  }
+
   // Check if the media file is a video
   const isVideoFile = (url) => {
     if (!url) return false
@@ -1991,7 +2392,8 @@ const ContentDashboard = () => {
                 {/* Channel Tabs */}
                 <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                   {availableChannels.map((channel) => {
-                    const channelCount = allContent.filter(c => c.platform === channel).length
+                    // Count only shows for currently selected channel (since we only fetch for selected channel)
+                    const channelCount = selectedChannel === channel ? allContent.length : 0
                     return (
                       <button
                         key={channel}
@@ -2004,11 +2406,11 @@ const ContentDashboard = () => {
                       >
                         <span>{getPlatformIcon(channel)}</span>
                         <span className="capitalize">{channel}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          selectedChannel === channel ? 'bg-white/20' : 'bg-gray-200'
-                        }`}>
-                          {channelCount}
-                        </span>
+                        {selectedChannel === channel && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-white/20">
+                            {channelCount}
+                          </span>
+                        )}
                       </button>
                     )
                   })}
@@ -2056,446 +2458,403 @@ const ContentDashboard = () => {
             </div>
           )}
 
-          {/* Content Cards - 4 Column Layout */}
+          {/* Content Cards - 2 Row Grid Layout */}
           <div className="space-y-6">
-            {filteredContent.length > 0 && (
+            {!selectedChannel && (
+              <div className="text-center py-12">
+                <p className="text-gray-500">Please select a channel to view content</p>
+              </div>
+            )}
+            {selectedChannel && fetchingContent && (
+              <div className="text-center py-12">
+                <p className="text-gray-600 font-medium">Loading content for {selectedChannel}...</p>
+              </div>
+            )}
+            {selectedChannel && !fetchingContent && filteredContent.length === 0 && !generating && !fetchingFreshData && (
+              <div className="text-center py-12">
+                <p className="text-gray-500">No content found for {selectedChannel}</p>
+                <p className="text-sm text-gray-400 mt-2">Try selecting a different channel or generate new content</p>
+              </div>
+            )}
+            {!fetchingContent && filteredContent.length > 0 && (
               <div className="relative">
-                {/* Right arrow indicator - only show when there's more content to scroll (hidden on mobile) */}
-                {showScrollArrow && (
-                  <div className="hidden sm:block absolute right-0 top-1/2 transform -translate-y-1/2 z-10 pointer-events-none">
-                    <div className="bg-white rounded-full p-2 shadow-lg border border-gray-200">
-                      <ChevronRight className="w-5 h-5 text-gray-400" />
-                    </div>
-                  </div>
-                )}
-                
                 <div 
-                  className="flex flex-col sm:flex-row gap-6 overflow-x-auto sm:overflow-x-auto overflow-y-visible py-2 px-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
-                  onScroll={handleScroll}
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
                 >
                 {filteredContent.map((content) => {
                   const theme = getPlatformCardTheme(content.platform)
                   console.log('Content platform:', content.platform, 'Theme:', theme)
+                  
+                  // Only load images for the selected channel
+                  // Use case-insensitive comparison
+                  const contentPlatform = content.platform?.toLowerCase().trim() || ''
+                  const normalizedSelectedChannel = selectedChannel?.toLowerCase().trim() || ''
+                  const isSelectedChannel = !selectedChannel || selectedChannel === 'all' || 
+                    contentPlatform === normalizedSelectedChannel ||
+                    (normalizedSelectedChannel === 'twitter' && (contentPlatform === 'x' || contentPlatform === 'x (twitter)')) ||
+                    (normalizedSelectedChannel === 'whatsapp' && contentPlatform.includes('whatsapp')) ||
+                    (normalizedSelectedChannel === 'google business profile' && contentPlatform.includes('google'))
+                  
+                  // Get image URL for left side - only if this is the selected channel
+                  const imageUrl = isSelectedChannel 
+                    ? ((generatedImages[content.id] && generatedImages[content.id].image_url) || content.image_url)
+                    : null
+                  const thumbnailUrl = imageUrl ? getCardThumbnailUrl(imageUrl) : null
+                  const hasImage = isSelectedChannel && !!(imageUrl || content.media_url)
+                  
+                  // Debug logging for image URLs
+                  if (content.id && !imageUrl && !content.media_url && isSelectedChannel) {
+                    console.log('⚠️ Content has no image:', content.id, {
+                      hasGeneratedImage: !!(generatedImages[content.id] && generatedImages[content.id].image_url),
+                      hasContentImage: !!content.image_url,
+                      hasMediaUrl: !!content.media_url,
+                      content: content
+                    })
+                  }
+                  
+                  // Check if post is approved or scheduled (show green border)
+                  const status = content.status?.toLowerCase()
+                  const isApproved = status === 'approved' || status === 'scheduled'
+                  
                   return (
                     <div 
                       key={content.id} 
                       onClick={() => handleViewContent(content)}
-                      className={`${theme.bg} rounded-xl shadow-[0_0_8px_rgba(0,0,0,0.12),0_2px_4px_rgba(0,0,0,0.08)] p-4 hover:shadow-[0_0_16px_rgba(0,0,0,0.18),0_4px_8px_rgba(0,0,0,0.12)] transition-all duration-300 hover:scale-[1.02] cursor-pointer flex-shrink-0 w-full sm:w-80 sm:min-w-80 sm:max-w-80 overflow-hidden`}
+                      className={`${theme.bg} rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] cursor-pointer w-full overflow-hidden flex flex-col shadow-[0_0_8px_rgba(0,0,0,0.12),0_2px_4px_rgba(0,0,0,0.08)] hover:shadow-[0_0_16px_rgba(0,0,0,0.18),0_4px_8px_rgba(0,0,0,0.12)] ${
+                        isApproved 
+                          ? 'border border-green-500' 
+                          : 'border border-transparent'
+                      }`}
                     >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-10 h-10 ${theme.iconBg} rounded-xl flex items-center justify-center shadow-sm`}>
-                            <div className="text-white">
-                              {getPlatformIcon(content.platform)}
-                            </div>
-                          </div>
-                          <div>
-                            <h4 className={`font-semibold capitalize ${theme.text}`}>{content.platform}</h4>
-                            {/* Date */}
-                            {content.scheduled_at && (
-                              <div className="flex items-center space-x-2 mt-1 text-xs text-gray-600">
-                                <span>{formatDate(content.scheduled_at)}</span>
-                                {content.scheduled_at.includes('T') && (
-                                  <>
-                                    <span className="text-gray-400">•</span>
-                                    <span>{formatTime(content.scheduled_at.split('T')[1])}</span>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {/* Status Dropdown */}
-                        <div className="relative status-dropdown">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setStatusDropdownOpen(statusDropdownOpen === content.id ? null : content.id)
-                            }}
-                            disabled={updatingStatus.has(content.id)}
-                            className={`px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(content.status)} hover:opacity-80 transition-opacity disabled:opacity-50`}
-                          >
-                            <span className="capitalize">{content.status}</span>
-                            {updatingStatus.has(content.id) ? (
-                              <RefreshCw className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <ChevronDown className="w-3 h-3" />
-                            )}
-                          </button>
-                          
-                          {/* Dropdown Menu */}
-                          {statusDropdownOpen === content.id && (
-                            <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-xl border border-gray-200 z-50 animate-in slide-in-from-top-2 duration-200">
-                              <div className="py-1">
-                                {statusOptions.map((option) => (
-                                  <button
-                                    key={option.value}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleStatusChange(content.id, option.value)
-                                    }}
-                                    disabled={updatingStatus.has(content.id) || content.status === option.value}
-                                    className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 transition-colors flex items-center space-x-2 ${
-                                      content.status === option.value ? 'bg-gray-100 text-gray-600' : 'text-gray-700'
-                                    } ${updatingStatus.has(content.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                  >
-                                    <div className={`w-2 h-2 rounded-full ${option.color.split(' ')[0]}`}></div>
-                                    <span className="capitalize">{option.label}</span>
-                                    {updatingStatus.has(content.id) && content.status === option.value && (
-                                      <RefreshCw className="w-3 h-3 animate-spin ml-auto" />
-                                    )}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    
-                    {content.title && (
-                      <h5 className="font-medium text-gray-900 mb-2 text-sm">{content.title}</h5>
-                    )}
-                    
-                      <div className="w-full max-w-full overflow-hidden">
-                        {/* Media Display - Only show if content has media */}
-                        {((generatedImages[content.id] && generatedImages[content.id].image_url) || content.image_url) && (
-                        <div className="mb-2 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center space-x-1">
-                              <span className="text-xs font-medium text-purple-800">Media</span>
-                                {generatedImages[content.id].is_approved ? (
-                                  <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">✓</span>
-                                ) : (
-                                  <span className="text-xs bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded">Pending</span>
+                      {/* Main Content: Image on Left, Content on Right */}
+                      <div className="flex gap-4 mb-3 flex-1">
+                        {/* Left Side: Image */}
+                        <div className="flex-shrink-0 w-24 h-24 sm:w-28 sm:h-28">
+                          {hasImage ? (
+                            <div className="relative w-full h-full bg-gray-200 rounded-lg overflow-hidden">
+                              {/* Show placeholder while loading */}
+                              {imageLoading.has(content.id) && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                                  <div className="w-8 h-8 bg-gray-300 rounded animate-pulse"></div>
+                                </div>
                               )}
-                            </div>
-                          </div>
-                          <div className="relative w-full aspect-square bg-gray-200 rounded overflow-hidden">
-                                {/* Show placeholder while loading */}
-                                {imageLoading.has(content.id) && (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                                    <div className="w-8 h-8 bg-gray-300 rounded animate-pulse"></div>
-                                  </div>
-                                )}
                               {(() => {
-                                    // Use generated image if available, otherwise use content's image_url
-                                    const imageUrl = (generatedImages[content.id] && generatedImages[content.id].image_url) || content.image_url
-                                    const thumbnailUrl = getUltraSmallThumbnailUrl(imageUrl)
-                                console.log('🖼️ Content card image check:', {
-                                  contentId: content.id,
-                                  hasGeneratedImage: !!(generatedImages[content.id] && generatedImages[content.id].image_url),
-                                  hasContentImage: !!content.image_url,
-                                  imageUrl: imageUrl,
-                                  thumbnailUrl: thumbnailUrl
-                                })
+                                // Only get media URL if this is the selected channel
+                                const mediaUrl = isSelectedChannel ? (imageUrl || content.media_url) : null
+                                // Always prefer thumbnail for faster loading, fallback to original if thumbnail not available
+                                const mediaThumbnail = isSelectedChannel ? (thumbnailUrl || mediaUrl) : null
                                 
-                                // Check if it's a video file
-                                if (isVideoFile(imageUrl)) {
-                                  console.log('🎬 Rendering video for content:', content.id)
-                                  console.log('🎬 Video URL:', imageUrl)
-                                  console.log('🎬 Video file extension:', imageUrl.split('.').pop())
-                                      return (
+                                // Check if it's a video file - only load for selected channel
+                                if (mediaUrl && isVideoFile(mediaUrl) && isSelectedChannel) {
+                                  return (
                                     <video 
-                                      src={imageUrl}
-                                      className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
-                                      controls
+                                      src={mediaUrl}
+                                      className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                      controls={false}
                                       preload="metadata"
                                       muted
                                       playsInline
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                        handleImageClick(imageUrl, content.title)
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleImageClick(mediaUrl, content.title)
                                       }}
                                       onLoadStart={() => {
-                                        console.log('🎬 Video loading started for content:', content.id)
                                         startImageLoading(content.id)
                                       }}
                                       onLoadedData={() => {
-                                        console.log('✅ Video loaded for content:', content.id)
                                         handleImageLoad(content.id)
                                       }}
                                       onError={(e) => {
-                                        console.error('❌ Video failed to load for content:', content.id)
-                                        console.error('❌ Failed URL:', imageUrl)
-                                        console.error('❌ Error details:', e)
                                         handleImageError(content.id)
-                                      }}
-                                      onCanPlay={() => {
-                                        console.log('🎬 Video can play for content:', content.id)
                                       }}
                                       style={{
                                         opacity: imageLoading.has(content.id) ? 0 : 1,
                                         filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
-                                        transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
-                                        transition: 'all 0.5s ease-in-out'
-                                      }}
-                                    >
-                                      Your browser does not support the video tag.
-                                    </video>
-                                  )
-                                }
-                                
-                                // If thumbnail URL is null (non-generated folder URL), show original image
-                                if (!thumbnailUrl) {
-                                  return (
-                                    <img 
-                                      src={imageUrl} 
-                                      alt="Content image" 
-                                      className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
-                                      loading="eager"
-                                      onClick={() => handleImageClick(imageUrl, content.title)}
-                                      onLoad={() => {
-                                        console.log('✅ Image loaded for content:', content.id)
-                                        handleImageLoad(content.id)
-                                      }}
-                                      onError={(e) => {
-                                        console.error('❌ Image failed to load for content:', content.id)
-                                        console.error('❌ Failed URL:', imageUrl)
-                                        handleImageError(content.id)
-                                      }}
-                                      onLoadStart={() => startImageLoading(content.id)}
-                                      style={{
-                                        opacity: imageLoading.has(content.id) ? 0 : 1,
-                                        filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
-                                        transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
                                         transition: 'all 0.5s ease-in-out'
                                       }}
                                     />
-                                      )
-                                    }
-                                    
-                                    // Show image if we have a valid Supabase thumbnail URL
-                                    return (
-                                      <img 
-                                        src={thumbnailUrl} 
-                                        alt="Content image" 
-                                        className="w-full h-full object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
-                                        loading="eager"
-                                      onClick={() => handleImageClick(getFullSizeImageUrl(imageUrl), content.title)}
-                                        onLoad={() => {
-                                          console.log('✅ Image loaded for content:', content.id)
-                                          handleImageLoad(content.id)
-                                        }}
-                                        onError={(e) => {
-                                          console.error('❌ Image failed to load for content:', content.id)
-                                          console.error('❌ Failed URL:', thumbnailUrl)
+                                  )
+                                }
+                                
+                                // Show image - using optimized thumbnail for fast loading
+                                // Only load images for the selected channel
+                                if (mediaThumbnail && isSelectedChannel) {
+                                  // Use eager loading only for first 4 images (what's actually visible in viewport)
+                                  // All others use lazy loading to prevent loading all images at once
+                                  const imageIndex = filteredContent.findIndex(c => c.id === content.id)
+                                  const shouldLoadEager = imageIndex < 4
+                                  
+                                  return (
+                                    <img 
+                                      src={mediaThumbnail} 
+                                      alt="Content image" 
+                                      className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                      loading={shouldLoadEager ? "eager" : "lazy"}
+                                      decoding="async"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleImageClick(mediaUrl || mediaThumbnail, content.title)
+                                      }}
+                                      onLoad={() => {
+                                        console.log('✅ Image loaded successfully:', content.id, mediaThumbnail)
+                                        handleImageLoad(content.id)
+                                      }}
+                                      onError={(e) => {
+                                        console.error('❌ Image failed to load:', content.id, mediaThumbnail, e)
+                                        // Try fallback to original URL if thumbnail fails
+                                        if (mediaThumbnail !== mediaUrl) {
+                                          console.log('🔄 Attempting fallback to original URL:', mediaUrl)
+                                          // Force reload with original URL
+                                          const img = e.target
+                                          img.src = mediaUrl
+                                        } else {
                                           handleImageError(content.id)
-                                        }}
-                                        onLoadStart={() => startImageLoading(content.id)}
-                                        style={{
-                                          opacity: imageLoading.has(content.id) ? 0 : 1,
-                                          filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
-                                          transform: imageLoading.has(content.id) ? 'scale(1.1)' : 'scale(1)',
-                                          transition: 'all 0.5s ease-in-out'
-                                        }}
-                                      />
-                                    )
+                                        }
+                                      }}
+                                      onLoadStart={() => {
+                                        console.log('🔄 Image loading started:', content.id, mediaThumbnail)
+                                        startImageLoading(content.id)
+                                      }}
+                                      style={{
+                                        opacity: imageLoading.has(content.id) ? 0 : 1,
+                                        filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
+                                        transition: 'all 0.5s ease-in-out'
+                                      }}
+                                    />
+                                  )
+                                }
+                                
+                                return null
                               })()}
                             </div>
-                            
-                            {/* Edit Image Button */}
-                            <div className="mt-2 flex justify-center">
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-purple-100 to-pink-100 rounded-lg"></div>
+                          )}
+                        </div>
+                        
+                        {/* Right Side: Content */}
+                        <div className="flex-1 min-w-0">
+                          {/* Header with Platform and Status */}
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="min-w-0">
+                              <h4 className={`font-semibold capitalize ${theme.text} text-sm truncate`}>{content.platform}</h4>
+                            </div>
+                            {/* Status Dropdown */}
+                            <div className="relative status-dropdown flex-shrink-0">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setImageEditorData({
-                                    postContent: content.content,
-                                    inputImageUrl: generatedImages[content.id].image_url
-                                  })
-                                  setShowImageEditor(true)
+                                  setStatusDropdownOpen(statusDropdownOpen === content.id ? null : content.id)
                                 }}
-                                className="px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1"
+                                disabled={updatingStatus.has(content.id)}
+                                className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(content.status)} hover:opacity-80 transition-opacity disabled:opacity-50`}
                               >
-                                <Edit3 className="w-3 h-3" />
-                                <span>Edit Image</span>
-                              </button>
-                            </div>
-                                  </div>
+                                <span className="capitalize text-xs">{content.status}</span>
+                                {updatingStatus.has(content.id) ? (
+                                  <RefreshCw className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <ChevronDown className="w-3 h-3" />
                                 )}
-                        
-                        <p className="text-gray-700 text-sm mb-2 line-clamp-2 break-words overflow-hidden">{cleanContentText(content.content)}</p>
-                        
-                        {cleanContentText(content.content).length > 150 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleViewContent(content)
-                            }}
-                            className="text-xs text-purple-600 hover:text-purple-800 font-medium mb-2"
-                          >
-                            Read more
-                          </button>
-                        )}
-                        
-                        {/* Media Action Buttons */}
-                        {(!generatedImages[content.id] || !generatedImages[content.id].image_url) && (
-                          <div className="flex gap-2 mt-2 mb-3">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleGenerateMedia(content)
-                                  }}
-                                  disabled={generatingMedia.has(content.id)}
-                               className="flex-1 px-3 py-2 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center space-x-1"
-                                >
-                                  {generatingMedia.has(content.id) ? (
-                                    <>
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  <span>Generating...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                  <Wand2 className="w-3 h-3" />
-                                  <span>Generate Media</span>
-                                    </>
-                                  )}
-                                </button>
-                        
-                          <button
+                              </button>
+                              
+                              {/* Dropdown Menu */}
+                              {statusDropdownOpen === content.id && (
+                                <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-xl border border-gray-200 z-50 animate-in slide-in-from-top-2 duration-200">
+                                  <div className="py-1">
+                                    {statusOptions.map((option) => (
+                                      <button
+                                        key={option.value}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleStatusChange(content.id, option.value)
+                                        }}
+                                        disabled={updatingStatus.has(content.id) || content.status === option.value}
+                                        className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 transition-colors flex items-center space-x-2 ${
+                                          content.status === option.value ? 'bg-gray-100 text-gray-600' : 'text-gray-700'
+                                        } ${updatingStatus.has(content.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                      >
+                                        <div className={`w-2 h-2 rounded-full ${option.color.split(' ')[0]}`}></div>
+                                        <span className="capitalize">{option.label}</span>
+                                        {updatingStatus.has(content.id) && content.status === option.value && (
+                                          <RefreshCw className="w-3 h-3 animate-spin ml-auto" />
+                                        )}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Title */}
+                          {content.title && (
+                            <h5 className="font-medium text-gray-900 mb-1.5 text-sm line-clamp-1">{content.title}</h5>
+                          )}
+                          
+                          {/* Content Text */}
+                          <p className="text-gray-700 text-xs mb-1.5 line-clamp-2 break-words overflow-hidden">{cleanContentText(content.content)}</p>
+                          
+                          {/* Read more link */}
+                          {cleanContentText(content.content).length > 150 && (
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                setShowUploadModal(content.id)
-                                setSelectedFile(null)
+                                handleViewContent(content)
                               }}
-                              className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-1"
+                              className="text-xs text-purple-600 hover:text-purple-800 font-medium"
                             >
-                              <Upload className="w-3 h-3" />
-                              <span>Upload Media</span>
-                          </button>
+                              Read more
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Bottom: Action Icons */}
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                        {/* Date Display */}
+                        {content.scheduled_at && (
+                          <div className="flex items-center space-x-2">
+                            <div className="w-8 h-8 bg-pink-100 rounded-lg flex items-center justify-center">
+                              <Calendar className="w-4 h-4 text-pink-600" />
+                            </div>
+                            <div className="text-xs text-gray-700">
+                              <div className="font-medium">{formatDate(content.scheduled_at).split(',')[0]}</div>
+                              {content.scheduled_at.includes('T') && (
+                                <div className="text-gray-500">{formatTime(content.scheduled_at.split('T')[1])}</div>
+                              )}
+                            </div>
                           </div>
                         )}
-                      </div>
-                    
-                    {content.media_url && (
-                      <div className="mb-4">
-                        <div className="w-full h-32 bg-gray-100 rounded-lg overflow-hidden">
-                          <img 
-                            src={content.media_url} 
-                            alt="Content media"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Inline Icons Row */}
-                    <div className="flex items-center justify-end mt-2">
-                      {/* Action Icons */}
-                      <div className="flex items-center space-x-2 relative">
-                        <div className="relative">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleEditContent(content)
-                            }}
-                            onMouseEnter={() => setHoveredButton(`${content.id}-edit`)}
-                            onMouseLeave={() => setHoveredButton(null)}
-                            className={`p-2 ${theme.accent} hover:opacity-80 rounded-lg transition-all duration-200 ${theme.text}`}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          {hoveredButton === `${content.id}-edit` && (
-                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                              Edit Post
-                              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                            </div>
-                          )}
-                        </div>
                         
-                        <div className="relative">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleGenerateMedia(content)
-                            }}
-                            onMouseEnter={() => setHoveredButton(`${content.id}-generate`)}
-                            onMouseLeave={() => setHoveredButton(null)}
-                            disabled={generatingMedia.has(content.id)}
-                            className={`p-2 rounded-lg transition-all duration-200 ${
-                              generatingMedia.has(content.id)
-                                ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
-                                : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90'
-                            }`}
-                          >
-                            {generatingMedia.has(content.id) ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Wand2 className="w-4 h-4" />
+                        {/* Action Icons */}
+                        <div className="flex items-center space-x-2 ml-auto">
+                          <div className="relative">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEditContent(content)
+                              }}
+                              onMouseEnter={() => setHoveredButton(`${content.id}-edit`)}
+                              onMouseLeave={() => setHoveredButton(null)}
+                              className="w-8 h-8 bg-pink-100 hover:bg-pink-200 rounded-lg transition-all duration-200 flex items-center justify-center"
+                            >
+                              <Edit className="w-4 h-4 text-pink-600" />
+                            </button>
+                            {hoveredButton === `${content.id}-edit` && (
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                Edit Post
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                              </div>
                             )}
-                          </button>
-                          {hoveredButton === `${content.id}-generate` && (
-                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                              {generatingMedia.has(content.id) ? 'Generating Image with AI...' : 'Generate Image with AI'}
-                              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="relative">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handlePostContent(content)
-                            }}
-                            onMouseEnter={() => setHoveredButton(`${content.id}-post`)}
-                            onMouseLeave={() => setHoveredButton(null)}
-                            disabled={content.status === 'published' || postingContent.has(content.id)}
-                            className={`p-2 rounded-lg transition-all duration-200 ${
-                              content.status === 'published' 
-                                ? 'bg-green-100 text-green-700 cursor-not-allowed' 
-                                : postingContent.has(content.id)
-                                ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
-                                : `${theme.iconBg} text-white hover:opacity-90`
-                            }`}
-                          >
-                            {postingContent.has(content.id) ? (
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Send className="w-4 h-4" />
+                          </div>
+                          
+                          <div className="relative">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleGenerateMedia(content)
+                              }}
+                              onMouseEnter={() => setHoveredButton(`${content.id}-generate`)}
+                              onMouseLeave={() => setHoveredButton(null)}
+                              disabled={generatingMedia.has(content.id)}
+                              className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
+                                generatingMedia.has(content.id)
+                                  ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                  : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90'
+                              }`}
+                            >
+                              {generatingMedia.has(content.id) ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Wand2 className="w-4 h-4" />
+                              )}
+                            </button>
+                            {hoveredButton === `${content.id}-generate` && (
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                {generatingMedia.has(content.id) ? 'Generating Image with AI...' : 'Generate Image with AI'}
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                              </div>
                             )}
-                          </button>
-                          {hoveredButton === `${content.id}-post` && (
-                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                              {content.status === 'published' ? 'Already Published' : postingContent.has(content.id) ? 'Posting...' : `Post on ${content.platform}`}
-                              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="relative">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setDeleteConfirm(content)
-                            }}
-                            onMouseEnter={() => setHoveredButton(`${content.id}-delete`)}
-                            onMouseLeave={() => setHoveredButton(null)}
-                            disabled={deletingContent.has(content.id)}
-                            className={`p-2 rounded-lg transition-all duration-200 ${
-                              deletingContent.has(content.id)
-                                ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
-                                : 'bg-red-500 text-white hover:bg-red-600'
-                            }`}
-                          >
-                            {deletingContent.has(content.id) ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-4 h-4" />
+                          </div>
+                          
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                // Share functionality - can be implemented later
+                                if (navigator.share) {
+                                  navigator.share({
+                                    title: content.title || 'Content',
+                                    text: cleanContentText(content.content),
+                                    url: window.location.href
+                                  }).catch(() => {})
+                                }
+                              }}
+                              onMouseEnter={() => setHoveredButton(`${content.id}-share`)}
+                              onMouseLeave={() => setHoveredButton(null)}
+                              className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 rounded-lg transition-all duration-200 flex items-center justify-center"
+                            >
+                              <Share2 className="w-4 h-4" />
+                            </button>
+                            {hoveredButton === `${content.id}-share` && (
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                Share
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                              </div>
                             )}
-                          </button>
-                          {hoveredButton === `${content.id}-delete` && (
-                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                              {deletingContent.has(content.id) ? 'Deleting...' : 'Delete Post'}
-                              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                            </div>
-                          )}
+                          </div>
+                          
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDeleteConfirm(content)
+                              }}
+                              onMouseEnter={() => setHoveredButton(`${content.id}-delete`)}
+                              onMouseLeave={() => setHoveredButton(null)}
+                              disabled={deletingContent.has(content.id)}
+                              className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
+                                deletingContent.has(content.id)
+                                  ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                  : 'bg-red-500 text-white hover:bg-red-600'
+                              }`}
+                            >
+                              {deletingContent.has(content.id) ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4" />
+                              )}
+                            </button>
+                            {hoveredButton === `${content.id}-delete` && (
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                {deletingContent.has(content.id) ? 'Deleting...' : 'Delete Post'}
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
                   )
                 })}
                 </div>
+                
+                {/* Load More Button */}
+                {hasMoreContent && !loadingAllContent && (
+                  <div className="mt-8 text-center">
+                    <button
+                      onClick={loadAllContent}
+                      className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-sm font-medium transition-all duration-200 underline"
+                    >
+                      Load more
+                    </button>
+                  </div>
+                )}
+                {loadingAllContent && (
+                  <div className="mt-8 text-center">
+                    <p className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 text-sm font-medium">Loading all content...</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -2628,96 +2987,135 @@ const ContentDashboard = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Image Section */}
                   <div className="space-y-4">
-                    {((generatedImages[selectedContentForModal.id] && generatedImages[selectedContentForModal.id].image_url) || selectedContentForModal.image_url) ? (
-                      <div className="relative">
-                        {(() => {
-                          const imageUrl = (generatedImages[selectedContentForModal.id] && generatedImages[selectedContentForModal.id].image_url) || selectedContentForModal.image_url
-                          
-                          if (isVideoFile(imageUrl)) {
-                            return (
-                              <video 
-                                src={imageUrl}
-                                className="w-full h-80 object-cover rounded-lg shadow-lg"
-                                controls
-                                preload="metadata"
-                              >
-                                Your browser does not support the video tag.
-                              </video>
-                            )
-                          } else {
-                            return (
-                              <img
-                                src={getFullSizeImageUrl(imageUrl)}
-                                alt={selectedContentForModal.title || 'Post image'}
-                                className="w-full h-80 object-cover rounded-lg shadow-lg cursor-pointer"
-                                onClick={() => handleImageClick(getFullSizeImageUrl(imageUrl), selectedContentForModal.title)}
-                              />
-                            )
-                          }
-                        })()}
-                        <div className="absolute bottom-4 right-4 flex gap-2">
-                          {(generatedImages[selectedContentForModal.id]?.image_url || selectedContentForModal.image_url) && (
-                            <>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setImageEditorData({
-                                    postContent: selectedContentForModal.content,
-                                    inputImageUrl: generatedImages[selectedContentForModal.id]?.image_url || selectedContentForModal.image_url
-                                  })
-                                  setShowImageEditor(true)
-                                  handleCloseModal()
-                                }}
-                                className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors"
-                              >
-                                Edit Image
-                              </button>
-                              <label className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors cursor-pointer inline-flex items-center space-x-1">
-                                <Upload className="w-4 h-4" />
-                                <span>Replace</span>
-                                <input
-                                  type="file"
-                                  accept="image/*,video/*"
-                                  onChange={(e) => {
-                                    const file = e.target.files[0]
-                                    if (file) {
-                                      handleFileSelect(e)
-                                      setTimeout(() => {
-                                        handleUploadImage(selectedContentForModal.id)
-                                      }, 100)
-                                    }
-                                  }}
-                                  className="hidden"
-                                  disabled={uploadingImage.has(selectedContentForModal.id)}
-                                />
-                              </label>
-                            </>
-                          )}
-                        </div>
-                        {uploadingImage.has(selectedContentForModal.id) && (
-                          <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
-                            <div className="bg-white rounded-lg p-4 flex items-center space-x-3">
-                              <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
-                              <span className="text-gray-900 font-medium">Uploading...</span>
+                    {(() => {
+                      // Always fetch image directly from content object, not from generatedImages state
+                      // This ensures we get the image even if card hasn't loaded it yet
+                      const imageUrl = selectedContentForModal.image_url || selectedContentForModal.media_url
+                      const generatedImageUrl = generatedImages[selectedContentForModal.id]?.image_url
+                      
+                      // Prioritize content's image_url, then generated image, then media_url
+                      const finalImageUrl = imageUrl || generatedImageUrl
+                      
+                      if (!finalImageUrl) {
+                        return (
+                          <div className="w-full h-80 bg-gradient-to-br from-purple-100 to-pink-100 rounded-lg flex items-center justify-center">
+                            <div className="text-center">
+                              <Image className="w-16 h-16 text-gray-400 mx-auto mb-2" strokeWidth={1.5} />
+                              <p className="text-gray-500 text-sm">No image available</p>
                             </div>
                           </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="w-full h-80 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center relative">
-                        {uploadingImage.has(selectedContentForModal.id) ? (
-                          <div className="text-center">
-                            <RefreshCw className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-2" />
-                            <p className="text-gray-700 font-medium">Uploading...</p>
+                        )
+                      }
+                      
+                      return (
+                        <div className="relative">
+                          {isVideoFile(finalImageUrl) ? (
+                            <video 
+                              key={`video-${selectedContentForModal.id}-${Date.now()}`}
+                              src={finalImageUrl}
+                              className="w-full h-80 object-cover rounded-lg shadow-lg"
+                              controls
+                              preload="auto"
+                              onError={(e) => {
+                                console.error('❌ Video failed to load in modal:', finalImageUrl)
+                              }}
+                            >
+                              Your browser does not support the video tag.
+                            </video>
+                          ) : (
+                            <img
+                              key={`img-${selectedContentForModal.id}-${Date.now()}`}
+                              src={getFullSizeImageUrl(finalImageUrl) || finalImageUrl}
+                              alt={selectedContentForModal.title || 'Post image'}
+                              className="w-full h-80 object-cover rounded-lg shadow-lg cursor-pointer"
+                              onClick={() => handleImageClick(getFullSizeImageUrl(finalImageUrl) || finalImageUrl, selectedContentForModal.title)}
+                              loading="eager"
+                              onError={(e) => {
+                                console.error('❌ Image failed to load in modal:', finalImageUrl)
+                                // Try to reload with a cache-busting parameter
+                                const img = e.target
+                                try {
+                                  if (finalImageUrl.includes('http://') || finalImageUrl.includes('https://')) {
+                                    const url = new URL(finalImageUrl)
+                                    url.searchParams.set('t', Date.now().toString())
+                                    img.src = url.toString()
+                                  } else {
+                                    // For relative URLs, append timestamp as query param
+                                    const separator = finalImageUrl.includes('?') ? '&' : '?'
+                                    img.src = `${finalImageUrl}${separator}t=${Date.now()}`
+                                  }
+                                } catch (urlError) {
+                                  console.error('Failed to add cache-busting parameter:', urlError)
+                                }
+                              }}
+                              onLoad={() => {
+                                console.log('✅ Image loaded successfully in modal:', finalImageUrl)
+                              }}
+                            />
+                          )}
+                          
+                          {/* Action buttons overlay */}
+                          <div className="absolute bottom-4 right-4 flex gap-2">
+                            {(() => {
+                              // Use the same image URL logic as the image display
+                              const imageUrl = selectedContentForModal.image_url || selectedContentForModal.media_url
+                              const generatedImageUrl = generatedImages[selectedContentForModal.id]?.image_url
+                              const finalImageUrl = imageUrl || generatedImageUrl
+                              
+                              if (!finalImageUrl) return null
+                              
+                              return (
+                                <>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setImageEditorData({
+                                        postContent: selectedContentForModal.content,
+                                        inputImageUrl: finalImageUrl
+                                      })
+                                      setShowImageEditor(true)
+                                      handleCloseModal()
+                                    }}
+                                    className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors"
+                                  >
+                                    Edit Image
+                                  </button>
+                                  <label className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors cursor-pointer inline-flex items-center space-x-1">
+                                    <Upload className="w-4 h-4" />
+                                    <span>Replace</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*,video/*"
+                                      onChange={(e) => {
+                                        const file = e.target.files[0]
+                                        if (file) {
+                                          handleFileSelect(e)
+                                          setTimeout(() => {
+                                            handleUploadImage(selectedContentForModal.id)
+                                          }, 100)
+                                        }
+                                      }}
+                                      className="hidden"
+                                      disabled={uploadingImage.has(selectedContentForModal.id)}
+                                    />
+                                  </label>
+                                </>
+                              )
+                            })()}
                           </div>
-                        ) : (
-                          <div className="text-center">
-                            <Image className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                            <p className="text-gray-500">No image available</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                          
+                          {/* Uploading overlay */}
+                          {uploadingImage.has(selectedContentForModal.id) && (
+                            <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
+                              <div className="bg-white rounded-lg p-4 flex items-center space-x-3">
+                                <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
+                                <span className="text-gray-900 font-medium">Uploading...</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                     
                     {/* Media Header and Upload - Below image */}
                     <div className="flex items-center justify-between">
@@ -2939,20 +3337,34 @@ const ContentDashboard = () => {
                         </div>
                       </div>
                       
-                      {/* Approve Button on Right */}
-                      {selectedContentForModal.status === 'draft' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleApprovePost(selectedContentForModal.id)
-                            handleCloseModal()
-                          }}
-                          className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
-                        >
-                          <CheckCircle className="w-5 h-5" />
-                          <span>Approve</span>
-                        </button>
-                      )}
+                      {/* Approve/Disapprove Buttons on Right */}
+                      <div className="flex items-center space-x-3">
+                        {selectedContentForModal.status === 'draft' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleApprovePost(selectedContentForModal.id)
+                              handleCloseModal()
+                            }}
+                            className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+                          >
+                            <CheckCircle className="w-5 h-5" />
+                            <span>Approve</span>
+                          </button>
+                        )}
+                        {(selectedContentForModal.status === 'scheduled' || selectedContentForModal.status === 'published' || selectedContentForModal.status?.toLowerCase() === 'approved') && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDisapprovePost(selectedContentForModal.id)
+                            }}
+                            className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+                          >
+                            <XCircle className="w-5 h-5" />
+                            <span>Disapprove</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
