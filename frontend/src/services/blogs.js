@@ -218,6 +218,13 @@ class BlogService {
     })
   }
 
+  async generateBlogImage(blogId) {
+    // Public endpoint for admin page
+    return this.makeRequest(`/api/blogs/public/${blogId}/generate-image`, {
+      method: 'POST'
+    }, false)
+  }
+
 
   // Blog Statistics
   async getBlogStats() {

@@ -495,6 +495,128 @@ async def generate_blogs(
         logger.error(f"Error generating blogs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate blogs: {str(e)}")
 
+@router.post("/public/{blog_id}/generate-image")
+async def generate_blog_image(blog_id: str):
+    """Generate an image for a blog post using Gemini 2.5 Preview Flash"""
+    logger.info(f"Route hit: /api/blogs/public/{blog_id}/generate-image")
+    try:
+        import google.generativeai as genai
+        import base64
+        import uuid
+        from datetime import datetime
+        
+        logger.info(f"Generating image for blog {blog_id}")
+        
+        # Get blog data
+        blog_response = supabase_admin.table("blog_posts").select("*").eq("id", blog_id).execute()
+        
+        if not blog_response.data:
+            raise HTTPException(status_code=404, detail="Blog not found")
+        
+        blog = blog_response.data[0]
+        
+        # Get Gemini API key
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            raise HTTPException(status_code=500, detail="Image generation service not configured")
+        
+        # Configure Gemini
+        genai.configure(api_key=gemini_api_key)
+        gemini_image_model = 'gemini-2.5-flash-image-preview'
+        
+        # Create image prompt from blog content
+        title = blog.get('title', 'Blog Post')
+        excerpt = blog.get('excerpt', '')
+        content = blog.get('content', '')
+        
+        # Extract text from HTML content
+        import re
+        text_content = re.sub(r'<[^>]+>', '', content) if content else ''
+        content_summary = text_content[:500] if text_content else excerpt[:500]
+        
+        # Create prompt for image generation
+        image_prompt = f"""Create a professional, high-quality blog post featured image for the following blog:
+
+Title: {title}
+
+Content Summary: {content_summary}
+
+Requirements:
+- Professional and visually appealing
+- Suitable for blog post header/featured image
+- High resolution (1024x1024 or landscape format)
+- Modern design with good composition
+- Engaging and eye-catching
+- Relevant to the blog topic
+- Clean and professional aesthetic
+- No text overlays (image only)
+"""
+        
+        logger.info(f"Generating image with prompt: {image_prompt[:200]}...")
+        
+        # Generate image using Gemini
+        model = genai.GenerativeModel(gemini_image_model)
+        response = model.generate_content(image_prompt)
+        
+        # Extract image data
+        image_data = None
+        if response.candidates and len(response.candidates) > 0:
+            candidate = response.candidates[0]
+            if candidate.content.parts:
+                for part in candidate.content.parts:
+                    if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
+                        image_data = part.inline_data.data
+                        break
+        
+        if not image_data:
+            raise HTTPException(status_code=500, detail="Failed to generate image - no image data returned")
+        
+        # Convert to bytes if needed
+        if isinstance(image_data, str):
+            image_bytes = base64.b64decode(image_data)
+        else:
+            image_bytes = image_data
+        
+        # Upload to Supabase Storage - using "blog image" bucket
+        file_name = f"{blog_id}/{uuid.uuid4()}.png"
+        bucket_name = "blog image"
+        
+        # Upload image
+        upload_response = supabase_admin.storage.from_(bucket_name).upload(
+            file_name,
+            image_bytes,
+            file_options={"content-type": "image/png", "upsert": "true"}
+        )
+        
+        # Get public URL
+        image_url_response = supabase_admin.storage.from_(bucket_name).get_public_url(file_name)
+        image_url = image_url_response
+        
+        # Update blog with featured image
+        metadata = blog.get('metadata', {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        metadata['featured_image'] = image_url
+        metadata['image_generated_at'] = datetime.now().isoformat()
+        
+        update_response = supabase_admin.table("blog_posts").update({
+            "metadata": metadata,
+            "updated_at": datetime.now().isoformat()
+        }).eq("id", blog_id).execute()
+        
+        logger.info(f"Image generated and saved for blog {blog_id}: {image_url}")
+        
+        return {
+            "success": True,
+            "image_url": image_url,
+            "message": "Image generated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating blog image: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate image: {str(e)}")
 
 @router.put("/public/{blog_id}")
 async def update_blog_public(

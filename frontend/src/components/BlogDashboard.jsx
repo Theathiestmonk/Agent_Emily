@@ -43,7 +43,11 @@ import {
 
   Sparkles,
 
-  Copy
+  Copy,
+
+  Image as ImageIcon,
+
+  Download
 
 } from 'lucide-react'
 
@@ -137,6 +141,9 @@ const BlogDashboard = () => {
 
   const [blogToDelete, setBlogToDelete] = useState(null)
 
+  const [generatingImages, setGeneratingImages] = useState(new Set())
+  const [fullScreenImage, setFullScreenImage] = useState(null)
+
 
 
   const statusColors = {
@@ -216,6 +223,19 @@ const BlogDashboard = () => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
 
   }, [])
+
+  // Handle ESC key to close full-screen image
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && fullScreenImage) {
+        setFullScreenImage(null)
+      }
+    }
+    if (fullScreenImage) {
+      document.addEventListener('keydown', handleEscape)
+    }
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [fullScreenImage])
 
 
 
@@ -917,6 +937,94 @@ const BlogDashboard = () => {
     }
   }
 
+  const handleGenerateImage = async (blog, e) => {
+    if (e) {
+      e.stopPropagation()
+    }
+    
+    try {
+      setGeneratingImages(prev => new Set(prev).add(blog.id))
+      showLoading('Generating Image', 'Creating blog image with AI...')
+      
+      const response = await blogService.generateBlogImage(blog.id)
+      
+      if (response.success && response.image_url) {
+        // Update the blog in the local state
+        setBlogs(prevBlogs => 
+          prevBlogs.map(b => 
+            b.id === blog.id 
+              ? {
+                  ...b,
+                  metadata: {
+                    ...b.metadata,
+                    featured_image: response.image_url,
+                    image_generated_at: new Date().toISOString()
+                  }
+                }
+              : b
+          )
+        )
+        
+        showSuccess('Image Generated! 🎨', 'Blog image has been generated successfully!')
+      } else {
+        showError('Image Generation Failed', 'Failed to generate blog image. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error generating blog image:', error)
+      const errorMessage = error.message || 'Failed to generate blog image'
+      showError('Image Generation Failed', errorMessage)
+    } finally {
+      setGeneratingImages(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(blog.id)
+        return newSet
+      })
+      removeNotification()
+    }
+  }
+
+  const handleDownloadImage = async (blog, e) => {
+    if (e) {
+      e.stopPropagation()
+    }
+    
+    const imageUrl = blog.metadata?.featured_image || blog.featured_image
+    
+    if (!imageUrl) {
+      showError('No Image', 'This blog does not have an image to download. Please generate one first.')
+      return
+    }
+    
+    try {
+      // Fetch the image
+      const response = await fetch(imageUrl)
+      const blob = await response.blob()
+      
+      // Create a download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      
+      // Create filename from blog title
+      const blogTitle = blog.title || 'blog-image'
+      const sanitizedTitle = blogTitle.replace(/[^a-z0-9]/gi, '-').toLowerCase()
+      link.download = `${sanitizedTitle}-${blog.id.substring(0, 8)}.png`
+      
+      // Trigger download
+      document.body.appendChild(link)
+      link.click()
+      
+      // Cleanup
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      showSuccess('Image Downloaded! 📥', 'Blog image has been downloaded successfully!')
+    } catch (error) {
+      console.error('Error downloading image:', error)
+      showError('Download Failed', 'Failed to download image. Please try again.')
+    }
+  }
+
 
 
   const filteredBlogs = blogs.filter(blog => {
@@ -1325,28 +1433,62 @@ const BlogDashboard = () => {
 
                     <div className="relative h-44 bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 overflow-hidden">
 
-                      <img 
+                      {(blog.metadata?.featured_image || blog.featured_image) ? (
+                        <img 
+                          src={blog.metadata?.featured_image || blog.featured_image}
+                          alt="Blog post image" 
+                          className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setFullScreenImage(blog.metadata?.featured_image || blog.featured_image)
+                          }}
+                          onError={(e) => {
+                            // Fallback to gradient if image fails to load
+                            e.target.style.display = 'none'
+                          }}
+                        />
+                      ) : (
+                        <>
+                          <img 
 
-                        src={`https://images.unsplash.com/photo-${Math.random().toString(36).substr(2, 9)}?w=400&h=300&fit=crop&crop=face`}
+                            src={`https://images.unsplash.com/photo-${Math.random().toString(36).substr(2, 9)}?w=400&h=300&fit=crop&crop=face`}
 
-                        alt="Blog post image" 
+                            alt="Blog post image" 
 
-                        className="w-full h-full object-cover"
+                            className="w-full h-full object-cover"
 
-                      />
+                          />
 
-                      <div className="absolute inset-0 bg-gradient-to-br from-pink-500/80 via-purple-500/80 to-blue-500/80"></div>
+                          <div className="absolute inset-0 bg-gradient-to-br from-pink-500/80 via-purple-500/80 to-blue-500/80"></div>
+                        </>
+                      )}
 
-                      <div className="absolute top-4 left-4">
-
+                      <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
                         <span className={`px-3 py-1 text-xs rounded-full ${statusColors[blog.status]} flex items-center space-x-1 backdrop-blur-sm`}>
-
                           <StatusIcon className="w-3 h-3" />
-
                           <span className="capitalize font-medium">{blog.status}</span>
-
                         </span>
-
+                        
+                        {/* Quick Generate Image Button on Image Area */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleGenerateImage(blog, e)
+                          }}
+                          disabled={generatingImages.has(blog.id)}
+                          className={`p-2 rounded-lg backdrop-blur-sm transition-all duration-200 ${
+                            generatingImages.has(blog.id)
+                              ? 'text-blue-300 bg-blue-900/50 cursor-not-allowed'
+                              : 'text-white/90 bg-black/30 hover:bg-black/50 hover:text-white'
+                          }`}
+                          title={generatingImages.has(blog.id) ? "Generating image..." : "Generate blog image with AI"}
+                        >
+                          {generatingImages.has(blog.id) ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <ImageIcon className="w-4 h-4" />
+                          )}
+                        </button>
                       </div>
 
                       <div className="absolute bottom-4 left-4 right-4">
@@ -1584,6 +1726,41 @@ const BlogDashboard = () => {
 
                             </>
 
+                          )}
+
+                          {/* Generate Image Button - Always visible for all blogs */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleGenerateImage(blog, e)
+                            }}
+                            disabled={generatingImages.has(blog.id)}
+                            className={`p-3 rounded-lg transition-all duration-200 ${
+                              generatingImages.has(blog.id)
+                                ? 'text-blue-600 bg-blue-100 cursor-not-allowed animate-pulse'
+                                : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+                            }`}
+                            title={generatingImages.has(blog.id) ? "Generating image..." : "Generate blog image with AI"}
+                          >
+                            {generatingImages.has(blog.id) ? (
+                              <RefreshCw className="w-5 h-5 animate-spin" />
+                            ) : (
+                              <ImageIcon className="w-5 h-5" />
+                            )}
+                          </button>
+
+                          {/* Download Image Button - Show only when image exists */}
+                          {(blog.metadata?.featured_image || blog.featured_image) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDownloadImage(blog, e)
+                              }}
+                              className="p-3 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Download blog image"
+                            >
+                              <Download className="w-5 h-5" />
+                            </button>
                           )}
 
                           <button
@@ -1967,6 +2144,21 @@ const BlogDashboard = () => {
 
             <div className="flex-1 overflow-y-auto p-4 md:p-6">
 
+              {/* Blog Featured Image */}
+              {(selectedBlog.metadata?.featured_image || selectedBlog.featured_image) && (
+                <div className="mb-6">
+                  <img 
+                    src={selectedBlog.metadata?.featured_image || selectedBlog.featured_image}
+                    alt="Blog featured image" 
+                    className="w-full h-auto max-h-96 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-lg"
+                    onClick={() => setFullScreenImage(selectedBlog.metadata?.featured_image || selectedBlog.featured_image)}
+                    onError={(e) => {
+                      e.target.style.display = 'none'
+                    }}
+                  />
+                </div>
+              )}
+
               {/* Blog Metadata */}
 
               <div className="bg-gray-50 rounded-lg p-4 mb-6">
@@ -2304,27 +2496,37 @@ const BlogDashboard = () => {
             <div className="p-4 md:p-6 overflow-y-auto max-h-[calc(95vh-250px)] md:max-h-[calc(90vh-200px)]">
 
               {/* 1. Blog Image (if exists) */}
-              {selectedBlog.featured_image && (
+              {(selectedBlog.metadata?.featured_image || selectedBlog.featured_image) && (
                 <div className="mb-6">
                   <div className="relative w-full h-64 rounded-xl overflow-hidden shadow-lg">
                     <img 
-                      src={selectedBlog.featured_image} 
-                            alt={selectedBlog.title}
-                            className="w-full h-full object-cover"
+                      src={selectedBlog.metadata?.featured_image || selectedBlog.featured_image} 
+                      alt={selectedBlog.title}
+                      className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => setFullScreenImage(selectedBlog.metadata?.featured_image || selectedBlog.featured_image)}
+                      onError={(e) => {
+                        e.target.style.display = 'none'
+                      }}
                     />
-                  <div className="absolute top-4 left-4">
+                    <div className="absolute top-4 left-4">
                       <span className="px-3 py-1 text-xs rounded-full bg-white/90 text-gray-800 font-medium">
-                      {selectedBlog.status.toUpperCase()}
-                    </span>
-                  </div>
+                        {selectedBlog.status.toUpperCase()}
+                      </span>
+                    </div>
                     <div className="absolute top-4 right-4">
                       <div className="flex items-center space-x-2 text-white/90 bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full">
-                      <Globe className="w-4 h-4" />
-                      <span className="text-sm font-medium">{selectedBlog.site_name || 'Unknown Site'}</span>
+                        <Globe className="w-4 h-4" />
+                        <span className="text-sm font-medium">{selectedBlog.site_name || 'Unknown Site'}</span>
+                      </div>
+                    </div>
+                    {/* Click hint overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/10 transition-all cursor-pointer group">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm text-white px-4 py-2 rounded-lg text-sm font-medium">
+                        Click to view full screen
+                      </div>
                     </div>
                   </div>
-                          </div>
-                        </div>
+                </div>
               )}
 
               {/* 2. Full Blog Content (without scrolling) */}
@@ -2690,6 +2892,90 @@ const BlogDashboard = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Full-Screen Image Viewer Modal */}
+      {fullScreenImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-[100] p-4"
+          onClick={() => setFullScreenImage(null)}
+        >
+          <div className="relative w-full h-full flex items-center justify-center">
+            {/* Close Button */}
+            <button
+              onClick={() => setFullScreenImage(null)}
+              className="absolute top-4 right-4 z-10 p-3 bg-white/20 hover:bg-white/30 rounded-full backdrop-blur-sm transition-all"
+              title="Close (ESC)"
+            >
+              <X className="w-6 h-6 text-white" />
+            </button>
+
+            {/* Download Button */}
+            <button
+              onClick={async (e) => {
+                e.stopPropagation()
+                try {
+                  const response = await fetch(fullScreenImage)
+                  const blob = await response.blob()
+                  const url = window.URL.createObjectURL(blob)
+                  const link = document.createElement('a')
+                  link.href = url
+                  
+                  // Find the blog that has this image
+                  const blog = blogs.find(b => 
+                    (b.metadata?.featured_image || b.featured_image) === fullScreenImage
+                  )
+                  
+                  if (blog) {
+                    const blogTitle = blog.title || 'blog-image'
+                    const sanitizedTitle = blogTitle.replace(/[^a-z0-9]/gi, '-').toLowerCase()
+                    link.download = `${sanitizedTitle}-${blog.id.substring(0, 8)}.png`
+                  } else {
+                    link.download = `blog-image-${Date.now()}.png`
+                  }
+                  
+                  document.body.appendChild(link)
+                  link.click()
+                  document.body.removeChild(link)
+                  window.URL.revokeObjectURL(url)
+                  
+                  showSuccess('Image Downloaded! 📥', 'Blog image has been downloaded successfully!')
+                } catch (error) {
+                  console.error('Error downloading image:', error)
+                  showError('Download Failed', 'Failed to download image. Please try again.')
+                }
+              }}
+              className="absolute top-4 right-20 z-10 p-3 bg-white/20 hover:bg-white/30 rounded-full backdrop-blur-sm transition-all"
+              title="Download image"
+            >
+              <Download className="w-6 h-6 text-white" />
+            </button>
+
+            {/* Image */}
+            <img 
+              src={fullScreenImage}
+              alt="Full screen blog image" 
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+              onError={(e) => {
+                e.target.style.display = 'none'
+                setFullScreenImage(null)
+              }}
+            />
+
+            {/* Image Info */}
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 backdrop-blur-sm text-white px-4 py-2 rounded-lg text-sm">
+              Click outside or press ESC to close
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ESC key handler for full-screen image */}
+      {fullScreenImage && (
+        <div className="hidden">
+          {/* This ensures the useEffect runs when fullScreenImage changes */}
         </div>
       )}
 
