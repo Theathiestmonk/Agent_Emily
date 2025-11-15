@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query, status
+from fastapi import APIRouter, HTTPException, Depends, Query, status, File, UploadFile, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 import os
@@ -577,15 +577,52 @@ Requirements:
         else:
             image_bytes = image_data
         
+        # Convert PNG to WebP format for better compression and quality
+        file_ext = "webp"
+        content_type = "image/webp"
+        
+        try:
+            from PIL import Image
+            import io
+            
+            # Open the image from bytes
+            image = Image.open(io.BytesIO(image_bytes))
+            
+            # Convert RGBA to RGB if necessary (WebP supports both, but RGB is more compatible)
+            if image.mode == 'RGBA':
+                # Create a white background for transparency
+                rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                rgb_image.paste(image, mask=image.split()[3])  # Use alpha channel as mask
+                image = rgb_image
+            elif image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Convert to WebP format with high quality
+            webp_buffer = io.BytesIO()
+            image.save(webp_buffer, format='WebP', quality=90, method=6)
+            image_bytes = webp_buffer.getvalue()
+            
+            logger.info(f"✅ Converted image to WebP format. Size: {len(image_bytes)} bytes")
+        except ImportError:
+            logger.warning("PIL/Pillow not available, using original PNG format")
+            # Fallback to PNG if PIL is not available
+            file_ext = "png"
+            content_type = "image/png"
+        except Exception as e:
+            logger.warning(f"Failed to convert to WebP: {e}, using original format")
+            # Fallback to PNG if conversion fails
+            file_ext = "png"
+            content_type = "image/png"
+        
         # Upload to Supabase Storage - using "blog image" bucket
-        file_name = f"{blog_id}/{uuid.uuid4()}.png"
+        file_name = f"{blog_id}/{uuid.uuid4()}.{file_ext}"
         bucket_name = "blog image"
         
         # Upload image
         upload_response = supabase_admin.storage.from_(bucket_name).upload(
             file_name,
             image_bytes,
-            file_options={"content-type": "image/png", "upsert": "true"}
+            file_options={"content-type": content_type, "upsert": "true"}
         )
         
         # Get public URL
@@ -617,6 +654,124 @@ Requirements:
     except Exception as e:
         logger.error(f"Error generating blog image: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate image: {str(e)}")
+
+@router.post("/public/{blog_id}/upload-image")
+async def upload_blog_image(
+    blog_id: str,
+    file: UploadFile = File(...)
+):
+    """Upload a manual image for a blog post - uses same bucket and path format as generated images"""
+    logger.info(f"Route hit: /api/blogs/public/{blog_id}/upload-image")
+    try:
+        # Get blog data to verify it exists
+        blog_response = supabase_admin.table("blog_posts").select("*").eq("id", blog_id).execute()
+        
+        if not blog_response.data:
+            raise HTTPException(status_code=404, detail="Blog not found")
+        
+        blog = blog_response.data[0]
+        
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+        if file.content_type not in allowed_types:
+            raise HTTPException(status_code=400, detail="Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.")
+        
+        # Read file content
+        file_content = await file.read()
+        logger.info(f"File content read - size: {len(file_content)} bytes, type: {file.content_type}")
+        
+        # Validate file size (max 10MB)
+        max_size = 10 * 1024 * 1024  # 10MB
+        if len(file_content) > max_size:
+            raise HTTPException(status_code=400, detail="File size must be less than 10MB")
+        
+        # Determine file extension from filename or content type
+        file_ext = file.filename.split('.')[-1].lower() if '.' in file.filename else None
+        
+        # If no extension in filename, try to determine from content type
+        if not file_ext or file_ext not in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
+            if file.content_type:
+                if 'jpeg' in file.content_type or 'jpg' in file.content_type:
+                    file_ext = 'jpg'
+                elif 'png' in file.content_type:
+                    file_ext = 'png'
+                elif 'gif' in file.content_type:
+                    file_ext = 'gif'
+                elif 'webp' in file.content_type:
+                    file_ext = 'webp'
+                else:
+                    file_ext = 'png'  # Default fallback
+            else:
+                # Try to detect from file content (magic bytes)
+                if file_content.startswith(b'RIFF') and b'WEBP' in file_content[:12]:
+                    file_ext = 'webp'
+                elif file_content.startswith(b'\x89PNG'):
+                    file_ext = 'png'
+                elif file_content.startswith(b'\xff\xd8\xff'):
+                    file_ext = 'jpg'
+                elif file_content.startswith(b'GIF'):
+                    file_ext = 'gif'
+                else:
+                    file_ext = 'png'  # Default fallback
+        
+        # Determine content type for upload
+        content_type_map = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'webp': 'image/webp'
+        }
+        upload_content_type = content_type_map.get(file_ext, file.content_type or 'image/png')
+        
+        # Upload to Supabase Storage - using "blog image" bucket (same as generated images)
+        file_name = f"{blog_id}/{uuid.uuid4()}.{file_ext}"
+        bucket_name = "blog image"
+        
+        logger.info(f"Uploading to bucket: {bucket_name}, path: {file_name}, format: {file_ext}, content-type: {upload_content_type}")
+        
+        # Upload image with upsert to allow replacing existing images
+        upload_response = supabase_admin.storage.from_(bucket_name).upload(
+            file_name,
+            file_content,
+            file_options={"content-type": upload_content_type, "upsert": "true"}
+        )
+        
+        if hasattr(upload_response, 'error') and upload_response.error:
+            logger.error(f"Storage upload failed: {upload_response.error}")
+            raise HTTPException(status_code=400, detail=f"Storage upload failed: {upload_response.error}")
+        
+        # Get public URL
+        image_url_response = supabase_admin.storage.from_(bucket_name).get_public_url(file_name)
+        image_url = image_url_response
+        
+        logger.info(f"Image uploaded successfully: {image_url}")
+        
+        # Update blog with featured image (same format as generated images)
+        metadata = blog.get('metadata', {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        metadata['featured_image'] = image_url
+        metadata['image_uploaded_at'] = datetime.now().isoformat()
+        
+        update_response = supabase_admin.table("blog_posts").update({
+            "metadata": metadata,
+            "updated_at": datetime.now().isoformat()
+        }).eq("id", blog_id).execute()
+        
+        logger.info(f"Image uploaded and saved for blog {blog_id}: {image_url}")
+        
+        return {
+            "success": True,
+            "image_url": image_url,
+            "message": "Image uploaded successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading blog image: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
 
 @router.put("/public/{blog_id}")
 async def update_blog_public(
@@ -946,7 +1101,10 @@ async def publish_blog(
                                 filename = filename.split('?')[0]
                             
                             # Determine content type from response headers or filename
+                            # Priority: 1. Response Content-Type header, 2. Filename extension, 3. Magic bytes
                             content_type = image_response.headers.get('Content-Type', '')
+                            logger.info(f"Image Content-Type from response header: {content_type}")
+                            
                             if not content_type or not content_type.startswith('image/'):
                                 # Try to determine from filename
                                 filename_lower = filename.lower()
@@ -959,8 +1117,12 @@ async def publish_blog(
                                 elif filename_lower.endswith('.jpg') or filename_lower.endswith('.jpeg'):
                                     content_type = 'image/jpeg'
                                 else:
-                                    # Try to detect from content
-                                    if image_content.startswith(b'\x89PNG'):
+                                    # Try to detect from content (check magic bytes)
+                                    if image_content.startswith(b'RIFF') and b'WEBP' in image_content[:12]:
+                                        # WebP format: starts with RIFF and contains WEBP
+                                        content_type = 'image/webp'
+                                        filename = filename.rsplit('.', 1)[0] + '.webp' if '.' in filename else 'blog-image.webp'
+                                    elif image_content.startswith(b'\x89PNG'):
                                         content_type = 'image/png'
                                         filename = filename.rsplit('.', 1)[0] + '.png' if '.' in filename else 'blog-image.png'
                                     elif image_content.startswith(b'\xff\xd8\xff'):
@@ -970,8 +1132,10 @@ async def publish_blog(
                                         content_type = 'image/gif'
                                         filename = filename.rsplit('.', 1)[0] + '.gif' if '.' in filename else 'blog-image.gif'
                                     else:
-                                        content_type = 'image/jpeg'
-                                        filename = 'blog-image.jpg'
+                                        # Default to WebP since we're generating in WebP format
+                                        content_type = 'image/webp'
+                                        filename = 'blog-image.webp'
+                                        logger.info("Could not detect image format from content, defaulting to WebP")
                             
                             logger.info(f"Preparing to upload image: {filename}, Content-Type: {content_type}, Size: {len(image_content)} bytes")
                             

@@ -1031,15 +1031,43 @@ const BlogDashboard = () => {
       const response = await fetch(imageUrl)
       const blob = await response.blob()
       
+      // Detect file extension from blob type or URL
+      let fileExt = 'webp' // Default to webp since we're generating in webp format
+      const contentType = blob.type
+      
+      if (contentType) {
+        if (contentType.includes('webp')) {
+          fileExt = 'webp'
+        } else if (contentType.includes('png')) {
+          fileExt = 'png'
+        } else if (contentType.includes('jpeg') || contentType.includes('jpg')) {
+          fileExt = 'jpg'
+        } else if (contentType.includes('gif')) {
+          fileExt = 'gif'
+        }
+      } else {
+        // Fallback: check URL for extension
+        const urlLower = imageUrl.toLowerCase()
+        if (urlLower.includes('.webp')) {
+          fileExt = 'webp'
+        } else if (urlLower.includes('.png')) {
+          fileExt = 'png'
+        } else if (urlLower.includes('.jpg') || urlLower.includes('.jpeg')) {
+          fileExt = 'jpg'
+        } else if (urlLower.includes('.gif')) {
+          fileExt = 'gif'
+        }
+      }
+      
       // Create a download link
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
       
-      // Create filename from blog title
+      // Create filename from blog title with correct extension
       const blogTitle = blog.title || 'blog-image'
       const sanitizedTitle = blogTitle.replace(/[^a-z0-9]/gi, '-').toLowerCase()
-      link.download = `${sanitizedTitle}-${blog.id.substring(0, 8)}.png`
+      link.download = `${sanitizedTitle}-${blog.id.substring(0, 8)}.${fileExt}`
       
       // Trigger download
       document.body.appendChild(link)
@@ -1086,14 +1114,11 @@ const BlogDashboard = () => {
       const formData = new FormData()
       formData.append('file', file)
 
-      const token = await blogService.getAuthToken()
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
       
-      const response = await fetch(`${API_URL}/api/media/upload-image`, {
+      // Use the blog-specific upload endpoint that uses the same bucket as generated images
+      const response = await fetch(`${API_URL}/api/blogs/public/${blog.id}/upload-image`, {
         method: 'POST',
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : ''
-        },
         body: formData
       })
 
@@ -1104,18 +1129,7 @@ const BlogDashboard = () => {
 
       const result = await response.json()
       if (result.success && result.image_url) {
-        // Update the blog with the new image
-        const updateData = {
-          metadata: {
-            ...blog.metadata,
-            featured_image: result.image_url,
-            image_uploaded_at: new Date().toISOString()
-          }
-        }
-
-        await blogService.updateBlog(blog.id, updateData)
-        
-        // Update local state
+        // The backend already updates the blog metadata, so we just need to update local state
         setBlogs(prevBlogs => 
           prevBlogs.map(b => 
             b.id === blog.id 
@@ -3030,46 +3044,46 @@ const BlogDashboard = () => {
       {/* Image Options Modal */}
       {showImageOptionsModal && selectedBlogForImage && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-3 md:p-4"
           onClick={() => {
             setShowImageOptionsModal(false)
             setSelectedBlogForImage(null)
           }}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all duration-300 scale-100"
+            className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg p-3 sm:p-4 md:p-6 transform transition-all duration-300 scale-100 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">Image Options</h3>
-                <p className="text-sm text-gray-500 mt-1">{selectedBlogForImage.title}</p>
+            <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
+              <div className="flex-1 min-w-0 pr-2">
+                <h3 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">Image Options</h3>
+                <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1 line-clamp-2">{selectedBlogForImage.title}</p>
               </div>
               <button
                 onClick={() => {
                   setShowImageOptionsModal(false)
                   setSelectedBlogForImage(null)
                 }}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
 
             {/* Image Preview */}
             {(selectedBlogForImage.metadata?.featured_image || selectedBlogForImage.featured_image) && (
-              <div className="mb-6 rounded-lg overflow-hidden">
+              <div className="mb-4 sm:mb-5 md:mb-6 rounded-lg overflow-hidden">
                 <img 
                   src={selectedBlogForImage.metadata?.featured_image || selectedBlogForImage.featured_image}
                   alt="Current blog image"
-                  className="w-full h-48 object-cover"
+                  className="w-full h-32 sm:h-40 md:h-48 object-cover"
                 />
               </div>
             )}
 
             {/* Action Buttons */}
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-2.5 md:space-y-3">
               {/* 1. Manually Add/Upload Image Button */}
               <button
                 onClick={(e) => {
@@ -3079,7 +3093,7 @@ const BlogDashboard = () => {
                   setSelectedBlogForImage(null)
                 }}
                 disabled={uploadingImages.has(selectedBlogForImage.id)}
-                className={`w-full flex items-center justify-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                className={`w-full flex items-center justify-center space-x-2 sm:space-x-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl transition-all duration-200 ${
                   uploadingImages.has(selectedBlogForImage.id)
                     ? 'bg-purple-100 text-purple-600 cursor-not-allowed'
                     : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 shadow-lg hover:shadow-xl'
@@ -3087,13 +3101,13 @@ const BlogDashboard = () => {
               >
                 {uploadingImages.has(selectedBlogForImage.id) ? (
                   <>
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                    <span className="font-medium">Uploading...</span>
+                    <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 animate-spin flex-shrink-0" />
+                    <span className="text-sm sm:text-base font-medium">Uploading...</span>
                   </>
                 ) : (
                   <>
-                    <Upload className="w-5 h-5" />
-                    <span className="font-medium">{(selectedBlogForImage.metadata?.featured_image || selectedBlogForImage.featured_image) ? 'Replace Image' : 'Upload Image'}</span>
+                    <Upload className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                    <span className="text-sm sm:text-base font-medium text-center truncate">{(selectedBlogForImage.metadata?.featured_image || selectedBlogForImage.featured_image) ? 'Replace Image' : 'Upload Image'}</span>
                   </>
                 )}
               </button>
@@ -3107,7 +3121,7 @@ const BlogDashboard = () => {
                   setSelectedBlogForImage(null)
                 }}
                 disabled={generatingImages.has(selectedBlogForImage.id)}
-                className={`w-full flex items-center justify-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                className={`w-full flex items-center justify-center space-x-2 sm:space-x-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl transition-all duration-200 ${
                   generatingImages.has(selectedBlogForImage.id)
                     ? 'bg-blue-100 text-blue-600 cursor-not-allowed'
                     : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-lg hover:shadow-xl'
@@ -3115,13 +3129,13 @@ const BlogDashboard = () => {
               >
                 {generatingImages.has(selectedBlogForImage.id) ? (
                   <>
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                    <span className="font-medium">Generating...</span>
+                    <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 animate-spin flex-shrink-0" />
+                    <span className="text-sm sm:text-base font-medium">Generating...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-5 h-5" />
-                    <span className="font-medium">Generate by AI</span>
+                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                    <span className="text-sm sm:text-base font-medium">Generate by AI</span>
                   </>
                 )}
               </button>
@@ -3135,10 +3149,10 @@ const BlogDashboard = () => {
                     handleDownloadImage(selectedBlogForImage, e)
                     setSelectedBlogForImage(null)
                   }}
-                  className="w-full flex items-center justify-center space-x-3 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all duration-200 shadow-lg hover:shadow-xl"
+                  className="w-full flex items-center justify-center space-x-2 sm:space-x-3 px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg sm:rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all duration-200 shadow-lg hover:shadow-xl"
                 >
-                  <Download className="w-5 h-5" />
-                  <span className="font-medium">Download Image</span>
+                  <Download className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                  <span className="text-sm sm:text-base font-medium">Download Image</span>
                 </button>
               )}
             </div>
@@ -3169,6 +3183,35 @@ const BlogDashboard = () => {
                 try {
                   const response = await fetch(fullScreenImage)
                   const blob = await response.blob()
+                  
+                  // Detect file extension from blob type or URL
+                  let fileExt = 'webp' // Default to webp since we're generating in webp format
+                  const contentType = blob.type
+                  
+                  if (contentType) {
+                    if (contentType.includes('webp')) {
+                      fileExt = 'webp'
+                    } else if (contentType.includes('png')) {
+                      fileExt = 'png'
+                    } else if (contentType.includes('jpeg') || contentType.includes('jpg')) {
+                      fileExt = 'jpg'
+                    } else if (contentType.includes('gif')) {
+                      fileExt = 'gif'
+                    }
+                  } else {
+                    // Fallback: check URL for extension
+                    const urlLower = fullScreenImage.toLowerCase()
+                    if (urlLower.includes('.webp')) {
+                      fileExt = 'webp'
+                    } else if (urlLower.includes('.png')) {
+                      fileExt = 'png'
+                    } else if (urlLower.includes('.jpg') || urlLower.includes('.jpeg')) {
+                      fileExt = 'jpg'
+                    } else if (urlLower.includes('.gif')) {
+                      fileExt = 'gif'
+                    }
+                  }
+                  
                   const url = window.URL.createObjectURL(blob)
                   const link = document.createElement('a')
                   link.href = url
@@ -3181,9 +3224,9 @@ const BlogDashboard = () => {
                   if (blog) {
                     const blogTitle = blog.title || 'blog-image'
                     const sanitizedTitle = blogTitle.replace(/[^a-z0-9]/gi, '-').toLowerCase()
-                    link.download = `${sanitizedTitle}-${blog.id.substring(0, 8)}.png`
+                    link.download = `${sanitizedTitle}-${blog.id.substring(0, 8)}.${fileExt}`
                   } else {
-                    link.download = `blog-image-${Date.now()}.png`
+                    link.download = `blog-image-${Date.now()}.${fileExt}`
                   }
                   
                   document.body.appendChild(link)
