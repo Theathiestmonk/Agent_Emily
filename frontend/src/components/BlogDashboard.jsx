@@ -47,7 +47,9 @@ import {
 
   Image as ImageIcon,
 
-  Download
+  Download,
+
+  Upload
 
 } from 'lucide-react'
 
@@ -76,6 +78,8 @@ const BlogDashboard = () => {
   const [wordpressConnections, setWordpressConnections] = useState([])
 
   const [loading, setLoading] = useState(false)
+  
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1920)
 
   const [generating, setGenerating] = useState(false)
 
@@ -126,8 +130,9 @@ const BlogDashboard = () => {
   const [showBlogPreview, setShowBlogPreview] = useState(false)
 
   const [currentPage, setCurrentPage] = useState(1)
-
   const [blogsPerPage] = useState(6)
+  const [visibleBlogsCount, setVisibleBlogsCount] = useState(6) // For infinite scroll
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   const [publishingBlogs, setPublishingBlogs] = useState(new Set())
 
@@ -143,6 +148,10 @@ const BlogDashboard = () => {
 
   const [generatingImages, setGeneratingImages] = useState(new Set())
   const [fullScreenImage, setFullScreenImage] = useState(null)
+  const [uploadingImages, setUploadingImages] = useState(new Set())
+  const [imageInputRefs, setImageInputRefs] = useState({})
+  const [showImageOptionsModal, setShowImageOptionsModal] = useState(false)
+  const [selectedBlogForImage, setSelectedBlogForImage] = useState(null)
 
 
 
@@ -219,9 +228,20 @@ const BlogDashboard = () => {
 
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    // Handle window resize for responsive width calculation
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth)
+    }
+    
+    window.addEventListener('resize', handleResize)
+    // Set initial width
+    handleResize()
 
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('resize', handleResize)
+    }
   }, [])
 
   // Handle ESC key to close full-screen image
@@ -834,6 +854,11 @@ const BlogDashboard = () => {
       // Refresh blogs to get updated status
       await fetchBlogs()
       
+      // Check if image upload failed (only show error if status is 'failed', not 'embedded')
+      if (response.image_status === 'failed') {
+        showError('⚠️ Published Without Image', 'Blog was published successfully, but the featured image could not be embedded. Please check your image URL accessibility.')
+      }
+      
       // Set success data and show celebration popup
       setPublishedBlogData(response)
       setShowPublishSuccess(true)
@@ -942,6 +967,12 @@ const BlogDashboard = () => {
       e.stopPropagation()
     }
     
+    // Prevent generating images for published blogs
+    if (blog.status === 'published') {
+      showError('Cannot Generate Image', 'Image generation is not available for published blogs.')
+      return
+    }
+    
     try {
       setGeneratingImages(prev => new Set(prev).add(blog.id))
       showLoading('Generating Image', 'Creating blog image with AI...')
@@ -1025,7 +1056,127 @@ const BlogDashboard = () => {
     }
   }
 
+  const handleImageFileSelect = async (blog, e) => {
+    if (e) {
+      e.stopPropagation()
+    }
+    
+    const file = e.target.files?.[0]
+    if (!file) return
 
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      showError('Invalid File Type', 'Please select a valid image file (JPEG, PNG, GIF, or WebP)')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      showError('File Too Large', 'File size must be less than 5MB')
+      return
+    }
+
+    // Upload the image
+    try {
+      setUploadingImages(prev => new Set(prev).add(blog.id))
+      showLoading('Uploading Image', 'Please wait while we upload your image...')
+
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const token = await blogService.getAuthToken()
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      
+      const response = await fetch(`${API_URL}/api/media/upload-image`, {
+        method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: 'Upload failed' }))
+        throw new Error(error.detail || 'Failed to upload image')
+      }
+
+      const result = await response.json()
+      if (result.success && result.image_url) {
+        // Update the blog with the new image
+        const updateData = {
+          metadata: {
+            ...blog.metadata,
+            featured_image: result.image_url,
+            image_uploaded_at: new Date().toISOString()
+          }
+        }
+
+        await blogService.updateBlog(blog.id, updateData)
+        
+        // Update local state
+        setBlogs(prevBlogs => 
+          prevBlogs.map(b => 
+            b.id === blog.id 
+              ? {
+                  ...b,
+                  metadata: {
+                    ...b.metadata,
+                    featured_image: result.image_url,
+                    image_uploaded_at: new Date().toISOString()
+                  }
+                }
+              : b
+          )
+        )
+        
+        showSuccess('Image Uploaded! 📤', 'Blog image has been uploaded successfully!')
+      } else {
+        throw new Error('Upload failed - no image URL returned')
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error)
+      showError('Upload Failed', error.message || 'Failed to upload image. Please try again.')
+    } finally {
+      setUploadingImages(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(blog.id)
+        return newSet
+      })
+      removeNotification()
+      // Reset file input
+      if (imageInputRefs[blog.id]) {
+        imageInputRefs[blog.id].value = ''
+      }
+    }
+  }
+
+  const handleUploadImageClick = (blog, e) => {
+    if (e) {
+      e.stopPropagation()
+    }
+    
+    // Prevent for published blogs
+    if (blog.status === 'published') {
+      showError('Cannot Upload Image', 'Image upload is not available for published blogs.')
+      return
+    }
+
+    // Create or get file input ref
+    if (!imageInputRefs[blog.id]) {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = 'image/jpeg,image/jpg,image/png,image/gif,image/webp'
+      input.style.display = 'none'
+      input.onchange = (e) => handleImageFileSelect(blog, e)
+      document.body.appendChild(input)
+      setImageInputRefs(prev => ({ ...prev, [blog.id]: input }))
+      input.click()
+    } else {
+      imageInputRefs[blog.id].click()
+    }
+  }
 
   const filteredBlogs = blogs.filter(blog => {
 
@@ -1049,15 +1200,31 @@ const BlogDashboard = () => {
 
 
 
-  // Pagination logic
+  // Infinite scroll logic - show blogs incrementally
+  const currentBlogs = filteredBlogs.slice(0, visibleBlogsCount)
+  const hasMoreBlogs = visibleBlogsCount < filteredBlogs.length
 
-  const totalPages = Math.ceil(filteredBlogs.length / blogsPerPage)
+  // Load more blogs when scrolling near bottom
+  useEffect(() => {
+    const handleScroll = () => {
+      // Check if user scrolled near bottom (within 200px)
+      if (
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 200 &&
+        hasMoreBlogs &&
+        !isLoadingMore
+      ) {
+        setIsLoadingMore(true)
+        // Load more blogs (add 6 more)
+        setTimeout(() => {
+          setVisibleBlogsCount(prev => Math.min(prev + 6, filteredBlogs.length))
+          setIsLoadingMore(false)
+        }, 300) // Small delay for smooth effect
+      }
+    }
 
-  const startIndex = (currentPage - 1) * blogsPerPage
-
-  const endIndex = startIndex + blogsPerPage
-
-  const currentBlogs = filteredBlogs.slice(startIndex, endIndex)
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [hasMoreBlogs, isLoadingMore, filteredBlogs.length, visibleBlogsCount])
 
 
 
@@ -1071,12 +1238,12 @@ const BlogDashboard = () => {
 
 
 
-  // Reset pagination when filters change
-
+  // Reset visible blogs count when filters change
   useEffect(() => {
-
+    setVisibleBlogsCount(6) // Reset to initial count
     setCurrentPage(1)
-
+    // Scroll to top smoothly
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [selectedStatus, selectedCampaign, searchTerm])
 
 
@@ -1197,7 +1364,7 @@ const BlogDashboard = () => {
 
   return (
 
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50 overflow-x-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50 overflow-x-hidden max-w-full">
 
       {/* Mobile Navigation */}
       <MobileNavigation 
@@ -1211,9 +1378,16 @@ const BlogDashboard = () => {
       <SideNavbar />
 
       {/* Main Content - No left margin on mobile, only on desktop */}
-      <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen w-full overflow-x-hidden">
+      <div 
+        className="md:ml-48 xl:ml-64 flex flex-col min-h-screen overflow-x-hidden w-full" 
+        style={{
+          width: windowWidth >= 1280 ? 'calc(100vw - 256px)' : windowWidth >= 768 ? 'calc(100vw - 192px)' : '100%',
+          maxWidth: windowWidth >= 1280 ? 'calc(100vw - 256px)' : windowWidth >= 768 ? 'calc(100vw - 192px)' : '100%',
+          boxSizing: 'border-box'
+        }}
+      >
         {/* Header */}
-        <div className="fixed top-[52px] md:top-0 right-0 left-0 md:left-48 xl:left-64 bg-gradient-to-r from-pink-50 to-purple-50 shadow-sm z-30 overflow-x-hidden" style={{position: 'fixed', zIndex: 30}}>
+        <div className="fixed top-[52px] md:top-0 right-0 left-0 md:left-48 xl:left-64 bg-gradient-to-r from-pink-50 to-purple-50 shadow-sm z-30 overflow-x-hidden max-w-full" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-2 md:px-6 lg:px-8 py-1.5 md:py-3 lg:py-4 overflow-x-hidden">
             {/* Single Row for ALL Devices */}
             <div className="flex items-center justify-between md:justify-between gap-0.5 md:gap-4 w-full overflow-x-hidden max-w-full">
@@ -1306,7 +1480,7 @@ const BlogDashboard = () => {
         </div>
 
         {/* Main Content Area */}
-        <div className="w-full px-3 md:px-6 overflow-x-hidden">
+        <div className="w-full px-2 md:px-2.5 lg:px-3 xl:px-4 overflow-x-hidden" style={{maxWidth: '100%', boxSizing: 'border-box'}}>
           <div className="pt-24 md:pt-28">
 
           {loading ? (
@@ -1357,7 +1531,8 @@ const BlogDashboard = () => {
 
               data-testid="blogs-section"
 
-              className={viewMode === 'grid' ? 'p-2 sm:p-3 md:p-4 lg:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 lg:gap-6' : 'divide-y'}
+              className={viewMode === 'grid' ? 'p-2 sm:p-3 md:p-3 lg:p-3 xl:p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-2 sm:gap-2 md:gap-2.5 lg:gap-2.5 xl:gap-3 w-full box-border' : 'divide-y'}
+              style={viewMode === 'grid' ? {maxWidth: '100%', width: '100%', boxSizing: 'border-box'} : {}}
 
             >
 
@@ -1373,7 +1548,8 @@ const BlogDashboard = () => {
 
                     key={blog.id} 
 
-                    className={`${viewMode === 'grid' ? 'bg-white rounded-lg sm:rounded-xl shadow-md sm:shadow-lg border border-gray-100 hover:shadow-xl hover:scale-[1.02] sm:hover:scale-105 transition-all duration-300 overflow-hidden cursor-pointer flex flex-col h-full' : 'bg-white'} p-0`}
+                    className={`${viewMode === 'grid' ? 'bg-white rounded-lg sm:rounded-xl shadow-md sm:shadow-lg border border-gray-100 hover:shadow-xl hover:scale-[1.02] sm:hover:scale-105 transition-all duration-300 overflow-hidden cursor-pointer flex flex-col h-full w-full min-w-0' : 'bg-white'} p-0`}
+                    style={viewMode === 'grid' ? {maxWidth: '100%', width: '100%', boxSizing: 'border-box'} : {}}
 
                     onClick={() => {
 
@@ -1440,7 +1616,14 @@ const BlogDashboard = () => {
                           className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
                           onClick={(e) => {
                             e.stopPropagation()
-                            setFullScreenImage(blog.metadata?.featured_image || blog.featured_image)
+                            // For unpublished blogs, show image options popup
+                            // For published blogs, show full screen image
+                            if (blog.status !== 'published') {
+                              setSelectedBlogForImage(blog)
+                              setShowImageOptionsModal(true)
+                            } else {
+                              setFullScreenImage(blog.metadata?.featured_image || blog.featured_image)
+                            }
                           }}
                           onError={(e) => {
                             // Fallback to gradient if image fails to load
@@ -1449,17 +1632,37 @@ const BlogDashboard = () => {
                         />
                       ) : (
                         <>
-                          <img 
+                          <div 
+                            className="w-full h-full cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              // For unpublished blogs, show image options popup
+                              if (blog.status !== 'published') {
+                                setSelectedBlogForImage(blog)
+                                setShowImageOptionsModal(true)
+                              }
+                            }}
+                          >
+                            <img 
 
-                            src={`https://images.unsplash.com/photo-${Math.random().toString(36).substr(2, 9)}?w=400&h=300&fit=crop&crop=face`}
+                              src={`https://images.unsplash.com/photo-${Math.random().toString(36).substr(2, 9)}?w=400&h=300&fit=crop&crop=face`}
 
-                            alt="Blog post image" 
+                              alt="Blog post image" 
 
-                            className="w-full h-full object-cover"
+                              className="w-full h-full object-cover"
 
-                          />
+                            />
 
-                          <div className="absolute inset-0 bg-gradient-to-br from-pink-500/80 via-purple-500/80 to-blue-500/80"></div>
+                            <div className="absolute inset-0 bg-gradient-to-br from-pink-500/80 via-purple-500/80 to-blue-500/80"></div>
+                            {/* Click hint for unpublished blogs without image */}
+                            {blog.status !== 'published' && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 transition-all cursor-pointer group">
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs font-medium">
+                                  Click to add image
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </>
                       )}
 
@@ -1469,26 +1672,14 @@ const BlogDashboard = () => {
                           <span className="capitalize font-medium hidden xs:inline">{blog.status}</span>
                         </span>
                         
-                        {/* Quick Generate Image Button on Image Area */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleGenerateImage(blog, e)
-                          }}
-                          disabled={generatingImages.has(blog.id)}
-                          className={`p-1.5 sm:p-2 rounded-lg backdrop-blur-sm transition-all duration-200 ${
-                            generatingImages.has(blog.id)
-                              ? 'text-blue-300 bg-blue-900/50 cursor-not-allowed'
-                              : 'text-white/90 bg-black/30 hover:bg-black/50 hover:text-white'
-                          }`}
-                          title={generatingImages.has(blog.id) ? "Generating image..." : "Generate blog image with AI"}
-                        >
-                          {generatingImages.has(blog.id) ? (
-                            <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
-                          ) : (
-                            <ImageIcon className="w-3 h-3 sm:w-4 sm:h-4" />
-                          )}
-                        </button>
+                        {/* Click hint for unpublished blogs */}
+                        {blog.status !== 'published' && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 transition-all cursor-pointer group">
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs font-medium">
+                              Click to manage image
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="absolute bottom-2 sm:bottom-3 md:bottom-4 left-2 sm:left-3 md:left-4 right-2 sm:right-3 md:right-4">
@@ -1629,43 +1820,8 @@ const BlogDashboard = () => {
 
                       <div className="flex items-center justify-between pt-2 sm:pt-3 md:pt-4 border-t border-gray-100 mt-auto">
 
-                        {blog.status === 'published' ? (
-
-                          <div className="flex items-center space-x-2 sm:space-x-3">
-
-                            <div className="flex items-center space-x-1 sm:space-x-2 text-gray-500">
-
-                              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-
-                              </svg>
-
-                              <span className="text-xs sm:text-sm font-medium hidden sm:inline">{Math.floor(Math.random() * 5000) + 1000} views</span>
-
-                            </div>
-
-                            <div className="flex items-center space-x-1 sm:space-x-2 text-gray-500">
-
-                              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
-
-                                <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-
-                              </svg>
-
-                              <span className="text-xs sm:text-sm font-medium">{Math.floor(Math.random() * 100) + 10}</span>
-
-                            </div>
-
-                          </div>
-
-                        ) : (
-
-                          <div></div>
-
-                        )}
+                        {/* Removed views and likes display for published blogs */}
+                        <div></div>
 
                         <div className="flex items-center space-x-1.5 sm:space-x-2 md:space-x-3 flex-shrink-0">
 
@@ -1734,40 +1890,6 @@ const BlogDashboard = () => {
 
                           )}
 
-                          {/* Generate Image Button - Always visible for all blogs */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleGenerateImage(blog, e)
-                            }}
-                            disabled={generatingImages.has(blog.id)}
-                            className={`p-2 sm:p-2.5 md:p-3 rounded-lg transition-all duration-200 ${
-                              generatingImages.has(blog.id)
-                                ? 'text-blue-600 bg-blue-100 cursor-not-allowed animate-pulse'
-                                : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
-                            }`}
-                            title={generatingImages.has(blog.id) ? "Generating image..." : "Generate blog image with AI"}
-                          >
-                            {generatingImages.has(blog.id) ? (
-                              <RefreshCw className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5 animate-spin" />
-                            ) : (
-                              <ImageIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5" />
-                            )}
-                          </button>
-
-                          {/* Download Image Button - Show only when image exists */}
-                          {(blog.metadata?.featured_image || blog.featured_image) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDownloadImage(blog, e)
-                              }}
-                              className="p-2 sm:p-2.5 md:p-3 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                              title="Download blog image"
-                            >
-                              <Download className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5" />
-                            </button>
-                          )}
 
                           <button
 
@@ -1817,76 +1939,38 @@ const BlogDashboard = () => {
 
 
 
-          {/* Pagination */}
-
-          {totalPages > 1 && (
-
-            <div className="flex flex-wrap justify-center items-center gap-2 mt-6 md:mt-8 mb-4 md:mb-6 px-4">
-
-              <button
-
-                onClick={() => handlePageChange(currentPage - 1)}
-
-                disabled={currentPage === 1}
-
-                className="px-3 md:px-4 py-2 text-xs md:text-sm bg-white/80 backdrop-blur-sm border border-pink-200 rounded-xl text-gray-700 hover:bg-pink-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-sm"
-
-              >
-
-                ← Prev
-
-              </button>
-
-              
-              
-              <div className="flex flex-wrap gap-1 max-w-full">
-
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-
-                  <button
-
-                    key={page}
-
-                    onClick={() => handlePageChange(page)}
-
-                    className={`px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-medium transition-all duration-300 min-w-[40px] ${
-
-                      currentPage === page
-
-                        ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
-
-                        : 'bg-white/80 backdrop-blur-sm border border-pink-200 text-gray-700 hover:bg-pink-50 shadow-sm'
-
-                    }`}
-
-                  >
-
-                    {page}
-
-                  </button>
-
-                ))}
-
-        </div>
-
-              
-              
-              <button
-
-                onClick={() => handlePageChange(currentPage + 1)}
-
-                disabled={currentPage === totalPages}
-
-                className="px-3 md:px-4 py-2 text-xs md:text-sm bg-white/80 backdrop-blur-sm border border-pink-200 rounded-xl text-gray-700 hover:bg-pink-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-sm"
-
-              >
-
-                Next →
-
-              </button>
-
+          {/* Infinite Scroll Loading Indicator */}
+          {hasMoreBlogs && (
+            <div className="flex justify-center items-center py-8 mb-6">
+              {isLoadingMore ? (
+                <div className="flex items-center space-x-3 text-gray-600">
+                  <RefreshCw className="w-5 h-5 animate-spin text-pink-500" />
+                  <span className="text-sm font-medium">Loading more blogs...</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setIsLoadingMore(true)
+                    setTimeout(() => {
+                      setVisibleBlogsCount(prev => Math.min(prev + 6, filteredBlogs.length))
+                      setIsLoadingMore(false)
+                    }, 300)
+                  }}
+                  className="px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl font-medium text-sm"
+                >
+                  Load More Blogs
+                </button>
+              )}
             </div>
+          )}
 
+          {/* Show total count when all blogs are loaded */}
+          {!hasMoreBlogs && filteredBlogs.length > 0 && (
+            <div className="text-center py-6 mb-6">
+              <p className="text-sm text-gray-500">
+                Showing all {filteredBlogs.length} blog{filteredBlogs.length !== 1 ? 's' : ''}
+              </p>
+            </div>
           )}
           </div>
 
@@ -2781,14 +2865,56 @@ const BlogDashboard = () => {
                 </div>
                 {publishedBlogData.blog_url && (
                   <a
-                    href={publishedBlogData.blog_url}
+                    href={publishedBlogData.blog_url || publishedBlogData.wordpress_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-2 text-blue-600 hover:text-blue-800 text-lg font-medium underline decoration-2 underline-offset-2 hover:decoration-blue-800 transition-all duration-200"
+                    className="inline-flex items-center space-x-2 text-blue-600 hover:text-blue-800 text-lg font-medium underline decoration-2 underline-offset-2 hover:decoration-blue-800 transition-all duration-200 mb-3"
                   >
                     <ExternalLink className="w-5 h-5" />
                     <span>View Published Post</span>
                   </a>
+                )}
+                {/* Image Status */}
+                {publishedBlogData.image_status && (
+                  <div className={`mt-3 p-3 rounded-lg ${
+                    publishedBlogData.image_status === 'embedded' || publishedBlogData.image_status === 'attached'
+                      ? 'bg-green-100 text-green-800' 
+                      : publishedBlogData.image_status === 'failed'
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    <div className="flex items-center space-x-2">
+                      {publishedBlogData.image_status === 'embedded' ? (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="text-sm font-medium">Featured image embedded in content</span>
+                        </>
+                      ) : publishedBlogData.image_status === 'attached' ? (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="text-sm font-medium">Featured image attached successfully</span>
+                        </>
+                      ) : publishedBlogData.image_status === 'failed' ? (
+                        <>
+                          <AlertCircle className="w-4 h-4" />
+                          <span className="text-sm font-medium">Featured image upload failed - post published without image</span>
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="w-4 h-4" />
+                          <span className="text-sm font-medium">No featured image to upload</span>
+                        </>
+                      )}
+                    </div>
+                    {/* Troubleshooting Note */}
+                    {publishedBlogData.troubleshooting_note && (publishedBlogData.image_status === 'embedded' || publishedBlogData.image_status === 'attached') && (
+                      <div className="mt-2 pt-2 border-t border-green-200">
+                        <p className="text-xs text-green-700 leading-relaxed">
+                          <strong>Note:</strong> {publishedBlogData.troubleshooting_note}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -2896,6 +3022,125 @@ const BlogDashboard = () => {
                   <span>Delete Forever</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Options Modal */}
+      {showImageOptionsModal && selectedBlogForImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowImageOptionsModal(false)
+            setSelectedBlogForImage(null)
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all duration-300 scale-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Image Options</h3>
+                <p className="text-sm text-gray-500 mt-1">{selectedBlogForImage.title}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowImageOptionsModal(false)
+                  setSelectedBlogForImage(null)
+                }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Image Preview */}
+            {(selectedBlogForImage.metadata?.featured_image || selectedBlogForImage.featured_image) && (
+              <div className="mb-6 rounded-lg overflow-hidden">
+                <img 
+                  src={selectedBlogForImage.metadata?.featured_image || selectedBlogForImage.featured_image}
+                  alt="Current blog image"
+                  className="w-full h-48 object-cover"
+                />
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              {/* 1. Manually Add/Upload Image Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowImageOptionsModal(false)
+                  handleUploadImageClick(selectedBlogForImage, e)
+                  setSelectedBlogForImage(null)
+                }}
+                disabled={uploadingImages.has(selectedBlogForImage.id)}
+                className={`w-full flex items-center justify-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                  uploadingImages.has(selectedBlogForImage.id)
+                    ? 'bg-purple-100 text-purple-600 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 shadow-lg hover:shadow-xl'
+                }`}
+              >
+                {uploadingImages.has(selectedBlogForImage.id) ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span className="font-medium">Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5" />
+                    <span className="font-medium">{(selectedBlogForImage.metadata?.featured_image || selectedBlogForImage.featured_image) ? 'Replace Image' : 'Upload Image'}</span>
+                  </>
+                )}
+              </button>
+
+              {/* 2. Generate Image by AI Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowImageOptionsModal(false)
+                  handleGenerateImage(selectedBlogForImage, e)
+                  setSelectedBlogForImage(null)
+                }}
+                disabled={generatingImages.has(selectedBlogForImage.id)}
+                className={`w-full flex items-center justify-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                  generatingImages.has(selectedBlogForImage.id)
+                    ? 'bg-blue-100 text-blue-600 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-lg hover:shadow-xl'
+                }`}
+              >
+                {generatingImages.has(selectedBlogForImage.id) ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span className="font-medium">Generating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5" />
+                    <span className="font-medium">Generate by AI</span>
+                  </>
+                )}
+              </button>
+
+              {/* 3. Download Image Button - Only if image exists */}
+              {(selectedBlogForImage.metadata?.featured_image || selectedBlogForImage.featured_image) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowImageOptionsModal(false)
+                    handleDownloadImage(selectedBlogForImage, e)
+                    setSelectedBlogForImage(null)
+                  }}
+                  className="w-full flex items-center justify-center space-x-3 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all duration-200 shadow-lg hover:shadow-xl"
+                >
+                  <Download className="w-5 h-5" />
+                  <span className="font-medium">Download Image</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -852,10 +852,39 @@ async def publish_blog(
             logger.error(f"Error decrypting WordPress app password: {e}")
             raise HTTPException(status_code=500, detail="Failed to decrypt WordPress app password")
         
+        # Get featured image URL from metadata or direct field
+        featured_image_url = None
+        if blog.get('metadata') and isinstance(blog.get('metadata'), dict):
+            featured_image_url = blog['metadata'].get('featured_image')
+        if not featured_image_url:
+            featured_image_url = blog.get('featured_image')
+        
+        logger.info(f"Blog featured image URL: {featured_image_url if featured_image_url else 'No featured image found'}")
+        
         # Format blog content for WordPress API
+        # Clean and prepare content - ensure it's proper HTML
+        blog_content = blog.get('content', '')
+        
+        # If content is empty, use excerpt as fallback
+        if not blog_content or not blog_content.strip():
+            blog_content = blog.get('excerpt', '')
+        
+        # Ensure content is properly formatted HTML
+        # WordPress REST API expects HTML content in the 'content' field
+        # The content should already be HTML from the editor
+        if blog_content:
+            # Only fix double-encoded HTML entities (not single-encoded ones)
+            # Fix double-encoded ampersands, but preserve single-encoded ones
+            blog_content = blog_content.replace('&amp;amp;', '&amp;')  # Fix double-encoded &
+            blog_content = blog_content.replace('&amp;lt;', '&lt;')    # Fix double-encoded <
+            blog_content = blog_content.replace('&amp;gt;', '&gt;')    # Fix double-encoded >
+            blog_content = blog_content.replace('&amp;quot;', '&quot;') # Fix double-encoded "
+            # Ensure proper line breaks are preserved
+            blog_content = blog_content.strip()
+        
         wordpress_data = {
             "title": blog['title'],
-            "content": blog['content'],
+            "content": blog_content,  # Send as HTML - WordPress will render it
             "excerpt": blog.get('excerpt', ''),
             "status": "publish",
             "format": blog.get('format', 'standard'),
@@ -867,28 +896,163 @@ async def publish_blog(
             }
         }
         
+        logger.info(f"Content length: {len(blog_content)} characters. First 200 chars: {blog_content[:200]}")
+        
         # Post to WordPress using REST API authentication
         rest_api_url = f"{wordpress_site['wordpress_site_url'].rstrip('/')}/wp-json/wp/v2/posts"
+        media_api_url = f"{wordpress_site['wordpress_site_url'].rstrip('/')}/wp-json/wp/v2/media"
         
         logger.info(f"Publishing to WordPress using REST API: {rest_api_url}")
         
         try:
             import requests
             from requests.auth import HTTPBasicAuth
+            import io
+            from urllib.parse import urlparse
+            
+            # Create a new session to avoid cookie persistence issues
+            session = requests.Session()
+            
+            # Disable automatic cookie handling to prevent multiple cookies issue
+            session.cookies.clear()
+            
+            # Upload featured image to WordPress if it exists
+            featured_media_id = None
+            if featured_image_url:
+                try:
+                    logger.info(f"Uploading featured image to WordPress: {featured_image_url}")
+                    
+                    # Download the image from Supabase/URL
+                    # Try with headers first (for Supabase public URLs)
+                    headers = {
+                        'User-Agent': 'Agent-Emily/1.0',
+                        'Accept': 'image/*'
+                    }
+                    
+                    image_response = requests.get(featured_image_url, timeout=30, headers=headers, stream=True)
+                    
+                    if image_response.status_code == 200:
+                        # Get image content
+                        image_content = image_response.content
+                        
+                        if not image_content or len(image_content) == 0:
+                            logger.warning("Downloaded image is empty")
+                        else:
+                            # Get image filename from URL
+                            parsed_url = urlparse(featured_image_url)
+                            filename = parsed_url.path.split('/')[-1] or 'blog-image.jpg'
+                            # Remove query parameters from filename
+                            if '?' in filename:
+                                filename = filename.split('?')[0]
+                            
+                            # Determine content type from response headers or filename
+                            content_type = image_response.headers.get('Content-Type', '')
+                            if not content_type or not content_type.startswith('image/'):
+                                # Try to determine from filename
+                                filename_lower = filename.lower()
+                                if filename_lower.endswith('.png'):
+                                    content_type = 'image/png'
+                                elif filename_lower.endswith('.gif'):
+                                    content_type = 'image/gif'
+                                elif filename_lower.endswith('.webp'):
+                                    content_type = 'image/webp'
+                                elif filename_lower.endswith('.jpg') or filename_lower.endswith('.jpeg'):
+                                    content_type = 'image/jpeg'
+                                else:
+                                    # Try to detect from content
+                                    if image_content.startswith(b'\x89PNG'):
+                                        content_type = 'image/png'
+                                        filename = filename.rsplit('.', 1)[0] + '.png' if '.' in filename else 'blog-image.png'
+                                    elif image_content.startswith(b'\xff\xd8\xff'):
+                                        content_type = 'image/jpeg'
+                                        filename = filename.rsplit('.', 1)[0] + '.jpg' if '.' in filename else 'blog-image.jpg'
+                                    elif image_content.startswith(b'GIF'):
+                                        content_type = 'image/gif'
+                                        filename = filename.rsplit('.', 1)[0] + '.gif' if '.' in filename else 'blog-image.gif'
+                                    else:
+                                        content_type = 'image/jpeg'
+                                        filename = 'blog-image.jpg'
+                            
+                            logger.info(f"Preparing to upload image: {filename}, Content-Type: {content_type}, Size: {len(image_content)} bytes")
+                            
+                            # Prepare file for upload
+                            files = {
+                                'file': (filename, io.BytesIO(image_content), content_type)
+                            }
+                            
+                            # Upload to WordPress Media Library
+                            media_response = session.post(
+                                media_api_url,
+                                files=files,
+                                auth=HTTPBasicAuth(wordpress_site['wordpress_username'], app_password),
+                                headers={
+                                    'Content-Disposition': f'attachment; filename="{filename}"',
+                                    'User-Agent': 'Agent-Emily/1.0'
+                                },
+                                timeout=60,
+                                allow_redirects=False
+                            )
+                            
+                            if media_response.status_code == 201:
+                                media_data = media_response.json()
+                                featured_media_id = media_data.get('id')
+                                
+                                # Ensure featured_media_id is an integer (WordPress REST API requires integer)
+                                if featured_media_id:
+                                    try:
+                                        featured_media_id = int(featured_media_id)
+                                    except (ValueError, TypeError):
+                                        logger.error(f"❌ Invalid media ID format: {featured_media_id}")
+                                        featured_media_id = None
+                                
+                                if featured_media_id:
+                                    logger.info(f"✅ Featured image uploaded successfully. Media ID: {featured_media_id} (type: {type(featured_media_id).__name__})")
+                                    # Log the full media response for debugging
+                                    logger.debug(f"Media upload response: {media_data}")
+                                else:
+                                    logger.error(f"❌ Media ID not found in response: {media_data}")
+                            elif media_response.status_code == 401:
+                                logger.warning(f"⚠️ WordPress authentication failed for media upload. Status: {media_response.status_code}. Post will be published without featured image.")
+                                # Continue without image - don't block publishing
+                            else:
+                                error_text = media_response.text[:500] if media_response.text else "No error message"
+                                logger.warning(f"⚠️ Failed to upload featured image. Status: {media_response.status_code}, Response: {error_text}. Post will be published without featured image.")
+                                # Continue without image - don't block publishing
+                    else:
+                        logger.warning(f"⚠️ Failed to download featured image from URL. Status: {image_response.status_code}, URL: {featured_image_url}. Post will be published without featured image.")
+                        # Continue without image - don't block publishing
+                except HTTPException:
+                    # Re-raise HTTP exceptions (these are critical errors)
+                    raise
+                except Exception as img_error:
+                    logger.warning(f"⚠️ Error uploading featured image to WordPress: {str(img_error)}. Post will be published without featured image.")
+                    import traceback
+                    logger.warning(f"Traceback: {traceback.format_exc()}")
+                    # Continue without image - don't block publishing
             
             # Prepare post data for REST API
-            # Add categories and tags to the content for visibility
-            content_with_meta = wordpress_data['content']
-            if wordpress_data['categories'] or wordpress_data['tags']:
-                content_with_meta += "\n\n<!-- Blog Metadata -->\n"
-                if wordpress_data['categories']:
-                    content_with_meta += f"<p><strong>Categories:</strong> {', '.join(wordpress_data['categories'])}</p>\n"
-                if wordpress_data['tags']:
-                    content_with_meta += f"<p><strong>Tags:</strong> {', '.join(wordpress_data['tags'])}</p>\n"
+            # Use clean content without appending metadata to the content body
+            # WordPress will handle categories and tags separately via the API
+            # This ensures the content displays properly without HTML structure showing as text
+            
+            # Add featured image directly to content HTML if available (simpler and more reliable approach)
+            # This ensures the image always shows in the blog post content, regardless of WordPress theme settings
+            content_with_image = wordpress_data['content']
+            if featured_image_url:
+                # Escape the title for HTML attribute
+                import html
+                escaped_title = html.escape(wordpress_data["title"])
+                
+                # Add featured image at the beginning of content as a simple <img> tag
+                # Using responsive styling to ensure it displays well on all devices
+                image_html = f'<figure style="margin: 0 0 20px 0; width: 100%;"><img src="{featured_image_url}" alt="{escaped_title}" style="width: 100%; height: auto; max-width: 100%; display: block; border-radius: 8px;" /></figure>\n\n'
+                content_with_image = image_html + content_with_image
+                logger.info(f"✅ Added featured image directly to content HTML: {featured_image_url}")
+                logger.info("ℹ️ Image embedded in content - will always display regardless of WordPress theme featured image settings")
             
             post_data = {
                 'title': wordpress_data['title'],
-                'content': content_with_meta,
+                'content': content_with_image,  # HTML content with embedded image - WordPress will render it
                 'excerpt': wordpress_data['excerpt'],
                 'status': 'publish',
                 'format': wordpress_data['format'],
@@ -897,6 +1061,17 @@ async def publish_blog(
                     '_yoast_wpseo_focuskw': ', '.join(wordpress_data['meta']['keywords'])
                 }
             }
+            
+            # Add featured media ID if image was uploaded successfully
+            if featured_media_id:
+                # Ensure it's an integer for WordPress REST API
+                post_data['featured_media'] = int(featured_media_id)
+                logger.info(f"✅ Setting featured media ID: {int(featured_media_id)} (as integer) for WordPress post")
+            else:
+                if featured_image_url:
+                    logger.warning(f"⚠️ Featured image URL exists ({featured_image_url}) but upload failed. Post will be published without featured image.")
+                else:
+                    logger.info("ℹ️ No featured image URL found. Post will be published without featured image.")
             
             # Handle categories and tags - WordPress REST API expects integer IDs
             # For now, we'll skip categories and tags to avoid the type error
@@ -913,20 +1088,20 @@ async def publish_blog(
                 # Add tags as meta data instead of direct tags
                 post_data['meta']['_blog_tags'] = ', '.join(wordpress_data['tags'])
             
-            # Create a new session to avoid cookie persistence issues
-            session = requests.Session()
-            
-            # Disable automatic cookie handling to prevent multiple cookies issue
-            session.cookies.clear()
+            # Log content preview for debugging
+            content_preview = post_data['content'][:500] if len(post_data['content']) > 500 else post_data['content']
+            logger.info(f"Publishing post with content preview (first 500 chars): {content_preview}")
+            logger.info(f"Content contains HTML tags: {'<' in post_data['content'] and '>' in post_data['content']}")
             
             # Publish the post using REST API
+            # WordPress REST API expects HTML in the 'content' field and will render it automatically
             response = session.post(
                 rest_api_url,
-                json=post_data,
+                json=post_data,  # JSON encoding will properly handle HTML content
                 auth=HTTPBasicAuth(wordpress_site['wordpress_username'], app_password),
                 headers={
                     'Accept': 'application/json',
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json',  # Important: This tells WordPress to expect JSON with HTML content
                     'User-Agent': 'Agent-Emily/1.0'
                 },
                 timeout=30,
@@ -936,6 +1111,77 @@ async def publish_blog(
             if response.status_code == 201:
                 wordpress_post_id = response.json()['id']
                 logger.info(f"Blog published to WordPress via REST API: Post ID {wordpress_post_id}")
+                
+                # Ensure featured image is set - always update post to set featured image
+                # WordPress sometimes doesn't set featured_media during POST, so we explicitly update it
+                if featured_media_id:
+                    try:
+                        logger.info(f"Setting featured image {featured_media_id} for post {wordpress_post_id} via PUT request")
+                        update_response = session.put(
+                            f"{wordpress_site['wordpress_site_url'].rstrip('/')}/wp-json/wp/v2/posts/{wordpress_post_id}",
+                            json={'featured_media': int(featured_media_id)},
+                            auth=HTTPBasicAuth(wordpress_site['wordpress_username'], app_password),
+                            headers={
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                                'User-Agent': 'Agent-Emily/1.0'
+                            },
+                            timeout=30,
+                            allow_redirects=False
+                        )
+                        
+                        if update_response.status_code == 200:
+                            updated_post = update_response.json()
+                            verified_featured_media = updated_post.get('featured_media', 0)
+                            
+                            # Also check the featured_media object if available
+                            featured_media_obj = updated_post.get('_links', {}).get('wp:featuredmedia', [])
+                            
+                            if verified_featured_media == int(featured_media_id):
+                                logger.info(f"✅ Successfully set featured image {featured_media_id} for post {wordpress_post_id}")
+                                
+                                # Also set via meta field as fallback (some themes use this)
+                                try:
+                                    meta_update_response = session.put(
+                                        f"{wordpress_site['wordpress_site_url'].rstrip('/')}/wp-json/wp/v2/posts/{wordpress_post_id}",
+                                        json={'meta': {'_thumbnail_id': int(featured_media_id)}},
+                                        auth=HTTPBasicAuth(wordpress_site['wordpress_username'], app_password),
+                                        headers={
+                                            'Accept': 'application/json',
+                                            'Content-Type': 'application/json',
+                                            'User-Agent': 'Agent-Emily/1.0'
+                                        },
+                                        timeout=30,
+                                        allow_redirects=False
+                                    )
+                                    if meta_update_response.status_code == 200:
+                                        logger.info(f"✅ Also set _thumbnail_id meta field for post {wordpress_post_id}")
+                                except Exception as meta_error:
+                                    logger.warning(f"⚠️ Could not set _thumbnail_id meta: {str(meta_error)}")
+                                
+                                # Verify the media exists and is accessible
+                                try:
+                                    media_check_response = session.get(
+                                        f"{wordpress_site['wordpress_site_url'].rstrip('/')}/wp-json/wp/v2/media/{featured_media_id}",
+                                        auth=HTTPBasicAuth(wordpress_site['wordpress_username'], app_password),
+                                        timeout=30
+                                    )
+                                    if media_check_response.status_code == 200:
+                                        media_info = media_check_response.json()
+                                        media_url = media_info.get('source_url') or media_info.get('guid', {}).get('rendered', '')
+                                        logger.info(f"✅ Verified media exists. Media URL: {media_url}")
+                                    else:
+                                        logger.warning(f"⚠️ Could not verify media {featured_media_id}. Status: {media_check_response.status_code}")
+                                except Exception as verify_error:
+                                    logger.warning(f"⚠️ Error verifying media: {str(verify_error)}")
+                            else:
+                                logger.warning(f"⚠️ Featured image update returned different ID. Expected: {featured_media_id}, Got: {verified_featured_media}")
+                        else:
+                            error_response = update_response.text[:500] if update_response.text else "No error message"
+                            logger.warning(f"⚠️ Failed to update featured image for post {wordpress_post_id}. Status: {update_response.status_code}, Response: {error_response}")
+                    except Exception as update_error:
+                        logger.warning(f"⚠️ Error updating featured image for post: {str(update_error)}")
+                        # Don't fail the whole publish if update fails
             elif response.status_code == 401:
                 # Check if it's a cookie-related issue
                 if 'Set-Cookie' in response.headers:
@@ -981,6 +1227,11 @@ async def publish_blog(
             if post_response.status_code == 200:
                 post_data = post_response.json()
                 blog_url = post_data.get('link', f"{wordpress_site['wordpress_site_url'].rstrip('/')}/?p={wordpress_post_id}")
+                
+                # Verify featured image is set in final post
+                final_featured_media = post_data.get('featured_media', 0)
+                if featured_media_id and final_featured_media != int(featured_media_id):
+                    logger.warning(f"⚠️ Final verification: Featured image ID mismatch. Expected: {featured_media_id}, Found in post: {final_featured_media}")
             else:
                 # Fallback to post ID format
                 blog_url = f"{wordpress_site['wordpress_site_url'].rstrip('/')}/?p={wordpress_post_id}"
@@ -1001,11 +1252,31 @@ async def publish_blog(
         supabase_admin.table("blog_posts").update(update_data).eq("id", blog_id).execute()
         
         logger.info(f"Blog published to WordPress: {blog_id} -> Post ID: {wordpress_post_id}")
+        
+        # Prepare response message
+        # Image is now embedded directly in content HTML (simpler approach)
+        image_status = "embedded" if featured_image_url else "none"
+        message = "Blog published successfully"
+        troubleshooting_note = None
+        
+        if featured_image_url:
+            message += " with featured image embedded in content"
+            # Image is now in the HTML content, so it will always show
+            troubleshooting_note = "Featured image has been embedded directly in the blog post content and will always display."
+        elif featured_media_id:
+            # Fallback: if we uploaded to Media Library but no URL, still note it
+            image_status = "attached"
+            message += " with featured image (uploaded to Media Library)"
+        
         return {
-            "message": "Blog published successfully", 
+            "message": message, 
             "blog_id": blog_id,
             "wordpress_post_id": str(wordpress_post_id),
-            "wordpress_url": f"{wordpress_site['wordpress_site_url'].rstrip('/')}/?p={wordpress_post_id}"
+            "wordpress_url": f"{wordpress_site['wordpress_site_url'].rstrip('/')}/?p={wordpress_post_id}",
+            "blog_url": blog_url,
+            "image_status": image_status,
+            "featured_media_id": str(featured_media_id) if featured_media_id else None,
+            "troubleshooting_note": troubleshooting_note
         }
         
     except HTTPException:
