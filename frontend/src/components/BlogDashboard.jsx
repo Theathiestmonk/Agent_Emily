@@ -109,7 +109,11 @@ const BlogDashboard = () => {
 
     categories: '',
 
-    tags: ''
+    tags: '',
+
+    scheduled_date: '',
+
+    scheduled_time: ''
 
   })
 
@@ -686,6 +690,20 @@ const BlogDashboard = () => {
 
     setEditingBlog(blog)
     
+    // Format scheduled date and time for input fields
+    let scheduledDate = ''
+    let scheduledTime = ''
+    
+    if (blog.scheduled_at) {
+      const scheduledDateObj = new Date(blog.scheduled_at)
+      // Format date as YYYY-MM-DD for date input
+      scheduledDate = scheduledDateObj.toISOString().split('T')[0]
+      // Format time as HH:MM for time input
+      const hours = String(scheduledDateObj.getHours()).padStart(2, '0')
+      const minutes = String(scheduledDateObj.getMinutes()).padStart(2, '0')
+      scheduledTime = `${hours}:${minutes}`
+    }
+    
     setEditForm({
 
       title: blog.title,
@@ -696,7 +714,11 @@ const BlogDashboard = () => {
 
       categories: blog.categories.join(', '),
 
-      tags: blog.tags.join(', ')
+      tags: blog.tags.join(', '),
+
+      scheduled_date: scheduledDate,
+
+      scheduled_time: scheduledTime
 
     })
 
@@ -726,7 +748,15 @@ const BlogDashboard = () => {
 
       }
 
-
+      // Add scheduled_at if date and time are provided
+      if (editForm.scheduled_date && editForm.scheduled_time) {
+        const scheduledDateTime = new Date(`${editForm.scheduled_date}T${editForm.scheduled_time}`)
+        updateData.scheduled_at = scheduledDateTime.toISOString()
+      } else if (editForm.scheduled_date) {
+        // If only date is provided, use current time
+        const scheduledDateTime = new Date(`${editForm.scheduled_date}T00:00`)
+        updateData.scheduled_at = scheduledDateTime.toISOString()
+      }
 
       await blogService.updateBlog(editingBlog.id, updateData)
 
@@ -734,7 +764,7 @@ const BlogDashboard = () => {
 
       setEditingBlog(null)
 
-      setEditForm({ title: '', content: '', excerpt: '', categories: '', tags: '' })
+      setEditForm({ title: '', content: '', excerpt: '', categories: '', tags: '', scheduled_date: '', scheduled_time: '' })
 
     } catch (error) {
 
@@ -756,7 +786,7 @@ const BlogDashboard = () => {
 
     setEditingBlog(null)
 
-    setEditForm({ title: '', content: '', excerpt: '', categories: '', tags: '' })
+    setEditForm({ title: '', content: '', excerpt: '', categories: '', tags: '', scheduled_date: '', scheduled_time: '' })
 
   }
 
@@ -2131,6 +2161,35 @@ const BlogDashboard = () => {
 
                 </div>
 
+              </div>
+
+              {/* Schedule Date and Time */}
+              <div className="grid grid-cols-1 min-[640px]:grid-cols-2 gap-3 md:gap-4 mt-4">
+                <div>
+                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
+                    <Clock className="w-4 h-4 inline mr-1" />
+                    Schedule Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editForm.scheduled_date}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, scheduled_date: e.target.value }))}
+                    className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
+                    <Clock className="w-4 h-4 inline mr-1" />
+                    Schedule Time
+                  </label>
+                  <input
+                    type="time"
+                    value={editForm.scheduled_time}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, scheduled_time: e.target.value }))}
+                    className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
               </div>
               
             </div>
