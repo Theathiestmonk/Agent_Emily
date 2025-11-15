@@ -49,7 +49,11 @@ import {
 
   Download,
 
-  Upload
+  Upload,
+
+  Maximize2,
+
+  Minimize2
 
 } from 'lucide-react'
 
@@ -152,6 +156,7 @@ const BlogDashboard = () => {
   const [imageInputRefs, setImageInputRefs] = useState({})
   const [showImageOptionsModal, setShowImageOptionsModal] = useState(false)
   const [selectedBlogForImage, setSelectedBlogForImage] = useState(null)
+  const [expandedPreviewImage, setExpandedPreviewImage] = useState(false)
 
 
 
@@ -822,11 +827,9 @@ const BlogDashboard = () => {
 
 
   const handleCloseBlogPreview = () => {
-
     setSelectedBlog(null)
-
     setShowBlogPreview(false)
-
+    setExpandedPreviewImage(false) // Reset expanded state when closing preview
   }
 
 
@@ -2602,33 +2605,43 @@ const BlogDashboard = () => {
               {/* 1. Blog Image (if exists) */}
               {(selectedBlog.metadata?.featured_image || selectedBlog.featured_image) && (
                 <div className="mb-6">
-                  <div className="relative w-full h-64 rounded-xl overflow-hidden shadow-lg">
+                  <div className={`relative ${expandedPreviewImage ? 'w-full h-[80vh] max-h-[800px]' : 'w-full h-64'} rounded-xl overflow-hidden shadow-lg transition-all duration-300`}>
                     <img 
                       src={selectedBlog.metadata?.featured_image || selectedBlog.featured_image} 
                       alt={selectedBlog.title}
-                      className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => setFullScreenImage(selectedBlog.metadata?.featured_image || selectedBlog.featured_image)}
+                      className={`w-full h-full ${expandedPreviewImage ? 'object-contain' : 'object-cover'} transition-all duration-300`}
                       onError={(e) => {
                         e.target.style.display = 'none'
                       }}
                     />
-                    <div className="absolute top-4 left-4">
+                    {/* Status badge and site name - always visible */}
+                    <div className="absolute top-4 left-4 z-10">
                       <span className="px-3 py-1 text-xs rounded-full bg-white/90 text-gray-800 font-medium">
                         {selectedBlog.status.toUpperCase()}
                       </span>
                     </div>
-                    <div className="absolute top-4 right-4">
+                    <div className="absolute top-4 right-4 z-10">
                       <div className="flex items-center space-x-2 text-white/90 bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full">
                         <Globe className="w-4 h-4" />
                         <span className="text-sm font-medium">{selectedBlog.site_name || 'Unknown Site'}</span>
                       </div>
                     </div>
-                    {/* Click hint overlay */}
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/10 transition-all cursor-pointer group">
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm text-white px-4 py-2 rounded-lg text-sm font-medium">
-                        Click to view full screen
-                      </div>
-                    </div>
+                    
+                    {/* Fullscreen button - bottom right corner (YouTube style) - toggles expand/collapse */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setExpandedPreviewImage(!expandedPreviewImage)
+                      }}
+                      className="absolute bottom-4 right-4 z-10 p-2.5 bg-black/50 hover:bg-black/70 rounded-lg backdrop-blur-sm transition-all group"
+                      title={expandedPreviewImage ? "Collapse image" : "Expand image"}
+                    >
+                      {expandedPreviewImage ? (
+                        <Minimize2 className="w-5 h-5 text-white" />
+                      ) : (
+                        <Maximize2 className="w-5 h-5 text-white" />
+                      )}
+                    </button>
                   </div>
                 </div>
               )}
