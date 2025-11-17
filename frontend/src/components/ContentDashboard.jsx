@@ -96,6 +96,9 @@ const ContentDashboard = () => {
   const [generateImagesWithContent, setGenerateImagesWithContent] = useState(false)
   const [fetchingFreshData, setFetchingFreshData] = useState(false)
   const [fetchingContent, setFetchingContent] = useState(false) // Track if content is being fetched for selected channel
+  const [loadingAllContent, setLoadingAllContent] = useState(false) // Track if loading all content
+  const [hasMoreContent, setHasMoreContent] = useState(false) // Track if there's more content to load
+  const [allDatesCount, setAllDatesCount] = useState(0) // Total number of dates found
   const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
   const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
   const [selectedChannel, setSelectedChannel] = useState(null) // Current selected channel (null = not set yet, will default to first channel)
@@ -251,6 +254,9 @@ const ContentDashboard = () => {
   // Refresh content when generation completes or channel changes
   useEffect(() => {
     if (!generating && !fetchingFreshData && selectedChannel) {
+      // Reset load more state when channel changes
+      setHasMoreContent(false)
+      setLoadingAllContent(false)
       fetchAllContent()
     }
   }, [generating, fetchingFreshData, selectedChannel])
@@ -284,7 +290,8 @@ const ContentDashboard = () => {
     }
   }
 
-  // Fetch all content for the selected channel (simplified - no date filtering)
+  // Fetch content only for the selected channel
+  // Only fetch content for 8 oldest dates (from bottom) to optimize performance
   const fetchAllContent = async () => {
     try {
       // Don't fetch if no channel is selected
@@ -294,9 +301,9 @@ const ContentDashboard = () => {
         return
       }
       
-      // If "all" is selected, don't fetch
+      // If "all" is selected, don't fetch (or fetch for all channels - but user wants only selected channel)
       if (selectedChannel === 'all') {
-        console.log('"All" channel selected - not fetching content')
+        console.log('"All" channel selected - not fetching content (only fetch for specific channel)')
         setAllContent([])
         setFetchingContent(false)
         return
@@ -304,9 +311,154 @@ const ContentDashboard = () => {
       
       // Set loading state
       setFetchingContent(true)
-      console.log(`Fetching all content for channel "${selectedChannel}"...`)
+      console.log(`Fetching content for channel "${selectedChannel}" - 8 oldest dates (from bottom)...`)
       
+      const allDates = new Set()
+      const allDateToContentMap = new Map() // Map date -> array of content (all dates)
+      const contentWithoutDates = []
+      let offset = 0
+      const batchSize = 50
+      const maxDates = 8
+      let hasMoreData = true
+      
+      // Normalize selected channel for comparison
+      const normalizedSelectedChannel = selectedChannel.toLowerCase()
+      
+      // Fetch in batches to collect dates
+      // Since backend returns newest first (desc), we fetch enough to likely get 8 oldest dates
+      // We'll fetch a reasonable number of batches (enough to cover date range)
+      const maxBatches = 10 // Fetch up to 10 batches (500 items) to ensure we get enough date coverage
+      let batchCount = 0
+      
+      while (hasMoreData && batchCount < maxBatches) {
+        const result = await contentAPI.getAllContent(batchSize, offset)
+        
+        if (!result.data || result.data.length === 0) {
+          hasMoreData = false
+          break
+        }
+        
+        console.log(`Fetched batch ${batchCount + 1}: ${result.data.length} items, offset: ${offset}`)
+        console.log(`Looking for channel: "${normalizedSelectedChannel}"`)
+        console.log(`Platforms in this batch:`, [...new Set(result.data.map(c => c.platform?.toLowerCase().trim()).filter(Boolean))])
+        
+        // Process this batch and track all dates - ONLY for selected channel
+        let matchedInBatch = 0
+        for (const content of result.data) {
+          // Filter by selected channel - normalize platform name for comparison
+          const contentPlatform = content.platform?.toLowerCase().trim() || ''
+          
+          // Skip content that doesn't match the selected channel
+          // Handle variations: "x (twitter)" -> "twitter", "whatsapp business" -> "whatsapp", etc.
+          let matchesChannel = false
+          if (contentPlatform === normalizedSelectedChannel) {
+            matchesChannel = true
+          } else if (normalizedSelectedChannel === 'twitter' && (contentPlatform === 'x' || contentPlatform === 'x (twitter)')) {
+            matchesChannel = true
+          } else if (normalizedSelectedChannel === 'whatsapp' && contentPlatform.includes('whatsapp')) {
+            matchesChannel = true
+          } else if (normalizedSelectedChannel === 'google business profile' && contentPlatform.includes('google')) {
+            matchesChannel = true
+          }
+          
+          if (!matchesChannel) {
+            continue
+          }
+          
+          matchedInBatch++
+          
+          if (content.scheduled_at) {
+            // Extract date from scheduled_at (format: "YYYY-MM-DDTHH:mm:ss" or "YYYY-MM-DD")
+            const dateStr = content.scheduled_at.split('T')[0]
+            allDates.add(dateStr)
+            
+            // Group content by date (store all dates)
+            if (!allDateToContentMap.has(dateStr)) {
+              allDateToContentMap.set(dateStr, [])
+            }
+            allDateToContentMap.get(dateStr).push(content)
+          } else {
+            // Store content without dates separately (only if it matches the channel)
+            contentWithoutDates.push(content)
+          }
+        }
+        
+        console.log(`Matched ${matchedInBatch} items in batch ${batchCount + 1} for channel "${normalizedSelectedChannel}"`)
+        
+        // If we got fewer items than batch size, we're done
+        if (result.data.length < batchSize) {
+          hasMoreData = false
+        } else {
+          offset += batchSize
+          batchCount++
+        }
+      }
+      
+      // Sort all dates in ascending order (oldest first) and take the 8 oldest
+      const sortedDates = Array.from(allDates).sort()
+      const selectedDates = sortedDates.slice(0, maxDates)
+      
+      // Track if there's more content to load
+      setAllDatesCount(sortedDates.length)
+      setHasMoreContent(sortedDates.length > maxDates)
+      
+      console.log(`Found ${allDates.size} unique dates for channel "${selectedChannel}", selecting 8 oldest:`, selectedDates)
+      
+      // Collect content from the 8 oldest dates
       const filteredContent = []
+      for (const date of selectedDates) {
+        const contentForDate = allDateToContentMap.get(date) || []
+        filteredContent.push(...contentForDate)
+      }
+      
+      // Add content without dates at the end
+      filteredContent.push(...contentWithoutDates)
+      
+      console.log(`Filtered to ${filteredContent.length} items from ${selectedDates.length} dates for channel "${selectedChannel}"`)
+      console.log('Selected dates (oldest first):', selectedDates)
+      console.log('Sample content platforms:', filteredContent.slice(0, 3).map(c => ({ id: c.id, platform: c.platform })))
+      
+      if (filteredContent.length > 0) {
+        setAllContent(filteredContent)
+        console.log(`✅ Set allContent with ${filteredContent.length} items for channel "${selectedChannel}"`)
+        
+        // Images are now loaded directly from content_posts.primary_image_url
+      } else {
+        setAllContent([])
+        console.log(`No content found for channel "${selectedChannel}"`)
+      }
+      
+      // Set loading state to false after fetch completes
+      setFetchingContent(false)
+    } catch (error) {
+      console.error('Error fetching all content:', error)
+      setAllContent([])
+      setFetchingContent(false)
+    }
+  }
+
+  // Load all content for the selected channel (all dates, not just 8)
+  const loadAllContent = async () => {
+    try {
+      // Don't fetch if no channel is selected
+      if (!selectedChannel) {
+        console.log('No channel selected, skipping content fetch')
+        return
+      }
+      
+      // If "all" is selected, don't fetch
+      if (selectedChannel === 'all') {
+        console.log('"All" channel selected - not fetching content')
+        return
+      }
+      
+      // Set loading state
+      setLoadingAllContent(true)
+      console.log(`Loading all content for channel "${selectedChannel}"...`)
+      
+      const allDates = new Set()
+      const allDateToContentMap = new Map() // Map date -> array of content
+      const contentWithoutDates = []
       let offset = 0
       const batchSize = 50
       let hasMoreData = true
@@ -314,8 +466,8 @@ const ContentDashboard = () => {
       // Normalize selected channel for comparison
       const normalizedSelectedChannel = selectedChannel.toLowerCase()
       
-      // Fetch in batches until we get all content
-      const maxBatches = 50 // Fetch up to 50 batches (2500 items) to get all content
+      // Fetch in batches to collect all dates
+      const maxBatches = 20 // Fetch up to 20 batches (1000 items) to get all content
       let batchCount = 0
       
       while (hasMoreData && batchCount < maxBatches) {
@@ -328,11 +480,13 @@ const ContentDashboard = () => {
         
         console.log(`Fetched batch ${batchCount + 1}: ${result.data.length} items, offset: ${offset}`)
         
-        // Filter content by selected channel
+        // Process this batch and track all dates - ONLY for selected channel
+        let matchedInBatch = 0
         for (const content of result.data) {
+          // Filter by selected channel - normalize platform name for comparison
           const contentPlatform = content.platform?.toLowerCase().trim() || ''
           
-          // Check if content matches the selected channel
+          // Skip content that doesn't match the selected channel
           let matchesChannel = false
           if (contentPlatform === normalizedSelectedChannel) {
             matchesChannel = true
@@ -344,10 +498,29 @@ const ContentDashboard = () => {
             matchesChannel = true
           }
           
-          if (matchesChannel) {
-            filteredContent.push(content)
+          if (!matchesChannel) {
+            continue
+          }
+          
+          matchedInBatch++
+          
+          if (content.scheduled_at) {
+            // Extract date from scheduled_at
+            const dateStr = content.scheduled_at.split('T')[0]
+            allDates.add(dateStr)
+            
+            // Group content by date
+            if (!allDateToContentMap.has(dateStr)) {
+              allDateToContentMap.set(dateStr, [])
+            }
+            allDateToContentMap.get(dateStr).push(content)
+          } else {
+            // Store content without dates separately
+            contentWithoutDates.push(content)
           }
         }
+        
+        console.log(`Matched ${matchedInBatch} items in batch ${batchCount + 1} for channel "${normalizedSelectedChannel}"`)
         
         // If we got fewer items than batch size, we're done
         if (result.data.length < batchSize) {
@@ -358,22 +531,41 @@ const ContentDashboard = () => {
         }
       }
       
-      console.log(`✅ Found ${filteredContent.length} items for channel "${selectedChannel}"`)
+      // Sort all dates in ascending order (oldest first) - load ALL dates
+      const sortedDates = Array.from(allDates).sort()
       
-      if (filteredContent.length > 0) {
-        setAllContent(filteredContent)
-        console.log(`✅ Set allContent with ${filteredContent.length} items for channel "${selectedChannel}"`)
+      console.log(`Found ${allDates.size} unique dates for channel "${selectedChannel}", loading all dates`)
+      
+      // Collect content from ALL dates
+      const allFilteredContent = []
+      for (const date of sortedDates) {
+        const contentForDate = allDateToContentMap.get(date) || []
+        allFilteredContent.push(...contentForDate)
+      }
+      
+      // Add content without dates at the end
+      allFilteredContent.push(...contentWithoutDates)
+      
+      console.log(`Loaded ${allFilteredContent.length} items from ${sortedDates.length} dates for channel "${selectedChannel}"`)
+      
+      if (allFilteredContent.length > 0) {
+        setAllContent(allFilteredContent)
+        setHasMoreContent(false) // No more content to load
+        setAllDatesCount(sortedDates.length)
+        console.log(`✅ Set allContent with ${allFilteredContent.length} items for channel "${selectedChannel}"`)
+        
+        // Images are now loaded directly from content_posts.primary_image_url
       } else {
         setAllContent([])
         console.log(`No content found for channel "${selectedChannel}"`)
       }
       
       // Set loading state to false after fetch completes
-      setFetchingContent(false)
+      setLoadingAllContent(false)
     } catch (error) {
-      console.error('Error fetching all content:', error)
+      console.error('Error loading all content:', error)
       setAllContent([])
-      setFetchingContent(false)
+      setLoadingAllContent(false)
     }
   }
 
@@ -2530,24 +2722,23 @@ const ContentDashboard = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                // Share functionality - can be implemented later
-                                if (navigator.share) {
-                                  navigator.share({
-                                    title: content.title || 'Content',
-                                    text: cleanContentText(content.content),
-                                    url: window.location.href
-                                  }).catch(() => {})
-                                }
+                                // Publish post to platform
+                                handlePostContent(content)
                               }}
                               onMouseEnter={() => setHoveredButton(`${content.id}-share`)}
                               onMouseLeave={() => setHoveredButton(null)}
-                              className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 rounded-lg transition-all duration-200 flex items-center justify-center"
+                              disabled={postingContent.has(content.id)}
+                              className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 rounded-lg transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              <Share2 className="w-4 h-4" />
+                              {postingContent.has(content.id) ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Share2 className="w-4 h-4" />
+                              )}
                             </button>
                             {hoveredButton === `${content.id}-share` && (
                               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                                Share
+                                Publish to {content.platform}
                                 <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                               </div>
                             )}
@@ -2588,6 +2779,22 @@ const ContentDashboard = () => {
                 })}
                 </div>
                 
+                {/* Load More Button */}
+                {hasMoreContent && !loadingAllContent && (
+                  <div className="mt-8 text-center">
+                    <button
+                      onClick={loadAllContent}
+                      className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-sm font-medium transition-all duration-200 underline"
+                    >
+                      Load more
+                    </button>
+                  </div>
+                )}
+                {loadingAllContent && (
+                  <div className="mt-8 text-center">
+                    <p className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 text-sm font-medium">Loading all content...</p>
+                  </div>
+                )}
               </div>
             )}
           </div>

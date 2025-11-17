@@ -7,7 +7,7 @@ import os
 import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/contact", tags=["contact"])
 
 class ContactFormRequest(BaseModel):
     name: str
-    email: str
+    email: EmailStr
     subject: str
     message: str
 
