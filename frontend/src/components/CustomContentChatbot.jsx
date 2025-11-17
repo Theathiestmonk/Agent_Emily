@@ -348,7 +348,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
   const validateFile = (file) => {
     const maxSize = mediaType === 'image' ? 10 * 1024 * 1024 : 100 * 1024 * 1024; // 10MB for images, 100MB for videos
     const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    const allowedVideoTypes = ['video/mp4', 'video/mov', 'video/avi', 'video/mkv', 'video/webm'];
+    const allowedVideoTypes = ['video/mp4', 'video/mov', 'video/avi', 'video/mkv', 'video/webm', 'video/wmv', 'video/quicktime'];
     
     if (file.size > maxSize) {
       return `File size too large. Maximum size is ${mediaType === 'image' ? '10MB' : '100MB'}.`;
@@ -359,7 +359,12 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
     }
     
     if (mediaType === 'video' && !allowedVideoTypes.includes(file.type)) {
-      return 'Please upload a valid video file (MP4, MOV, AVI, MKV, or WebM).';
+      // Also check file extension as fallback (some browsers may not set MIME type correctly)
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+      const allowedExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'wmv'];
+      if (!allowedExtensions.includes(fileExtension)) {
+        return 'Please upload a valid video file (MP4, MOV, AVI, MKV, WebM, or WMV).';
+      }
     }
     
     return null;
@@ -751,7 +756,9 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept={mediaType === 'image' ? 'image/*' : 'video/*'}
+                        accept={mediaType === 'image' 
+                          ? 'image/jpeg,image/jpg,image/png,image/gif,image/webp' 
+                          : 'video/mp4,video/mov,video/avi,video/mkv,video/webm,video/wmv'}
                         onChange={handleFileSelect}
                         className="w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gradient-to-r file:from-pink-400 file:to-purple-500 file:text-white hover:file:from-pink-500 hover:file:to-purple-600 transition-all duration-200"
                       />
@@ -759,7 +766,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                       <div className="text-xs text-purple-600 font-medium">
                         {mediaType === 'image' 
                           ? 'Supported formats: JPEG, PNG, GIF, WebP (max 10MB)'
-                          : 'Supported formats: MP4, MOV, AVI, MKV, WebM (max 100MB)'
+                          : 'Supported formats: MP4, MOV, AVI, MKV, WebM, WMV (max 100MB)'
                         }
                       </div>
                       

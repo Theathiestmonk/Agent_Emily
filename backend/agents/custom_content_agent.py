@@ -71,6 +71,7 @@ class ConversationStep(str, Enum):
     HANDLE_MEDIA = "handle_media"
     VALIDATE_MEDIA = "validate_media"
     CONFIRM_MEDIA = "confirm_media"
+    ASK_VIDEO_DESCRIPTION = "ask_video_description"
     GENERATE_CONTENT = "generate_content"
     CONFIRM_CONTENT = "confirm_content"
     SELECT_SCHEDULE = "select_schedule"
@@ -93,6 +94,7 @@ class CustomContentState(TypedDict):
     uploaded_media_url: Optional[str]
     should_generate_media: Optional[bool]
     media_prompt: Optional[str]
+    video_description: Optional[str]
     generated_content: Optional[Dict[str, Any]]
     generated_media_url: Optional[str]
     final_post: Optional[Dict[str, Any]]
@@ -279,6 +281,7 @@ class CustomContentAgent:
         graph.add_node("handle_media", self.handle_media)
         graph.add_node("validate_media", self.validate_media)
         graph.add_node("confirm_media", self.confirm_media)
+        graph.add_node("ask_video_description", self.ask_video_description)
         graph.add_node("generate_content", self.generate_content)
         graph.add_node("confirm_content", self.confirm_content)
         graph.add_node("select_schedule", self.select_schedule)
@@ -314,13 +317,17 @@ class CustomContentAgent:
         # Conditional edge after media confirmation
         graph.add_conditional_edges(
             "confirm_media",
-            self._should_proceed_after_media,
+            self._should_ask_video_description,
             {
+                "ask_description": "ask_video_description",
                 "proceed": "generate_content",
                 "retry": "ask_media",
                 "error": "handle_error"
             }
         )
+        
+        # After video description, proceed to content generation
+        graph.add_edge("ask_video_description", "generate_content")
         
         
         # Content generation flow - skip parse and optimize, go directly to confirm
@@ -599,12 +606,32 @@ class CustomContentAgent:
     async def confirm_media(self, state: CustomContentState) -> CustomContentState:
         """Ask user to confirm if the uploaded media is correct"""
         try:
+            # Check if media is already confirmed - if so, don't ask again and transition immediately
+            if state.get("media_confirmed") is True:
+                logger.info("Media already confirmed, skipping confirmation step and transitioning")
+                # Use conditional logic to determine next step
+                next_step_decision = self._should_ask_video_description(state)
+                if next_step_decision == "ask_description":
+                    state["current_step"] = ConversationStep.ASK_VIDEO_DESCRIPTION
+                else:
+                    state["current_step"] = ConversationStep.GENERATE_CONTENT
+                return state
+            
             state["current_step"] = ConversationStep.CONFIRM_MEDIA
             state["progress_percentage"] = 60
             
             media_url = state.get("uploaded_media_url")
             media_type = state.get("uploaded_media_type", "")
             media_filename = state.get("uploaded_media_filename", "")
+            
+            # Check if we've already asked for confirmation (to prevent duplicate messages)
+            last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
+            confirmation_text = "Is this the correct media you'd like me to use for your content?"
+            
+            if last_message and confirmation_text in last_message.get("content", ""):
+                # Already asked, don't add duplicate message
+                logger.info("Confirmation message already present, skipping duplicate")
+                return state
             
             # Create a message asking for confirmation
             message = {
@@ -664,9 +691,16 @@ class CustomContentAgent:
                     logger.error(f"Image analysis failed: {e}")
                     image_analysis = f"Image analysis failed: {str(e)}"
             
+            # Get video description if available, otherwise use user's initial description (topics)
+            video_description = state.get("video_description", "")
+            # For video, if no separate video description was provided, use the user's initial description/topics
+            if has_media and media_type != "image" and not video_description:
+                video_description = user_description
+                logger.info(f"Using user's initial description as video description: {video_description[:100]}...")
+            
             # Create enhanced content generation prompt
             prompt = self._create_enhanced_content_prompt(
-                user_description, platform, content_type, business_context, image_analysis, has_media
+                user_description, platform, content_type, business_context, image_analysis, has_media, video_description
             )
             
             # Prepare messages for content generation
@@ -999,16 +1033,17 @@ class CustomContentAgent:
                 logger.info(f"Using generated media URL: {final_media_url}")
             elif uploaded_media_url and uploaded_media_url.startswith("data:"):
                 try:
-                    final_media_url = await self._upload_base64_image_to_supabase(
+                    # Upload base64 media (image or video) to Supabase storage
+                    final_media_url = await self._upload_base64_media_to_supabase(
                         uploaded_media_url, user_id, platform
                     )
-                    logger.info(f"Image uploaded to Supabase: {final_media_url}")
+                    logger.info(f"Media uploaded to Supabase: {final_media_url}")
                 except Exception as e:
-                    logger.error(f"Failed to upload image to Supabase: {e}")
-                    # Continue without image if upload fails
+                    logger.error(f"Failed to upload media to Supabase: {e}")
+                    # Continue without media if upload fails
                     final_media_url = None
             elif uploaded_media_url:
-                # Already uploaded image URL
+                # Already uploaded media URL (from Supabase storage)
                 final_media_url = uploaded_media_url
                 logger.info(f"Using existing uploaded media URL: {final_media_url}")
             
@@ -1053,17 +1088,22 @@ class CustomContentAgent:
                 }
             }
             
-            # Add primary image data to post_data if image exists
+            # Add primary image data to post_data if media exists (image or video)
             if final_media_url:
-                # Determine image prompt based on source
-                image_prompt = "User uploaded image for custom content"
+                # Determine if it's a video or image
+                is_video = final_media_url.startswith("data:video/") or any(ext in final_media_url.lower() for ext in ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv'])
+                
+                # Determine media prompt based on source and type
                 if generated_media_url:
                     # Try to get prompt from state if it was generated
-                    image_prompt = state.get("generated_image_prompt", "AI generated image for custom content")
+                    image_prompt = state.get("generated_image_prompt", "AI generated media for custom content")
+                else:
+                    # User uploaded media
+                    image_prompt = f"User uploaded {'video' if is_video else 'image'} for custom content"
                 
                 post_data["primary_image_url"] = final_media_url
                 post_data["primary_image_prompt"] = image_prompt
-                post_data["primary_image_approved"] = True  # User uploads/generated images in custom content are auto-approved
+                post_data["primary_image_approved"] = True  # User uploads/generated media in custom content are auto-approved
             
             # Save to Supabase
             logger.info(f"Saving post to database: {post_data}")
@@ -1277,8 +1317,8 @@ class CustomContentAgent:
             "brand_values": profile_data.get("brand_values", [])
         }
 
-    async def _upload_base64_image_to_supabase(self, base64_data_url: str, user_id: str, platform: str) -> str:
-        """Upload base64 image data to Supabase storage"""
+    async def _upload_base64_media_to_supabase(self, base64_data_url: str, user_id: str, platform: str) -> str:
+        """Upload base64 media data (image or video) to Supabase storage"""
         try:
             import base64
             import uuid
@@ -1292,19 +1332,25 @@ class CustomContentAgent:
             content_type = header.split(":")[1].split(";")[0]
             
             # Decode base64 data
-            image_data = base64.b64decode(data)
+            media_data = base64.b64decode(data)
+            
+            # Determine if it's a video or image
+            is_video = content_type.startswith("video/")
             
             # Generate unique filename
-            file_extension = content_type.split("/")[1] if "/" in content_type else "jpg"
+            file_extension = content_type.split("/")[1] if "/" in content_type else ("mp4" if is_video else "jpg")
             filename = f"custom_content_{user_id}_{platform}_{uuid.uuid4().hex[:8]}.{file_extension}"
-            file_path = f"user-uploads/{filename}"
             
-            logger.info(f"Uploading image to Supabase storage: {file_path}")
+            # Use appropriate bucket: user-uploads for videos, ai-generated-images for images
+            bucket_name = "user-uploads" if is_video else "ai-generated-images"
+            file_path = filename if is_video else f"user-uploads/{filename}"
+            
+            logger.info(f"Uploading {'video' if is_video else 'image'} to Supabase storage: {bucket_name}/{file_path}")
             
             # Upload to Supabase storage
-            storage_response = self.supabase.storage.from_("ai-generated-images").upload(
+            storage_response = self.supabase.storage.from_(bucket_name).upload(
                 file_path,
-                image_data,
+                media_data,
                 file_options={"content-type": content_type}
             )
             
@@ -1313,13 +1359,13 @@ class CustomContentAgent:
                 raise Exception(f"Storage upload failed: {storage_response.error}")
             
             # Get public URL
-            public_url = self.supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+            public_url = self.supabase.storage.from_(bucket_name).get_public_url(file_path)
             
-            logger.info(f"Successfully uploaded image to Supabase: {public_url}")
+            logger.info(f"Successfully uploaded {'video' if is_video else 'image'} to Supabase: {public_url}")
             return public_url
             
         except Exception as e:
-            logger.error(f"Error uploading base64 image to Supabase: {e}")
+            logger.error(f"Error uploading base64 media to Supabase: {e}")
             raise e
     
     async def _analyze_uploaded_image(self, image_url: str, user_description: str, business_context: Dict[str, Any]) -> str:
@@ -1396,7 +1442,7 @@ class CustomContentAgent:
         return prompt
 
     def _create_enhanced_content_prompt(self, description: str, platform: str, content_type: str, 
-                                      business_context: Dict[str, Any], image_analysis: str, has_media: bool) -> str:
+                                      business_context: Dict[str, Any], image_analysis: str, has_media: bool, video_description: str = "") -> str:
         """Create an enhanced prompt for content generation with image analysis"""
         base_prompt = f"""
         Create a {content_type} for {platform} based on this description: "{description}"
@@ -1408,6 +1454,10 @@ class CustomContentAgent:
         - Brand Voice: {business_context.get('brand_voice', 'Professional and friendly')}
         - Brand Personality: {business_context.get('brand_personality', 'Approachable and trustworthy')}
         """
+        
+        # Add video description if available (for video content)
+        if video_description and has_media:
+            base_prompt += f"\n\nVIDEO DESCRIPTION:\nThe user has described their video as: \"{video_description}\"\nUse this description to create content that perfectly complements and describes the video."
         
         if has_media and image_analysis:
             enhanced_prompt = f"""
@@ -1443,7 +1493,68 @@ class CustomContentAgent:
               "visual_elements": ["key", "visual", "elements", "to", "highlight"]
             }}
             """
+        elif has_media and video_description:
+            # Video content with description
+            enhanced_prompt = f"""
+            {base_prompt}
+            
+            Requirements:
+            - Create content that perfectly complements and describes the uploaded video
+            - Use the video description to craft engaging, visual storytelling
+            - Optimize for {platform} best practices with video content
+            - Match the brand voice and personality
+            - Include relevant hashtags
+            - Make it engaging and shareable
+            - Create a compelling narrative that connects the video to your business
+            - Write content that helps viewers understand what they'll see in the video
+            
+            CRITICAL INSTRUCTIONS:
+            - Return ONLY a valid JSON object
+            - Do NOT use markdown code blocks (no ```json or ```)
+            - Do NOT include any text before or after the JSON
+            - The JSON must be parseable directly
+            - Use these exact field names:
+            
+            {{
+              "content": "The main post content",
+              "title": "A catchy title",
+              "hashtags": ["array", "of", "relevant", "hashtags"],
+              "call_to_action": "Suggested call to action",
+              "engagement_hooks": "Ways to encourage engagement"
+            }}
+            """
+        elif has_media:
+            # Media exists but no image analysis (could be video or image without analysis)
+            # If video_description is available, it's already added to base_prompt above
+            enhanced_prompt = f"""
+            {base_prompt}
+            
+            Requirements:
+            - Create content that complements the uploaded media
+            - Optimize for {platform} best practices with media content
+            - Match the brand voice and personality
+            - Include relevant hashtags
+            - Make it engaging and shareable
+            - Create a compelling narrative that connects the media to your business
+            - If this is video content, use the description provided to create engaging video-optimized content
+            
+            CRITICAL INSTRUCTIONS:
+            - Return ONLY a valid JSON object
+            - Do NOT use markdown code blocks (no ```json or ```)
+            - Do NOT include any text before or after the JSON
+            - The JSON must be parseable directly
+            - Use these exact field names:
+            
+            {{
+              "content": "The main post content",
+              "title": "A catchy title",
+              "hashtags": ["array", "of", "relevant", "hashtags"],
+              "call_to_action": "Suggested call to action",
+              "engagement_hooks": "Ways to encourage engagement"
+            }}
+            """
         else:
+            # No media - text-only content
             enhanced_prompt = f"""
             {base_prompt}
             
@@ -1533,8 +1644,15 @@ class CustomContentAgent:
             elif current_step == ConversationStep.ASK_DESCRIPTION:
                 # Store user description
                 state["user_description"] = user_input
-                # Transition to next step
+                # Transition to next step (ask_media)
                 state["current_step"] = ConversationStep.ASK_MEDIA
+                logger.info(f"✅ Description stored, transitioning to ASK_MEDIA step")
+                
+            elif current_step == ConversationStep.ASK_VIDEO_DESCRIPTION:
+                # Store video description
+                state["video_description"] = user_input
+                # Transition to content generation
+                state["current_step"] = ConversationStep.GENERATE_CONTENT
                 
             elif current_step == ConversationStep.CONFIRM_CONTENT:
                 # Handle content confirmation
@@ -1605,11 +1723,52 @@ class CustomContentAgent:
                 
             elif current_step == ConversationStep.CONFIRM_MEDIA:
                 # Handle media confirmation
-                if user_input.lower().strip() in ["yes", "y", "correct", "proceed"]:
+                user_input_lower = user_input.lower().strip()
+                # Check for various "yes" variations including "yes, proceed"
+                if any(phrase in user_input_lower for phrase in ["yes", "y", "correct", "proceed", "yes proceed", "yes, proceed"]):
                     state["media_confirmed"] = True
-                    state["current_step"] = ConversationStep.GENERATE_CONTENT
-                elif user_input.lower().strip() in ["no", "n", "incorrect", "wrong"]:
+                    logger.info("✅ Media confirmed by user, transitioning to next step")
+                    
+                    # Add user confirmation message (similar to image approval pattern)
+                    user_message = {
+                        "role": "user",
+                        "content": "Yes, proceed",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    state["conversation_messages"].append(user_message)
+                    
+                    # Use conditional logic to determine next step (might need video description)
+                    next_step_decision = self._should_ask_video_description(state)
+                    if next_step_decision == "ask_description":
+                        state["current_step"] = ConversationStep.ASK_VIDEO_DESCRIPTION
+                        # Add assistant message for video description
+                        message = {
+                            "role": "assistant",
+                            "content": "Perfect! Media confirmed. Now, could you please provide a brief description of what happens in this video? This will help me create better content for your post.",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        state["conversation_messages"].append(message)
+                    else:
+                        state["current_step"] = ConversationStep.GENERATE_CONTENT
+                        # Add assistant message for content generation
+                        message = {
+                            "role": "assistant",
+                            "content": "Perfect! Media confirmed. Now let me generate your content...",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        state["conversation_messages"].append(message)
+                elif any(phrase in user_input_lower for phrase in ["no", "n", "incorrect", "wrong", "upload different"]):
                     state["media_confirmed"] = False
+                    logger.info("❌ Media rejected by user, returning to media selection")
+                    
+                    # Add user rejection message
+                    user_message = {
+                        "role": "user",
+                        "content": "No, upload different",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    state["conversation_messages"].append(user_message)
+                    
                     # Clear previous media
                     state.pop("uploaded_media_url", None)
                     state.pop("uploaded_media_filename", None)
@@ -1823,6 +1982,30 @@ class CustomContentAgent:
             
         return state
     
+    async def ask_video_description(self, state: CustomContentState) -> CustomContentState:
+        """Ask user to describe the video for content generation"""
+        try:
+            state["current_step"] = ConversationStep.ASK_VIDEO_DESCRIPTION
+            state["progress_percentage"] = 65
+            
+            platform = state.get("selected_platform", "Facebook")
+            
+            message = {
+                "role": "assistant",
+                "content": f"Great! I can see you've uploaded a video for your {platform} post. 📹\n\nTo create the best content for your video, please **describe what's in the video**. For example:\n\n- What is happening in the video?\n- What is the main message or story?\n- Who or what is featured?\n- What emotions or actions should the content convey?\n\nThis description will help me generate engaging text content that complements your video perfectly! ✨",
+                "timestamp": datetime.now().isoformat()
+            }
+            state["conversation_messages"].append(message)
+            
+            logger.info("Asking user to describe video for content generation")
+            
+        except Exception as e:
+            logger.error(f"Error in ask_video_description: {e}")
+            state["error_message"] = f"Failed to ask for video description: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            
+        return state
+    
     def get_conversation_state(self, conversation_id: str) -> Optional[CustomContentState]:
         """Get conversation state by ID (for persistence)"""
         # This would typically load from a database
@@ -1849,18 +2032,37 @@ class CustomContentAgent:
                 return "handle"
         return "skip"
     
-    def _should_proceed_after_media(self, state: CustomContentState) -> str:
-        """Determine next step after media confirmation"""
+    def _should_ask_video_description(self, state: CustomContentState) -> str:
+        """Determine next step after media confirmation - check if we need to ask for video description"""
         if state.get("current_step") == ConversationStep.ERROR:
             return "error"
         
         # Check if user confirmed media or if there was an error
-        if state.get("media_confirmed", False):
-            return "proceed"
-        elif state.get("validation_errors"):
+        if state.get("validation_errors"):
             return "retry"
-        else:
-            return "proceed"  # Default to proceed if no explicit confirmation
+        
+        # Check if it's a video and platform supports video description
+        platform = state.get("selected_platform", "").lower()
+        media_type = state.get("uploaded_media_type", "")
+        is_video = media_type.startswith("video/") if media_type else False
+        
+        # If video is uploaded for Facebook or Instagram, check if we need video description
+        # Only ask if user hasn't already provided video details in initial description
+        if is_video and platform in ["facebook", "instagram"] and not state.get("video_description"):
+            user_description = state.get("user_description", "").lower()
+            # Check if user already mentioned video details in initial description
+            video_keywords = ["video", "explain", "show", "demonstrate", "tutorial", "guide", "walkthrough"]
+            has_video_context = any(keyword in user_description for keyword in video_keywords)
+            
+            # Only ask for video description if initial description doesn't have video context
+            if not has_video_context:
+                return "ask_description"
+        
+        return "proceed"  # Default to proceed
+    
+    def _should_proceed_after_media(self, state: CustomContentState) -> str:
+        """Determine next step after media confirmation (legacy - kept for compatibility)"""
+        return self._should_ask_video_description(state)
     
     def _should_proceed_after_content(self, state: CustomContentState) -> str:
         """Determine next step after content confirmation"""
@@ -1909,7 +2111,7 @@ class CustomContentAgent:
             if user_input:
                 logger.info(f"Processing user input: '{user_input}'")
                 state = await self.process_user_input(state, user_input, "text")
-                logger.info(f"After processing input, current_step: {state.get('current_step')}")
+                logger.info(f"After processing input, current_step: {state.get('current_step')}, media_confirmed: {state.get('media_confirmed')}")
             
             # If there's an error, don't continue with the graph
             if state.get("current_step") == ConversationStep.ERROR:
@@ -1919,6 +2121,18 @@ class CustomContentAgent:
             current_step = state.get("current_step")
             logger.info(f"Executing conversation step: {current_step}")
             
+            # Special handling: If media is confirmed but we're still on CONFIRM_MEDIA step, force transition
+            if current_step == ConversationStep.CONFIRM_MEDIA and state.get("media_confirmed") is True:
+                logger.info("Media confirmed but still on CONFIRM_MEDIA step, forcing transition")
+                next_step_decision = self._should_ask_video_description(state)
+                if next_step_decision == "ask_description":
+                    current_step = ConversationStep.ASK_VIDEO_DESCRIPTION
+                    state["current_step"] = ConversationStep.ASK_VIDEO_DESCRIPTION
+                else:
+                    current_step = ConversationStep.GENERATE_CONTENT
+                    state["current_step"] = ConversationStep.GENERATE_CONTENT
+                logger.info(f"Force transitioned to: {current_step}")
+            
             if current_step == ConversationStep.GREET:
                 result = await self.greet_user(state)
             elif current_step == ConversationStep.ASK_PLATFORM:
@@ -1926,7 +2140,15 @@ class CustomContentAgent:
             elif current_step == ConversationStep.ASK_CONTENT_TYPE:
                 result = await self.ask_content_type(state)
             elif current_step == ConversationStep.ASK_DESCRIPTION:
-                result = await self.ask_description(state)
+                # Only call ask_description if we don't have a description yet
+                # This prevents repeating the question after user has provided input
+                if not state.get("user_description"):
+                    result = await self.ask_description(state)
+                else:
+                    # User already provided description, move to media step
+                    logger.info("User already provided description, moving to ASK_MEDIA")
+                    state["current_step"] = ConversationStep.ASK_MEDIA
+                    result = await self.ask_media(state)
             elif current_step == ConversationStep.ASK_MEDIA:
                 result = await self.ask_media(state)
             elif current_step == ConversationStep.HANDLE_MEDIA:
@@ -1934,7 +2156,22 @@ class CustomContentAgent:
             elif current_step == ConversationStep.VALIDATE_MEDIA:
                 result = await self.validate_media(state)
             elif current_step == ConversationStep.CONFIRM_MEDIA:
-                result = await self.confirm_media(state)
+                # Check if media is already confirmed - if so, move to next step (prevent looping)
+                if state.get("media_confirmed") is True:
+                    logger.info("Media already confirmed, skipping confirm_media to prevent loop")
+                    # Use conditional logic to determine next step
+                    next_step = self._should_ask_video_description(state)
+                    if next_step == "ask_description":
+                        state["current_step"] = ConversationStep.ASK_VIDEO_DESCRIPTION
+                        result = await self.ask_video_description(state)
+                    else:
+                        state["current_step"] = ConversationStep.GENERATE_CONTENT
+                        result = await self.generate_content(state)
+                else:
+                    # Only call confirm_media if media is not yet confirmed
+                    result = await self.confirm_media(state)
+            elif current_step == ConversationStep.ASK_VIDEO_DESCRIPTION:
+                result = await self.ask_video_description(state)
             elif current_step == ConversationStep.GENERATE_CONTENT:
                 result = await self.generate_content(state)
             elif current_step == ConversationStep.CONFIRM_CONTENT:

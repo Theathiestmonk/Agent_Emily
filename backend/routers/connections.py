@@ -7,6 +7,8 @@ import secrets
 import string
 import hashlib
 import base64
+import time
+import traceback
 from cryptography.fernet import Fernet
 import requests
 from supabase import create_client, Client
@@ -3299,25 +3301,41 @@ async def post_to_facebook(
 
         
         
-        # Prepare payload based on whether we have an image
-
+        # Check if media is a video or image
+        is_video = False
         if image_url:
-
-            # For posts with images, we need to use photos endpoint
-
-            facebook_url = f"https://graph.facebook.com/v18.0/{connection['page_id']}/photos"
-
-            payload = {
-
-                "message": full_message,
-
-                "url": image_url,  # Facebook will fetch the image from this URL
-
-                "access_token": access_token
-
-            }
-
-            print(f"🖼️ Posting with image to photos endpoint")
+            # Check if URL is a video by file extension (handle URLs with query parameters)
+            video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.3gp']
+            image_url_lower = image_url.lower()
+            # Remove query parameters for extension check
+            url_without_query = image_url_lower.split('?')[0]
+            is_video = any(url_without_query.endswith(ext) for ext in video_extensions)
+            print(f"🎬 Media type detection: {'Video' if is_video else 'Image'} - URL: {image_url[:100]}...")
+        
+        # Prepare payload based on whether we have media and what type
+        if image_url:
+            if is_video:
+                # For posts with videos, we need to use videos endpoint
+                facebook_url = f"https://graph.facebook.com/v18.0/{connection['page_id']}/videos"
+                
+                payload = {
+                    "file_url": image_url,  # Facebook will fetch the video from this URL
+                    "description": full_message,
+                    "access_token": access_token
+                }
+                
+                print(f"🎥 Posting with video to videos endpoint")
+            else:
+                # For posts with images, we need to use photos endpoint
+                facebook_url = f"https://graph.facebook.com/v18.0/{connection['page_id']}/photos"
+                
+                payload = {
+                    "message": full_message,
+                    "url": image_url,  # Facebook will fetch the image from this URL
+                    "access_token": access_token
+                }
+                
+                print(f"🖼️ Posting with image to photos endpoint")
 
         else:
 
@@ -3356,19 +3374,19 @@ async def post_to_facebook(
         print(f"🌐 Trying URL method: {facebook_url_with_token}")
 
         if image_url:
-
-            # For photos, send URL parameter separately
-
-            response = requests.post(facebook_url_with_token, data={
-
-                "message": full_message,
-
-                "url": image_url
-
-            })
-
+            if is_video:
+                # For videos, use file_url and description
+                response = requests.post(facebook_url_with_token, data={
+                    "file_url": image_url,
+                    "description": full_message
+                })
+            else:
+                # For photos, send URL parameter separately
+                response = requests.post(facebook_url_with_token, data={
+                    "message": full_message,
+                    "url": image_url
+                })
         else:
-
             response = requests.post(facebook_url_with_token, data={"message": full_message})
         
         
@@ -3407,19 +3425,27 @@ async def post_to_facebook(
 
                 if content_id:
 
-                    update_response = supabase_admin.table("content_posts").update({
-
+                    published_at = datetime.now().isoformat()
+                    update_data = {
                         "status": "published",
-
-                        "published_at": datetime.now().isoformat(),
-
+                        "published_at": published_at,
                         "facebook_post_id": result.get('id')
-
-                    }).eq("id", content_id).execute()
+                    }
+                    
+                    print(f"🔄 Updating content {content_id} status to published...")
+                    print(f"📝 Update data: {update_data}")
+                    
+                    update_response = supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
 
                     
                     
-                    print(f"✅ Updated content status in database: {update_response}")
+                    if update_response.data:
+                        print(f"✅ Successfully updated content status in database: {update_response.data}")
+                    else:
+                        print(f"⚠️  Update response has no data: {update_response}")
+                        # Try to get the current content to verify
+                        check_response = supabase_admin.table("content_posts").select("id, status").eq("id", content_id).execute()
+                        print(f"🔍 Current content status: {check_response.data}")
 
                 else:
 
@@ -3427,7 +3453,8 @@ async def post_to_facebook(
 
             except Exception as e:
 
-                print(f"⚠️  Error updating content status in database: {e}")
+                print(f"❌ Error updating content status in database: {e}")
+                print(f"📋 Traceback: {traceback.format_exc()}")
 
                 # Don't fail the whole request if database update fails
             
@@ -4660,36 +4687,44 @@ async def post_to_instagram(
 
         
         
-        # Prepare media data based on whether we have an image
-
+        # Check if media is a video or image (same logic as Facebook)
+        is_video = False
         if image_url:
-
-            # For posts with images
-
-            media_data = {
-
-                "image_url": image_url,
-
-                "caption": full_message,
-
-                "access_token": access_token
-
-            }
-
-            print(f"🖼️ Creating Instagram post with image")
-
+            # Check if URL is a video by file extension (handle URLs with query parameters)
+            video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.3gp']
+            image_url_lower = image_url.lower()
+            # Remove query parameters for extension check
+            url_without_query = image_url_lower.split('?')[0]
+            is_video = any(url_without_query.endswith(ext) for ext in video_extensions)
+            print(f"🎬 Media type detection: {'Video/Reel' if is_video else 'Image'} - URL: {image_url[:100]}...")
+        
+        
+        # Prepare media data based on whether we have media and what type
+        if image_url:
+            if is_video:
+                # For posts with videos/reels
+                media_data = {
+                    "media_type": "REELS",
+                    "video_url": image_url,  # Use video_url for reels
+                    "caption": full_message,
+                    "access_token": access_token
+                }
+                print(f"🎥 Creating Instagram reel with video")
+            else:
+                # For posts with images
+                media_data = {
+                    "media_type": "IMAGE",
+                    "image_url": image_url,
+                    "caption": full_message,
+                    "access_token": access_token
+                }
+                print(f"🖼️ Creating Instagram post with image")
         else:
-
             # For text-only posts, we need to create a media container with a caption
-
             media_data = {
-
                 "caption": full_message,
-
                 "access_token": access_token
-
             }
-
             print(f"📝 Creating Instagram text-only post")
         
         
@@ -4754,6 +4789,50 @@ async def post_to_instagram(
         
         print(f"✅ Instagram media container created: {media_id}")
 
+        
+        
+        # For videos/reels, wait for processing before publishing (with shorter timeout for better UX)
+        if is_video:
+            max_wait_time = 120  # 2 minutes max wait (reduced from 5 minutes)
+            wait_interval = 3  # Check every 3 seconds (reduced from 5)
+            elapsed_time = 0
+            
+            print(f"⏳ Waiting for video to be processed...")
+            while elapsed_time < max_wait_time:
+                # Check media status
+                status_url = f"https://graph.facebook.com/v18.0/{media_id}?fields=status_code&access_token={access_token}"
+                try:
+                    status_response = requests.get(status_url, timeout=10)
+                    
+                    if status_response.status_code == 200:
+                        status_data = status_response.json()
+                        status_code = status_data.get('status_code')
+                        
+                        if status_code == 'FINISHED':
+                            print(f"✅ Video processing completed")
+                            break
+                        elif status_code == 'ERROR':
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="Video processing failed. Please check your video file and try again."
+                            )
+                        else:
+                            print(f"⏳ Video processing status: {status_code}, waiting... ({elapsed_time}s/{max_wait_time}s)")
+                            time.sleep(wait_interval)
+                            elapsed_time += wait_interval
+                    else:
+                        # If status check fails, try to publish anyway (might be ready)
+                        print(f"⚠️  Could not check video status (HTTP {status_response.status_code}), attempting to publish...")
+                        break
+                except requests.exceptions.Timeout:
+                    print(f"⚠️  Status check timeout, attempting to publish...")
+                    break
+                except Exception as e:
+                    print(f"⚠️  Error checking status: {e}, attempting to publish...")
+                    break
+            
+            if elapsed_time >= max_wait_time:
+                print(f"⚠️  Video processing timeout after {max_wait_time}s, attempting to publish anyway...")
         
         
         # Publish the media
@@ -4822,19 +4901,27 @@ async def post_to_instagram(
 
             if content_id:
 
-                update_response = supabase_admin.table("content_posts").update({
-
+                published_at = datetime.now().isoformat()
+                update_data = {
                     "status": "published",
-
-                    "published_at": datetime.now().isoformat(),
-
+                    "published_at": published_at,
                     "instagram_post_id": post_id
-
-                }).eq("id", content_id).execute()
+                }
+                
+                print(f"🔄 Updating content {content_id} status to published...")
+                print(f"📝 Update data: {update_data}")
+                
+                update_response = supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
 
                 
                 
-                print(f"✅ Updated content status in database: {update_response}")
+                if update_response.data:
+                    print(f"✅ Successfully updated content status in database: {update_response.data}")
+                else:
+                    print(f"⚠️  Update response has no data: {update_response}")
+                    # Try to get the current content to verify
+                    check_response = supabase_admin.table("content_posts").select("id, status").eq("id", content_id).execute()
+                    print(f"🔍 Current content status: {check_response.data}")
 
             else:
 
@@ -4842,11 +4929,23 @@ async def post_to_instagram(
 
         except Exception as e:
 
-            print(f"⚠️  Error updating content status in database: {e}")
+            print(f"❌ Error updating content status in database: {e}")
+            import traceback
+            print(f"📋 Traceback: {traceback.format_exc()}")
 
             # Don't fail the whole request if database update fails
         
         
+        
+        # Determine URL format based on media type (reels use different URL format)
+        post_url = None
+        if post_id:
+            if is_video:
+                # For reels, use the reel URL format
+                post_url = f"https://www.instagram.com/reel/{post_id}/"
+            else:
+                # For regular posts, use the post URL format
+                post_url = f"https://www.instagram.com/p/{post_id}/"
         
         return {
 
@@ -4858,7 +4957,8 @@ async def post_to_instagram(
 
             "message": "Content posted to Instagram successfully!",
 
-            "url": f"https://www.instagram.com/p/{post_id}/" if post_id else None
+            "url": post_url,
+            "post_url": post_url  # Also include post_url for consistency with frontend
 
         }
         

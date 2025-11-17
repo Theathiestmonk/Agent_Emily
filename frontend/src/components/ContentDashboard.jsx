@@ -139,6 +139,7 @@ const ContentDashboard = () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showAddMenu])
+
   const [generatingMedia, setGeneratingMedia] = useState(new Set()) // Track which content is generating media
   const [uploadingImage, setUploadingImage] = useState(new Set()) // Track which content is uploading image
   const [showUploadModal, setShowUploadModal] = useState(null) // Track which content is showing upload modal
@@ -148,6 +149,7 @@ const ContentDashboard = () => {
   const [showImageEditor, setShowImageEditor] = useState(false) // Track if image editor is open
   const [imageEditorData, setImageEditorData] = useState(null) // Data for image editor
   const [selectedFile, setSelectedFile] = useState(null) // Selected file for upload
+  const [previewUrl, setPreviewUrl] = useState(null) // Preview URL for selected file
   const [hoveredButton, setHoveredButton] = useState(null) // Track which button is being hovered
   const [imageLoading, setImageLoading] = useState(new Set()) // Track which images are loading
   const [showCustomContentChatbot, setShowCustomContentChatbot] = useState(false) // Custom content chatbot modal
@@ -178,6 +180,15 @@ const ContentDashboard = () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [statusDropdownOpen])
+
+  // Cleanup preview URL when previewUrl changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl)
+      }
+    }
+  }, [previewUrl])
 
   // Fetch profile to get available channels (Digital Marketing Platforms)
   useEffect(() => {
@@ -1063,8 +1074,20 @@ const ContentDashboard = () => {
       // Show beautiful notification with post URL if available
       showPostNotification('Facebook', result.post_url || result.url)
       
-      // Update the content status to published in cache
-      updateContentInCache(content.id, { status: 'published' })
+      // Update the content status to published in cache (with published_at timestamp)
+      const publishedAt = new Date().toISOString()
+      updateContentInCache(content.id, { 
+        status: 'published',
+        published_at: publishedAt,
+        facebook_post_id: result.post_id
+      })
+      
+      // Also update in allContent if it exists there
+      setAllContent(prev => prev.map(item => 
+        item.id === content.id 
+          ? { ...item, status: 'published', published_at: publishedAt, facebook_post_id: result.post_id }
+          : item
+      ))
       
     } catch (error) {
       console.error('Error posting to Facebook:', error)
@@ -1100,27 +1123,67 @@ const ContentDashboard = () => {
       // Try OAuth method first (original endpoint)
       try {
         console.log('🔄 Trying Instagram OAuth posting...')
-        const response = await fetch(`${API_BASE_URL}/connections/instagram/post`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: JSON.stringify(postData)
-        })
+        
+        // Create an AbortController for timeout handling
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 180000) // 3 minutes timeout (longer than backend wait)
+        
+        try {
+          const response = await fetch(`${API_BASE_URL}/connections/instagram/post`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify(postData),
+            signal: controller.signal
+          })
 
-        if (response.ok) {
-          const result = await response.json()
-          console.log('✅ Instagram OAuth post successful:', result)
-          // Show beautiful notification with post URL if available
-          showPostNotification('Instagram', result.post_url || result.url)
-          updateContentInCache(content.id, { status: 'published' })
-          return
-        } else {
-          const errorText = await response.text()
-          console.log('❌ Instagram OAuth failed:', response.status, errorText)
-          oauthError = new Error(`OAuth method failed: ${response.status}: ${errorText}`)
-          // Continue to try token method
+          clearTimeout(timeoutId)
+
+          if (response.ok) {
+            const result = await response.json()
+            console.log('✅ Instagram OAuth post successful:', result)
+            console.log('📋 Response data:', { post_url: result.post_url, url: result.url, post_id: result.post_id })
+            
+            // Show beautiful notification with post URL if available
+            const postUrl = result.post_url || result.url
+            if (postUrl) {
+              showPostNotification('Instagram', postUrl)
+            } else {
+              // If no URL, still show success message
+              showSuccess('Successfully posted to Instagram!')
+            }
+            
+            // Update the content status to published in cache (with published_at timestamp)
+            const publishedAt = new Date().toISOString()
+            updateContentInCache(content.id, { 
+              status: 'published',
+              published_at: publishedAt,
+              instagram_post_id: result.post_id
+            })
+            
+            // Also update in allContent if it exists there
+            setAllContent(prev => prev.map(item => 
+              item.id === content.id 
+                ? { ...item, status: 'published', published_at: publishedAt, instagram_post_id: result.post_id }
+                : item
+            ))
+            return
+          } else {
+            const errorText = await response.text()
+            console.log('❌ Instagram OAuth failed:', response.status, errorText)
+            oauthError = new Error(`OAuth method failed: ${response.status}: ${errorText}`)
+            // Continue to try token method
+          }
+        } catch (fetchError) {
+          clearTimeout(timeoutId)
+          if (fetchError.name === 'AbortError') {
+            console.log('⏱️ Instagram OAuth request timeout')
+            oauthError = new Error('Request timeout: Instagram reel processing is taking longer than expected. The post may still be processing in the background.')
+          } else {
+            throw fetchError
+          }
         }
       } catch (error) {
         console.log('❌ Instagram OAuth error:', error)
@@ -1144,7 +1207,21 @@ const ContentDashboard = () => {
           const result = await response.json()
           console.log('✅ Instagram token post successful:', result)
           showSuccess(`Successfully posted to Instagram!`)
-          updateContentInCache(content.id, { status: 'published' })
+          
+          // Update the content status to published in cache (with published_at timestamp)
+          const publishedAt = new Date().toISOString()
+          updateContentInCache(content.id, { 
+            status: 'published',
+            published_at: publishedAt,
+            instagram_post_id: result.post_id
+          })
+          
+          // Also update in allContent if it exists there
+          setAllContent(prev => prev.map(item => 
+            item.id === content.id 
+              ? { ...item, status: 'published', published_at: publishedAt, instagram_post_id: result.post_id }
+              : item
+          ))
           return
         } else {
           const errorText = await response.text()
@@ -1814,7 +1891,7 @@ const ContentDashboard = () => {
     console.log('🔍 Selected file:', selectedFile)
     
     if (!selectedFile) {
-      showError('No file selected', 'Please select an image to upload')
+      showError('No file selected', 'Please select an image or video to upload')
       return
     }
 
@@ -1874,33 +1951,30 @@ const ContentDashboard = () => {
         throw new Error(result.message || 'Upload failed')
       }
       
-      // Update local state
-      console.log('🔍 Setting video URL in state:', result.image_url)
-      setGeneratedImages(prev => ({
-        ...prev,
-        [postId]: {
-          image_url: result.image_url,
-          cost: 0,
-          generation_time: 0,
-          generated_at: new Date().toISOString(),
-          is_approved: true
-        }
-      }))
-      
       // Update modal content if it's open
       if (selectedContentForModal && selectedContentForModal.id === postId) {
         setSelectedContentForModal(prev => ({
           ...prev,
+          media_url: result.image_url,
           image_url: result.image_url
         }))
       }
       
-      // Update allContent state
+      // Update allContent state with media_url (which comes from primary_image_url)
       setAllContent(prev => prev.map(item => 
-        item.id === postId ? { ...item, image_url: result.image_url } : item
+        item.id === postId ? { ...item, media_url: result.image_url, image_url: result.image_url } : item
+      ))
+      
+      // Update scheduled content if it exists
+      setScheduledContent(prev => prev.map(item => 
+        item.id === postId ? { ...item, media_url: result.image_url, image_url: result.image_url } : item
       ))
       
       // Close modal and reset
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl)
+      }
+      setPreviewUrl(null)
       setShowUploadModal(null)
       setSelectedFile(null)
       
@@ -1911,9 +1985,6 @@ const ContentDashboard = () => {
         : 'Your custom image has been added to the post'
       
       showSuccess(successMessage, successDescription)
-      
-      // Refresh images
-      await fetchPostImages(postId)
       
     } catch (error) {
       console.error('Error uploading image:', error)
@@ -2722,6 +2793,35 @@ const ContentDashboard = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
+                                handleOpenUploadModal(content.id)
+                              }}
+                              onMouseEnter={() => setHoveredButton(`${content.id}-upload`)}
+                              onMouseLeave={() => setHoveredButton(null)}
+                              disabled={uploadingImage.has(content.id)}
+                              className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
+                                uploadingImage.has(content.id)
+                                  ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                  : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:opacity-90'
+                              }`}
+                            >
+                              {uploadingImage.has(content.id) ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Upload className="w-4 h-4" />
+                              )}
+                            </button>
+                            {hoveredButton === `${content.id}-upload` && (
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                {uploadingImage.has(content.id) ? 'Uploading...' : 'Upload Image/Video'}
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
                                 // Publish post to platform
                                 handlePostContent(content)
                               }}
@@ -2999,23 +3099,25 @@ const ContentDashboard = () => {
                               
                               return (
                                 <>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setImageEditorData({
-                                        postContent: selectedContentForModal.content,
-                                        inputImageUrl: finalImageUrl
-                                      })
-                                      setShowImageEditor(true)
-                                      handleCloseModal()
-                                    }}
-                                    className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors"
-                                  >
-                                    Edit Image
-                                  </button>
+                                  {!isVideoFile(finalImageUrl) && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setImageEditorData({
+                                          postContent: selectedContentForModal.content,
+                                          inputImageUrl: finalImageUrl
+                                        })
+                                        setShowImageEditor(true)
+                                        handleCloseModal()
+                                      }}
+                                      className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors"
+                                    >
+                                      Edit Image
+                                    </button>
+                                  )}
                                   <label className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors cursor-pointer inline-flex items-center space-x-1">
                                     <Upload className="w-4 h-4" />
-                                    <span>Replace</span>
+                                    <span>Replace Media</span>
                                     <input
                                       type="file"
                                       accept="image/*,video/*"
@@ -3055,7 +3157,7 @@ const ContentDashboard = () => {
                       <h4 className="text-lg font-semibold text-gray-900">Media</h4>
                       <label className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 cursor-pointer text-sm font-medium transition-colors">
                         <Upload className="w-4 h-4" />
-                        <span>Upload Image</span>
+                        <span>Upload Media</span>
                         <input
                           type="file"
                           accept="image/*,video/*"
@@ -4116,6 +4218,10 @@ const ContentDashboard = () => {
               </div>
               <button
                 onClick={() => {
+                  if (previewUrl) {
+                    URL.revokeObjectURL(previewUrl)
+                  }
+                  setPreviewUrl(null)
                   setShowUploadModal(null)
                   setSelectedFile(null)
                 }}
@@ -4134,10 +4240,17 @@ const ContentDashboard = () => {
                 <div className="relative">
                   <input
                     type="file"
-                    accept="image/*,video/*"
+                    accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,video/mp4,video/mov,video/avi,video/mkv,video/webm,video/wmv"
                     onChange={(e) => {
                       const file = e.target.files[0]
                       if (file) {
+                        // Cleanup previous preview URL
+                        if (previewUrl) {
+                          URL.revokeObjectURL(previewUrl)
+                        }
+                        // Create new preview URL
+                        const url = URL.createObjectURL(file)
+                        setPreviewUrl(url)
                         setSelectedFile(file)
                       }
                     }}
@@ -4152,13 +4265,13 @@ const ContentDashboard = () => {
                 </div>
                 <p className="text-xs text-gray-500 mt-2 flex items-center">
                   <span className="w-1 h-1 bg-purple-400 rounded-full mr-2"></span>
-                  Supported formats: Images (JPG, PNG, GIF) and Videos (MP4, AVI, MOV)
+                  Supported formats: Images (JPG, PNG, GIF, WebP - max 10MB) and Videos (MP4, MOV, AVI, MKV, WebM, WMV - max 100MB)
                 </p>
               </div>
               
               {/* Selected File Preview */}
               {selectedFile && (
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4">
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4 space-y-3">
                   <div className="flex items-center space-x-4">
                     <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
                       {selectedFile.type.startsWith('video/') ? (
@@ -4174,12 +4287,36 @@ const ContentDashboard = () => {
                       </p>
                     </div>
                     <button
-                      onClick={() => setSelectedFile(null)}
+                      onClick={() => {
+                        if (previewUrl) {
+                          URL.revokeObjectURL(previewUrl)
+                        }
+                        setPreviewUrl(null)
+                        setSelectedFile(null)
+                      }}
                       className="w-8 h-8 bg-red-100 hover:bg-red-200 rounded-full flex items-center justify-center transition-colors"
                     >
                       <X className="w-4 h-4 text-red-600" />
                     </button>
                   </div>
+                  {/* Media Preview */}
+                  {previewUrl && selectedFile.type.startsWith('video/') ? (
+                    <div className="w-full">
+                      <video
+                        src={previewUrl}
+                        controls
+                        className="w-full h-48 object-cover rounded-lg border border-purple-200"
+                      />
+                    </div>
+                  ) : previewUrl ? (
+                    <div className="w-full">
+                      <img
+                        src={previewUrl}
+                        alt="Preview"
+                        className="w-full h-48 object-cover rounded-lg border border-purple-200"
+                      />
+                    </div>
+                  ) : null}
                 </div>
               )}
               
