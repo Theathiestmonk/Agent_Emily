@@ -624,7 +624,7 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                 "is_approved": False
             }
             
-            
+            # Save to content_images (temporary - for migration period)
             if existing_images.data and len(existing_images.data) > 0:
                 # Update existing image
                 image_id = existing_images.data[0]["id"]
@@ -633,6 +633,31 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                 # Create new image record
                 image_data["post_id"] = post_data["id"]
                 response = self.supabase.table("content_images").insert(image_data).execute()
+            
+            # Update content_posts with primary image data
+            # Logic: If new image is approved OR no approved image exists, set as primary
+            post_id = post_data["id"]
+            is_approved = image_data.get("is_approved", False)
+            
+            # Check if there's already an approved image for this post
+            approved_check = self.supabase.table("content_posts").select("primary_image_approved").eq("id", post_id).execute()
+            has_existing_approved = approved_check.data and approved_check.data[0].get("primary_image_approved", False) if approved_check.data else False
+            
+            # Set as primary if: new image is approved OR no approved image exists
+            should_set_as_primary = is_approved or not has_existing_approved
+            
+            if should_set_as_primary:
+                update_data = {
+                    "primary_image_url": state["generated_image_url"],
+                    "primary_image_prompt": state["image_prompt"],
+                    "primary_image_approved": is_approved
+                }
+                
+                update_response = self.supabase.table("content_posts").update(update_data).eq("id", post_id).execute()
+                if update_response.data:
+                    logger.info(f"Updated content_posts.primary_image_url for post {post_id}")
+                else:
+                    logger.warning(f"Failed to update content_posts for post {post_id}")
             
             if response.data:
                 state["status"] = "completed"

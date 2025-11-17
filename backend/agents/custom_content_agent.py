@@ -1053,6 +1053,18 @@ class CustomContentAgent:
                 }
             }
             
+            # Add primary image data to post_data if image exists
+            if final_media_url:
+                # Determine image prompt based on source
+                image_prompt = "User uploaded image for custom content"
+                if generated_media_url:
+                    # Try to get prompt from state if it was generated
+                    image_prompt = state.get("generated_image_prompt", "AI generated image for custom content")
+                
+                post_data["primary_image_url"] = final_media_url
+                post_data["primary_image_prompt"] = image_prompt
+                post_data["primary_image_approved"] = True  # User uploads/generated images in custom content are auto-approved
+            
             # Save to Supabase
             logger.info(f"Saving post to database: {post_data}")
             result = self.supabase.table("content_posts").insert(post_data).execute()
@@ -1061,13 +1073,13 @@ class CustomContentAgent:
                 post_id = result.data[0]["id"]
                 state["final_post"] = result.data[0]
                 
-                # Also save image metadata to content_images table if image was uploaded
+                # Also save image metadata to content_images table (temporary - for migration period)
                 if final_media_url:
                     try:
                         image_data = {
                             "post_id": post_id,
                             "image_url": final_media_url,
-                            "image_prompt": "User uploaded image for custom content",
+                            "image_prompt": post_data.get("primary_image_prompt", "User uploaded image for custom content"),
                             "image_style": "user_upload",
                             "image_size": "custom",
                             "image_quality": "custom",
@@ -1079,9 +1091,9 @@ class CustomContentAgent:
                         }
                         
                         self.supabase.table("content_images").insert(image_data).execute()
-                        logger.info(f"Image metadata saved for post {post_id}")
+                        logger.info(f"Image metadata saved to content_images for post {post_id}")
                     except Exception as e:
-                        logger.error(f"Failed to save image metadata: {e}")
+                        logger.error(f"Failed to save image metadata to content_images: {e}")
                         # Continue even if image metadata save fails
                 
                 # Determine if image was uploaded or generated

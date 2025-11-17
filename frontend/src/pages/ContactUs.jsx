@@ -9,6 +9,7 @@ const ContactUs = () => {
     message: ''
   });
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -18,16 +19,40 @@ const ContactUs = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Here you would typically send the form data to your backend
-    console.log('Form submitted:', formData);
-    setIsSubmitted(true);
-    // Reset form after 3 seconds
-    setTimeout(() => {
-      setIsSubmitted(false);
-      setFormData({ name: '', email: '', subject: '', message: '' });
-    }, 3000);
+    setIsSubmitting(true);
+    
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com';
+      const baseUrl = API_BASE_URL.replace(/\/+$/, '');
+      
+      const response = await fetch(`${baseUrl}/api/contact/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok && result.success) {
+        setIsSubmitted(true);
+        // Reset form after 3 seconds
+        setTimeout(() => {
+          setIsSubmitted(false);
+          setFormData({ name: '', email: '', subject: '', message: '' });
+        }, 3000);
+      } else {
+        alert('Failed to send message. Please try again later.');
+      }
+    } catch (error) {
+      console.error('Error submitting contact form:', error);
+      alert('Failed to send message. Please try again later.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -245,10 +270,11 @@ const ContactUs = () => {
 
                   <button
                     type="submit"
-                    className="w-full bg-gradient-to-r from-[#9E005C] to-[#FF4D94] text-white py-3 rounded-xl font-medium hover:from-[#FF4D94] hover:to-[#9E005C] transition-all duration-300 transform hover:scale-105 flex items-center justify-center space-x-2"
+                    disabled={isSubmitting}
+                    className="w-full bg-gradient-to-r from-[#9E005C] to-[#FF4D94] text-white py-3 rounded-xl font-medium hover:from-[#FF4D94] hover:to-[#9E005C] transition-all duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                   >
-                    <Send className="w-5 h-5" />
-                    <span>Send Message</span>
+                    <Send className={`w-5 h-5 ${isSubmitting ? 'animate-pulse' : ''}`} />
+                    <span>{isSubmitting ? 'Sending...' : 'Send Message'}</span>
                   </button>
                 </form>
               )}

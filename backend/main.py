@@ -24,12 +24,14 @@ from routers.ads import router as ads_router
 from routers.blogs import router as blogs_router
 from routers.platform_connections import router as platform_connections_router
 from routers.custom_content import router as custom_content_router
+from routers.custom_blog import router as custom_blog_router
 from routers.simple_image_editor import router as simple_image_editor_router
 from routers.template_editor import router as template_editor_router
 from routers.subscription import router as subscription_router
 from routers.website_analysis import router as website_analysis_router
 from routers.trial import router as trial_router
 from routers.leads import router as leads_router
+from routers.contact import router as contact_router
 
 # Load environment variables
 load_dotenv()
@@ -101,12 +103,14 @@ app.include_router(media_router)
 app.include_router(ads_router)
 app.include_router(blogs_router)
 app.include_router(custom_content_router)
+app.include_router(custom_blog_router)
 app.include_router(simple_image_editor_router)
 app.include_router(template_editor_router)
 app.include_router(subscription_router)
 app.include_router(website_analysis_router)
 app.include_router(trial_router)
 app.include_router(leads_router)
+app.include_router(contact_router)
 
 # Health check endpoint
 @app.get("/health")

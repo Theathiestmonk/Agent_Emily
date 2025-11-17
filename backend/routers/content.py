@@ -134,7 +134,7 @@ async def get_scheduled_content(
                 "scheduled_at": f"{item.get('scheduled_date')}T{item.get('scheduled_time', '12:00:00')}",
                 "status": item.get("status", "draft"),
                 "created_at": item.get("created_at"),
-                "media_url": None,  # Will be populated from content_images if needed
+                "media_url": item.get("primary_image_url"),  # Use primary_image_url from content_posts
                 "hashtags": item.get("hashtags", []),
                 "post_type": item.get("post_type", "text"),
                 "campaign_id": item.get("campaign_id"),
@@ -178,7 +178,7 @@ async def get_all_content(
                 "scheduled_at": f"{item.get('scheduled_date')}T{item.get('scheduled_time', '12:00:00')}",
                 "status": item.get("status", "draft"),
                 "created_at": item.get("created_at"),
-                "media_url": None,  # Will be populated from content_images if needed
+                "media_url": item.get("primary_image_url"),  # Use primary_image_url from content_posts
                 "hashtags": item.get("hashtags", []),
                 "post_type": item.get("post_type", "text"),
                 "campaign_id": item.get("campaign_id"),
@@ -233,7 +233,7 @@ async def get_content_by_date(
                 "scheduled_at": f"{item.get('scheduled_date')}T{item.get('scheduled_time', '12:00:00')}",
                 "status": item.get("status", "draft"),
                 "created_at": item.get("created_at"),
-                "media_url": None,  # Will be populated from content_images if needed
+                "media_url": item.get("primary_image_url"),  # Use primary_image_url from content_posts
                 "hashtags": item.get("hashtags", []),
                 "post_type": item.get("post_type", "text"),
                 "campaign_id": item.get("campaign_id"),

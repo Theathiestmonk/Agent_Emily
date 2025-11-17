@@ -65,6 +65,8 @@ import MainContentLoader from './MainContentLoader'
 
 import MobileNavigation from './MobileNavigation'
 
+import CustomBlogChatbot from './CustomBlogChatbot'
+
 
 
 const BlogDashboard = () => {
@@ -161,6 +163,7 @@ const BlogDashboard = () => {
   const [showImageOptionsModal, setShowImageOptionsModal] = useState(false)
   const [selectedBlogForImage, setSelectedBlogForImage] = useState(null)
   const [expandedPreviewImage, setExpandedPreviewImage] = useState(false)
+  const [showCustomBlogChatbot, setShowCustomBlogChatbot] = useState(false)
 
 
 
@@ -1466,6 +1469,16 @@ const BlogDashboard = () => {
 
               {/* Right Side - Actions */}
               <div className="flex items-center gap-0.5 md:gap-3 flex-shrink-0 min-w-0">
+                {/* Custom Blog Button */}
+                <button
+                  onClick={() => setShowCustomBlogChatbot(true)}
+                  className="flex items-center justify-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-1.5 py-1.5 md:px-4 md:py-2 lg:px-6 lg:py-3 rounded-md md:rounded-lg lg:rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all duration-300 shadow-lg hover:shadow-xl h-8 w-8 md:w-auto md:h-auto flex-shrink-0"
+                  title="Create Custom Blog"
+                >
+                  <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-5" />
+                  <span className="hidden md:inline ml-2 text-sm lg:text-base">Custom Blog</span>
+                </button>
+                
                 {/* Generate Button */}
                 <button
                   onClick={generateBlogs}
@@ -3344,6 +3357,18 @@ const BlogDashboard = () => {
           {/* This ensures the useEffect runs when fullScreenImage changes */}
         </div>
       )}
+
+      {/* Custom Blog Chatbot */}
+      <CustomBlogChatbot
+        isOpen={showCustomBlogChatbot}
+        onClose={() => setShowCustomBlogChatbot(false)}
+        onBlogCreated={(blog) => {
+          if (blog) {
+            showSuccess('Blog Created', `Your custom blog "${blog.title}" has been created successfully!`)
+            fetchBlogs() // Refresh the blog list
+          }
+        }}
+      />
 
     </div>
 

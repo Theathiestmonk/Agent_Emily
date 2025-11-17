@@ -204,7 +204,7 @@ const Page = () => {
           </h1>
         
           <p className="text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl text-[#2E2E2E]/70 mb-4 sm:mb-6 md:mb-8 lg:mb-10 xl:mb-12 max-w-3xl mx-auto leading-relaxed px-4">
-            Meet your AI teammates that work autonomously to automate tasks, 
+            AI teammates that work autonomously to automate tasks, 
             boost productivity, and transform how you work.
           </p>
           
@@ -588,7 +588,7 @@ const Page = () => {
                 </div>
                 <div className="flex items-center space-x-2 sm:space-x-3">
                   <Check className="w-4 h-4 sm:w-5 sm:h-5 text-[#3F2B96] flex-shrink-0" />
-                  <span className="text-xs sm:text-sm md:text-base text-[#2E2E2E]/80">Custom AI Training</span>
+                  <span className="text-xs sm:text-sm md:text-base text-[#2E2E2E]/80">Custom AI Agents</span>
                 </div>
                 <div className="flex items-center space-x-2 sm:space-x-3">
                   <Check className="w-4 h-4 sm:w-5 sm:h-5 text-[#3F2B96] flex-shrink-0" />
@@ -604,9 +604,12 @@ const Page = () => {
                 </div>
               </div>
               
-              <button className="w-full bg-gradient-to-r from-[#3F2B96] to-[#9E005C] text-white py-2 sm:py-2.5 md:py-3 rounded-xl text-xs sm:text-sm md:text-base font-medium hover:from-[#9E005C] hover:to-[#3F2B96] transition-all duration-300">
+              <Link
+                to="/contact"
+                className="w-full bg-gradient-to-r from-[#3F2B96] to-[#9E005C] text-white py-2 sm:py-2.5 md:py-3 rounded-xl text-xs sm:text-sm md:text-base font-medium hover:from-[#9E005C] hover:to-[#3F2B96] transition-all duration-300 transform hover:scale-105 flex items-center justify-center"
+              >
                 Contact Sales
-              </button>
+              </Link>
             </div>
           </div>
         </div>

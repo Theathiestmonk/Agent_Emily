@@ -96,9 +96,6 @@ const ContentDashboard = () => {
   const [generateImagesWithContent, setGenerateImagesWithContent] = useState(false)
   const [fetchingFreshData, setFetchingFreshData] = useState(false)
   const [fetchingContent, setFetchingContent] = useState(false) // Track if content is being fetched for selected channel
-  const [loadingAllContent, setLoadingAllContent] = useState(false) // Track if loading all content
-  const [hasMoreContent, setHasMoreContent] = useState(false) // Track if there's more content to load
-  const [allDatesCount, setAllDatesCount] = useState(0) // Total number of dates found
   const [postingContent, setPostingContent] = useState(new Set()) // Track which content is being posted
   const [expandedCampaigns, setExpandedCampaigns] = useState(new Set()) // Track expanded campaigns
   const [selectedChannel, setSelectedChannel] = useState(null) // Current selected channel (null = not set yet, will default to first channel)
@@ -140,7 +137,6 @@ const ContentDashboard = () => {
     }
   }, [showAddMenu])
   const [generatingMedia, setGeneratingMedia] = useState(new Set()) // Track which content is generating media
-  const [generatedImages, setGeneratedImages] = useState({}) // Store generated images by content ID
   const [uploadingImage, setUploadingImage] = useState(new Set()) // Track which content is uploading image
   const [showUploadModal, setShowUploadModal] = useState(null) // Track which content is showing upload modal
   const [lightboxImage, setLightboxImage] = useState(null) // Track which image to show in lightbox
@@ -255,9 +251,6 @@ const ContentDashboard = () => {
   // Refresh content when generation completes or channel changes
   useEffect(() => {
     if (!generating && !fetchingFreshData && selectedChannel) {
-      // Reset load more state when channel changes
-      setHasMoreContent(false)
-      setLoadingAllContent(false)
       fetchAllContent()
     }
   }, [generating, fetchingFreshData, selectedChannel])
@@ -281,15 +274,7 @@ const ContentDashboard = () => {
         console.log('Platform values in content:', result.data.map(item => ({ id: item.id, platform: item.platform })))
         console.log('Data source:', result.fromCache ? 'cache' : 'API')
         
-        // Load images immediately for all scheduled content (with error handling)
-        for (const content of result.data) {
-          try {
-            await fetchPostImages(content.id)
-          } catch (error) {
-            // Silently handle image loading errors to prevent console spam
-            console.debug('Image loading failed for content:', content.id)
-          }
-        }
+        // Images are now loaded directly from content_posts.primary_image_url
         
         // Refresh all content and channels after content is loaded
         await fetchAllContent()
@@ -299,8 +284,7 @@ const ContentDashboard = () => {
     }
   }
 
-  // Fetch content only for the selected channel
-  // Only fetch content for 8 oldest dates (from bottom) to optimize performance
+  // Fetch all content for the selected channel (simplified - no date filtering)
   const fetchAllContent = async () => {
     try {
       // Don't fetch if no channel is selected
@@ -310,9 +294,9 @@ const ContentDashboard = () => {
         return
       }
       
-      // If "all" is selected, don't fetch (or fetch for all channels - but user wants only selected channel)
+      // If "all" is selected, don't fetch
       if (selectedChannel === 'all') {
-        console.log('"All" channel selected - not fetching content (only fetch for specific channel)')
+        console.log('"All" channel selected - not fetching content')
         setAllContent([])
         setFetchingContent(false)
         return
@@ -320,23 +304,18 @@ const ContentDashboard = () => {
       
       // Set loading state
       setFetchingContent(true)
-      console.log(`Fetching content for channel "${selectedChannel}" - 8 oldest dates (from bottom)...`)
+      console.log(`Fetching all content for channel "${selectedChannel}"...`)
       
-      const allDates = new Set()
-      const allDateToContentMap = new Map() // Map date -> array of content (all dates)
-      const contentWithoutDates = []
+      const filteredContent = []
       let offset = 0
       const batchSize = 50
-      const maxDates = 8
       let hasMoreData = true
       
       // Normalize selected channel for comparison
       const normalizedSelectedChannel = selectedChannel.toLowerCase()
       
-      // Fetch in batches to collect dates
-      // Since backend returns newest first (desc), we fetch enough to likely get 8 oldest dates
-      // We'll fetch a reasonable number of batches (enough to cover date range)
-      const maxBatches = 10 // Fetch up to 10 batches (500 items) to ensure we get enough date coverage
+      // Fetch in batches until we get all content
+      const maxBatches = 50 // Fetch up to 50 batches (2500 items) to get all content
       let batchCount = 0
       
       while (hasMoreData && batchCount < maxBatches) {
@@ -348,17 +327,12 @@ const ContentDashboard = () => {
         }
         
         console.log(`Fetched batch ${batchCount + 1}: ${result.data.length} items, offset: ${offset}`)
-        console.log(`Looking for channel: "${normalizedSelectedChannel}"`)
-        console.log(`Platforms in this batch:`, [...new Set(result.data.map(c => c.platform?.toLowerCase().trim()).filter(Boolean))])
         
-        // Process this batch and track all dates - ONLY for selected channel
-        let matchedInBatch = 0
+        // Filter content by selected channel
         for (const content of result.data) {
-          // Filter by selected channel - normalize platform name for comparison
           const contentPlatform = content.platform?.toLowerCase().trim() || ''
           
-          // Skip content that doesn't match the selected channel
-          // Handle variations: "x (twitter)" -> "twitter", "whatsapp business" -> "whatsapp", etc.
+          // Check if content matches the selected channel
           let matchesChannel = false
           if (contentPlatform === normalizedSelectedChannel) {
             matchesChannel = true
@@ -370,29 +344,10 @@ const ContentDashboard = () => {
             matchesChannel = true
           }
           
-          if (!matchesChannel) {
-            continue
-          }
-          
-          matchedInBatch++
-          
-          if (content.scheduled_at) {
-            // Extract date from scheduled_at (format: "YYYY-MM-DDTHH:mm:ss" or "YYYY-MM-DD")
-            const dateStr = content.scheduled_at.split('T')[0]
-            allDates.add(dateStr)
-            
-            // Group content by date (store all dates)
-            if (!allDateToContentMap.has(dateStr)) {
-              allDateToContentMap.set(dateStr, [])
-            }
-            allDateToContentMap.get(dateStr).push(content)
-          } else {
-            // Store content without dates separately (only if it matches the channel)
-            contentWithoutDates.push(content)
+          if (matchesChannel) {
+            filteredContent.push(content)
           }
         }
-        
-        console.log(`Matched ${matchedInBatch} items in batch ${batchCount + 1} for channel "${normalizedSelectedChannel}"`)
         
         // If we got fewer items than batch size, we're done
         if (result.data.length < batchSize) {
@@ -403,45 +358,11 @@ const ContentDashboard = () => {
         }
       }
       
-      // Sort all dates in ascending order (oldest first) and take the 8 oldest
-      const sortedDates = Array.from(allDates).sort()
-      const selectedDates = sortedDates.slice(0, maxDates)
-      
-      // Track if there's more content to load
-      setAllDatesCount(sortedDates.length)
-      setHasMoreContent(sortedDates.length > maxDates)
-      
-      console.log(`Found ${allDates.size} unique dates for channel "${selectedChannel}", selecting 8 oldest:`, selectedDates)
-      
-      // Collect content from the 8 oldest dates
-      const filteredContent = []
-      for (const date of selectedDates) {
-        const contentForDate = allDateToContentMap.get(date) || []
-        filteredContent.push(...contentForDate)
-      }
-      
-      // Add content without dates at the end
-      filteredContent.push(...contentWithoutDates)
-      
-      console.log(`Filtered to ${filteredContent.length} items from ${selectedDates.length} dates for channel "${selectedChannel}"`)
-      console.log('Selected dates (oldest first):', selectedDates)
-      console.log('Sample content platforms:', filteredContent.slice(0, 3).map(c => ({ id: c.id, platform: c.platform })))
+      console.log(`✅ Found ${filteredContent.length} items for channel "${selectedChannel}"`)
       
       if (filteredContent.length > 0) {
         setAllContent(filteredContent)
         console.log(`✅ Set allContent with ${filteredContent.length} items for channel "${selectedChannel}"`)
-        
-        // Only load images for the filtered content (8 dates worth)
-        console.log('Loading images for filtered content...')
-        for (const content of filteredContent) {
-          try {
-            await fetchPostImages(content.id)
-          } catch (error) {
-            // Silently handle image loading errors to prevent console spam
-            console.debug('Image loading failed for content:', content.id)
-          }
-        }
-        console.log('Finished loading images for filtered content')
       } else {
         setAllContent([])
         console.log(`No content found for channel "${selectedChannel}"`)
@@ -453,147 +374,6 @@ const ContentDashboard = () => {
       console.error('Error fetching all content:', error)
       setAllContent([])
       setFetchingContent(false)
-    }
-  }
-
-  // Load all content for the selected channel (all dates, not just 8)
-  const loadAllContent = async () => {
-    try {
-      // Don't fetch if no channel is selected
-      if (!selectedChannel) {
-        console.log('No channel selected, skipping content fetch')
-        return
-      }
-      
-      // If "all" is selected, don't fetch
-      if (selectedChannel === 'all') {
-        console.log('"All" channel selected - not fetching content')
-        return
-      }
-      
-      // Set loading state
-      setLoadingAllContent(true)
-      console.log(`Loading all content for channel "${selectedChannel}"...`)
-      
-      const allDates = new Set()
-      const allDateToContentMap = new Map() // Map date -> array of content
-      const contentWithoutDates = []
-      let offset = 0
-      const batchSize = 50
-      let hasMoreData = true
-      
-      // Normalize selected channel for comparison
-      const normalizedSelectedChannel = selectedChannel.toLowerCase()
-      
-      // Fetch in batches to collect all dates
-      const maxBatches = 20 // Fetch up to 20 batches (1000 items) to get all content
-      let batchCount = 0
-      
-      while (hasMoreData && batchCount < maxBatches) {
-        const result = await contentAPI.getAllContent(batchSize, offset)
-        
-        if (!result.data || result.data.length === 0) {
-          hasMoreData = false
-          break
-        }
-        
-        console.log(`Fetched batch ${batchCount + 1}: ${result.data.length} items, offset: ${offset}`)
-        
-        // Process this batch and track all dates - ONLY for selected channel
-        let matchedInBatch = 0
-        for (const content of result.data) {
-          // Filter by selected channel - normalize platform name for comparison
-          const contentPlatform = content.platform?.toLowerCase().trim() || ''
-          
-          // Skip content that doesn't match the selected channel
-          let matchesChannel = false
-          if (contentPlatform === normalizedSelectedChannel) {
-            matchesChannel = true
-          } else if (normalizedSelectedChannel === 'twitter' && (contentPlatform === 'x' || contentPlatform === 'x (twitter)')) {
-            matchesChannel = true
-          } else if (normalizedSelectedChannel === 'whatsapp' && contentPlatform.includes('whatsapp')) {
-            matchesChannel = true
-          } else if (normalizedSelectedChannel === 'google business profile' && contentPlatform.includes('google')) {
-            matchesChannel = true
-          }
-          
-          if (!matchesChannel) {
-            continue
-          }
-          
-          matchedInBatch++
-          
-          if (content.scheduled_at) {
-            // Extract date from scheduled_at
-            const dateStr = content.scheduled_at.split('T')[0]
-            allDates.add(dateStr)
-            
-            // Group content by date
-            if (!allDateToContentMap.has(dateStr)) {
-              allDateToContentMap.set(dateStr, [])
-            }
-            allDateToContentMap.get(dateStr).push(content)
-          } else {
-            // Store content without dates separately
-            contentWithoutDates.push(content)
-          }
-        }
-        
-        console.log(`Matched ${matchedInBatch} items in batch ${batchCount + 1} for channel "${normalizedSelectedChannel}"`)
-        
-        // If we got fewer items than batch size, we're done
-        if (result.data.length < batchSize) {
-          hasMoreData = false
-        } else {
-          offset += batchSize
-          batchCount++
-        }
-      }
-      
-      // Sort all dates in ascending order (oldest first) - load ALL dates
-      const sortedDates = Array.from(allDates).sort()
-      
-      console.log(`Found ${allDates.size} unique dates for channel "${selectedChannel}", loading all dates`)
-      
-      // Collect content from ALL dates
-      const allFilteredContent = []
-      for (const date of sortedDates) {
-        const contentForDate = allDateToContentMap.get(date) || []
-        allFilteredContent.push(...contentForDate)
-      }
-      
-      // Add content without dates at the end
-      allFilteredContent.push(...contentWithoutDates)
-      
-      console.log(`Loaded ${allFilteredContent.length} items from ${sortedDates.length} dates for channel "${selectedChannel}"`)
-      
-      if (allFilteredContent.length > 0) {
-        setAllContent(allFilteredContent)
-        setHasMoreContent(false) // No more content to load
-        setAllDatesCount(sortedDates.length)
-        console.log(`✅ Set allContent with ${allFilteredContent.length} items for channel "${selectedChannel}"`)
-        
-        // Load images for all content
-        console.log('Loading images for all content...')
-        for (const content of allFilteredContent) {
-          try {
-            await fetchPostImages(content.id)
-          } catch (error) {
-            console.debug('Image loading failed for content:', content.id)
-          }
-        }
-        console.log('Finished loading images for all content')
-      } else {
-        setAllContent([])
-        console.log(`No content found for channel "${selectedChannel}"`)
-      }
-      
-      // Set loading state to false after fetch completes
-      setLoadingAllContent(false)
-    } catch (error) {
-      console.error('Error loading all content:', error)
-      setAllContent([])
-      setLoadingAllContent(false)
     }
   }
 
@@ -1059,10 +839,9 @@ const ContentDashboard = () => {
     try {
       const authToken = await getAuthToken()
       
-      // Get the image URL if available
-      let imageUrl = ''
-      if (generatedImages[content.id] && generatedImages[content.id].image_url) {
-        imageUrl = generatedImages[content.id].image_url
+      // Get the image URL if available (from content.media_url which comes from primary_image_url)
+      let imageUrl = content.media_url || ''
+      if (imageUrl) {
         console.log('📸 Including image in Facebook post:', imageUrl)
       }
       
@@ -1107,10 +886,9 @@ const ContentDashboard = () => {
     try {
       const authToken = await getAuthToken()
       
-      // Get the image URL if available
-      let imageUrl = ''
-      if (generatedImages[content.id] && generatedImages[content.id].image_url) {
-        imageUrl = generatedImages[content.id].image_url
+      // Get the image URL if available (from content.media_url which comes from primary_image_url)
+      let imageUrl = content.media_url || ''
+      if (imageUrl) {
         console.log('📸 Including image in Instagram post:', imageUrl)
       }
       
@@ -1216,10 +994,9 @@ const ContentDashboard = () => {
     try {
       const authToken = await getAuthToken()
       
-      // Get the image URL if available
-      let imageUrl = ''
-      if (generatedImages[content.id] && generatedImages[content.id].image_url) {
-        imageUrl = generatedImages[content.id].image_url
+      // Get the image URL if available (from content.media_url which comes from primary_image_url)
+      let imageUrl = content.media_url || ''
+      if (imageUrl) {
         console.log('📸 Including image in LinkedIn post:', imageUrl)
       }
       
@@ -1264,10 +1041,9 @@ const ContentDashboard = () => {
     try {
       const authToken = await getAuthToken()
       
-      // Get the image URL if available
-      let imageUrl = ''
-      if (generatedImages[content.id] && generatedImages[content.id].image_url) {
-        imageUrl = generatedImages[content.id].image_url
+      // Get the image URL if available (from content.media_url which comes from primary_image_url)
+      let imageUrl = content.media_url || ''
+      if (imageUrl) {
         console.log('📸 Including image in YouTube post:', imageUrl)
       }
       
@@ -1320,7 +1096,8 @@ const ContentDashboard = () => {
       hashtags: content.hashtags ? content.hashtags.join(', ') : '',
       scheduled_date: content.scheduled_at ? content.scheduled_at.split('T')[0] : '',
       scheduled_time: content.scheduled_at ? content.scheduled_at.split('T')[1] : '12:00',
-      status: content.status || 'draft'
+      status: content.status || 'draft',
+      media_url: content.media_url || content.image_url || '' // Include media_url from primary_image_url
     })
   }
 
@@ -1601,35 +1378,7 @@ const ContentDashboard = () => {
     }
   }
 
-  const fetchPostImages = async (postId) => {
-    try {
-      const result = await mediaService.getPostImages(postId)
-      
-      if (result.images && result.images.length > 0) {
-        // Store the latest image for this post
-        const latestImage = result.images[0] // Assuming we want the latest one
-        
-        setGeneratedImages(prev => {
-          const newImages = {
-            ...prev,
-            [postId]: {
-              image_url: latestImage.image_url,
-              cost: latestImage.generation_cost,
-              generation_time: latestImage.generation_time,
-              generated_at: latestImage.created_at,
-              is_approved: latestImage.is_approved
-            }
-          }
-          return newImages
-        })
-      }
-    } catch (error) {
-      // Only log errors that are not 404 (Post not found) to reduce console spam
-      if (!error.message?.includes('404') && !error.message?.includes('Post not found')) {
-        console.error('Error fetching post images:', error)
-      }
-    }
-  }
+  // fetchPostImages removed - images are now loaded directly from content_posts.primary_image_url via content.media_url
 
   const handleGenerateMedia = async (content) => {
     try {
@@ -2496,18 +2245,18 @@ const ContentDashboard = () => {
                     (normalizedSelectedChannel === 'google business profile' && contentPlatform.includes('google'))
                   
                   // Get image URL for left side - only if this is the selected channel
+                  // Use content.media_url (which comes from primary_image_url) directly
                   const imageUrl = isSelectedChannel 
-                    ? ((generatedImages[content.id] && generatedImages[content.id].image_url) || content.image_url)
+                    ? (content.media_url || content.image_url)
                     : null
                   const thumbnailUrl = imageUrl ? getCardThumbnailUrl(imageUrl) : null
-                  const hasImage = isSelectedChannel && !!(imageUrl || content.media_url)
+                  const hasImage = isSelectedChannel && !!imageUrl
                   
                   // Debug logging for image URLs
-                  if (content.id && !imageUrl && !content.media_url && isSelectedChannel) {
+                  if (content.id && !imageUrl && isSelectedChannel) {
                     console.log('⚠️ Content has no image:', content.id, {
-                      hasGeneratedImage: !!(generatedImages[content.id] && generatedImages[content.id].image_url),
-                      hasContentImage: !!content.image_url,
                       hasMediaUrl: !!content.media_url,
+                      hasContentImage: !!content.image_url,
                       content: content
                     })
                   }
@@ -2839,22 +2588,6 @@ const ContentDashboard = () => {
                 })}
                 </div>
                 
-                {/* Load More Button */}
-                {hasMoreContent && !loadingAllContent && (
-                  <div className="mt-8 text-center">
-                    <button
-                      onClick={loadAllContent}
-                      className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-sm font-medium transition-all duration-200 underline"
-                    >
-                      Load more
-                    </button>
-                  </div>
-                )}
-                {loadingAllContent && (
-                  <div className="mt-8 text-center">
-                    <p className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 text-sm font-medium">Loading all content...</p>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -2988,13 +2721,8 @@ const ContentDashboard = () => {
                   {/* Image Section */}
                   <div className="space-y-4">
                     {(() => {
-                      // Always fetch image directly from content object, not from generatedImages state
-                      // This ensures we get the image even if card hasn't loaded it yet
-                      const imageUrl = selectedContentForModal.image_url || selectedContentForModal.media_url
-                      const generatedImageUrl = generatedImages[selectedContentForModal.id]?.image_url
-                      
-                      // Prioritize content's image_url, then generated image, then media_url
-                      const finalImageUrl = imageUrl || generatedImageUrl
+                      // Get image directly from content.media_url (which comes from primary_image_url)
+                      const finalImageUrl = selectedContentForModal.media_url || selectedContentForModal.image_url
                       
                       if (!finalImageUrl) {
                         return (
@@ -3057,10 +2785,8 @@ const ContentDashboard = () => {
                           {/* Action buttons overlay */}
                           <div className="absolute bottom-4 right-4 flex gap-2">
                             {(() => {
-                              // Use the same image URL logic as the image display
-                              const imageUrl = selectedContentForModal.image_url || selectedContentForModal.media_url
-                              const generatedImageUrl = generatedImages[selectedContentForModal.id]?.image_url
-                              const finalImageUrl = imageUrl || generatedImageUrl
+                              // Use content.media_url (which comes from primary_image_url)
+                              const finalImageUrl = selectedContentForModal.media_url || selectedContentForModal.image_url
                               
                               if (!finalImageUrl) return null
                               
@@ -3696,16 +3422,12 @@ const ContentDashboard = () => {
                     </label>
                     
                     {/* Current Media Display */}
-                    {generatedImages[editForm.id] && (
+                    {editForm.media_url && (
                       <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl">
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-sm font-semibold text-purple-800">Current Media:</span>
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                            generatedImages[editForm.id].is_approved 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {generatedImages[editForm.id].is_approved ? 'Approved' : 'Pending'}
+                          <span className="text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-800">
+                            Available
                           </span>
                         </div>
                         <div className="relative w-full h-32 bg-gray-200 rounded-lg overflow-hidden">
@@ -3715,14 +3437,14 @@ const ContentDashboard = () => {
                             </div>
                           )}
                           
-                          {isVideoFile(generatedImages[editForm.id].image_url) ? (
+                          {isVideoFile(editForm.media_url) ? (
                             <video 
-                              src={generatedImages[editForm.id].image_url}
+                              src={editForm.media_url}
                               className="w-full h-32 object-cover rounded-lg"
                               controls
                               preload="metadata"
                               onLoadStart={() => {
-                                console.log('🔍 Video loading started, URL:', generatedImages[editForm.id].image_url)
+                                console.log('🔍 Video loading started, URL:', editForm.media_url)
                                 startImageLoading(editForm.id)
                               }}
                               onLoadedData={() => handleImageLoad(editForm.id)}
@@ -3738,7 +3460,7 @@ const ContentDashboard = () => {
                             </video>
                           ) : (
                           <img 
-                            src={getSmallThumbnailUrl(generatedImages[editForm.id].image_url)} 
+                            src={getSmallThumbnailUrl(editForm.media_url)} 
                               alt="Current content media" 
                             className="w-full h-32 object-cover rounded-lg"
                             onLoad={() => handleImageLoad(editForm.id)}

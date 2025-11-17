@@ -262,15 +262,28 @@ async def approve_image(
         if not image_response.data:
             raise HTTPException(status_code=404, detail="Image not found")
         
-        if image_response.data[0]["content_posts"]["content_campaigns"]["user_id"] != current_user.id:
+        image_data = image_response.data[0]
+        post_data = image_data["content_posts"]
+        
+        if post_data["content_campaigns"]["user_id"] != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Update approval status
+        post_id = post_data["id"]
+        
+        # Update approval status in content_images
         update_response = supabase_admin.table("content_images").update({
             "is_approved": True
         }).eq("id", image_id).execute()
         
         if update_response.data:
+            # Update content_posts with approved image as primary
+            supabase_admin.table("content_posts").update({
+                "primary_image_url": image_data["image_url"],
+                "primary_image_prompt": image_data.get("image_prompt", ""),
+                "primary_image_approved": True
+            }).eq("id", post_id).execute()
+            
+            logger.info(f"Updated content_posts.primary_image_url for post {post_id} (approved image)")
             return {"success": True, "message": "Image approved successfully"}
         else:
             raise HTTPException(status_code=500, detail="Failed to approve image")
@@ -292,13 +305,56 @@ async def delete_image(
         if not image_response.data:
             raise HTTPException(status_code=404, detail="Image not found")
         
-        if image_response.data[0]["content_posts"]["content_campaigns"]["user_id"] != current_user.id:
+        image_data = image_response.data[0]
+        post_data = image_data["content_posts"]
+        
+        if post_data["content_campaigns"]["user_id"] != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Delete image
+        post_id = post_data["id"]
+        deleted_image_url = image_data["image_url"]
+        
+        # Check if this was the primary image
+        current_post = supabase_admin.table("content_posts").select("primary_image_url").eq("id", post_id).execute()
+        is_primary = current_post.data and current_post.data[0].get("primary_image_url") == deleted_image_url
+        
+        # Delete image from content_images
         delete_response = supabase_admin.table("content_images").delete().eq("id", image_id).execute()
         
         if delete_response.data:
+            # If this was the primary image, find next approved or latest
+            if is_primary:
+                # Try to find approved image first
+                approved_images = supabase_admin.table("content_images").select("*").eq("post_id", post_id).eq("is_approved", True).order("created_at", desc=True).limit(1).execute()
+                
+                if approved_images.data and len(approved_images.data) > 0:
+                    next_image = approved_images.data[0]
+                    supabase_admin.table("content_posts").update({
+                        "primary_image_url": next_image["image_url"],
+                        "primary_image_prompt": next_image.get("image_prompt", ""),
+                        "primary_image_approved": True
+                    }).eq("id", post_id).execute()
+                    logger.info(f"Updated content_posts.primary_image_url to next approved image for post {post_id}")
+                else:
+                    # If no approved image, get latest
+                    latest_images = supabase_admin.table("content_images").select("*").eq("post_id", post_id).order("created_at", desc=True).limit(1).execute()
+                    if latest_images.data and len(latest_images.data) > 0:
+                        next_image = latest_images.data[0]
+                        supabase_admin.table("content_posts").update({
+                            "primary_image_url": next_image["image_url"],
+                            "primary_image_prompt": next_image.get("image_prompt", ""),
+                            "primary_image_approved": next_image.get("is_approved", False)
+                        }).eq("id", post_id).execute()
+                        logger.info(f"Updated content_posts.primary_image_url to latest image for post {post_id}")
+                    else:
+                        # No images remaining
+                        supabase_admin.table("content_posts").update({
+                            "primary_image_url": None,
+                            "primary_image_prompt": None,
+                            "primary_image_approved": False
+                        }).eq("id", post_id).execute()
+                        logger.info(f"Removed primary_image_url from post {post_id} (no images remaining)")
+            
             return {"success": True, "message": "Image deleted successfully"}
         else:
             raise HTTPException(status_code=500, detail="Failed to delete image")
@@ -348,9 +404,47 @@ async def delete_uploaded_media(
                 logger.warning(f"Storage delete failed (file may not exist): {storage_error}")
         
         # Delete from database
+        deleted_image_url = media_record["image_url"]
         delete_response = supabase_admin.table("content_images").delete().eq("id", media_record["id"]).execute()
         
         if delete_response.data:
+            # Check if this was the primary image
+            current_post = supabase_admin.table("content_posts").select("primary_image_url").eq("id", post_id).execute()
+            is_primary = current_post.data and current_post.data[0].get("primary_image_url") == deleted_image_url
+            
+            # If this was the primary image, find next approved or latest
+            if is_primary:
+                # Try to find approved image first
+                approved_images = supabase_admin.table("content_images").select("*").eq("post_id", post_id).eq("is_approved", True).order("created_at", desc=True).limit(1).execute()
+                
+                if approved_images.data and len(approved_images.data) > 0:
+                    next_image = approved_images.data[0]
+                    supabase_admin.table("content_posts").update({
+                        "primary_image_url": next_image["image_url"],
+                        "primary_image_prompt": next_image.get("image_prompt", ""),
+                        "primary_image_approved": True
+                    }).eq("id", post_id).execute()
+                    logger.info(f"Updated content_posts.primary_image_url to next approved image for post {post_id}")
+                else:
+                    # If no approved image, get latest
+                    latest_images = supabase_admin.table("content_images").select("*").eq("post_id", post_id).order("created_at", desc=True).limit(1).execute()
+                    if latest_images.data and len(latest_images.data) > 0:
+                        next_image = latest_images.data[0]
+                        supabase_admin.table("content_posts").update({
+                            "primary_image_url": next_image["image_url"],
+                            "primary_image_prompt": next_image.get("image_prompt", ""),
+                            "primary_image_approved": next_image.get("is_approved", False)
+                        }).eq("id", post_id).execute()
+                        logger.info(f"Updated content_posts.primary_image_url to latest image for post {post_id}")
+                    else:
+                        # No images remaining
+                        supabase_admin.table("content_posts").update({
+                            "primary_image_url": None,
+                            "primary_image_prompt": None,
+                            "primary_image_approved": False
+                        }).eq("id", post_id).execute()
+                        logger.info(f"Removed primary_image_url from post {post_id} (no images remaining)")
+            
             return {"success": True, "message": "Uploaded media deleted successfully"}
         else:
             raise HTTPException(status_code=500, detail="Failed to delete media record")
@@ -514,10 +608,11 @@ async def upload_image(
         
         # Update database using admin client
         is_video = content_type.startswith('video/')
+        image_prompt = "User uploaded video" if is_video else "User uploaded image"
         media_data = {
             "post_id": post_id,
             "image_url": public_url,  # Keep using image_url field for compatibility
-            "image_prompt": "User uploaded video" if is_video else "User uploaded image",
+            "image_prompt": image_prompt,
             "image_style": "user_upload",
             "image_size": "custom",
             "image_quality": "custom",
@@ -539,6 +634,14 @@ async def upload_image(
         else:
             # Create new image record
             supabase_admin.table("content_images").insert(media_data).execute()
+        
+        # Update content_posts with primary image (user uploads are auto-approved)
+        supabase_admin.table("content_posts").update({
+            "primary_image_url": public_url,
+            "primary_image_prompt": image_prompt,
+            "primary_image_approved": True
+        }).eq("id", post_id).execute()
+        logger.info(f"Updated content_posts.primary_image_url for post {post_id} (uploaded image)")
         
         return {
             "success": True,

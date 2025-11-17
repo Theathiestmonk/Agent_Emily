@@ -178,6 +178,33 @@ async def get_blogs(
         response = query.execute()
         blogs = response.data if response.data else []
         
+        # Populate site_name from WordPress connections if missing
+        for blog in blogs:
+            if blog.get('wordpress_site_id'):
+                # Always try to populate site_name from connection (in case it's missing or outdated)
+                try:
+                    wordpress_response = supabase_admin.table("platform_connections").select("*").eq("id", blog['wordpress_site_id']).eq("platform", "wordpress").limit(1).execute()
+                    if wordpress_response.data:
+                        connection = wordpress_response.data[0]
+                        # Try multiple possible field names
+                        site_name = (
+                            connection.get('wordpress_site_name') or 
+                            connection.get('site_name') or 
+                            connection.get('page_name') or
+                            ''
+                        )
+                        
+                        # Only update if site_name is missing or different
+                        if not blog.get('site_name') or blog.get('site_name') != site_name:
+                            blog['site_name'] = site_name
+                            # Try to update blog in database (may fail if column doesn't exist, that's ok)
+                            try:
+                                supabase_admin.table("blog_posts").update({"site_name": site_name}).eq("id", blog['id']).execute()
+                            except Exception as update_error:
+                                logger.debug(f"Could not update site_name in blog_posts (column may not exist): {update_error}")
+                except Exception as e:
+                    logger.warning(f"Could not fetch site_name for blog {blog['id']}: {e}")
+        
         logger.info(f"Found {len(blogs)} blogs")
         return {"blogs": blogs, "total": len(blogs)}
         
