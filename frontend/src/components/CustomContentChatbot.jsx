@@ -412,14 +412,39 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       const response = await new Promise((resolve, reject) => {
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(JSON.parse(xhr.responseText));
+            try {
+              const responseText = xhr.responseText;
+              if (!responseText) {
+                reject(new Error('Empty response from server'));
+                return;
+              }
+              resolve(JSON.parse(responseText));
+            } catch (parseError) {
+              console.error('Failed to parse response:', parseError);
+              reject(new Error('Invalid response from server'));
+            }
           } else {
-            reject(new Error(`Upload failed with status: ${xhr.status}`));
+            // Try to parse error response
+            let errorMessage = `Upload failed with status: ${xhr.status}`;
+            try {
+              const errorData = JSON.parse(xhr.responseText);
+              errorMessage = errorData.detail || errorData.message || errorMessage;
+            } catch (e) {
+              errorMessage = xhr.responseText || errorMessage;
+            }
+            reject(new Error(errorMessage));
           }
         };
-        xhr.onerror = () => reject(new Error('Upload failed'));
+        xhr.onerror = () => {
+          reject(new Error('Network error: Failed to connect to server. Please check your internet connection.'));
+        };
+        xhr.ontimeout = () => {
+          reject(new Error('Upload timeout: The file is too large or the connection is too slow. Please try a smaller file.'));
+        };
         xhr.open('POST', `${API_BASE_URL}/custom-content/upload-media`);
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        // Set timeout to 5 minutes for large video files
+        xhr.timeout = 300000; // 5 minutes
         xhr.send(formData);
       });
       
@@ -446,7 +471,14 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
 
     } catch (error) {
       console.error('Error uploading file:', error);
-      setUploadError('Sorry, I encountered an error uploading your file. Please try again.');
+      // Show the actual error message from the server if available
+      const errorMessage = error.message || 'Sorry, I encountered an error uploading your file. Please try again.';
+      setUploadError(errorMessage);
+      
+      // Log additional details for debugging
+      if (error.message) {
+        console.error('Upload error details:', error.message);
+      }
     } finally {
       setIsUploading(false);
     }

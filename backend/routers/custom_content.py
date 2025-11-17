@@ -155,23 +155,51 @@ async def upload_media(
     try:
         logger.info(f"Upload request received: conversation_id={conversation_id}, filename={file.filename}, content_type={file.content_type}")
         
+        # Validate file exists
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No file provided")
+        
         # Get conversation state
         if conversation_id not in conversation_states:
             logger.error(f"Conversation not found: {conversation_id}")
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail="Conversation not found. Please refresh and try again.")
         
         state = conversation_states[conversation_id]
         logger.info(f"Found conversation state for user: {state.get('user_id')}")
         
-        # Read file content
+        # Validate file size (100MB limit for videos, 10MB for images)
+        MAX_VIDEO_SIZE = 100 * 1024 * 1024  # 100MB
+        MAX_IMAGE_SIZE = 10 * 1024 * 1024   # 10MB
+        
+        # Read file content with size check
         file_content = await file.read()
-        logger.info(f"Read file content: {len(file_content)} bytes")
+        file_size = len(file_content)
+        logger.info(f"Read file content: {file_size} bytes")
+        
+        # Check if it's a video or image
+        is_video = file.content_type and file.content_type.startswith('video/')
+        max_size = MAX_VIDEO_SIZE if is_video else MAX_IMAGE_SIZE
+        size_limit_mb = 100 if is_video else 10
+        
+        if file_size > max_size:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"File size ({file_size / (1024*1024):.1f}MB) exceeds the maximum allowed size of {size_limit_mb}MB for {'videos' if is_video else 'images'}"
+            )
+        
+        if file_size == 0:
+            raise HTTPException(status_code=400, detail="File is empty")
         
         # Upload media using the agent
         updated_state = await custom_content_agent.upload_media(
             state, file_content, file.filename, file.content_type
         )
         logger.info(f"Media upload completed, new step: {updated_state.get('current_step')}")
+        
+        # Check for errors in the upload state
+        if updated_state.get("error_message"):
+            logger.error(f"Upload error in state: {updated_state.get('error_message')}")
+            raise HTTPException(status_code=500, detail=updated_state.get("error_message"))
         
         # Execute the conversation step using LangGraph
         result = await custom_content_agent.execute_conversation_step(updated_state)
@@ -208,9 +236,18 @@ async def upload_media(
         logger.info(f"Media upload response prepared: {result['current_step']}")
         return response_data
         
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        logger.error(f"Error uploading media: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload media: {str(e)}")
+        logger.error(f"Error uploading media: {e}", exc_info=True)
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Traceback: {error_traceback}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to upload media. Please check the file size and format, then try again. Error: {str(e)}"
+        )
 
 @router.get("/conversation/{conversation_id}")
 async def get_conversation(
