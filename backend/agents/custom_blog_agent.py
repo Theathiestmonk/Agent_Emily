@@ -16,6 +16,10 @@ import openai
 from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
+import requests
+from requests.auth import HTTPBasicAuth
+from urllib.parse import urlparse
+from cryptography.fernet import Fernet
 
 # Load environment variables
 load_dotenv()
@@ -31,6 +35,27 @@ supabase: Client = create_client(supabase_url, supabase_key)
 
 # Initialize OpenAI
 openai_api_key = os.getenv("OPENAI_API_KEY")
+
+# Encryption setup for WordPress passwords
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
+if ENCRYPTION_KEY:
+    try:
+        cipher = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
+    except Exception as e:
+        logger.warning(f"Failed to initialize encryption cipher: {e}")
+        cipher = None
+else:
+    cipher = None
+
+def decrypt_token(encrypted_token: str) -> str:
+    """Decrypt token for use"""
+    if not cipher:
+        raise ValueError("Encryption key not configured")
+    try:
+        return cipher.decrypt(encrypted_token.encode()).decode()
+    except Exception as e:
+        logger.error(f"Error decrypting token: {e}")
+        raise
 
 class BlogType(str, Enum):
     EDUCATIONAL = "educational"
@@ -238,8 +263,11 @@ class CustomBlogAgent:
             
             message = {
                 "role": "assistant",
-                "content": "Perfect! Now, would you like to provide up to 3 primary keywords for SEO? (This is optional - I can suggest keywords if you leave it empty)",
-                "timestamp": datetime.now().isoformat()
+                "content": "Perfect! Now, would you like to provide up to 3 primary keywords for SEO? (This is optional)",
+                "timestamp": datetime.now().isoformat(),
+                "options": [
+                    {"value": "skip", "label": "⏭️ Skip (Use AI suggestions)"}
+                ]
             }
             state["conversation_messages"].append(message)
             
@@ -258,64 +286,65 @@ class CustomBlogAgent:
             state["current_step"] = ConversationStep.ASK_BLOG_LENGTH
             state["progress_percentage"] = 40
             
-            if user_input:
-                user_input_clean = user_input.strip()
+            # Handle both None and empty string cases
+            user_input_clean = (user_input or "").strip().lower()
+            
+            # Handle skip option - check for various skip variations
+            if not user_input_clean or user_input_clean in ["skip", "⏭️ skip", "skip (use ai suggestions)"] or "skip" in user_input_clean:
+                # Generate keywords using AI when user skips
+                keywords = await self._suggest_keywords(state)
+                state["keywords"] = keywords
                 
-                if user_input_clean:
-                    # Parse keywords - can be comma-separated, space-separated, or JSON array
-                    try:
-                        # Try to parse as JSON first (for structured input from frontend)
-                        keywords_data = json.loads(user_input_clean)
-                        if isinstance(keywords_data, dict) and "keywords" in keywords_data:
-                            keywords = [k.strip() for k in keywords_data["keywords"] if k.strip()][:3]
-                        elif isinstance(keywords_data, list):
-                            keywords = [k.strip() for k in keywords_data if k.strip()][:3]
-                        else:
-                            keywords = [k.strip() for k in user_input_clean.replace(',', ' ').split()[:3]]
-                    except json.JSONDecodeError:
-                        # Not JSON, parse as text
+                # Add user message
+                user_message = {
+                    "role": "user",
+                    "content": "Skip",
+                    "timestamp": datetime.now().isoformat()
+                }
+                state["conversation_messages"].append(user_message)
+                
+                message = {
+                    "role": "assistant",
+                    "content": f"Got it! I've suggested these keywords for you: {', '.join(keywords)}",
+                    "timestamp": datetime.now().isoformat()
+                }
+                state["conversation_messages"].append(message)
+            elif user_input_clean:
+                # Parse keywords - can be comma-separated, space-separated, or JSON array
+                try:
+                    # Try to parse as JSON first (for structured input from frontend)
+                    keywords_data = json.loads(user_input_clean)
+                    if isinstance(keywords_data, dict) and "keywords" in keywords_data:
+                        keywords = [k.strip() for k in keywords_data["keywords"] if k.strip()][:3]
+                    elif isinstance(keywords_data, list):
+                        keywords = [k.strip() for k in keywords_data if k.strip()][:3]
+                    else:
                         keywords = [k.strip() for k in user_input_clean.replace(',', ' ').split()[:3]]
-                    
-                    state["keywords"] = keywords
-                    
-                    # Add user message
-                    user_message = {
-                        "role": "user",
-                        "content": user_input,
+                except json.JSONDecodeError:
+                    # Not JSON, parse as text
+                    keywords = [k.strip() for k in user_input_clean.replace(',', ' ').split()[:3]]
+                
+                state["keywords"] = keywords
+                
+                # Add user message
+                user_message = {
+                    "role": "user",
+                    "content": user_input,
+                    "timestamp": datetime.now().isoformat()
+                }
+                state["conversation_messages"].append(user_message)
+                
+                if keywords:
+                    message = {
+                        "role": "assistant",
+                        "content": f"Great! I'll use these keywords: {', '.join(keywords)}",
                         "timestamp": datetime.now().isoformat()
                     }
-                    state["conversation_messages"].append(user_message)
-                    
-                    if keywords:
-                        message = {
-                            "role": "assistant",
-                            "content": f"Great! I'll use these keywords: {', '.join(keywords)}",
-                            "timestamp": datetime.now().isoformat()
-                        }
-                        state["conversation_messages"].append(message)
-                    else:
-                        # Generate keywords using AI
-                        keywords = await self._suggest_keywords(state)
-                        state["keywords"] = keywords
-                        message = {
-                            "role": "assistant",
-                            "content": f"No problem! I've suggested these keywords for you: {', '.join(keywords)}",
-                            "timestamp": datetime.now().isoformat()
-                        }
-                        state["conversation_messages"].append(message)
+                    state["conversation_messages"].append(message)
                 else:
-                    # Generate keywords using AI
+                    # Generate keywords using AI if parsing resulted in empty keywords
                     keywords = await self._suggest_keywords(state)
                     state["keywords"] = keywords
-                    
-                    # Add user message
-                    user_message = {
-                        "role": "user",
-                        "content": "(empty - using AI suggestions)",
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    state["conversation_messages"].append(user_message)
-                    
                     message = {
                         "role": "assistant",
                         "content": f"No problem! I've suggested these keywords for you: {', '.join(keywords)}",
@@ -372,15 +401,14 @@ class CustomBlogAgent:
                 }
                 state["conversation_messages"].append(user_message)
             
-            # Ask about images
+            # Ask about images - simple yes/no
             message = {
                 "role": "assistant",
-                "content": "Would you like images in your blog post?",
+                "content": "Do you want to add an image to your blog post?",
                 "timestamp": datetime.now().isoformat(),
                 "options": [
-                    {"value": "yes", "label": "✅ Yes - images inside blog"},
-                    {"value": "no", "label": "❌ No - only featured image"},
-                    {"value": "both", "label": "🖼️ Both - featured and inside"}
+                    {"value": "yes", "label": "✅ Yes"},
+                    {"value": "no", "label": "❌ No"}
                 ]
             }
             state["conversation_messages"].append(message)
@@ -395,23 +423,10 @@ class CustomBlogAgent:
         return state
     
     async def ask_images(self, state: CustomBlogState, user_input: str = None) -> CustomBlogState:
-        """Process image option and ask for image generation/upload"""
+        """Process image option - if yes, continue to image handling; if no, skip to outline"""
         try:
-            state["current_step"] = ConversationStep.HANDLE_IMAGE
-            state["progress_percentage"] = 55
-            
             if user_input:
                 user_input_lower = user_input.lower().strip()
-                
-                # Map user input to image option
-                image_map = {
-                    "yes": ImageOption.YES,
-                    "no": ImageOption.NO,
-                    "both": ImageOption.BOTH
-                }
-                
-                selected_option = image_map.get(user_input_lower, ImageOption.YES)
-                state["image_option"] = selected_option
                 
                 # Add user message
                 user_message = {
@@ -420,38 +435,82 @@ class CustomBlogAgent:
                     "timestamp": datetime.now().isoformat()
                 }
                 state["conversation_messages"].append(user_message)
-            
-            # Always ask for featured image (even if user selected "no" for images in content)
-            # Featured image is separate from content images
-            image_option = state.get("image_option")
-            if image_option in [ImageOption.YES, ImageOption.BOTH]:
-                # User wants images in content AND featured image
-                message = {
-                    "role": "assistant",
-                    "content": "Great! How would you like to add images to your blog?",
-                    "timestamp": datetime.now().isoformat(),
-                    "options": [
-                        {"value": "generate", "label": "🎨 Generate image with AI"},
-                        {"value": "upload", "label": "📤 Upload my own image"},
-                        {"value": "skip", "label": "⏭️ Skip for now"}
-                    ]
-                }
-                state["conversation_messages"].append(message)
+                
+                if user_input_lower == "no":
+                    # User doesn't want images - skip image steps and go directly to outline
+                    state["image_option"] = ImageOption.NO
+                    state["should_generate_image"] = False
+                    state["uploaded_image_url"] = None
+                    state["generated_image_url"] = None
+                    
+                    message = {
+                        "role": "assistant",
+                        "content": "Got it! I'll proceed without images. Now let me create an outline for your blog post...",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    state["conversation_messages"].append(message)
+                    
+                    # Skip to outline generation
+                    state["current_step"] = ConversationStep.CONFIRM_OUTLINE
+                    state["progress_percentage"] = 60
+                    
+                    # Generate outline directly
+                    outline = await self._generate_outline(state)
+                    state["outline"] = outline
+                    
+                    # Ask for outline confirmation
+                    message = {
+                        "role": "assistant",
+                        "content": f"Perfect! I've created an outline for your blog post:\n\n{outline}\n\nWould you like me to proceed with writing the blog based on this outline?",
+                        "timestamp": datetime.now().isoformat(),
+                        "options": [
+                            {"value": "yes", "label": "✅ Yes, proceed"},
+                            {"value": "no", "label": "❌ No, let me revise"}
+                        ]
+                    }
+                    state["conversation_messages"].append(message)
+                    
+                    logger.info(f"User chose no images, skipped to outline generation")
+                    return state
+                elif user_input_lower == "yes":
+                    # User wants images - continue to image handling
+                    state["image_option"] = ImageOption.YES
+                    state["current_step"] = ConversationStep.HANDLE_IMAGE
+                    state["progress_percentage"] = 55
+                    
+                    message = {
+                        "role": "assistant",
+                        "content": "Great! How would you like to add an image to your blog?",
+                        "timestamp": datetime.now().isoformat(),
+                        "options": [
+                            {"value": "generate", "label": "🎨 Generate image with AI"},
+                            {"value": "upload", "label": "📤 Upload my own image"},
+                            {"value": "skip", "label": "⏭️ Skip for now"}
+                        ]
+                    }
+                    state["conversation_messages"].append(message)
+                    
+                    logger.info(f"User chose yes for images, proceeding to image handling")
+                    return state
+                else:
+                    # Invalid input - ask again
+                    message = {
+                        "role": "assistant",
+                        "content": "Please choose 'Yes' or 'No'. Do you want to add an image to your blog post?",
+                        "timestamp": datetime.now().isoformat(),
+                        "options": [
+                            {"value": "yes", "label": "✅ Yes"},
+                            {"value": "no", "label": "❌ No"}
+                        ]
+                    }
+                    state["conversation_messages"].append(message)
+                    return state
             else:
-                # User selected "no" for images in content, but still need featured image
-                message = {
-                    "role": "assistant",
-                    "content": "Perfect! You've chosen to have only a featured image (no images inside the blog content). How would you like to add the featured image?",
-                    "timestamp": datetime.now().isoformat(),
-                    "options": [
-                        {"value": "generate", "label": "🎨 Generate featured image with AI"},
-                        {"value": "upload", "label": "📤 Upload my own featured image"},
-                        {"value": "skip", "label": "⏭️ Skip featured image"}
-                    ]
-                }
-                state["conversation_messages"].append(message)
+                # No user input yet - this shouldn't happen, but handle gracefully
+                state["current_step"] = ConversationStep.ASK_IMAGES
+                state["progress_percentage"] = 50
             
-            logger.info(f"Asked user for image handling (image option: {state.get('image_option')})")
+            logger.info(f"Processed image option (image option: {state.get('image_option')})")
             
         except Exception as e:
             logger.error(f"Error in ask_images: {e}")
@@ -735,12 +794,12 @@ class CustomBlogAgent:
         return await self.confirm_outline(state)
     
     async def ask_schedule(self, state: CustomBlogState, user_input: str = None) -> CustomBlogState:
-        """Ask user for schedule/timeline"""
+        """Ask user for schedule/timeline - combined with publish/draft options"""
         try:
             state["progress_percentage"] = 85
             
             if user_input:
-                # Parse schedule input (can be "now", "schedule", or datetime string)
+                # Parse schedule input (can be "now", "schedule", "draft", or datetime string)
                 user_input_clean = user_input.strip().lower()
                 
                 # Add user message
@@ -751,11 +810,18 @@ class CustomBlogAgent:
                 }
                 state["conversation_messages"].append(user_message)
                 
-                if user_input_clean == "now":
-                    # Publish now - no schedule, ask for publish or draft
+                if user_input_clean == "now" or user_input_clean == "publish":
+                    # Publish now - save directly as published
                     state["scheduled_at"] = None
-                    # Automatically proceed to publish option
-                    return await self.ask_publish_option(state)
+                    state["publish_option"] = "publish"
+                    # Save directly without extra steps
+                    return await self.save_blog(state)
+                elif user_input_clean == "draft":
+                    # Save as draft - save directly as draft
+                    state["scheduled_at"] = None
+                    state["publish_option"] = "draft"
+                    # Save directly without extra steps
+                    return await self.save_blog(state)
                 elif user_input_clean == "schedule":
                     # User wants to schedule - stay in ASK_SCHEDULE step to show date/time inputs
                     # Frontend will show date/time inputs
@@ -778,20 +844,22 @@ class CustomBlogAgent:
                         # Automatically proceed to save blog (skip publish option step)
                         return await self.save_blog(state)
                     except:
-                        # If parsing fails, treat as "now"
+                        # If parsing fails, treat as "now" and publish
                         state["scheduled_at"] = None
-                        return await self.ask_publish_option(state)
+                        state["publish_option"] = "publish"
+                        return await self.save_blog(state)
             else:
-                # First time asking - show schedule options
+                # First time asking - show all options in one step
                 state["current_step"] = ConversationStep.ASK_SCHEDULE
                 state["progress_percentage"] = 85
                 message = {
                     "role": "assistant",
-                    "content": "When would you like to publish this blog post?",
+                    "content": "How would you like to proceed with this blog post?",
                     "timestamp": datetime.now().isoformat(),
                     "options": [
-                        {"value": "now", "label": "🚀 Publish Now"},
-                        {"value": "schedule", "label": "📅 Schedule for Later"}
+                        {"value": "publish", "label": "🚀 Publish Now"},
+                        {"value": "schedule", "label": "📅 Schedule for Later"},
+                        {"value": "draft", "label": "💾 Save as Draft"}
                     ]
                 }
                 state["conversation_messages"].append(message)
@@ -867,14 +935,38 @@ class CustomBlogAgent:
             
             # Get scheduled_at if provided
             scheduled_at = state.get("scheduled_at")
-            if scheduled_at and status == "published":
-                status = "scheduled"
+            # Ensure scheduled_at is properly formatted as ISO string if provided
+            if scheduled_at:
+                try:
+                    # If it's already a string, parse and reformat to ensure proper ISO format
+                    if isinstance(scheduled_at, str):
+                        # Parse the datetime string
+                        scheduled_datetime = datetime.fromisoformat(scheduled_at.replace('Z', '+00:00'))
+                        scheduled_at = scheduled_datetime.isoformat()
+                    elif isinstance(scheduled_at, datetime):
+                        scheduled_at = scheduled_at.isoformat()
+                except Exception as e:
+                    logger.warning(f"Error parsing scheduled_at: {e}, setting to None")
+                    scheduled_at = None
+                
+                if scheduled_at and status == "published":
+                    status = "scheduled"
+            else:
+                scheduled_at = None
             
             # Get featured image URL if available
             featured_image = state.get("generated_image_url") or state.get("uploaded_image_url")
             
             # Get WordPress connection if available
             wordpress_connection = state.get("wordpress_connection")
+            # If wordpress_connection is not in state, try to reload it
+            if not wordpress_connection:
+                logger.info("⚠️ WordPress connection not found in state, attempting to reload...")
+                wordpress_connection = await self._load_wordpress_connection(state.get("user_id"))
+                if wordpress_connection:
+                    state["wordpress_connection"] = wordpress_connection
+                    logger.info(f"✅ WordPress connection reloaded: {wordpress_connection.get('site_name')}")
+            
             wordpress_site_id = None
             site_name = None
             website_url = None
@@ -940,21 +1032,25 @@ class CustomBlogAgent:
                 "word_count": generated_blog.get("word_count", 0),
                 "reading_time": generated_blog.get("reading_time", 0),
                 "author_id": state.get("user_id"),
-                "scheduled_at": scheduled_at,
+                "scheduled_at": scheduled_at,  # ISO format datetime string or None
                 "wordpress_site_id": wordpress_site_id,  # Link to WordPress if connection exists
-                "site_name": site_name,  # WordPress site name
-                "website_url": website_url,  # WordPress site URL
+                "site_name": site_name,  # WordPress site name (stored in metadata if column doesn't exist)
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
                 "metadata": metadata
             }
             
+            # Store website_url in metadata since the column doesn't exist in blog_posts table
+            if website_url:
+                blog_data["metadata"]["website_url"] = website_url
+            
             # Save to database using self.supabase (service role client)
             logger.info(f"💾 Saving blog to database: {blog_data.get('title')}")
             logger.info(f"   - WordPress Site ID: {blog_data.get('wordpress_site_id')}")
             logger.info(f"   - Site Name: {blog_data.get('site_name')}")
-            logger.info(f"   - Website URL: {blog_data.get('website_url')}")
+            logger.info(f"   - Website URL: {blog_data.get('metadata', {}).get('website_url', 'N/A')}")
             logger.info(f"   - Status: {blog_data.get('status')}")
+            logger.info(f"   - Scheduled At: {blog_data.get('scheduled_at')}")
             response = self.supabase.table("blog_posts").insert(blog_data).execute()
             
             if not response.data:
@@ -967,17 +1063,60 @@ class CustomBlogAgent:
             logger.info(f"   - Saved Blog ID: {saved_blog.get('id')}")
             logger.info(f"   - Saved WordPress Site ID: {saved_blog.get('wordpress_site_id')}")
             logger.info(f"   - Saved Site Name: {saved_blog.get('site_name')}")
-            logger.info(f"   - Saved Website URL: {saved_blog.get('website_url')}")
+            logger.info(f"   - Saved Website URL: {saved_blog.get('metadata', {}).get('website_url', 'N/A')}")
+            logger.info(f"   - Saved Scheduled At: {saved_blog.get('scheduled_at')}")
+            
+            # If status is "published" and WordPress connection exists, publish to WordPress
+            wordpress_post_id = None
+            logger.info(f"🔍 Checking publish conditions:")
+            logger.info(f"   - Status: '{status}'")
+            logger.info(f"   - WordPress Site ID: {wordpress_site_id}")
+            logger.info(f"   - WordPress Connection exists: {wordpress_connection is not None}")
+            if wordpress_connection:
+                logger.info(f"   - WordPress Connection ID: {wordpress_connection.get('id')}")
+            
+            if status == "published" and wordpress_site_id and wordpress_connection:
+                try:
+                    logger.info(f"🚀 Publishing blog to WordPress...")
+                    wordpress_post_id = await self._publish_to_wordpress(saved_blog, wordpress_connection)
+                    if wordpress_post_id:
+                        # Update blog with WordPress post ID
+                        self.supabase.table("blog_posts").update({
+                            "wordpress_post_id": wordpress_post_id,
+                            "published_at": datetime.now().isoformat()
+                        }).eq("id", saved_blog['id']).execute()
+                        logger.info(f"✅ Blog published to WordPress with post ID: {wordpress_post_id}")
+                        saved_blog['wordpress_post_id'] = wordpress_post_id
+                    else:
+                        logger.warning(f"⚠️ Failed to publish to WordPress, but blog saved as published")
+                except Exception as e:
+                    logger.error(f"❌ Error publishing to WordPress: {e}", exc_info=True)
+                    # Don't fail the whole operation, just log the error
+                    # The blog is still saved as "published" in the database
+            else:
+                if status != "published":
+                    logger.info(f"⏭️ Skipping WordPress publish - status is '{status}', not 'published'")
+                elif not wordpress_site_id:
+                    logger.info(f"⏭️ Skipping WordPress publish - no WordPress site ID")
+                elif not wordpress_connection:
+                    logger.info(f"⏭️ Skipping WordPress publish - no WordPress connection")
             
             state["final_blog"] = saved_blog
             state["is_complete"] = True
             
             status_text = "published" if status == "published" else ("scheduled" if status == "scheduled" else "saved as draft")
-            message = {
-                "role": "assistant",
-                "content": f"🎉 Success! Your blog post '{saved_blog['title']}' has been {status_text}. You can find it in your blog dashboard!",
-                "timestamp": datetime.now().isoformat()
-            }
+            if wordpress_post_id:
+                message = {
+                    "role": "assistant",
+                    "content": f"🎉 Success! Your blog post '{saved_blog['title']}' has been {status_text} and is now live on WordPress! You can find it in your blog dashboard!",
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:
+                message = {
+                    "role": "assistant",
+                    "content": f"🎉 Success! Your blog post '{saved_blog['title']}' has been {status_text}. You can find it in your blog dashboard!",
+                    "timestamp": datetime.now().isoformat()
+                }
             state["conversation_messages"].append(message)
             
             logger.info(f"Blog saved successfully: {saved_blog['id']}")
@@ -1017,7 +1156,8 @@ class CustomBlogAgent:
             elif current_step == ConversationStep.ASK_SCHEDULE:
                 result = await self.ask_schedule(state, user_input)
             elif current_step == ConversationStep.ASK_PUBLISH_OPTION:
-                result = await self.ask_publish_option(state, user_input)
+                # This step is now handled by ask_schedule - redirect to ask_schedule
+                result = await self.ask_schedule(state, user_input)
             elif current_step == ConversationStep.SAVE_BLOG:
                 result = await self.save_blog(state)
             else:
@@ -1192,23 +1332,39 @@ SEO KEYWORDS (integrate naturally into content, NOT as hashtags): {', '.join(key
 INCLUDE IMAGES IN CONTENT: {'Yes - mention image concepts naturally in text where appropriate' if include_images else 'No - text only, no image references'}
 {context_info}
 
-Requirements:
+CRITICAL STRUCTURE REQUIREMENTS:
+- Write in clean, professional HTML format with proper semantic structure
+- DO NOT add [IMAGE: description] placeholders or any image placeholders in the content
+- The featured image will be added separately - do NOT reference images in the content
+- Structure the content with clear sections using proper HTML headings (h2, h3)
+- Each section should have a clear purpose and flow logically
+- Use proper paragraph tags (<p>) for body text
+- Create well-organized sections that can be displayed in a two-column or structured layout
+- Avoid redundant titles or headings - the title is already set, focus on content sections
+- Include sections like:
+  * Introduction paragraph (hook the reader)
+  * Main content sections with subheadings
+  * Key points or benefits (use lists where appropriate)
+  * Conclusion that ties everything together
+- Make sections scannable and easy to read
+- Use proper HTML formatting: <h2> for main sections, <h3> for subsections, <p> for paragraphs, <ul>/<li> for lists
+
+Content Requirements:
 - Write engaging, well-structured content that aligns with the brand voice, brand tone, and target audience
 - Follow the outline provided
 - IMPORTANT: Integrate the provided SEO keywords naturally throughout the content. Use them in headings, subheadings, and body paragraphs where they fit contextually. DO NOT use them as hashtags (#keyword) or list them separately
-- Include an introduction and conclusion
 - Make it informative and valuable
-- DO NOT add [IMAGE: description] placeholders or any image placeholders in the content
-- Write in HTML format with proper paragraph tags
 - Ensure the content is relevant to the business context, industry, and brand values
 - The keywords should appear naturally in the content for SEO purposes, not as social media hashtags
 - Personalize the content to reflect the business name, industry, and target audience mentioned above
 - Use the brand voice and tone consistently throughout the content
+- DO NOT repeat the title in the content - start directly with the introduction
+- Keep the structure clean and professional, matching a modern business website layout
 
 Return a JSON object with:
 {{
     "title": "Blog post title",
-    "content": "Full HTML content",
+    "content": "Full HTML content with proper structure (h2, h3, p tags, lists)",
     "excerpt": "Brief excerpt (150-200 characters)",
     "word_count": <number>,
     "reading_time": <number in minutes>
@@ -1217,7 +1373,7 @@ Return a JSON object with:
             response = self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are an expert blog writer. Return valid JSON only."},
+                    {"role": "system", "content": "You are an expert blog writer specializing in creating well-structured, professional blog content for business websites. Your content should be clean, organized, and ready for publication. Always return valid JSON only. Focus on creating structured HTML content with proper headings, paragraphs, and lists - avoid redundant titles or image references."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
@@ -1286,6 +1442,153 @@ Return a JSON object with:
             "brand_personality": profile_data.get("brand_personality", ""),
             "brand_values": profile_data.get("brand_values", [])
         }
+    
+    async def _publish_to_wordpress(self, blog: Dict[str, Any], wordpress_connection: Dict[str, Any]) -> Optional[str]:
+        """Publish blog to WordPress using REST API"""
+        try:
+            # Get WordPress connection details from platform_connections
+            wordpress_response = self.supabase.table("platform_connections").select("*").eq("id", wordpress_connection.get("id")).eq("platform", "wordpress").execute()
+            
+            if not wordpress_response.data:
+                logger.error("WordPress connection not found in platform_connections")
+                return None
+            
+            wordpress_site = wordpress_response.data[0]
+            
+            # Decrypt WordPress app password
+            try:
+                app_password = decrypt_token(wordpress_site['wordpress_app_password_encrypted'])
+            except Exception as e:
+                logger.error(f"Error decrypting WordPress app password: {e}")
+                return None
+            
+            # Get featured image URL from metadata
+            featured_image_url = None
+            if blog.get('metadata') and isinstance(blog.get('metadata'), dict):
+                featured_image_url = blog['metadata'].get('featured_image')
+            
+            # Clean blog content
+            blog_content = blog.get('content', '')
+            if not blog_content or not blog_content.strip():
+                blog_content = blog.get('excerpt', '')
+            
+            if blog_content:
+                # Fix double-encoded HTML entities
+                blog_content = blog_content.replace('&amp;amp;', '&amp;')
+                blog_content = blog_content.replace('&amp;lt;', '&lt;')
+                blog_content = blog_content.replace('&amp;gt;', '&gt;')
+                blog_content = blog_content.replace('&amp;quot;', '&quot;')
+                blog_content = blog_content.strip()
+            
+            # Prepare WordPress post data
+            # Note: WordPress REST API expects categories and tags as integer IDs, not strings
+            # We'll store them in meta instead to avoid type errors
+            wordpress_data = {
+                "title": blog['title'],
+                "content": blog_content,
+                "excerpt": blog.get('excerpt', ''),
+                "status": "publish",
+                "format": blog.get('format', 'standard'),
+                "meta": {
+                    "description": blog.get('meta_description', ''),
+                    "keywords": blog.get('meta_keywords', [])
+                }
+            }
+            
+            # Store categories and tags in meta instead of direct fields
+            # WordPress REST API expects integer IDs for categories/tags, not strings
+            if blog.get('categories'):
+                wordpress_data['meta']['_blog_categories'] = ', '.join(blog.get('categories', []))
+            if blog.get('tags'):
+                wordpress_data['meta']['_blog_tags'] = ', '.join(blog.get('tags', []))
+            
+            # WordPress REST API URL
+            rest_api_url = f"{wordpress_site['wordpress_site_url'].rstrip('/')}/wp-json/wp/v2/posts"
+            media_api_url = f"{wordpress_site['wordpress_site_url'].rstrip('/')}/wp-json/wp/v2/media"
+            
+            logger.info(f"Publishing to WordPress: {rest_api_url}")
+            
+            # Create session
+            session = requests.Session()
+            session.cookies.clear()
+            
+            # Upload featured image if available
+            featured_media_id = None
+            if featured_image_url:
+                try:
+                    logger.info(f"Uploading featured image: {featured_image_url}")
+                    headers = {'User-Agent': 'Agent-Emily/1.0', 'Accept': 'image/*'}
+                    image_response = requests.get(featured_image_url, timeout=30, headers=headers, stream=True)
+                    
+                    if image_response.status_code == 200:
+                        image_content = image_response.content
+                        if image_content and len(image_content) > 0:
+                            parsed_url = urlparse(featured_image_url)
+                            filename = parsed_url.path.split('/')[-1] or 'blog-image.jpg'
+                            if '?' in filename:
+                                filename = filename.split('?')[0]
+                            
+                            content_type = image_response.headers.get('Content-Type', '')
+                            if not content_type or not content_type.startswith('image/'):
+                                filename_lower = filename.lower()
+                                if filename_lower.endswith('.png'):
+                                    content_type = 'image/png'
+                                elif filename_lower.endswith('.gif'):
+                                    content_type = 'image/gif'
+                                elif filename_lower.endswith('.webp'):
+                                    content_type = 'image/webp'
+                                else:
+                                    content_type = 'image/jpeg'
+                            
+                            # Upload to WordPress
+                            files = {'file': (filename, image_content, content_type)}
+                            media_response = session.post(
+                                media_api_url,
+                                files=files,
+                                auth=HTTPBasicAuth(wordpress_site['wordpress_username'], app_password),
+                                headers={'User-Agent': 'Agent-Emily/1.0'},
+                                timeout=30
+                            )
+                            
+                            if media_response.status_code == 201:
+                                media_data = media_response.json()
+                                featured_media_id = media_data.get('id')
+                                logger.info(f"Featured image uploaded: Media ID {featured_media_id}")
+                            else:
+                                logger.warning(f"Failed to upload featured image: {media_response.status_code}")
+                except Exception as img_error:
+                    logger.warning(f"Error uploading featured image: {img_error}")
+            
+            # Add featured image to post data if uploaded
+            if featured_media_id:
+                wordpress_data['featured_media'] = featured_media_id
+            
+            # Publish post to WordPress
+            response = session.post(
+                rest_api_url,
+                json=wordpress_data,
+                auth=HTTPBasicAuth(wordpress_site['wordpress_username'], app_password),
+                headers={
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Agent-Emily/1.0'
+                },
+                timeout=30,
+                allow_redirects=False
+            )
+            
+            if response.status_code == 201:
+                post_data = response.json()
+                wordpress_post_id = str(post_data.get('id'))
+                logger.info(f"✅ Blog published to WordPress: Post ID {wordpress_post_id}")
+                return wordpress_post_id
+            else:
+                logger.error(f"Failed to publish to WordPress: {response.status_code} - {response.text}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error publishing to WordPress: {e}")
+            return None
     
     async def _load_wordpress_connection(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Load WordPress connection for user (default/first active connection)"""

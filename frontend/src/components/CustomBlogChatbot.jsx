@@ -231,8 +231,8 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
   const handleKeywordsSubmit = () => {
     const keywordsArray = keywords.filter(k => k.trim());
     if (keywordsArray.length === 0) {
-      // Send empty to trigger AI suggestions
-      sendMessage('');
+      // Send "skip" to explicitly skip keywords
+      sendMessage('skip');
     } else {
       // Send as JSON array
       sendMessage(JSON.stringify({ keywords: keywordsArray }));
@@ -467,8 +467,9 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
                     : 'bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200'
                 }`}
               >
-                {/* Show featured image if available in blog preview */}
-                {message.image_url && currentStep === 'confirm_outline' && (
+                {/* Show featured image if available in blog preview - but not during image approval step */}
+                {message.image_url && currentStep === 'confirm_outline' && 
+                 !(message.options && message.options.some(opt => ['approve', 'regenerate', 'skip'].includes(opt.value))) && (
                   <div className="mt-3 mb-3">
                     <img
                       src={message.image_url}
@@ -617,8 +618,8 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
                           <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
                           <span className="text-sm text-purple-700 font-medium">Generating image...</span>
                         </div>
-                      ) : message.image_url && message.options && message.options.some(opt => ['approve', 'regenerate', 'skip'].includes(opt.value)) ? (
-                        // Image approval UI
+                      ) : message.image_url && currentStep === 'handle_image' && message.options && message.options.some(opt => ['approve', 'regenerate', 'skip'].includes(opt.value)) ? (
+                        // Image approval UI - only show during handle_image step
                         <div className="space-y-4">
                           <div className="text-sm font-bold text-purple-800 mb-3">Generated Image Preview:</div>
                           <div className="flex justify-center">
@@ -660,18 +661,16 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
                   </div>
                 )}
 
-                {/* Schedule Input - Show ONLY for the message that asks for schedule */}
+                {/* Schedule Options - Show for ask_schedule step */}
                 {message.role === 'assistant' && 
                  currentStep === 'ask_schedule' && 
-                 message.content && 
-                 (message.content.includes('When would you like to publish') || message.content.includes('select a date and time')) && 
                  messages.indexOf(message) === messages.length - 1 && (
-                  <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
-                    <div className="space-y-4">
-                      {/* Show date/time inputs if message asks for them, otherwise show options */}
-                      {message.content && message.content.includes('select a date and time') ? (
-                        <>
-                          <div className="text-sm font-bold text-purple-800">Please select a date and time:</div>
+                  <div className="mt-4">
+                    {message.content && message.content.includes('select a date and time') ? (
+                      // Show date/time inputs for scheduling
+                      <div className="p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
+                        <div className="text-sm font-bold text-purple-800 mb-3">Select Date and Time:</div>
+                        <div className="space-y-3">
                           <div className="flex gap-3">
                             <input
                               type="date"
@@ -695,45 +694,22 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
                           >
                             📅 Schedule Post
                           </button>
-                        </>
-                      ) : (
-                        <>
-                          <div className="text-sm font-bold text-purple-800">When would you like to publish?</div>
+                        </div>
+                      </div>
+                    ) : message.options && message.options.length > 0 ? (
+                      // Show the three options (Publish, Schedule, Draft)
+                      <div className="grid grid-cols-1 gap-3">
+                        {message.options.map((option, index) => (
                           <button
-                            onClick={() => handleScheduleSubmit('now')}
-                            className="w-full px-6 py-3 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl hover:from-green-500 hover:to-blue-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
+                            key={index}
+                            onClick={() => handleOptionClick(option.value, option.label)}
+                            className="w-full px-6 py-3 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-xl hover:from-pink-500 hover:to-purple-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl text-left"
                           >
-                            🚀 Publish Now
+                            {option.label}
                           </button>
-                          <div className="space-y-3">
-                            <label className="text-sm font-bold text-purple-800">Or schedule for later:</label>
-                            <div className="flex gap-3">
-                              <input
-                                type="date"
-                                ref={dateInputRef}
-                                value={scheduleDate}
-                                onChange={(e) => setScheduleDate(e.target.value)}
-                                className="flex-1 px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 text-sm bg-white shadow-sm"
-                              />
-                              <input
-                                type="time"
-                                ref={timeInputRef}
-                                value={scheduleTime}
-                                onChange={(e) => setScheduleTime(e.target.value)}
-                                className="flex-1 px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 text-sm bg-white shadow-sm"
-                              />
-                            </div>
-                            <button
-                              onClick={() => handleScheduleSubmit('schedule')}
-                              disabled={!scheduleDate || !scheduleTime}
-                              className="w-full px-6 py-3 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-xl hover:from-pink-500 hover:to-purple-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              📅 Schedule Post
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 )}
 

@@ -818,26 +818,32 @@ const BlogDashboard = () => {
   const handleReadMore = (blog) => {
 
     // Only for published blogs - redirect to actual blog URL
-
-    let blogUrl = blog.blog_url || blog.website_url
+    // Get website_url from metadata first, then from direct field
+    let websiteUrl = blog.metadata?.website_url || blog.website_url
+    
+    let blogUrl = blog.blog_url || websiteUrl
 
     
     
     // If no specific blog URL, try to construct it
 
-    if (!blogUrl || blogUrl === blog.website_url) {
+    if (!blogUrl || blogUrl === websiteUrl) {
 
-      if (blog.wordpress_post_id) {
+      if (blog.wordpress_post_id && websiteUrl) {
 
-        // Use post ID format
+        // Use post ID format with proper URL
+        blogUrl = `${websiteUrl.replace(/\/$/, '')}/?p=${blog.wordpress_post_id}`
 
-        blogUrl = `${blog.website_url || `https://${blog.site_name}.wordpress.com`}/?p=${blog.wordpress_post_id}`
-
-      } else {
+      } else if (websiteUrl) {
 
         // Fallback to site URL
+        blogUrl = websiteUrl
 
-        blogUrl = blog.website_url || `https://${blog.site_name}.wordpress.com`
+      } else if (blog.site_name) {
+
+        // Last resort: construct from site_name (replace spaces with hyphens)
+        const sanitizedSiteName = blog.site_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+        blogUrl = `https://${sanitizedSiteName}.wordpress.com`
 
       }
 
@@ -1299,17 +1305,22 @@ const BlogDashboard = () => {
 
 
   const formatDate = (dateString) => {
-
-    return new Date(dateString).toLocaleDateString('en-US', {
-
-      year: 'numeric',
-
-      month: 'short',
-
-      day: 'numeric'
-
-    })
-
+    if (!dateString) {
+      return 'N/A'
+    }
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) {
+        return 'N/A'
+      }
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      })
+    } catch (e) {
+      return 'N/A'
+    }
   }
 
 
@@ -1616,26 +1627,32 @@ const BlogDashboard = () => {
                       if (blog.status === 'published') {
 
                         // For published blogs, open the actual blog URL
-
-                        let blogUrl = blog.blog_url || blog.website_url
+                        // Get website_url from metadata first, then from direct field
+                        let websiteUrl = blog.metadata?.website_url || blog.website_url
+                        
+                        let blogUrl = blog.blog_url || websiteUrl
 
                         
                         
                         // If no specific blog URL, try to construct it
 
-                        if (!blogUrl || blogUrl === blog.website_url) {
+                        if (!blogUrl || blogUrl === websiteUrl) {
 
-                          if (blog.wordpress_post_id) {
+                          if (blog.wordpress_post_id && websiteUrl) {
 
-                            // Use post ID format
+                            // Use post ID format with proper URL
+                            blogUrl = `${websiteUrl.replace(/\/$/, '')}/?p=${blog.wordpress_post_id}`
 
-                            blogUrl = `${blog.website_url || `https://${blog.site_name}.wordpress.com`}/?p=${blog.wordpress_post_id}`
-
-                          } else {
+                          } else if (websiteUrl) {
 
                             // Fallback to site URL
+                            blogUrl = websiteUrl
 
-                            blogUrl = blog.website_url || `https://${blog.site_name}.wordpress.com`
+                          } else if (blog.site_name) {
+
+                            // Last resort: construct from site_name (replace spaces with hyphens)
+                            const sanitizedSiteName = blog.site_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+                            blogUrl = `https://${sanitizedSiteName}.wordpress.com`
 
                           }
 
@@ -1796,7 +1813,9 @@ const BlogDashboard = () => {
 
                             <div className="text-xs sm:text-sm text-gray-500 truncate">
 
-                              {blog.published_at ? formatDate(blog.published_at) : formatDate(blog.scheduled_at)}
+                              {blog.published_at ? formatDate(blog.published_at) : 
+                               blog.scheduled_at ? formatDate(blog.scheduled_at) : 
+                               formatDate(blog.created_at)}
 
                             </div>
 
@@ -1911,7 +1930,7 @@ const BlogDashboard = () => {
 
                               </button>
 
-                              {blog.status === 'draft' && blog.wordpress_site_id && (
+                              {(blog.status === 'draft' || blog.status === 'scheduled') && blog.wordpress_site_id && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
@@ -2881,7 +2900,7 @@ const BlogDashboard = () => {
 
                 </button>
 
-                {selectedBlog.status === 'draft' && selectedBlog.wordpress_site_id && (
+                {(selectedBlog.status === 'draft' || selectedBlog.status === 'scheduled') && selectedBlog.wordpress_site_id && (
                   <button
                     onClick={() => {
                       handlePublishBlog(selectedBlog.id)
