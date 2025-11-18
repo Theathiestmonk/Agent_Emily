@@ -22,7 +22,8 @@ import {
   Globe,
   Users,
   LogIn,
-  CalendarCheck
+  CalendarCheck,
+  ChevronDown
 } from 'lucide-react'
 import { leadsAPI } from '../services/leads'
 import { useNotifications } from '../contexts/NotificationContext'
@@ -42,12 +43,24 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const [pendingStatus, setPendingStatus] = useState(null)
   const [followUpAt, setFollowUpAt] = useState(lead.follow_up_at || '')
   const [updatingFollowUp, setUpdatingFollowUp] = useState(false)
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
 
   useEffect(() => {
     fetchConversations()
     fetchStatusHistory()
     setFollowUpAt(lead.follow_up_at || '')
   }, [lead.id, lead.follow_up_at])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (statusDropdownOpen && !event.target.closest('.status-dropdown-container')) {
+        setStatusDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [statusDropdownOpen])
 
   const fetchConversations = async () => {
     try {
@@ -321,20 +334,55 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
           <div className="mt-4 space-y-3">
             <div className="flex items-center space-x-3">
               <span className="text-sm font-medium">Status:</span>
-              <select
-                value={pendingStatus || selectedStatus}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                disabled={updatingStatus || showRemarksInput}
-                className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50"
-              >
-                <option value="new">New</option>
-                <option value="contacted">Contacted</option>
-                <option value="responded">Responded</option>
-                <option value="qualified">Qualified</option>
-                <option value="converted">Converted</option>
-                <option value="lost">Lost</option>
-                <option value="invalid">Invalid</option>
-              </select>
+              <div className="relative status-dropdown-container">
+                <button
+                  onClick={() => !updatingStatus && !showRemarksInput && setStatusDropdownOpen(!statusDropdownOpen)}
+                  disabled={updatingStatus || showRemarksInput}
+                  className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 flex items-center space-x-2 min-w-[140px] justify-between"
+                >
+                  <span className="capitalize">{pendingStatus || selectedStatus}</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${statusDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {/* Custom Dropdown with Glassmorphism */}
+                {statusDropdownOpen && (
+                  <div 
+                    className="absolute top-full mt-2 left-0 w-full min-w-[160px] z-50"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="bg-white/95 backdrop-blur-lg border border-white/40 rounded-lg shadow-2xl overflow-hidden ring-1 ring-black/5">
+                      <div className="py-1">
+                        {[
+                          { value: 'new', label: 'New' },
+                          { value: 'contacted', label: 'Contacted' },
+                          { value: 'responded', label: 'Responded' },
+                          { value: 'qualified', label: 'Qualified' },
+                          { value: 'converted', label: 'Converted' },
+                          { value: 'lost', label: 'Lost' },
+                          { value: 'invalid', label: 'Invalid' }
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleStatusChange(option.value)
+                              setStatusDropdownOpen(false)
+                            }}
+                            disabled={updatingStatus || showRemarksInput}
+                            className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors flex items-center space-x-2 ${
+                              (pendingStatus || selectedStatus) === option.value
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'text-gray-700 hover:bg-purple-50 hover:text-purple-700'
+                            } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            <span className="capitalize">{option.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               {updatingStatus && <Loader2 className="w-4 h-4 animate-spin" />}
             </div>
             
