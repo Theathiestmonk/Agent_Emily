@@ -443,8 +443,8 @@ class CustomBlogAgent:
                     state["uploaded_image_url"] = None
                     state["generated_image_url"] = None
                     
-                message = {
-                    "role": "assistant",
+                    message = {
+                        "role": "assistant",
                         "content": "Got it! I'll proceed without images. Now let me create an outline for your blog post...",
                         "timestamp": datetime.now().isoformat()
                     }
