@@ -481,29 +481,29 @@ class CustomBlogAgent:
                     message = {
                         "role": "assistant",
                         "content": "Great! How would you like to add an image to your blog?",
-                    "timestamp": datetime.now().isoformat(),
-                    "options": [
-                        {"value": "generate", "label": "🎨 Generate image with AI"},
-                        {"value": "upload", "label": "📤 Upload my own image"},
-                        {"value": "skip", "label": "⏭️ Skip for now"}
-                    ]
-                }
-                state["conversation_messages"].append(message)
+                        "timestamp": datetime.now().isoformat(),
+                        "options": [
+                            {"value": "generate", "label": "🎨 Generate image with AI"},
+                            {"value": "upload", "label": "📤 Upload my own image"},
+                            {"value": "skip", "label": "⏭️ Skip for now"}
+                        ]
+                    }
+                    state["conversation_messages"].append(message)
                     
                     logger.info(f"User chose yes for images, proceeding to image handling")
                     return state
-            else:
+                else:
                     # Invalid input - ask again
-                message = {
-                    "role": "assistant",
+                    message = {
+                        "role": "assistant",
                         "content": "Please choose 'Yes' or 'No'. Do you want to add an image to your blog post?",
-                    "timestamp": datetime.now().isoformat(),
-                    "options": [
+                        "timestamp": datetime.now().isoformat(),
+                        "options": [
                             {"value": "yes", "label": "✅ Yes"},
                             {"value": "no", "label": "❌ No"}
-                    ]
-                }
-                state["conversation_messages"].append(message)
+                        ]
+                    }
+                    state["conversation_messages"].append(message)
                     return state
             else:
                 # No user input yet - this shouldn't happen, but handle gracefully
@@ -1112,11 +1112,11 @@ class CustomBlogAgent:
                     "timestamp": datetime.now().isoformat()
                 }
             else:
-            message = {
-                "role": "assistant",
-                "content": f"🎉 Success! Your blog post '{saved_blog['title']}' has been {status_text}. You can find it in your blog dashboard!",
-                "timestamp": datetime.now().isoformat()
-            }
+                message = {
+                    "role": "assistant",
+                    "content": f"🎉 Success! Your blog post '{saved_blog['title']}' has been {status_text}. You can find it in your blog dashboard!",
+                    "timestamp": datetime.now().isoformat()
+                }
             state["conversation_messages"].append(message)
             
             logger.info(f"Blog saved successfully: {saved_blog['id']}")
