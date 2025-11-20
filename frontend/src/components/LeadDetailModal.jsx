@@ -368,7 +368,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                               handleStatusChange(option.value)
                               setStatusDropdownOpen(false)
                             }}
-                            disabled={updatingStatus || showRemarksInput}
+                disabled={updatingStatus || showRemarksInput}
                             className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors flex items-center space-x-2 ${
                               (pendingStatus || selectedStatus) === option.value
                                 ? 'bg-purple-100 text-purple-700'

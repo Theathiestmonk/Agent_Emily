@@ -453,6 +453,69 @@ async def delete_content(
             detail=f"Failed to delete content: {str(e)}"
         )
 
+# Scheduled post registration model
+class ScheduledPostRegister(BaseModel):
+    post_id: str
+    scheduled_at: str  # ISO format datetime
+    platform: str
+
+@router.post("/register-scheduled")
+async def register_scheduled_post(
+    request: ScheduledPostRegister,
+    current_user: User = Depends(get_current_user)
+):
+    """Register a scheduled post with backend for exact-time publishing"""
+    try:
+        from scheduler.post_publisher import post_publisher
+        
+        if not post_publisher:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Post publisher not initialized"
+            )
+        
+        # Verify post belongs to user
+        post_response = supabase_admin.table("content_posts").select(
+            "*, content_campaigns!inner(user_id)"
+        ).eq("id", request.post_id).execute()
+        
+        if not post_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found"
+            )
+        
+        post = post_response.data[0]
+        user_id = post.get("content_campaigns", {}).get("user_id") if isinstance(post.get("content_campaigns"), dict) else None
+        
+        if not user_id or user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+        
+        # Register with post publisher
+        await post_publisher.register_scheduled_post(
+            request.post_id,
+            request.scheduled_at,
+            request.platform,
+            current_user.id
+        )
+        
+        return {
+            "success": True,
+            "message": "Scheduled post registered successfully",
+            "scheduled_at": request.scheduled_at
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to register scheduled post: {str(e)}"
+        )
+
 @router.post("/ai/edit-content")
 async def ai_edit_content(
     request: AIEditRequest,

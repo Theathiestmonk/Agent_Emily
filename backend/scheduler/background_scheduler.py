@@ -12,6 +12,7 @@ import pytz
 from scheduler.content_scheduler import ContentScheduler
 from scheduler.ads_scheduler import AdsScheduler
 from scheduler.blog_scheduler import BlogScheduler
+from scheduler.post_publisher import start_post_publisher, stop_post_publisher
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -43,7 +44,11 @@ class BackgroundScheduler:
         await self.ads_scheduler.start()
         await self.blog_scheduler.start()
         
+        # Start post publisher for auto-publishing scheduled posts
+        await start_post_publisher(self.supabase_url, self.supabase_key)
+        
         logger.info("Background scheduler started - will run every Sunday at 4:00 AM IST")
+        logger.info("Post publisher started - checking for scheduled posts every minute")
         
     async def stop(self):
         """Stop the background scheduler"""
@@ -56,6 +61,9 @@ class BackgroundScheduler:
             await self.ads_scheduler.stop()
         if self.blog_scheduler:
             await self.blog_scheduler.stop()
+        
+        # Stop post publisher
+        await stop_post_publisher()
             
         logger.info("Background scheduler stopped")
         

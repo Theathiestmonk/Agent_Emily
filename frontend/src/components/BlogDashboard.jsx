@@ -820,7 +820,7 @@ const BlogDashboard = () => {
     // Only for published blogs - redirect to actual blog URL
     // Get website_url from metadata first, then from direct field
     let websiteUrl = blog.metadata?.website_url || blog.website_url
-    
+
     let blogUrl = blog.blog_url || websiteUrl
 
     
@@ -1314,10 +1314,10 @@ const BlogDashboard = () => {
         return 'N/A'
       }
       return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      })
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
     } catch (e) {
       return 'N/A'
     }
@@ -1629,7 +1629,7 @@ const BlogDashboard = () => {
                         // For published blogs, open the actual blog URL
                         // Get website_url from metadata first, then from direct field
                         let websiteUrl = blog.metadata?.website_url || blog.website_url
-                        
+
                         let blogUrl = blog.blog_url || websiteUrl
 
                         

@@ -219,6 +219,37 @@ class ContentAPI {
     }
   }
 
+  // Register scheduled post with backend for exact-time publishing
+  async registerScheduledPost(postId, scheduledAt, platform) {
+    try {
+      const authToken = await this.getAuthToken()
+      
+      const response = await fetch(buildApiUrl('/content/register-scheduled'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          post_id: postId,
+          scheduled_at: scheduledAt,
+          platform: platform
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}, ${errorText}`)
+      }
+
+      const data = await response.json()
+      return { success: true, data }
+    } catch (error) {
+      console.error('Error registering scheduled post:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
   // Helper method to get auth token
   async getAuthToken() {
     const { data: { session } } = await supabase.auth.getSession()

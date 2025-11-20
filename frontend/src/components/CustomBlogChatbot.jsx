@@ -666,7 +666,7 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
                  currentStep === 'ask_schedule' && 
                  messages.indexOf(message) === messages.length - 1 && (
                   <div className="mt-4">
-                    {message.content && message.content.includes('select a date and time') ? (
+                      {message.content && message.content.includes('select a date and time') ? (
                       // Show date/time inputs for scheduling
                       <div className="p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
                         <div className="text-sm font-bold text-purple-800 mb-3">Select Date and Time:</div>
@@ -708,7 +708,7 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
                             {option.label}
                           </button>
                         ))}
-                      </div>
+                            </div>
                     ) : null}
                   </div>
                 )}

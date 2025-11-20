@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
@@ -141,6 +141,10 @@ const ContentDashboard = () => {
   }, [showAddMenu])
 
   const [generatingMedia, setGeneratingMedia] = useState(new Set()) // Track which content is generating media
+  
+  // Refs to persist scheduled posts cache across renders
+  const scheduledPostsCacheRef = useRef(new Map())
+  const publishedPostsRef = useRef(new Set())
   const [uploadingImage, setUploadingImage] = useState(new Set()) // Track which content is uploading image
   const [showUploadModal, setShowUploadModal] = useState(null) // Track which content is showing upload modal
   const [lightboxImage, setLightboxImage] = useState(null) // Track which image to show in lightbox
@@ -271,6 +275,104 @@ const ContentDashboard = () => {
       fetchAllContent()
     }
   }, [generating, fetchingFreshData, selectedChannel])
+
+  // Auto-publish scheduled posts when their time arrives (client-side check with continuous monitoring)
+  useEffect(() => {
+    if (!allContent || allContent.length === 0) return
+
+    const scheduledPostsCache = scheduledPostsCacheRef.current
+    const publishedPosts = publishedPostsRef.current
+    let checkInterval = null
+
+    // Build cache of scheduled posts (always includes all scheduled posts)
+    const buildCache = () => {
+      // Update cache with current content
+      allContent.forEach(content => {
+        if (content.status === 'scheduled' && content.scheduled_at) {
+          try {
+            const scheduledTime = new Date(content.scheduled_at)
+            if (!isNaN(scheduledTime.getTime())) {
+              // Only add/update if not already published or being posted
+              if (!publishedPosts.has(content.id) && !postingContent.has(content.id)) {
+                scheduledPostsCache.set(content.id, {
+                  content,
+                  scheduledTime,
+                  addedAt: Date.now()
+                })
+              }
+            }
+          } catch (error) {
+            console.error(`Error parsing scheduled time for post ${content.id}:`, error)
+          }
+        } else {
+          // Remove from cache if status changed from scheduled
+          scheduledPostsCache.delete(content.id)
+        }
+      })
+    }
+
+    // Check and publish scheduled posts
+    const checkAndPublishScheduledPosts = async () => {
+      const now = new Date()
+      const postsToPublish = []
+
+      // Check all cached scheduled posts
+      scheduledPostsCache.forEach((cached, postId) => {
+        // Skip if already being posted or published
+        if (postingContent.has(postId) || publishedPosts.has(postId)) {
+          return
+        }
+
+        const { content, scheduledTime } = cached
+        const timeDiff = now - scheduledTime
+
+        // Check if scheduled time has passed (with 10 minute window to catch late posts)
+        if (timeDiff >= 0 && timeDiff < 600000) { // 10 minutes window
+          postsToPublish.push(content)
+          // Mark as published to avoid duplicate attempts
+          publishedPosts.add(postId)
+        }
+      })
+
+      // Publish each post that's ready
+      for (const content of postsToPublish) {
+        try {
+          console.log(`⏰ Auto-publishing scheduled post ${content.id} (scheduled for ${content.scheduled_at})`)
+          await handlePostContent(content)
+          // Remove from cache after successful publishing
+          scheduledPostsCache.delete(content.id)
+          // Refresh content after successful publishing
+          setTimeout(() => {
+            fetchAllContent()
+          }, 2000) // Wait 2 seconds for backend to update
+        } catch (error) {
+          console.error(`Error auto-publishing post ${content.id}:`, error)
+          // Remove from published set on error so it can be retried after cache rebuild
+          publishedPosts.delete(content.id)
+        }
+      }
+    }
+
+    // Build cache immediately when content changes
+    buildCache()
+
+    // Check immediately
+    checkAndPublishScheduledPosts()
+
+    // Check every 10 seconds for very responsive publishing (catches posts scheduled 3 min before)
+    checkInterval = setInterval(() => {
+      // Rebuild cache to pick up newly scheduled posts
+      buildCache()
+      checkAndPublishScheduledPosts()
+    }, 10000) // Check every 10 seconds for continuous monitoring
+
+    return () => {
+      if (checkInterval) {
+        clearInterval(checkInterval)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allContent, postingContent]) // Re-run when content or posting state changes
 
   // Set first channel as default when channels become available
   useEffect(() => {
@@ -1089,6 +1191,11 @@ const ContentDashboard = () => {
           : item
       ))
       
+      // Refresh content after successful publishing
+      setTimeout(() => {
+        fetchAllContent()
+      }, 1500)
+      
     } catch (error) {
       console.error('Error posting to Facebook:', error)
       throw error
@@ -1169,6 +1276,10 @@ const ContentDashboard = () => {
                 ? { ...item, status: 'published', published_at: publishedAt, instagram_post_id: result.post_id }
                 : item
             ))
+            // Refresh content after successful publishing
+            setTimeout(() => {
+              fetchAllContent()
+            }, 1500)
             return
           } else {
             const errorText = await response.text()
@@ -1222,6 +1333,10 @@ const ContentDashboard = () => {
               ? { ...item, status: 'published', published_at: publishedAt, instagram_post_id: result.post_id }
               : item
           ))
+          // Refresh content after successful publishing
+          setTimeout(() => {
+            fetchAllContent()
+          }, 1500)
           return
         } else {
           const errorText = await response.text()
@@ -1291,9 +1406,29 @@ const ContentDashboard = () => {
       if (response.ok) {
         const result = await response.json()
         console.log('✅ LinkedIn post successful:', result)
+        
+        // Update the content status to published
+        const publishedAt = new Date().toISOString()
+        updateContentInCache(content.id, { 
+          status: 'published',
+          published_at: publishedAt,
+          linkedin_post_id: result.post_id || result.id
+        })
+        
+        // Also update in allContent if it exists there
+        setAllContent(prev => prev.map(item => 
+          item.id === content.id 
+            ? { ...item, status: 'published', published_at: publishedAt, linkedin_post_id: result.post_id || result.id }
+            : item
+        ))
+        
+        // Refresh content after successful publishing
+        setTimeout(() => {
+          fetchAllContent()
+        }, 1500)
+        
         // Show beautiful notification with post URL if available
         showPostNotification('LinkedIn', result.post_url || result.url)
-        updateContentInCache(content.id, { status: 'published' })
       } else {
         const errorText = await response.text()
         console.error('❌ LinkedIn post failed:', response.status, errorText)
@@ -1336,9 +1471,29 @@ const ContentDashboard = () => {
       if (response.ok) {
         const result = await response.json()
         console.log('✅ YouTube post successful:', result)
+        
+        // Update the content status to published
+        const publishedAt = new Date().toISOString()
+        updateContentInCache(content.id, { 
+          status: 'published',
+          published_at: publishedAt,
+          youtube_post_id: result.post_id || result.id
+        })
+        
+        // Also update in allContent if it exists there
+        setAllContent(prev => prev.map(item => 
+          item.id === content.id 
+            ? { ...item, status: 'published', published_at: publishedAt, youtube_post_id: result.post_id || result.id }
+            : item
+        ))
+        
+        // Refresh content after successful publishing
+        setTimeout(() => {
+          fetchAllContent()
+        }, 1500)
+        
         // Show beautiful notification with post URL if available
         showPostNotification('YouTube', result.post_url || result.url)
-        updateContentInCache(content.id, { status: 'published' })
       } else {
         const errorText = await response.text()
         console.error('❌ YouTube post failed:', response.status, errorText)
@@ -1406,6 +1561,23 @@ const ContentDashboard = () => {
 
       const result = await response.json()
       console.log('Content update result:', result)
+      
+      // If status is scheduled, register with backend for exact-time publishing
+      if (updateData.status === 'scheduled' && updateData.scheduled_date && updateData.scheduled_time) {
+        const scheduledAt = `${updateData.scheduled_date}T${updateData.scheduled_time}`
+        const platform = editingContent.platform || 'facebook' // Default platform
+        try {
+          await contentAPI.registerScheduledPost(
+            editingContent.id,
+            scheduledAt,
+            platform
+          )
+          console.log(`✅ Registered scheduled post ${editingContent.id} with backend`)
+        } catch (error) {
+          console.warn(`Failed to register scheduled post with backend: ${error.message}`)
+          // Don't fail the update if registration fails
+        }
+      }
       
       showSuccess('Content updated successfully!')
       
@@ -1740,6 +1912,24 @@ const ContentDashboard = () => {
         // Update local content cache first
         updateContentInCache(contentId, { status: 'scheduled' })
         
+        // Register with backend for exact-time publishing
+        const content = allContent.find(c => c.id === contentId) || 
+                       scheduledContent.find(c => c.id === contentId) ||
+                       (selectedContentForModal && selectedContentForModal.id === contentId ? selectedContentForModal : null)
+        if (content && content.scheduled_at && content.platform) {
+          try {
+            await contentAPI.registerScheduledPost(
+              contentId,
+              content.scheduled_at,
+              content.platform
+            )
+            console.log(`✅ Registered scheduled post ${contentId} with backend`)
+          } catch (error) {
+            console.warn(`Failed to register scheduled post with backend: ${error.message}`)
+            // Don't fail the approval if registration fails
+          }
+        }
+        
         // Close the modal if this content is currently open
         if (selectedContentForModal && selectedContentForModal.id === contentId) {
           setSelectedContentForModal(null)
@@ -1804,6 +1994,25 @@ const ContentDashboard = () => {
       if (result.success) {
         // Update local content cache first
         updateContentInCache(contentId, { status: newStatus })
+        
+        // If status changed to 'scheduled', register with backend for exact-time publishing
+        if (newStatus === 'scheduled') {
+          const content = allContent.find(c => c.id === contentId) || 
+                         scheduledContent.find(c => c.id === contentId)
+          if (content && content.scheduled_at && content.platform) {
+            try {
+              await contentAPI.registerScheduledPost(
+                contentId,
+                content.scheduled_at,
+                content.platform
+              )
+              console.log(`✅ Registered scheduled post ${contentId} with backend`)
+            } catch (error) {
+              console.warn(`Failed to register scheduled post with backend: ${error.message}`)
+              // Don't fail the status update if registration fails
+            }
+          }
+        }
         
         // Close the dropdown
         setStatusDropdownOpen(null)

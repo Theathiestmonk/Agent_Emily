@@ -310,41 +310,41 @@ class CustomBlogAgent:
                 }
                 state["conversation_messages"].append(message)
             elif user_input_clean:
-                # Parse keywords - can be comma-separated, space-separated, or JSON array
-                try:
-                    # Try to parse as JSON first (for structured input from frontend)
-                    keywords_data = json.loads(user_input_clean)
-                    if isinstance(keywords_data, dict) and "keywords" in keywords_data:
-                        keywords = [k.strip() for k in keywords_data["keywords"] if k.strip()][:3]
-                    elif isinstance(keywords_data, list):
-                        keywords = [k.strip() for k in keywords_data if k.strip()][:3]
-                    else:
+                    # Parse keywords - can be comma-separated, space-separated, or JSON array
+                    try:
+                        # Try to parse as JSON first (for structured input from frontend)
+                        keywords_data = json.loads(user_input_clean)
+                        if isinstance(keywords_data, dict) and "keywords" in keywords_data:
+                            keywords = [k.strip() for k in keywords_data["keywords"] if k.strip()][:3]
+                        elif isinstance(keywords_data, list):
+                            keywords = [k.strip() for k in keywords_data if k.strip()][:3]
+                        else:
+                            keywords = [k.strip() for k in user_input_clean.replace(',', ' ').split()[:3]]
+                    except json.JSONDecodeError:
+                        # Not JSON, parse as text
                         keywords = [k.strip() for k in user_input_clean.replace(',', ' ').split()[:3]]
-                except json.JSONDecodeError:
-                    # Not JSON, parse as text
-                    keywords = [k.strip() for k in user_input_clean.replace(',', ' ').split()[:3]]
-                
-                state["keywords"] = keywords
-                
-                # Add user message
-                user_message = {
-                    "role": "user",
-                    "content": user_input,
-                    "timestamp": datetime.now().isoformat()
-                }
-                state["conversation_messages"].append(user_message)
-                
-                if keywords:
-                    message = {
-                        "role": "assistant",
-                        "content": f"Great! I'll use these keywords: {', '.join(keywords)}",
+                    
+                    state["keywords"] = keywords
+                    
+                    # Add user message
+                    user_message = {
+                        "role": "user",
+                        "content": user_input,
                         "timestamp": datetime.now().isoformat()
                     }
-                    state["conversation_messages"].append(message)
-                else:
+                    state["conversation_messages"].append(user_message)
+                    
+                    if keywords:
+                        message = {
+                            "role": "assistant",
+                            "content": f"Great! I'll use these keywords: {', '.join(keywords)}",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        state["conversation_messages"].append(message)
+                    else:
                     # Generate keywords using AI if parsing resulted in empty keywords
-                    keywords = await self._suggest_keywords(state)
-                    state["keywords"] = keywords
+                        keywords = await self._suggest_keywords(state)
+                        state["keywords"] = keywords
                     message = {
                         "role": "assistant",
                         "content": f"No problem! I've suggested these keywords for you: {', '.join(keywords)}",
@@ -435,7 +435,7 @@ class CustomBlogAgent:
                     "timestamp": datetime.now().isoformat()
                 }
                 state["conversation_messages"].append(user_message)
-                
+            
                 if user_input_lower == "no":
                     # User doesn't want images - skip image steps and go directly to outline
                     state["image_option"] = ImageOption.NO
@@ -443,8 +443,8 @@ class CustomBlogAgent:
                     state["uploaded_image_url"] = None
                     state["generated_image_url"] = None
                     
-                    message = {
-                        "role": "assistant",
+                message = {
+                    "role": "assistant",
                         "content": "Got it! I'll proceed without images. Now let me create an outline for your blog post...",
                         "timestamp": datetime.now().isoformat()
                     }
@@ -481,29 +481,29 @@ class CustomBlogAgent:
                     message = {
                         "role": "assistant",
                         "content": "Great! How would you like to add an image to your blog?",
-                        "timestamp": datetime.now().isoformat(),
-                        "options": [
-                            {"value": "generate", "label": "🎨 Generate image with AI"},
-                            {"value": "upload", "label": "📤 Upload my own image"},
-                            {"value": "skip", "label": "⏭️ Skip for now"}
-                        ]
-                    }
-                    state["conversation_messages"].append(message)
+                    "timestamp": datetime.now().isoformat(),
+                    "options": [
+                        {"value": "generate", "label": "🎨 Generate image with AI"},
+                        {"value": "upload", "label": "📤 Upload my own image"},
+                        {"value": "skip", "label": "⏭️ Skip for now"}
+                    ]
+                }
+                state["conversation_messages"].append(message)
                     
                     logger.info(f"User chose yes for images, proceeding to image handling")
                     return state
-                else:
+            else:
                     # Invalid input - ask again
-                    message = {
-                        "role": "assistant",
+                message = {
+                    "role": "assistant",
                         "content": "Please choose 'Yes' or 'No'. Do you want to add an image to your blog post?",
-                        "timestamp": datetime.now().isoformat(),
-                        "options": [
+                    "timestamp": datetime.now().isoformat(),
+                    "options": [
                             {"value": "yes", "label": "✅ Yes"},
                             {"value": "no", "label": "❌ No"}
-                        ]
-                    }
-                    state["conversation_messages"].append(message)
+                    ]
+                }
+                state["conversation_messages"].append(message)
                     return state
             else:
                 # No user input yet - this shouldn't happen, but handle gracefully
@@ -949,8 +949,8 @@ class CustomBlogAgent:
                     logger.warning(f"Error parsing scheduled_at: {e}, setting to None")
                     scheduled_at = None
                 
-                if scheduled_at and status == "published":
-                    status = "scheduled"
+            if scheduled_at and status == "published":
+                status = "scheduled"
             else:
                 scheduled_at = None
             
@@ -1112,11 +1112,11 @@ class CustomBlogAgent:
                     "timestamp": datetime.now().isoformat()
                 }
             else:
-                message = {
-                    "role": "assistant",
-                    "content": f"🎉 Success! Your blog post '{saved_blog['title']}' has been {status_text}. You can find it in your blog dashboard!",
-                    "timestamp": datetime.now().isoformat()
-                }
+            message = {
+                "role": "assistant",
+                "content": f"🎉 Success! Your blog post '{saved_blog['title']}' has been {status_text}. You can find it in your blog dashboard!",
+                "timestamp": datetime.now().isoformat()
+            }
             state["conversation_messages"].append(message)
             
             logger.info(f"Blog saved successfully: {saved_blog['id']}")
