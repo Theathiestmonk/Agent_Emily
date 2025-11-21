@@ -846,16 +846,19 @@ class CustomContentAgent:
             state["progress_percentage"] = 55
             
             max_images = state.get("carousel_max_images", 10)
-            uploaded_count = len(state.get("uploaded_carousel_images", []))
+            uploaded_carousel_images = state.get("uploaded_carousel_images") or []
+            uploaded_count = len(uploaded_carousel_images)
             remaining = max_images - uploaded_count
             
             message = {
                 "role": "assistant",
-                "content": f"Please upload your carousel images below. You can upload up to {max_images} images total.\n\nCurrently uploaded: {uploaded_count} / {max_images} images",
+                "content": "Please upload your carousel images below.",
                 "timestamp": datetime.now().isoformat(),
                 "max_images": max_images,
                 "uploaded_count": uploaded_count,
-                "remaining": remaining
+                "remaining": remaining,
+                # Include uploaded images in message so frontend can display them
+                "uploaded_carousel_images": uploaded_carousel_images if uploaded_carousel_images else []
             }
             state["conversation_messages"].append(message)
             
@@ -871,7 +874,8 @@ class CustomContentAgent:
     async def confirm_carousel_upload_done(self, state: CustomContentState, user_input: str = None) -> CustomContentState:
         """Ask if carousel upload is complete"""
         try:
-            uploaded_count = len(state.get("uploaded_carousel_images", []))
+            uploaded_carousel_images = state.get("uploaded_carousel_images") or []
+            uploaded_count = len(uploaded_carousel_images)
             max_images = state.get("carousel_max_images", 10)
             
             if not user_input:
@@ -884,7 +888,9 @@ class CustomContentAgent:
                     "options": [
                         {"value": "yes", "label": "✅ Yes, I'm done"},
                         {"value": "no", "label": "📤 No, add more images"}
-                    ]
+                    ],
+                    # Include uploaded images in message so frontend can display them
+                    "uploaded_carousel_images": uploaded_carousel_images if uploaded_carousel_images else []
                 }
                 state["conversation_messages"].append(message)
                 return state
@@ -945,7 +951,7 @@ class CustomContentAgent:
                         carousel_images = [img.get("url") for img in carousel_images_data if img.get("url")]
                 elif carousel_image_source == "manual_upload":
                     # Get manually uploaded carousel images
-                    carousel_images = state.get("uploaded_carousel_images", [])
+                    carousel_images = state.get("uploaded_carousel_images") or []
                     if not isinstance(carousel_images, list):
                         carousel_images = []
             
@@ -1093,15 +1099,15 @@ class CustomContentAgent:
                 message_content = f"Perfect! I've analyzed your image and generated your {content_type} content. Here's what I created:\n\n**{content_data.get('title', f'{content_type} for {platform}')}**\n\n{content_data.get('content', '')}"
             else:
                 message_content = f"Great! I've generated your {content_type} content. Here's what I created:\n\n**{content_data.get('title', f'{content_type} for {platform}')}**\n\n{content_data.get('content', '')}"
-            
+                
             # Add hashtags if available (for all cases)
-            if content_data.get('hashtags'):
-                hashtags = ' '.join([f"#{tag.replace('#', '')}" for tag in content_data['hashtags']])
-                message_content += f"\n\n{hashtags}"
-            
+                if content_data.get('hashtags'):
+                    hashtags = ' '.join([f"#{tag.replace('#', '')}" for tag in content_data['hashtags']])
+                    message_content += f"\n\n{hashtags}"
+                
             # Add call to action if available (for all cases)
-            if content_data.get('call_to_action'):
-                message_content += f"\n\n**Call to Action:** {content_data['call_to_action']}"
+                if content_data.get('call_to_action'):
+                    message_content += f"\n\n**Call to Action:** {content_data['call_to_action']}"
             
             # Prepare message with carousel images if applicable
             message = {
@@ -1334,13 +1340,31 @@ class CustomContentAgent:
             
             confirmation_message += "\n\n---\n\n**Please review the content above and let me know:**"
             
+            # Get carousel images if this is a carousel post
+            carousel_images = []
+            is_carousel = content_type and content_type.lower() == "carousel"
+            if is_carousel:
+                carousel_image_source = state.get("carousel_image_source", "")
+                if carousel_image_source == "ai_generate":
+                    # Get AI-generated carousel images
+                    carousel_images_data = state.get("carousel_images", [])
+                    if carousel_images_data:
+                        carousel_images = [img.get("url") for img in carousel_images_data if img.get("url")]
+                elif carousel_image_source == "manual_upload":
+                    # Get manually uploaded carousel images
+                    carousel_images = state.get("uploaded_carousel_images") or []
+                    if not isinstance(carousel_images, list):
+                        carousel_images = []
+            
             message = {
                 "role": "assistant",
                 "content": confirmation_message,
                 "timestamp": datetime.now().isoformat(),
-                "has_media": has_media,
-                "media_url": state.get("uploaded_media_url") or state.get("generated_media_url"),
-                "media_type": state.get("media_type"),
+                "has_media": has_media or (is_carousel and len(carousel_images) > 0),
+                "media_url": state.get("uploaded_media_url") or state.get("generated_media_url") if not is_carousel else None,
+                "media_type": state.get("media_type") if not is_carousel else None,
+                # Include carousel images in the message
+                "carousel_images": carousel_images if is_carousel else None,
                 # Explicitly set structured_content to null to prevent frontend from creating cards
                 "structured_content": None
             }
@@ -1404,8 +1428,8 @@ class CustomContentAgent:
             
             if is_carousel:
                 # Handle carousel post
-                carousel_images = state.get("carousel_images", [])
-                uploaded_carousel_images = state.get("uploaded_carousel_images", [])
+                carousel_images = state.get("carousel_images") or []
+                uploaded_carousel_images = state.get("uploaded_carousel_images") or []
                 
                 # Combine AI-generated and manually uploaded images
                 all_carousel_images = []

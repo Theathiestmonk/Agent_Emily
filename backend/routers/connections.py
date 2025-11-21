@@ -9,6 +9,7 @@ import hashlib
 import base64
 import time
 import traceback
+import json
 from cryptography.fernet import Fernet
 import requests
 from supabase import create_client, Client
@@ -3301,6 +3302,97 @@ async def post_to_facebook(
 
         
         
+        # Check if this is a carousel post
+        carousel_images = post_data.get('carousel_images', [])
+        is_carousel = post_data.get('post_type') == 'carousel' or (carousel_images and len(carousel_images) > 0)
+        
+        if is_carousel and carousel_images:
+            # Handle carousel post
+            print(f"🎠 Posting carousel with {len(carousel_images)} images")
+            
+            # Step 1: Create photo containers for each image (published=false)
+            photo_ids = []
+            for idx, img_url in enumerate(carousel_images):
+                try:
+                    photo_url = f"https://graph.facebook.com/v18.0/{connection['page_id']}/photos"
+                    photo_payload = {
+                        "url": img_url,
+                        "published": "false",
+                        "access_token": access_token
+                    }
+                    
+                    photo_response = requests.post(photo_url, data=photo_payload)
+                    if photo_response.status_code == 200:
+                        photo_data = photo_response.json()
+                        photo_id = photo_data.get('id')
+                        if photo_id:
+                            photo_ids.append({"media_fbid": photo_id})
+                            print(f"✅ Created photo container {idx + 1}/{len(carousel_images)}: {photo_id}")
+                        else:
+                            print(f"⚠️ Photo container {idx + 1} created but no ID returned")
+                    else:
+                        error_data = photo_response.json() if photo_response.headers.get('content-type', '').startswith('application/json') else {"error": photo_response.text}
+                        print(f"❌ Failed to create photo container {idx + 1}: {error_data}")
+                        raise HTTPException(
+                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Failed to create photo container {idx + 1}: {error_data.get('error', {}).get('message', 'Unknown error')}"
+                        )
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    print(f"❌ Error creating photo container {idx + 1}: {e}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Failed to create photo container {idx + 1}: {str(e)}"
+                    )
+            
+            if not photo_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to create photo containers for carousel"
+                )
+            
+            # Step 2: Create carousel post with attached_media
+            facebook_url = f"https://graph.facebook.com/v18.0/{connection['page_id']}/feed"
+            payload = {
+                "message": full_message,
+                "attached_media": json.dumps(photo_ids),  # JSON string of photo IDs
+                "access_token": access_token
+            }
+            
+            print(f"🎠 Posting carousel to feed endpoint with {len(photo_ids)} photos")
+            response = requests.post(facebook_url, data=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"✅ Facebook carousel post successful: {result}")
+                
+                # Update content status
+                content_id = post_data.get('content_id')
+                if content_id:
+                    published_at = datetime.now().isoformat()
+                    update_data = {
+                        "status": "published",
+                        "published_at": published_at,
+                        "facebook_post_id": result.get('id')
+                    }
+                    supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
+                
+                return {
+                    "success": True,
+                    "post_id": result.get('id'),
+                    "post_url": f"https://www.facebook.com/{result.get('id')}",
+                    "message": "Carousel post published successfully",
+                    "url": f"https://www.facebook.com/{result.get('id')}"
+                }
+            else:
+                error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {"error": response.text}
+                print(f"❌ Facebook carousel post failed: {error_data}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to post carousel: {error_data.get('error', {}).get('message', 'Unknown error')}"
+                )
+        
         # Check if media is a video or image
         is_video = False
         if image_url:
@@ -3426,10 +3518,20 @@ async def post_to_facebook(
                 if content_id:
 
                     published_at = datetime.now().isoformat()
+                    # Get existing metadata first
+                    try:
+                        existing_post = supabase_admin.table("content_posts").select("metadata").eq("id", content_id).execute()
+                        existing_metadata = existing_post.data[0].get("metadata", {}) if existing_post.data else {}
+                    except:
+                        existing_metadata = {}
+                    
+                    # Update metadata with post ID
+                    existing_metadata["facebook_post_id"] = result.get('id')
+                    
                     update_data = {
                         "status": "published",
                         "published_at": published_at,
-                        "facebook_post_id": result.get('id')
+                        "metadata": existing_metadata
                     }
                     
                     print(f"🔄 Updating content {content_id} status to published...")
@@ -4679,6 +4781,133 @@ async def post_to_instagram(
 
             )
         
+        # Check if this is a carousel post
+        carousel_images = post_data.get('carousel_images', [])
+        is_carousel = post_data.get('post_type') == 'carousel' or (carousel_images and len(carousel_images) > 0)
+        
+        if is_carousel and carousel_images:
+            # Handle carousel post
+            print(f"🎠 Posting Instagram carousel with {len(carousel_images)} images")
+            
+            # Step 1: Create media containers for each image (is_carousel_item=true)
+            container_ids = []
+            for idx, img_url in enumerate(carousel_images):
+                try:
+                    container_url = f"https://graph.facebook.com/v18.0/{instagram_id}/media"
+                    container_data = {
+                        "image_url": img_url,
+                        "is_carousel_item": "true",
+                        "access_token": access_token
+                    }
+                    
+                    container_response = requests.post(container_url, data=container_data)
+                    if container_response.status_code == 200:
+                        container_result = container_response.json()
+                        container_id = container_result.get('id')
+                        if container_id:
+                            container_ids.append(container_id)
+                            print(f"✅ Created media container {idx + 1}/{len(carousel_images)}: {container_id}")
+                        else:
+                            print(f"⚠️ Media container {idx + 1} created but no ID returned")
+                    else:
+                        error_data = container_response.json() if container_response.headers.get('content-type', '').startswith('application/json') else {"error": container_response.text}
+                        print(f"❌ Failed to create media container {idx + 1}: {error_data}")
+                        raise HTTPException(
+                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Failed to create media container {idx + 1}: {error_data.get('error', {}).get('message', 'Unknown error')}"
+                        )
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    print(f"❌ Error creating media container {idx + 1}: {e}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Failed to create media container {idx + 1}: {str(e)}"
+                    )
+            
+            if not container_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to create media containers for carousel"
+                )
+            
+            # Step 2: Create carousel container with children parameter
+            carousel_url = f"https://graph.facebook.com/v18.0/{instagram_id}/media"
+            carousel_data = {
+                "media_type": "CAROUSEL",
+                "children": ",".join(container_ids),  # Comma-separated list of container IDs
+                "caption": full_message,
+                "access_token": access_token
+            }
+            
+            print(f"🎠 Creating Instagram carousel container with {len(container_ids)} children")
+            carousel_response = requests.post(carousel_url, data=carousel_data)
+            
+            if carousel_response.status_code != 200:
+                error_data = carousel_response.json() if carousel_response.headers.get('content-type', '').startswith('application/json') else {"error": carousel_response.text}
+                print(f"❌ Failed to create carousel container: {error_data}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to create carousel container: {error_data.get('error', {}).get('message', 'Unknown error')}"
+                )
+            
+            carousel_result = carousel_response.json()
+            creation_id = carousel_result.get('id')
+            
+            if not creation_id:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to create carousel container - no creation ID returned"
+                )
+            
+            # Step 3: Publish the carousel
+            publish_url = f"https://graph.facebook.com/v18.0/{instagram_id}/media_publish"
+            publish_data = {
+                "creation_id": creation_id,
+                "access_token": access_token
+            }
+            
+            print(f"🎠 Publishing Instagram carousel: {creation_id}")
+            publish_response = requests.post(publish_url, data=publish_data)
+            
+            if publish_response.status_code == 200:
+                publish_result = publish_response.json()
+                post_id = publish_result.get('id')
+                print(f"✅ Instagram carousel post successful: {post_id}")
+                
+                # Update content status
+                content_id = post_data.get('content_id')
+                if content_id:
+                    published_at = datetime.now().isoformat()
+                    # Get existing metadata first
+                    try:
+                        existing_post = supabase_admin.table("content_posts").select("metadata").eq("id", content_id).execute()
+                        existing_metadata = existing_post.data[0].get("metadata", {}) if existing_post.data else {}
+                    except:
+                        existing_metadata = {}
+                    
+                    # Update metadata with post ID
+                    existing_metadata["instagram_post_id"] = post_id
+                    
+                    update_data = {
+                        "status": "published",
+                        "published_at": published_at,
+                        "metadata": existing_metadata
+                    }
+                    supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
+                
+                return {
+                    "success": True,
+                    "post_id": post_id,
+                    "message": "Instagram carousel post published successfully"
+                }
+            else:
+                error_data = publish_response.json() if publish_response.headers.get('content-type', '').startswith('application/json') else {"error": publish_response.text}
+                print(f"❌ Failed to publish Instagram carousel: {error_data}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to publish carousel: {error_data.get('error', {}).get('message', 'Unknown error')}"
+                )
         
         
         # Create media container first
@@ -4902,10 +5131,20 @@ async def post_to_instagram(
             if content_id:
 
                 published_at = datetime.now().isoformat()
+                # Get existing metadata first
+                try:
+                    existing_post = supabase_admin.table("content_posts").select("metadata").eq("id", content_id).execute()
+                    existing_metadata = existing_post.data[0].get("metadata", {}) if existing_post.data else {}
+                except:
+                    existing_metadata = {}
+                
+                # Update metadata with post ID
+                existing_metadata["instagram_post_id"] = post_id
+                
                 update_data = {
                     "status": "published",
                     "published_at": published_at,
-                    "instagram_post_id": post_id
+                    "metadata": existing_metadata
                 }
                 
                 print(f"🔄 Updating content {content_id} status to published...")

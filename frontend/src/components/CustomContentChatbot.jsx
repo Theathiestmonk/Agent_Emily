@@ -444,8 +444,45 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
         setCarouselMaxImages(data.message.max_images || 10);
         // Clear approval UI when switching to manual upload
         setCarouselImages([]);
+        
+        // CRITICAL: Sync uploaded images from state to preserve count
+        if (data.state?.uploaded_carousel_images && Array.isArray(data.state.uploaded_carousel_images)) {
+          setUploadedCarouselImages(data.state.uploaded_carousel_images);
+          console.log('✅ Synced uploaded images from state:', data.state.uploaded_carousel_images.length);
+        } else if (data.message.uploaded_count !== undefined) {
+          // Fallback: use count from message if state not available
+          // Note: This won't restore image URLs, but will show correct count
+          console.log('⚠️ State not available, using message count:', data.message.uploaded_count);
+        } else {
+          // If state not in response, fetch latest state to restore images (e.g., after clicking "no")
+          const token2 = await getAuthToken();
+          if (token2 && conversationId) {
+            try {
+              const convResponse = await fetch(`${API_BASE_URL}/custom-content/conversation/${conversationId}`, {
+                headers: { 'Authorization': `Bearer ${token2}` }
+              });
+              
+              if (convResponse.ok) {
+                const convData = await convResponse.json();
+                if (convData.state?.uploaded_carousel_images && Array.isArray(convData.state.uploaded_carousel_images)) {
+                  setUploadedCarouselImages(convData.state.uploaded_carousel_images);
+                  console.log('✅ Restored uploaded images after "no":', convData.state.uploaded_carousel_images.length);
+                }
+              }
+            } catch (fetchError) {
+              console.error('Error fetching conversation state:', fetchError);
+            }
+          }
+        }
       } else if (data.current_step === 'confirm_carousel_upload_done') {
-        setShowCarouselUpload(false);
+        // Keep upload UI visible so user can see uploaded images and add more if needed
+        setShowCarouselUpload(true);
+        // CRITICAL: Sync uploaded images from state in confirmation step
+        // This ensures images are preserved when user clicks "no, add more"
+        if (data.state?.uploaded_carousel_images && Array.isArray(data.state.uploaded_carousel_images)) {
+          setUploadedCarouselImages(data.state.uploaded_carousel_images);
+          console.log('✅ Synced uploaded images in confirm step:', data.state.uploaded_carousel_images.length);
+        }
       } else if (data.current_step === 'generate_content') {
         // Clear carousel-related UI when moving to content generation
         setShowCarouselUpload(false);
@@ -672,7 +709,19 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || 'Failed to generate carousel images');
+        console.error('❌ Generate carousel images error:', response.status, errorText);
+        let errorMessage = 'Failed to generate carousel images';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch (e) {
+          errorMessage = errorText || errorMessage;
+        }
+        
+        if (response.status === 404) {
+          errorMessage = 'Endpoint not found. Please ensure the backend is deployed with the latest code.';
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -938,13 +987,31 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || 'Failed to upload carousel images');
+        console.error('❌ Upload carousel images error:', response.status, errorText);
+        let errorMessage = 'Failed to upload carousel images';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch (e) {
+          errorMessage = errorText || errorMessage;
+        }
+        
+        if (response.status === 404) {
+          errorMessage = 'Endpoint not found. Please ensure the backend is deployed with the latest code.';
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
       
-      // Update uploaded images
-      setUploadedCarouselImages(prev => [...prev, ...data.image_urls]);
+      // Update uploaded images immediately from response
+      if (data.image_urls && Array.isArray(data.image_urls)) {
+        setUploadedCarouselImages(prev => {
+          const newImages = [...prev, ...data.image_urls];
+          console.log('✅ Updated uploadedCarouselImages:', newImages.length, 'images');
+          return newImages;
+        });
+      }
       
       // Clear file input
       if (carouselFileInputRef.current) {
@@ -963,19 +1030,51 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
         if (convResponse.ok) {
           const convData = await convResponse.json();
           // Update state and step from conversation
+          let stateImages = [];
           if (convData.state) {
             setState(convData.state);
-            setUploadedCarouselImages(convData.state.uploaded_carousel_images || []);
+            // Always use backend state as source of truth for uploaded images
+            stateImages = convData.state.uploaded_carousel_images || [];
+            const expectedTotal = data.total_images || 0;
+            console.log('🔍 Syncing uploaded images - State:', stateImages.length, 'Expected:', expectedTotal, 'images');
+            
+            // Always use state if it has images (backend is source of truth)
+            if (Array.isArray(stateImages) && stateImages.length > 0) {
+              setUploadedCarouselImages(stateImages);
+              console.log('✅ Using state images:', stateImages.length);
+            } else if (expectedTotal > 0) {
+              // State is empty but response says we have images - might be a race condition
+              // Keep what we set from response
+              console.log('⚠️ State empty but response has total, keeping response images');
+            }
           }
           if (convData.current_step) {
             setCurrentStep(convData.current_step);
           }
           
-          // Add the latest message if it's new
+          // Update or add the latest message with uploaded images
           if (convData.messages && convData.messages.length > 0) {
             const lastMessage = convData.messages[convData.messages.length - 1];
             const existingMessages = messages.map(m => m.content);
-            if (!existingMessages.includes(lastMessage.content)) {
+            
+            // Check if this is an upload-related message that needs updating
+            const isUploadMessage = lastMessage.content && (
+              lastMessage.content.includes('upload your carousel images') ||
+              lastMessage.content.includes('Currently uploaded')
+            );
+            
+            if (isUploadMessage && stateImages.length > 0) {
+              // Update the existing message with uploaded images
+              setMessages(prev => prev.map(msg => {
+                if (msg.content === lastMessage.content && msg.role === 'assistant') {
+                  return {
+                    ...msg,
+                    uploaded_carousel_images: stateImages
+                  };
+                }
+                return msg;
+              }));
+            } else if (!existingMessages.includes(lastMessage.content)) {
               addMessage(lastMessage.role, lastMessage.content, lastMessage);
             }
           }
@@ -1326,21 +1425,75 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                     : 'bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200'
                 }`}
               >
-                {/* Show carousel images if available */}
+                {/* Show carousel images if available - display before content text */}
                 {message.carousel_images && Array.isArray(message.carousel_images) && message.carousel_images.length > 0 && (
                   <div className="mb-6">
-                    <div className="text-sm font-bold text-purple-800 mb-2">
+                    <div className="text-sm font-bold text-purple-800 mb-3">
                       Carousel Images ({message.carousel_images.length}):
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {message.carousel_images.map((imgUrl, idx) => (
-                        <img
-                          key={idx}
-                          src={imgUrl}
-                          alt={`Carousel image ${idx + 1}`}
-                          className="w-full h-32 object-cover rounded-lg border border-purple-200 shadow-md"
-                        />
-                      ))}
+                    <div className={`grid gap-3 ${message.carousel_images.length <= 4 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                      {message.carousel_images.map((imgUrl, idx) => {
+                        const imageUrl = typeof imgUrl === 'string' ? imgUrl : (imgUrl.url || imgUrl);
+                        return (
+                          <div key={idx} className="relative group">
+                            <img
+                              src={imageUrl}
+                              alt={`Carousel image ${idx + 1}`}
+                              className="w-full h-40 object-cover rounded-lg border-2 border-purple-200 shadow-md hover:border-purple-400 transition-all"
+                              onError={(e) => {
+                                console.error('❌ Failed to load carousel image:', imageUrl);
+                                e.target.style.display = 'none';
+                                const parent = e.target.parentElement;
+                                if (parent) {
+                                  parent.innerHTML = '<div class="flex items-center justify-center h-40 bg-gray-100 rounded-lg border border-purple-200 text-gray-400 text-xs">Failed to load</div>';
+                                }
+                              }}
+                            />
+                            <div className="absolute top-1 left-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded">
+                              {idx + 1}/{message.carousel_images.length}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Show uploaded carousel images if available - only in current step and for most recent message */}
+                {/* Check both message object and state for uploaded images (like approve step does) */}
+                {((message.uploaded_carousel_images && Array.isArray(message.uploaded_carousel_images) && message.uploaded_carousel_images.length > 0) ||
+                  (uploadedCarouselImages.length > 0 && (currentStep === 'handle_carousel_upload' || currentStep === 'confirm_carousel_upload_done'))) &&
+                  (currentStep === 'handle_carousel_upload' || currentStep === 'confirm_carousel_upload_done') &&
+                  message.id === messages.filter(m => m.role === 'assistant').slice(-1)[0]?.id && (
+                  <div className="mb-6">
+                    <div className="text-sm font-bold text-purple-800 mb-3">
+                      Uploaded Carousel Images ({message.uploaded_carousel_images?.length || uploadedCarouselImages.length}):
+                    </div>
+                    <div className={`grid gap-3 ${(message.uploaded_carousel_images?.length || uploadedCarouselImages.length) <= 4 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                      {(message.uploaded_carousel_images || uploadedCarouselImages).map((imgUrl, idx) => {
+                        const imageUrl = typeof imgUrl === 'string' ? imgUrl : (imgUrl.url || imgUrl);
+                        const totalImages = message.uploaded_carousel_images?.length || uploadedCarouselImages.length;
+                        return (
+                          <div key={idx} className="relative group">
+                            <img
+                              src={imageUrl}
+                              alt={`Uploaded carousel image ${idx + 1}`}
+                              className="w-full h-40 object-cover rounded-lg border-2 border-purple-200 shadow-md hover:border-purple-400 transition-all"
+                              onError={(e) => {
+                                console.error('❌ Failed to load uploaded carousel image:', imageUrl);
+                                e.target.style.display = 'none';
+                                const parent = e.target.parentElement;
+                                if (parent) {
+                                  parent.innerHTML = '<div class="flex items-center justify-center h-40 bg-gray-100 rounded-lg border border-purple-200 text-gray-400 text-xs">Failed to load</div>';
+                                }
+                              }}
+                            />
+                            <div className="absolute top-1 left-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded">
+                              {idx + 1}/{totalImages}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1569,7 +1722,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                           </span>
                         </div>
                         <span className="text-xs text-purple-600 font-medium">
-                          {uploadedCarouselImages.length} / {carouselMaxImages} images
+                          {`${uploadedCarouselImages.length} / ${carouselMaxImages}`} images
                         </span>
                       </div>
                       

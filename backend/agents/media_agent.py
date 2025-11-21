@@ -217,6 +217,13 @@ class MediaAgent:
             platform = post_data.get("platform", "")
             image_style = state.get("image_style", Style.REALISTIC)
             
+            # Check if this is a sequential carousel image
+            is_sequential_carousel = post_data.get("is_sequential_carousel", False)
+            carousel_index = post_data.get("carousel_index", 0)
+            total_carousel_images = post_data.get("total_carousel_images", 4)
+            previous_prompts = post_data.get("previous_carousel_prompts", [])
+            carousel_theme = post_data.get("carousel_theme", "")
+            
             # Get user profile for context including brand colors
             user_profile = self._get_user_profile(state["user_id"])
             business_name = user_profile.get('business_name', 'Unknown')
@@ -253,6 +260,45 @@ class MediaAgent:
             Note: No specific brand colors have been set. Use appropriate colors that match the business and content.
             """
             
+            # Build sequential carousel context if this is part of a carousel
+            carousel_sequence_context = ""
+            if is_sequential_carousel:
+                theme_context = f" Overall carousel theme: {carousel_theme}" if carousel_theme else ""
+                if carousel_index == 0:
+                    carousel_sequence_context = f"""
+            SEQUENTIAL CAROUSEL IMAGE REQUIREMENTS (Image {carousel_index + 1} of {total_carousel_images}):{theme_context}
+            - This is the FIRST image in a {total_carousel_images}-part sequential carousel story
+            - Create an opening/introduction scene that sets up the narrative
+            - Use a color palette and visual style that can be consistently maintained across all {total_carousel_images} images
+            - Establish the visual theme, mood, and composition style that will continue in subsequent images
+            - Make it engaging and attention-grabbing as the first image users will see
+            - Set the foundation for a cohesive visual story that will flow through all {total_carousel_images} images
+            """
+                elif carousel_index < total_carousel_images - 1:
+                    carousel_sequence_context = f"""
+            SEQUENTIAL CAROUSEL IMAGE REQUIREMENTS (Image {carousel_index + 1} of {total_carousel_images}):{theme_context}
+            - This is image {carousel_index + 1} in a {total_carousel_images}-part sequential carousel story
+            - MUST maintain visual consistency with previous images: {', '.join(previous_prompts[:2]) if previous_prompts else 'N/A'}
+            - Continue the narrative progression from the previous image(s)
+            - Use the SAME color palette, visual style, and composition approach as previous images
+            - Build upon the story/theme established in previous images
+            - Create visual continuity: similar lighting, color tones, design elements, and mood
+            - The image should feel like a natural continuation of the carousel sequence
+            - Maintain the same artistic style, color scheme, and visual language as image {carousel_index}
+            """
+                else:  # Last image
+                    carousel_sequence_context = f"""
+            SEQUENTIAL CAROUSEL IMAGE REQUIREMENTS (Image {carousel_index + 1} of {total_carousel_images} - FINAL):{theme_context}
+            - This is the FINAL image in a {total_carousel_images}-part sequential carousel story
+            - MUST maintain visual consistency with all previous images: {', '.join(previous_prompts[:3]) if previous_prompts else 'N/A'}
+            - Conclude the narrative and provide a satisfying ending to the carousel story
+            - Use the SAME color palette, visual style, and composition approach as all previous images
+            - Create visual continuity: similar lighting, color tones, design elements, and mood
+            - Include a call-to-action or conclusion element that wraps up the story
+            - The image should feel like a natural conclusion to the carousel sequence
+            - Complete the visual narrative while maintaining consistency with images 1, 2, and 3
+            """
+            
             prompt = f"""
             Create a detailed image prompt for a social media post on {platform}.
             
@@ -265,10 +311,13 @@ class MediaAgent:
             
             {brand_colors_context}
             
+            {carousel_sequence_context if is_sequential_carousel else ''}
+            
             Generate a detailed, specific prompt that will create an engaging image for this social media post.
             The prompt should be optimized for {image_style.value if image_style else 'realistic'} style and suitable for {platform} audience.
             Include specific visual elements, composition, lighting, and mood.
             CRITICALLY IMPORTANT: The image MUST use the specified brand colors as the primary color scheme.
+            {'CRITICALLY IMPORTANT: Maintain visual consistency and narrative flow with previous carousel images.' if is_sequential_carousel else ''}
             Keep it under 500 characters for API limits.
             """
             
@@ -298,6 +347,12 @@ class MediaAgent:
                 platform = post_data.get("platform", "social media")
                 image_style = state.get("image_style", Style.REALISTIC)
                 
+                # Check if this is a sequential carousel
+                is_sequential_carousel = post_data.get("is_sequential_carousel", False)
+                carousel_index = post_data.get("carousel_index", 0)
+                total_carousel_images = post_data.get("total_carousel_images", 4)
+                previous_prompts = post_data.get("previous_carousel_prompts", [])
+                
                 # Get user profile for fallback prompt
                 user_profile = self._get_user_profile(state["user_id"])
                 business_name = user_profile.get('business_name', 'Unknown')
@@ -311,7 +366,17 @@ class MediaAgent:
                 if secondary_color:
                     color_context += f" and secondary color {secondary_color}"
                 
-                fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image for {business_name} featuring: {content[:100]}.{color_context}"
+                # Add carousel sequence context to fallback
+                carousel_context = ""
+                if is_sequential_carousel:
+                    if carousel_index == 0:
+                        carousel_context = f" First image of {total_carousel_images}-part carousel story. Opening scene."
+                    elif carousel_index < total_carousel_images - 1:
+                        carousel_context = f" Image {carousel_index + 1} of {total_carousel_images}-part carousel. Continue story with visual consistency."
+                    else:
+                        carousel_context = f" Final image of {total_carousel_images}-part carousel. Conclude story with visual consistency."
+                
+                fallback_prompt = f"Professional {image_style.value if image_style else 'realistic'} {platform} post image for {business_name} featuring: {content[:100]}.{color_context}{carousel_context}"
                 
                 state["image_prompt"] = fallback_prompt
                 state["status"] = "generating"

@@ -1144,10 +1144,33 @@ const ContentDashboard = () => {
     try {
       const authToken = await getAuthToken()
       
+      // Check if this is a carousel post
+      const isCarousel = content.post_type === 'carousel' || 
+                         (content.metadata && content.metadata.carousel_images && content.metadata.carousel_images.length > 0)
+      const carouselImages = isCarousel ? (content.metadata?.carousel_images || []) : []
+      
       // Get the image URL if available (from content.media_url which comes from primary_image_url)
       let imageUrl = content.media_url || ''
-      if (imageUrl) {
+      if (imageUrl && !isCarousel) {
         console.log('📸 Including image in Facebook post:', imageUrl)
+      }
+      
+      if (isCarousel) {
+        console.log(`🎠 Posting carousel with ${carouselImages.length} images to Facebook`)
+      }
+      
+      const postBody = {
+        message: content.content,
+        title: content.title,
+        hashtags: content.hashtags || [],
+        content_id: content.id
+      }
+      
+      if (isCarousel && carouselImages.length > 0) {
+        postBody.post_type = 'carousel'
+        postBody.carousel_images = carouselImages
+      } else {
+        postBody.image_url = imageUrl
       }
       
       const response = await fetch(`${API_BASE_URL}/connections/facebook/post`, {
@@ -1156,13 +1179,7 @@ const ContentDashboard = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify({
-          message: content.content,
-          title: content.title,
-          hashtags: content.hashtags || [],
-          content_id: content.id,
-          image_url: imageUrl
-        })
+        body: JSON.stringify(postBody)
       })
 
       if (!response.ok) {
@@ -1208,23 +1225,42 @@ const ContentDashboard = () => {
     try {
       const authToken = await getAuthToken()
       
+      // Check if this is a carousel post
+      const isCarousel = content.post_type === 'carousel' || 
+                         (content.metadata && content.metadata.carousel_images && content.metadata.carousel_images.length > 0)
+      const carouselImages = isCarousel ? (content.metadata?.carousel_images || []) : []
+      
       // Get the image URL if available (from content.media_url which comes from primary_image_url)
       let imageUrl = content.media_url || ''
-      if (imageUrl) {
+      if (imageUrl && !isCarousel) {
         console.log('📸 Including image in Instagram post:', imageUrl)
       }
       
-      // Instagram requires an image - check if we have one
-      if (!imageUrl) {
+      if (isCarousel) {
+        console.log(`🎠 Posting carousel with ${carouselImages.length} images to Instagram`)
+      }
+      
+      // Instagram requires an image or carousel - check if we have one
+      if (!isCarousel && !imageUrl) {
         throw new Error('Instagram requires an image to post content. Please click the "Generate Media" button to create an image for this post first.')
+      }
+      
+      if (isCarousel && carouselImages.length === 0) {
+        throw new Error('Carousel post requires at least one image.')
       }
       
       const postData = {
         message: content.content,
         title: content.title,
         hashtags: content.hashtags || [],
-        content_id: content.id,
-        image_url: imageUrl
+        content_id: content.id
+      }
+      
+      if (isCarousel && carouselImages.length > 0) {
+        postData.post_type = 'carousel'
+        postData.carousel_images = carouselImages
+      } else {
+        postData.image_url = imageUrl
       }
       
       // Try OAuth method first (original endpoint)

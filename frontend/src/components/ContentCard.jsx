@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Copy, Edit, Eye, Heart, MessageCircle, Share, Calendar, Hash, Image as ImageIcon, Video, FileText } from 'lucide-react';
+import { Copy, Edit, Eye, Heart, MessageCircle, Share, Calendar, Hash, Image as ImageIcon, Video, FileText, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview }) => {
   const [copied, setCopied] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);
+  const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
 
   const handleCopy = async () => {
     try {
@@ -34,6 +35,7 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
       case 'post': return <MessageCircle className="w-4 h-4" />;
       case 'reel': return <Video className="w-4 h-4" />;
       case 'image': return <ImageIcon className="w-4 h-4" />;
+      case 'carousel': return <Layers className="w-4 h-4" />;
       default: return <FileText className="w-4 h-4" />;
     }
   };
@@ -55,6 +57,58 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
   const title = content.title || `${contentType} for ${platform}`;
   const hashtags = content.hashtags || [];
   const mediaUrl = content.media_url || content.mediaUrl;
+  
+  // Check if this is a carousel post - enhanced detection
+  const isCarousel = content.post_type === 'carousel' || 
+                     contentType?.toLowerCase() === 'carousel' ||
+                     content.content_type?.toLowerCase() === 'carousel' ||
+                     content.selected_content_type?.toLowerCase() === 'carousel' ||
+                     (content.metadata && content.metadata.carousel_images && content.metadata.carousel_images.length > 0) ||
+                     (content.carousel_images && content.carousel_images.length > 0) ||
+                     (content.metadata && content.metadata.total_images && content.metadata.total_images > 1);
+  
+  // Get carousel images from various possible locations
+  let carouselImages = [];
+  if (isCarousel) {
+    // Check multiple locations for carousel images
+    if (content.carousel_images && Array.isArray(content.carousel_images) && content.carousel_images.length > 0) {
+      carouselImages = content.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img));
+    } else if (content.metadata?.carousel_images && Array.isArray(content.metadata.carousel_images) && content.metadata.carousel_images.length > 0) {
+      carouselImages = content.metadata.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img));
+    } else if (content.metadata?.images && Array.isArray(content.metadata.images) && content.metadata.images.length > 0) {
+      carouselImages = content.metadata.images.map(img => typeof img === 'string' ? img : (img.url || img));
+    } else if (content.images && Array.isArray(content.images) && content.images.length > 0) {
+      // Also check content_images relationship if available
+      carouselImages = content.images.map(img => typeof img === 'object' && img.image_url ? img.image_url : (typeof img === 'string' ? img : img));
+    }
+  }
+  
+  const carouselImageCount = carouselImages.length;
+  
+  // Determine post type for proper rendering
+  const getPostType = () => {
+    if (isCarousel) return 'carousel';
+    if (content.post_type === 'video' || mediaUrl?.includes('video')) return 'video';
+    if (content.post_type === 'image' || mediaUrl) return 'image';
+    return 'text';
+  };
+  
+  const postType = getPostType();
+  
+  // Helper functions for carousel navigation
+  const nextCarouselImage = (e) => {
+    e.stopPropagation();
+    setCurrentCarouselIndex((prev) => (prev + 1) % carouselImageCount);
+  };
+  
+  const prevCarouselImage = (e) => {
+    e.stopPropagation();
+    setCurrentCarouselIndex((prev) => (prev - 1 + carouselImageCount) % carouselImageCount);
+  };
+  
+  const goToCarouselImage = (index) => {
+    setCurrentCarouselIndex(index);
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
@@ -108,7 +162,81 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
       </div>
 
       {/* Media Preview */}
-      {mediaUrl && (
+      {isCarousel && carouselImages.length > 0 ? (
+        <div className="relative group">
+          {/* Carousel Slider */}
+          <div className="relative overflow-hidden h-64 bg-gray-100">
+            <div 
+              className="flex transition-transform duration-300 ease-in-out h-full"
+              style={{ transform: `translateX(-${currentCarouselIndex * 100}%)` }}
+            >
+              {carouselImages.map((img, index) => {
+                const imageUrl = typeof img === 'string' ? img : (img.url || img);
+                return (
+                  <div key={index} className="min-w-full h-full flex-shrink-0">
+                    <img
+                      src={imageUrl}
+                      alt={`Carousel image ${index + 1}`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* Navigation Arrows */}
+            {carouselImageCount > 1 && (
+              <>
+                <button
+                  onClick={prevCarouselImage}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-all opacity-0 group-hover:opacity-100"
+                  aria-label="Previous image"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={nextCarouselImage}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-all opacity-0 group-hover:opacity-100"
+                  aria-label="Next image"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </>
+            )}
+            
+            {/* Image Counter Badge */}
+            <div className="absolute top-2 right-2 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
+              <Layers className="w-3 h-3" />
+              <span>{currentCarouselIndex + 1}/{carouselImageCount}</span>
+            </div>
+            
+            {/* Carousel Indicator Dots - Enhanced visibility */}
+            {carouselImageCount > 1 && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+                {carouselImages.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      goToCarouselImage(index);
+                    }}
+                    className={`rounded-full transition-all duration-300 ${
+                      index === currentCarouselIndex 
+                        ? 'bg-white w-8 h-2 shadow-lg' 
+                        : 'bg-white/60 hover:bg-white/80 w-2 h-2'
+                    }`}
+                    aria-label={`Go to image ${index + 1}`}
+                    title={`Image ${index + 1} of ${carouselImageCount}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : mediaUrl && (
         <div className="relative">
           <img
             src={mediaUrl}

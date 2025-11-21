@@ -6,6 +6,7 @@ Uses exact time scheduling instead of polling for efficiency
 
 import asyncio
 import logging
+import json
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from supabase import create_client, Client
@@ -342,14 +343,25 @@ class PostPublisher:
             
             connection = connection_response.data[0]
             
+            # Check if this is a carousel post
+            post_type = post.get("post_type", "").lower()
+            metadata = post.get("metadata", {})
+            carousel_images = metadata.get("carousel_images", [])
+            is_carousel = post_type == "carousel" or (carousel_images and len(carousel_images) > 0)
+            
             # Prepare post data
             post_data = {
                 "message": post.get("content", ""),
                 "title": post.get("title", ""),
                 "hashtags": post.get("hashtags", []),
-                "content_id": post_id,
-                "image_url": post.get("primary_image_url", "")
+                "content_id": post_id
             }
+            
+            if is_carousel and carousel_images:
+                post_data["post_type"] = "carousel"
+                post_data["carousel_images"] = carousel_images
+            else:
+                post_data["image_url"] = post.get("primary_image_url", "")
             
             # Publish based on platform
             success = False
@@ -435,16 +447,86 @@ class PostPublisher:
                 full_message += f"\n\n{hashtag_string}"
             
             image_url = post_data.get("image_url", "")
+            carousel_images = post_data.get("carousel_images", [])
+            is_carousel = post_data.get("post_type") == "carousel" or (carousel_images and len(carousel_images) > 0)
             
-            # Determine if media is a video or image
-            is_video = False
-            if image_url:
-                video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.3gp']
-                image_url_lower = image_url.lower()
-                url_without_query = image_url_lower.split('?')[0]
-                is_video = any(url_without_query.endswith(ext) for ext in video_extensions)
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:  # Longer timeout for carousel
+                # Handle carousel post
+                if is_carousel and carousel_images:
+                    logger.info(f"Publishing Facebook carousel with {len(carousel_images)} images")
+                    
+                    # Step 1: Create photo containers for each image (published=false)
+                    photo_ids = []
+                    for idx, img_url in enumerate(carousel_images):
+                        try:
+                            photo_url = f"https://graph.facebook.com/v18.0/{page_id}/photos"
+                            photo_params = {
+                                "url": img_url,
+                                "published": "false",
+                                "access_token": access_token
+                            }
+                            
+                            photo_response = await client.post(photo_url, params=photo_params)
+                            if photo_response.status_code == 200:
+                                photo_data = photo_response.json()
+                                photo_id = photo_data.get('id')
+                                if photo_id:
+                                    photo_ids.append({"media_fbid": photo_id})
+                                    logger.info(f"Created photo container {idx + 1}/{len(carousel_images)}: {photo_id}")
+                                else:
+                                    logger.warning(f"Photo container {idx + 1} created but no ID returned")
+                            else:
+                                error_data = photo_response.json() if photo_response.headers.get('content-type', '').startswith('application/json') else {"error": photo_response.text}
+                                logger.error(f"Failed to create photo container {idx + 1}: {error_data}")
+                                return False
+                        except Exception as e:
+                            logger.error(f"Error creating photo container {idx + 1}: {e}")
+                            return False
+                    
+                    if not photo_ids:
+                        logger.error("Failed to create photo containers for carousel")
+                        return False
+                    
+                    # Step 2: Create carousel post with attached_media
+                    import json
+                    url = f"https://graph.facebook.com/v18.0/{page_id}/feed"
+                    params = {
+                        "message": full_message,
+                        "attached_media": json.dumps(photo_ids),  # JSON string of photo IDs
+                        "access_token": access_token
+                    }
+                    
+                    logger.info(f"Posting carousel to feed endpoint with {len(photo_ids)} photos")
+                    response = await client.post(url, params=params)
+                    
+                    # Parse response
+                    try:
+                        response_data = response.json()
+                    except:
+                        response_text = response.text
+                        logger.error(f"Facebook API returned non-JSON response: {response_text}")
+                        return False
+                    
+                    if response.status_code == 200:
+                        if response_data.get("id"):
+                            logger.info(f"Facebook carousel post published: {response_data.get('id')}")
+                            return True
+                        else:
+                            logger.error(f"Facebook carousel post failed - no ID in response: {response_data}")
+                            return False
+                    else:
+                        error_message = response_data.get("error", {}).get("message", "Unknown error") if isinstance(response_data, dict) else str(response_data)
+                        logger.error(f"Facebook carousel API error: {error_message}")
+                        return False
+                
+                # Determine if media is a video or image
+                is_video = False
+                if image_url:
+                    video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.3gp']
+                    image_url_lower = image_url.lower()
+                    url_without_query = image_url_lower.split('?')[0]
+                    is_video = any(url_without_query.endswith(ext) for ext in video_extensions)
+                
                 # Post to Facebook based on media type
                 if image_url:
                     if is_video:
@@ -517,6 +599,104 @@ class PostPublisher:
             if not page_id:
                 logger.error("No page_id found in Instagram connection")
                 return False
+            
+            # Check if this is a carousel post
+            carousel_images = post_data.get("carousel_images", [])
+            is_carousel = post_data.get("post_type") == "carousel" or (carousel_images and len(carousel_images) > 0)
+            
+            if is_carousel and carousel_images:
+                # Handle carousel post
+                logger.info(f"Publishing Instagram carousel with {len(carousel_images)} images")
+                
+                # Prepare caption
+                message = post_data.get("message", "")
+                title = post_data.get("title", "")
+                hashtags = post_data.get("hashtags", [])
+                
+                caption = ""
+                if title:
+                    caption += f"{title}\n\n"
+                caption += message
+                if hashtags:
+                    hashtag_string = " ".join([f"#{tag.replace('#', '')}" for tag in hashtags])
+                    caption += f"\n\n{hashtag_string}"
+                
+                async with httpx.AsyncClient(timeout=60.0) as client:  # Longer timeout for carousel
+                    # Step 1: Create media containers for each image (is_carousel_item=true)
+                    container_ids = []
+                    for idx, img_url in enumerate(carousel_images):
+                        try:
+                            container_url = f"https://graph.facebook.com/v18.0/{page_id}/media"
+                            container_params = {
+                                "image_url": img_url,
+                                "is_carousel_item": "true",
+                                "access_token": access_token
+                            }
+                            
+                            container_response = await client.post(container_url, params=container_params)
+                            if container_response.status_code == 200:
+                                container_result = container_response.json()
+                                container_id = container_result.get('id')
+                                if container_id:
+                                    container_ids.append(container_id)
+                                    logger.info(f"Created media container {idx + 1}/{len(carousel_images)}: {container_id}")
+                                else:
+                                    logger.warning(f"Media container {idx + 1} created but no ID returned")
+                            else:
+                                error_data = container_response.json() if container_response.headers.get('content-type', '').startswith('application/json') else {"error": container_response.text}
+                                logger.error(f"Failed to create media container {idx + 1}: {error_data}")
+                                return False
+                        except Exception as e:
+                            logger.error(f"Error creating media container {idx + 1}: {e}")
+                            return False
+                    
+                    if not container_ids:
+                        logger.error("Failed to create media containers for carousel")
+                        return False
+                    
+                    # Step 2: Create carousel container with children parameter
+                    carousel_url = f"https://graph.facebook.com/v18.0/{page_id}/media"
+                    carousel_params = {
+                        "media_type": "CAROUSEL",
+                        "children": ",".join(container_ids),  # Comma-separated list of container IDs
+                        "caption": caption,
+                        "access_token": access_token
+                    }
+                    
+                    logger.info(f"Creating Instagram carousel container with {len(container_ids)} children")
+                    carousel_response = await client.post(carousel_url, params=carousel_params)
+                    
+                    if carousel_response.status_code != 200:
+                        error_data = carousel_response.json() if carousel_response.headers.get('content-type', '').startswith('application/json') else {"error": carousel_response.text}
+                        logger.error(f"Failed to create carousel container: {error_data}")
+                        return False
+                    
+                    carousel_result = carousel_response.json()
+                    creation_id = carousel_result.get('id')
+                    
+                    if not creation_id:
+                        logger.error("Failed to create carousel container - no creation ID returned")
+                        return False
+                    
+                    # Step 3: Publish the carousel
+                    publish_url = f"https://graph.facebook.com/v18.0/{page_id}/media_publish"
+                    publish_params = {
+                        "creation_id": creation_id,
+                        "access_token": access_token
+                    }
+                    
+                    logger.info(f"Publishing Instagram carousel: {creation_id}")
+                    publish_response = await client.post(publish_url, params=publish_params)
+                    
+                    if publish_response.status_code == 200:
+                        publish_result = publish_response.json()
+                        post_id = publish_result.get('id')
+                        logger.info(f"Instagram carousel post published: {post_id}")
+                        return True
+                    else:
+                        error_data = publish_response.json() if publish_response.headers.get('content-type', '').startswith('application/json') else {"error": publish_response.text}
+                        logger.error(f"Failed to publish Instagram carousel: {error_data}")
+                        return False
             
             # Instagram requires image, so check if we have one
             image_url = post_data.get("image_url", "")
