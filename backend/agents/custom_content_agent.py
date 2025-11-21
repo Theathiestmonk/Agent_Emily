@@ -71,7 +71,11 @@ class ConversationStep(str, Enum):
     HANDLE_MEDIA = "handle_media"
     VALIDATE_MEDIA = "validate_media"
     CONFIRM_MEDIA = "confirm_media"
-    ASK_VIDEO_DESCRIPTION = "ask_video_description"
+    ASK_CAROUSEL_IMAGE_SOURCE = "ask_carousel_image_source"
+    GENERATE_CAROUSEL_IMAGE = "generate_carousel_image"
+    APPROVE_CAROUSEL_IMAGES = "approve_carousel_images"
+    HANDLE_CAROUSEL_UPLOAD = "handle_carousel_upload"
+    CONFIRM_CAROUSEL_UPLOAD_DONE = "confirm_carousel_upload_done"
     GENERATE_CONTENT = "generate_content"
     CONFIRM_CONTENT = "confirm_content"
     SELECT_SCHEDULE = "select_schedule"
@@ -94,7 +98,6 @@ class CustomContentState(TypedDict):
     uploaded_media_url: Optional[str]
     should_generate_media: Optional[bool]
     media_prompt: Optional[str]
-    video_description: Optional[str]
     generated_content: Optional[Dict[str, Any]]
     generated_media_url: Optional[str]
     final_post: Optional[Dict[str, Any]]
@@ -104,6 +107,14 @@ class CustomContentState(TypedDict):
     validation_errors: Optional[List[str]]
     retry_count: int
     is_complete: bool
+    # Carousel-specific fields
+    carousel_images: Optional[List[Dict[str, Any]]]  # List of carousel image objects
+    carousel_image_source: Optional[str]  # "ai_generate" or "manual_upload"
+    current_carousel_index: int  # Current image index (0-3 for AI, 0-max for manual)
+    carousel_max_images: int  # Platform-specific max (10 for Facebook, 20 for Instagram)
+    uploaded_carousel_images: Optional[List[str]]  # URLs of uploaded images
+    carousel_upload_done: bool  # Whether user confirmed upload is complete
+    carousel_theme: Optional[str]  # Overall theme/narrative for sequential carousel images
 
 # Platform-specific content types
 PLATFORM_CONTENT_TYPES = {
@@ -281,7 +292,6 @@ class CustomContentAgent:
         graph.add_node("handle_media", self.handle_media)
         graph.add_node("validate_media", self.validate_media)
         graph.add_node("confirm_media", self.confirm_media)
-        graph.add_node("ask_video_description", self.ask_video_description)
         graph.add_node("generate_content", self.generate_content)
         graph.add_node("confirm_content", self.confirm_content)
         graph.add_node("select_schedule", self.select_schedule)
@@ -317,17 +327,13 @@ class CustomContentAgent:
         # Conditional edge after media confirmation
         graph.add_conditional_edges(
             "confirm_media",
-            self._should_ask_video_description,
+            self._should_proceed_after_media,
             {
-                "ask_description": "ask_video_description",
                 "proceed": "generate_content",
                 "retry": "ask_media",
                 "error": "handle_error"
             }
         )
-        
-        # After video description, proceed to content generation
-        graph.add_edge("ask_video_description", "generate_content")
         
         
         # Content generation flow - skip parse and optimize, go directly to confirm
@@ -512,6 +518,45 @@ class CustomContentAgent:
             platform = state.get("selected_platform")
             content_type = state.get("selected_content_type")
             
+            # Check if this is a carousel post
+            if content_type and content_type.lower() == "carousel":
+                # Set platform-specific max images
+                if platform and platform.lower() == "facebook":
+                    state["carousel_max_images"] = 10
+                elif platform and platform.lower() == "instagram":
+                    state["carousel_max_images"] = 20
+                else:
+                    state["carousel_max_images"] = 10  # Default
+                
+                # Initialize carousel fields
+                state["carousel_images"] = []
+                state["uploaded_carousel_images"] = []
+                state["current_carousel_index"] = 0
+                state["carousel_upload_done"] = False
+                
+                # Ask for carousel image source
+                state["current_step"] = ConversationStep.ASK_CAROUSEL_IMAGE_SOURCE
+                max_images = state["carousel_max_images"]
+                
+                message = {
+                    "role": "assistant",
+                    "content": f"Great! For your carousel post, how would you like to add images?\n\n• Generate with AI: I'll create up to 4 images for you\n• Upload manually: You can upload up to {max_images} images",
+                    "timestamp": datetime.now().isoformat(),
+                    "options": [
+                        {
+                            "value": "ai_generate",
+                            "label": "🎨 Generate with AI (4 images max)"
+                        },
+                        {
+                            "value": "manual_upload",
+                            "label": f"📤 Upload manually (up to {max_images} images)"
+                        }
+                    ]
+                }
+                state["conversation_messages"].append(message)
+                logger.info(f"Asked user about carousel image source for {platform}")
+                return state
+            
             # Get media requirements for the platform
             media_reqs = PLATFORM_MEDIA_REQUIREMENTS.get(platform, {})
             
@@ -606,32 +651,12 @@ class CustomContentAgent:
     async def confirm_media(self, state: CustomContentState) -> CustomContentState:
         """Ask user to confirm if the uploaded media is correct"""
         try:
-            # Check if media is already confirmed - if so, don't ask again and transition immediately
-            if state.get("media_confirmed") is True:
-                logger.info("Media already confirmed, skipping confirmation step and transitioning")
-                # Use conditional logic to determine next step
-                next_step_decision = self._should_ask_video_description(state)
-                if next_step_decision == "ask_description":
-                    state["current_step"] = ConversationStep.ASK_VIDEO_DESCRIPTION
-                else:
-                    state["current_step"] = ConversationStep.GENERATE_CONTENT
-                return state
-            
             state["current_step"] = ConversationStep.CONFIRM_MEDIA
             state["progress_percentage"] = 60
             
             media_url = state.get("uploaded_media_url")
             media_type = state.get("uploaded_media_type", "")
             media_filename = state.get("uploaded_media_filename", "")
-            
-            # Check if we've already asked for confirmation (to prevent duplicate messages)
-            last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
-            confirmation_text = "Is this the correct media you'd like me to use for your content?"
-            
-            if last_message and confirmation_text in last_message.get("content", ""):
-                # Already asked, don't add duplicate message
-                logger.info("Confirmation message already present, skipping duplicate")
-                return state
             
             # Create a message asking for confirmation
             message = {
@@ -652,6 +677,244 @@ class CustomContentAgent:
             state["current_step"] = ConversationStep.ERROR
             
         return state
+    
+    async def ask_carousel_image_source(self, state: CustomContentState, user_input: str = None) -> CustomContentState:
+        """Handle carousel image source selection (AI generate or manual upload)"""
+        try:
+            if not user_input:
+                # This should not happen as we already asked in ask_media
+                return state
+            
+            user_input_lower = user_input.lower().strip()
+            
+            if user_input_lower == "ai_generate" or "generate" in user_input_lower:
+                state["carousel_image_source"] = "ai_generate"
+                state["current_carousel_index"] = 0
+                state["carousel_images"] = []
+                # Initialize carousel theme based on user description for sequential consistency
+                user_description = state.get("user_description", "")
+                state["carousel_theme"] = f"Sequential carousel story about: {user_description}"
+                state["current_step"] = ConversationStep.GENERATE_CAROUSEL_IMAGE
+                return await self.generate_carousel_image(state)
+            elif user_input_lower == "manual_upload" or "upload" in user_input_lower:
+                state["carousel_image_source"] = "manual_upload"
+                state["uploaded_carousel_images"] = []
+                state["carousel_upload_done"] = False
+                state["current_step"] = ConversationStep.HANDLE_CAROUSEL_UPLOAD
+                return await self.handle_carousel_upload(state)
+            else:
+                # Invalid input, ask again
+                max_images = state.get("carousel_max_images", 10)
+                message = {
+                    "role": "assistant",
+                    "content": f"Please choose either 'Generate with AI' or 'Upload manually'. How would you like to add images to your carousel?",
+                    "timestamp": datetime.now().isoformat(),
+                    "options": [
+                        {
+                            "value": "ai_generate",
+                            "label": "🎨 Generate with AI (4 images max)"
+                        },
+                        {
+                            "value": "manual_upload",
+                            "label": f"📤 Upload manually (up to {max_images} images)"
+                        }
+                    ]
+                }
+                state["conversation_messages"].append(message)
+                return state
+                
+        except Exception as e:
+            logger.error(f"Error in ask_carousel_image_source: {e}")
+            state["error_message"] = f"Failed to process carousel image source: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            return state
+    
+    async def generate_carousel_image(self, state: CustomContentState, user_input: str = None) -> CustomContentState:
+        """Generate all 4 carousel images at once"""
+        try:
+            # This step just indicates that generation should start
+            # The actual generation will be handled by the API endpoint which generates all 4 at once
+            state["current_step"] = ConversationStep.GENERATE_CAROUSEL_IMAGE
+            state["progress_percentage"] = 50
+            state["carousel_images"] = []
+            state["current_carousel_index"] = 0
+            
+            message = {
+                "role": "assistant",
+                "content": "Generating all 4 carousel images for you... This may take a moment. I'll create a cohesive sequential story across all images.",
+                "timestamp": datetime.now().isoformat(),
+                "generating_all": True,
+                "total_images": 4
+            }
+            state["conversation_messages"].append(message)
+            
+            return state
+            
+        except Exception as e:
+            logger.error(f"Error in generate_carousel_image: {e}")
+            state["error_message"] = f"Failed to generate carousel image: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            return state
+    
+    async def approve_carousel_images(self, state: CustomContentState, user_input: str = None) -> CustomContentState:
+        """Handle user approval of all carousel images"""
+        try:
+            carousel_images = state.get("carousel_images", [])
+            
+            if not user_input:
+                # Show all images and ask for approval
+                if carousel_images and len(carousel_images) == 4:
+                    message = {
+                        "role": "assistant",
+                        "content": "Perfect! I've generated all 4 carousel images for you. Please review them below. Do you want to approve these images and continue?",
+                        "timestamp": datetime.now().isoformat(),
+                        "carousel_images": [img.get("url") for img in carousel_images if img.get("url")],
+                        "options": [
+                            {"value": "approve", "label": "✅ Yes, approve and continue"},
+                            {"value": "regenerate", "label": "🔄 Regenerate all images"},
+                            {"value": "manual_upload", "label": "📤 Switch to manual upload"}
+                        ]
+                    }
+                    state["conversation_messages"].append(message)
+                    state["current_step"] = ConversationStep.APPROVE_CAROUSEL_IMAGES
+                    return state
+                else:
+                    # Not all images generated yet, wait
+                    message = {
+                        "role": "assistant",
+                        "content": "Still generating carousel images... Please wait.",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    state["conversation_messages"].append(message)
+                    return state
+            
+            user_input_lower = user_input.lower().strip() if user_input else ""
+            # Remove emojis and normalize the input
+            import re
+            user_input_clean = re.sub(r'[^\w\s]', '', user_input_lower)  # Remove all non-alphanumeric except spaces
+            user_input_clean = user_input_clean.strip()
+            
+            # Check for approval - handle various formats
+            if (user_input_lower == "approve" or 
+                user_input_lower == "yes" or 
+                "approve" in user_input_clean or 
+                ("yes" in user_input_clean and "approve" in user_input_clean) or
+                user_input_clean == "yes approve and continue"):
+                # User approved, proceed directly to content generation
+                state["current_step"] = ConversationStep.GENERATE_CONTENT
+                # Don't add intermediate message, go directly to content generation
+                return await self.generate_content(state)
+            elif ("regenerate" in user_input_clean or 
+                  user_input_lower == "regenerate" or 
+                  user_input_lower == "regenerate_all" or
+                  "regenerate all" in user_input_clean):
+                # User wants to regenerate all images
+                state["carousel_images"] = []
+                state["current_carousel_index"] = 0
+                state["current_step"] = ConversationStep.GENERATE_CAROUSEL_IMAGE
+                message = {
+                    "role": "assistant",
+                    "content": "No problem! I'll regenerate all 4 carousel images for you. This may take a moment...",
+                    "timestamp": datetime.now().isoformat()
+                }
+                state["conversation_messages"].append(message)
+                return await self.generate_carousel_image(state)
+            elif ("manual" in user_input_clean and "upload" in user_input_clean) or \
+                 user_input_lower == "manual_upload" or \
+                 user_input_lower == "upload" or \
+                 "switch to manual" in user_input_clean:
+                # User wants to switch to manual upload
+                state["carousel_image_source"] = "manual_upload"
+                state["carousel_images"] = []  # Clear generated images
+                state["uploaded_carousel_images"] = []
+                state["carousel_upload_done"] = False
+                state["current_step"] = ConversationStep.HANDLE_CAROUSEL_UPLOAD
+                return await self.handle_carousel_upload(state)
+            
+            return state
+            
+        except Exception as e:
+            logger.error(f"Error in approve_carousel_images: {e}")
+            state["error_message"] = f"Failed to approve carousel images: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            return state
+    
+    async def handle_carousel_upload(self, state: CustomContentState) -> CustomContentState:
+        """Handle bulk carousel image uploads"""
+        try:
+            state["current_step"] = ConversationStep.HANDLE_CAROUSEL_UPLOAD
+            state["progress_percentage"] = 55
+            
+            max_images = state.get("carousel_max_images", 10)
+            uploaded_count = len(state.get("uploaded_carousel_images", []))
+            remaining = max_images - uploaded_count
+            
+            message = {
+                "role": "assistant",
+                "content": f"Please upload your carousel images below. You can upload up to {max_images} images total.\n\nCurrently uploaded: {uploaded_count} / {max_images} images",
+                "timestamp": datetime.now().isoformat(),
+                "max_images": max_images,
+                "uploaded_count": uploaded_count,
+                "remaining": remaining
+            }
+            state["conversation_messages"].append(message)
+            
+            logger.info(f"Ready for carousel upload: {uploaded_count}/{max_images}")
+            
+        except Exception as e:
+            logger.error(f"Error in handle_carousel_upload: {e}")
+            state["error_message"] = f"Failed to handle carousel upload: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            
+        return state
+    
+    async def confirm_carousel_upload_done(self, state: CustomContentState, user_input: str = None) -> CustomContentState:
+        """Ask if carousel upload is complete"""
+        try:
+            uploaded_count = len(state.get("uploaded_carousel_images", []))
+            max_images = state.get("carousel_max_images", 10)
+            
+            if not user_input:
+                # Ask if done
+                state["current_step"] = ConversationStep.CONFIRM_CAROUSEL_UPLOAD_DONE
+                message = {
+                    "role": "assistant",
+                    "content": f"You've uploaded {uploaded_count} image(s). Are you done uploading images?",
+                    "timestamp": datetime.now().isoformat(),
+                    "options": [
+                        {"value": "yes", "label": "✅ Yes, I'm done"},
+                        {"value": "no", "label": "📤 No, add more images"}
+                    ]
+                }
+                state["conversation_messages"].append(message)
+                return state
+            
+            user_input_lower = user_input.lower().strip()
+            
+            if user_input_lower == "yes" or user_input_lower == "done":
+                # User is done, proceed directly to content generation
+                state["carousel_upload_done"] = True
+                state["current_step"] = ConversationStep.GENERATE_CONTENT
+                # Don't add intermediate message, go directly to content generation
+                return await self.generate_content(state)
+            elif user_input_lower == "no":
+                # User wants to add more, show upload interface again
+                if uploaded_count >= max_images:
+                    # Reached max, proceed directly to content generation
+                    state["carousel_upload_done"] = True
+                    state["current_step"] = ConversationStep.GENERATE_CONTENT
+                    return await self.generate_content(state)
+                else:
+                    state["current_step"] = ConversationStep.HANDLE_CAROUSEL_UPLOAD
+                    return await self.handle_carousel_upload(state)
+            
+            return state
+            
+        except Exception as e:
+            logger.error(f"Error in confirm_carousel_upload_done: {e}")
+            state["error_message"] = f"Failed to confirm carousel upload: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            return state
 
     async def generate_content(self, state: CustomContentState) -> CustomContentState:
         """Generate content using the content creation agent logic with image analysis"""
@@ -668,7 +931,25 @@ class CustomContentAgent:
             has_media = state.get("has_media", False)
             media_type = state.get("media_type", "")
             
-            # Determine which media URL to use (uploaded or generated)
+            # Check if this is a carousel post
+            is_carousel = content_type.lower() == "carousel"
+            carousel_images = []
+            
+            if is_carousel:
+                # Get carousel images - either AI-generated or manually uploaded
+                carousel_image_source = state.get("carousel_image_source", "")
+                if carousel_image_source == "ai_generate":
+                    # Get AI-generated carousel images
+                    carousel_images_data = state.get("carousel_images", [])
+                    if carousel_images_data:
+                        carousel_images = [img.get("url") for img in carousel_images_data if img.get("url")]
+                elif carousel_image_source == "manual_upload":
+                    # Get manually uploaded carousel images
+                    carousel_images = state.get("uploaded_carousel_images", [])
+                    if not isinstance(carousel_images, list):
+                        carousel_images = []
+            
+            # Determine which media URL to use (uploaded or generated) - for non-carousel posts
             media_url = uploaded_media_url or generated_media_url
             
             # Load business context if not already loaded
@@ -681,9 +962,27 @@ class CustomContentAgent:
                 else:
                     business_context = {}
             
-            # Analyze image if available (uploaded or generated)
+            # Analyze image(s) if available
             image_analysis = ""
-            if has_media and media_url and media_type == "image":
+            if is_carousel and carousel_images:
+                # Analyze all carousel images
+                try:
+                    image_analyses = []
+                    for idx, img_url in enumerate(carousel_images):
+                        try:
+                            analysis = await self._analyze_uploaded_image(img_url, user_description, business_context)
+                            image_analyses.append(f"Image {idx + 1}: {analysis}")
+                            logger.info(f"Carousel image {idx + 1} analysis completed successfully")
+                        except Exception as e:
+                            logger.error(f"Carousel image {idx + 1} analysis failed: {e}")
+                            image_analyses.append(f"Image {idx + 1}: Analysis failed: {str(e)}")
+                    image_analysis = "\n\n".join(image_analyses)
+                    logger.info("All carousel images analyzed successfully")
+                except Exception as e:
+                    logger.error(f"Carousel image analysis failed: {e}")
+                    image_analysis = f"Carousel image analysis failed: {str(e)}"
+            elif has_media and media_url and media_type == "image":
+                # Analyze single image (non-carousel)
                 try:
                     image_analysis = await self._analyze_uploaded_image(media_url, user_description, business_context)
                     logger.info("Image analysis completed successfully")
@@ -691,16 +990,11 @@ class CustomContentAgent:
                     logger.error(f"Image analysis failed: {e}")
                     image_analysis = f"Image analysis failed: {str(e)}"
             
-            # Get video description if available, otherwise use user's initial description (topics)
-            video_description = state.get("video_description", "")
-            # For video, if no separate video description was provided, use the user's initial description/topics
-            if has_media and media_type != "image" and not video_description:
-                video_description = user_description
-                logger.info(f"Using user's initial description as video description: {video_description[:100]}...")
-            
             # Create enhanced content generation prompt
+            # For carousel, indicate we have multiple images
+            has_images_for_analysis = (is_carousel and carousel_images) or (has_media and media_url and media_type == "image")
             prompt = self._create_enhanced_content_prompt(
-                user_description, platform, content_type, business_context, image_analysis, has_media, video_description
+                user_description, platform, content_type, business_context, image_analysis, has_images_for_analysis
             )
             
             # Prepare messages for content generation
@@ -709,8 +1003,18 @@ class CustomContentAgent:
                 {"role": "user", "content": prompt}
             ]
             
-            # Add image to messages if available
-            if has_media and media_url and media_type == "image":
+            # Add image(s) to messages if available
+            if is_carousel and carousel_images:
+                # Add all carousel images
+                image_content = [{"type": "text", "text": f"Here are the {len(carousel_images)} carousel images to incorporate into the content. Analyze them as a sequence and create content that works across all images:"}]
+                for img_url in carousel_images:
+                    image_content.append({"type": "image_url", "image_url": {"url": img_url}})
+                messages.append({
+                    "role": "user",
+                    "content": image_content
+                })
+            elif has_media and media_url and media_type == "image":
+                # Add single image (non-carousel)
                 messages.append({
                     "role": "user",
                     "content": [
@@ -720,14 +1024,42 @@ class CustomContentAgent:
                 })
             
             # Generate content using OpenAI with vision capabilities
-            response = self.client.chat.completions.create(
-                model="gpt-4o",  # Use vision-capable model
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1000
-            )
-            
-            generated_text = response.choices[0].message.content
+            # Handle timeout errors gracefully - continue without images if timeout occurs
+            try:
+                response = self.client.chat.completions.create(
+                    model="gpt-4o",  # Use vision-capable model
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=1000,
+                    timeout=60  # 60 second timeout
+                )
+                generated_text = response.choices[0].message.content
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"Error generating content with images: {e}")
+                
+                # If timeout or image download error, try without images
+                if "timeout" in error_msg.lower() or "invalid_image_url" in error_msg.lower() or "downloading" in error_msg.lower():
+                    logger.warning("Image download timeout, generating content without images")
+                    # Remove image messages and retry with text only
+                    text_only_messages = [
+                        {"role": "system", "content": messages[0]["content"]},
+                        {"role": "user", "content": prompt + "\n\nNote: Carousel images are available but couldn't be analyzed due to timeout. Generate content based on the description and theme."}
+                    ]
+                    try:
+                        response = self.client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=text_only_messages,
+                            temperature=0.7,
+                            max_tokens=1000
+                        )
+                        generated_text = response.choices[0].message.content
+                    except Exception as e2:
+                        logger.error(f"Error generating content without images: {e2}")
+                        raise e2
+                else:
+                    # Other errors, re-raise
+                    raise e
             
             # Parse the generated content
             try:
@@ -739,43 +1071,48 @@ class CustomContentAgent:
                     "content": generated_text,
                     "title": f"{content_type} for {platform}",
                     "hashtags": self._extract_hashtags(generated_text),
-                    "post_type": "image" if has_media else "text",
-                    "media_url": uploaded_media_url if has_media else None
+                    "post_type": "carousel" if is_carousel else ("image" if has_media else "text"),
+                    "media_url": uploaded_media_url if (has_media and not is_carousel) else None
                 }
+            
+            # Add carousel images to content data if this is a carousel post
+            if is_carousel and carousel_images:
+                content_data["carousel_images"] = carousel_images
+                content_data["post_type"] = "carousel"
             
             state["generated_content"] = content_data
             
             # Create response message with the generated content displayed directly
-            if has_media and image_analysis:
+            if is_carousel and carousel_images:
+                # Carousel post with images
+                if image_analysis and not image_analysis.startswith("Carousel image analysis failed"):
+                    message_content = f"Perfect! I've analyzed your {len(carousel_images)} carousel images and generated your {content_type} content. Here's what I created:\n\n**{content_data.get('title', f'{content_type} for {platform}')}**\n\n{content_data.get('content', '')}"
+                else:
+                    message_content = f"Great! I've generated your {content_type} content based on your {len(carousel_images)} carousel images. Here's what I created:\n\n**{content_data.get('title', f'{content_type} for {platform}')}**\n\n{content_data.get('content', '')}"
+            elif has_media and image_analysis and not image_analysis.startswith("Image analysis failed"):
                 message_content = f"Perfect! I've analyzed your image and generated your {content_type} content. Here's what I created:\n\n**{content_data.get('title', f'{content_type} for {platform}')}**\n\n{content_data.get('content', '')}"
-                
-                # Add hashtags if available
-                if content_data.get('hashtags'):
-                    hashtags = ' '.join([f"#{tag.replace('#', '')}" for tag in content_data['hashtags']])
-                    message_content += f"\n\n{hashtags}"
-                
-                # Add call to action if available
-                if content_data.get('call_to_action'):
-                    message_content += f"\n\n**Call to Action:** {content_data['call_to_action']}"
             else:
                 message_content = f"Great! I've generated your {content_type} content. Here's what I created:\n\n**{content_data.get('title', f'{content_type} for {platform}')}**\n\n{content_data.get('content', '')}"
-                
-                # Add hashtags if available
-                if content_data.get('hashtags'):
-                    hashtags = ' '.join([f"#{tag.replace('#', '')}" for tag in content_data['hashtags']])
-                    message_content += f"\n\n{hashtags}"
-                
-                # Add call to action if available
-                if content_data.get('call_to_action'):
-                    message_content += f"\n\n**Call to Action:** {content_data['call_to_action']}"
             
+            # Add hashtags if available (for all cases)
+            if content_data.get('hashtags'):
+                hashtags = ' '.join([f"#{tag.replace('#', '')}" for tag in content_data['hashtags']])
+                message_content += f"\n\n{hashtags}"
+            
+            # Add call to action if available (for all cases)
+            if content_data.get('call_to_action'):
+                message_content += f"\n\n**Call to Action:** {content_data['call_to_action']}"
+            
+            # Prepare message with carousel images if applicable
             message = {
                 "role": "assistant",
                 "content": message_content,
                 "timestamp": datetime.now().isoformat(),
-                "has_media": has_media,
-                "media_url": uploaded_media_url if has_media else None,
-                "media_type": media_type if has_media else None,
+                "has_media": has_images_for_analysis,
+                "media_url": uploaded_media_url if (has_media and not is_carousel) else None,
+                "media_type": media_type if (has_media and not is_carousel) else None,
+                # Include carousel images in the message
+                "carousel_images": carousel_images if is_carousel else None,
                 # Explicitly set structured_content to null to prevent frontend from creating cards
                 "structured_content": None
             }
@@ -838,8 +1175,49 @@ class CustomContentAgent:
             state["current_step"] = ConversationStep.CONFIRM_CONTENT
             state["progress_percentage"] = 85
             
+            # Clear any previous error messages
+            if "error_message" in state:
+                del state["error_message"]
+            
             # Automatically call confirm_content to show the confirmation message
             return await self.confirm_content(state)
+            
+        except Exception as e:
+            logger.error(f"Critical error in generate_content: {e}")
+            # Don't set to ERROR - try to continue with basic content
+            # Create a basic content based on description only
+            try:
+                basic_content = {
+                    "content": f"{user_description or 'Your content description'}",
+                    "title": f"{content_type} for {platform}",
+                    "hashtags": [],
+                    "post_type": "carousel" if is_carousel else "text"
+                }
+                
+                if is_carousel and carousel_images:
+                    basic_content["carousel_images"] = carousel_images
+                
+                state["generated_content"] = basic_content
+                
+                message = {
+                    "role": "assistant",
+                    "content": f"I encountered an issue, but I've created content based on your description. Please review it below.\n\n**{basic_content['title']}**\n\n{basic_content['content']}",
+                    "timestamp": datetime.now().isoformat(),
+                    "carousel_images": carousel_images if is_carousel else None,
+                    "structured_content": None
+                }
+                state["conversation_messages"].append(message)
+                
+                # Continue to confirmation step
+                state["current_step"] = ConversationStep.CONFIRM_CONTENT
+                state["progress_percentage"] = 85
+                return await self.confirm_content(state)
+            except Exception as e2:
+                logger.error(f"Failed to create basic content: {e2}")
+                # Last resort - set error but don't break the flow
+                state["error_message"] = f"Content generation failed: {str(e)}"
+                state["current_step"] = ConversationStep.CONFIRM_CONTENT
+                return state
             
         except Exception as e:
             logger.error(f"Error in generate_content: {e}")
@@ -1020,6 +1398,135 @@ class CustomContentAgent:
             platform = state["selected_platform"]
             content_type = state["selected_content_type"]
             generated_content = state["generated_content"]
+            
+            # Check if this is a carousel post
+            is_carousel = content_type and content_type.lower() == "carousel"
+            
+            if is_carousel:
+                # Handle carousel post
+                carousel_images = state.get("carousel_images", [])
+                uploaded_carousel_images = state.get("uploaded_carousel_images", [])
+                
+                # Combine AI-generated and manually uploaded images
+                all_carousel_images = []
+                for img in carousel_images:
+                    if img.get("url"):
+                        all_carousel_images.append(img.get("url"))
+                all_carousel_images.extend(uploaded_carousel_images)
+                
+                if not all_carousel_images:
+                    raise Exception("Carousel post must have at least one image")
+                
+                # Get scheduled time
+                scheduled_for = state.get("scheduled_for")
+                if scheduled_for:
+                    scheduled_datetime = datetime.fromisoformat(scheduled_for.replace('Z', '+00:00'))
+                    status = "scheduled" if scheduled_datetime > datetime.now() else "draft"
+                else:
+                    scheduled_datetime = datetime.now()
+                    status = "draft"
+                
+                # Get or create campaign
+                campaign_id = await self._get_or_create_custom_content_campaign(user_id)
+                
+                # Create carousel post data
+                post_data = {
+                    "campaign_id": campaign_id,
+                    "platform": platform,
+                    "post_type": "carousel",
+                    "title": generated_content.get("title", ""),
+                    "content": generated_content.get("content", ""),
+                    "hashtags": generated_content.get("hashtags", []),
+                    "scheduled_date": scheduled_datetime.date().isoformat(),
+                    "scheduled_time": scheduled_datetime.time().isoformat(),
+                    "status": status,
+                    "metadata": {
+                        "generated_by": "custom_content_agent",
+                        "conversation_id": state["conversation_id"],
+                        "user_id": user_id,
+                        "platform_optimized": True,
+                        "carousel_images": all_carousel_images,
+                        "total_images": len(all_carousel_images),
+                        "carousel_image_source": state.get("carousel_image_source", "mixed"),
+                        "call_to_action": generated_content.get("call_to_action", ""),
+                        "engagement_hooks": generated_content.get("engagement_hooks", ""),
+                        "image_caption": generated_content.get("image_caption", ""),
+                        "visual_elements": generated_content.get("visual_elements", [])
+                    }
+                }
+                
+                # Use first image as primary for preview
+                if all_carousel_images:
+                    post_data["primary_image_url"] = all_carousel_images[0]
+                
+                # Save to Supabase
+                logger.info(f"Saving carousel post to database: {post_data}")
+                result = self.supabase.table("content_posts").insert(post_data).execute()
+                
+                if result.data:
+                    post_id = result.data[0]["id"]
+                    final_post_data = result.data[0]
+                    # Add carousel_images at top level for easier frontend access
+                    final_post_data["carousel_images"] = all_carousel_images
+                    state["final_post"] = final_post_data
+                    
+                    # Save each carousel image to content_images table with image_order
+                    for idx, image_url in enumerate(all_carousel_images):
+                        try:
+                            # Determine prompt based on source
+                            image_prompt = "User uploaded image for carousel"
+                            if idx < len(carousel_images) and carousel_images[idx].get("prompt"):
+                                image_prompt = carousel_images[idx].get("prompt", "AI generated image for carousel")
+                            
+                            image_data = {
+                                "post_id": post_id,
+                                "image_url": image_url,
+                                "image_prompt": image_prompt,
+                                "image_style": "carousel",
+                                "image_size": "custom",
+                                "image_quality": "custom",
+                                "generation_model": "gemini" if idx < len(carousel_images) else "user_upload",
+                                "generation_service": "gemini" if idx < len(carousel_images) else "user_upload",
+                                "generation_cost": 0,
+                                "generation_time": 0,
+                                "is_approved": True
+                            }
+                            
+                            # Try to add image_order if column exists (some schemas may not have it)
+                            # Store order in metadata instead if column doesn't exist
+                            try:
+                                # First try without image_order
+                                insert_data = image_data.copy()
+                                self.supabase.table("content_images").insert(insert_data).execute()
+                            except Exception as order_error:
+                                # If that fails, try with image_order (in case column exists but other field is wrong)
+                                try:
+                                    image_data["image_order"] = idx
+                                    self.supabase.table("content_images").insert(image_data).execute()
+                                except:
+                                    # If both fail, log but continue - images are already in metadata
+                                    logger.warning(f"Could not save image {idx + 1} to content_images, but image is in post metadata")
+                                    pass
+                            logger.info(f"Carousel image {idx + 1} saved to content_images for post {post_id}")
+                        except Exception as e:
+                            logger.error(f"Failed to save carousel image {idx + 1} to content_images: {e}")
+                            # Continue even if one image save fails
+                    
+                    message = {
+                        "role": "assistant",
+                        "content": f"🎉 Perfect! Your carousel post with {len(all_carousel_images)} image(s) for {platform} has been saved as a draft post! 📝\n\n✅ Content generated and optimized\n✅ {len(all_carousel_images)} image(s) saved\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard.",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    state["conversation_messages"].append(message)
+                    state["current_step"] = ConversationStep.ASK_ANOTHER_CONTENT
+                    state["progress_percentage"] = 100
+                else:
+                    raise Exception("Failed to save carousel post to database")
+                
+                logger.info(f"Carousel post saved for user {user_id} on {platform}, post_id: {post_id}")
+                return state
+            
+            # Regular (non-carousel) post handling
             uploaded_media_url = state.get("uploaded_media_url")
             
             # Determine final media URL (uploaded or generated)
@@ -1033,17 +1540,16 @@ class CustomContentAgent:
                 logger.info(f"Using generated media URL: {final_media_url}")
             elif uploaded_media_url and uploaded_media_url.startswith("data:"):
                 try:
-                    # Upload base64 media (image or video) to Supabase storage
-                    final_media_url = await self._upload_base64_media_to_supabase(
+                    final_media_url = await self._upload_base64_image_to_supabase(
                         uploaded_media_url, user_id, platform
                     )
-                    logger.info(f"Media uploaded to Supabase: {final_media_url}")
+                    logger.info(f"Image uploaded to Supabase: {final_media_url}")
                 except Exception as e:
-                    logger.error(f"Failed to upload media to Supabase: {e}")
-                    # Continue without media if upload fails
+                    logger.error(f"Failed to upload image to Supabase: {e}")
+                    # Continue without image if upload fails
                     final_media_url = None
             elif uploaded_media_url:
-                # Already uploaded media URL (from Supabase storage)
+                # Already uploaded image URL
                 final_media_url = uploaded_media_url
                 logger.info(f"Using existing uploaded media URL: {final_media_url}")
             
@@ -1088,22 +1594,17 @@ class CustomContentAgent:
                 }
             }
             
-            # Add primary image data to post_data if media exists (image or video)
+            # Add primary image data to post_data if image exists
             if final_media_url:
-                # Determine if it's a video or image
-                is_video = final_media_url.startswith("data:video/") or any(ext in final_media_url.lower() for ext in ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv'])
-                
-                # Determine media prompt based on source and type
+                # Determine image prompt based on source
+                image_prompt = "User uploaded image for custom content"
                 if generated_media_url:
                     # Try to get prompt from state if it was generated
-                    image_prompt = state.get("generated_image_prompt", "AI generated media for custom content")
-                else:
-                    # User uploaded media
-                    image_prompt = f"User uploaded {'video' if is_video else 'image'} for custom content"
+                    image_prompt = state.get("generated_image_prompt", "AI generated image for custom content")
                 
                 post_data["primary_image_url"] = final_media_url
                 post_data["primary_image_prompt"] = image_prompt
-                post_data["primary_image_approved"] = True  # User uploads/generated media in custom content are auto-approved
+                post_data["primary_image_approved"] = True  # User uploads/generated images in custom content are auto-approved
             
             # Save to Supabase
             logger.info(f"Saving post to database: {post_data}")
@@ -1317,8 +1818,8 @@ class CustomContentAgent:
             "brand_values": profile_data.get("brand_values", [])
         }
 
-    async def _upload_base64_media_to_supabase(self, base64_data_url: str, user_id: str, platform: str) -> str:
-        """Upload base64 media data (image or video) to Supabase storage"""
+    async def _upload_base64_image_to_supabase(self, base64_data_url: str, user_id: str, platform: str) -> str:
+        """Upload base64 image data to Supabase storage"""
         try:
             import base64
             import uuid
@@ -1332,25 +1833,19 @@ class CustomContentAgent:
             content_type = header.split(":")[1].split(";")[0]
             
             # Decode base64 data
-            media_data = base64.b64decode(data)
-            
-            # Determine if it's a video or image
-            is_video = content_type.startswith("video/")
+            image_data = base64.b64decode(data)
             
             # Generate unique filename
-            file_extension = content_type.split("/")[1] if "/" in content_type else ("mp4" if is_video else "jpg")
+            file_extension = content_type.split("/")[1] if "/" in content_type else "jpg"
             filename = f"custom_content_{user_id}_{platform}_{uuid.uuid4().hex[:8]}.{file_extension}"
+            file_path = f"user-uploads/{filename}"
             
-            # Use appropriate bucket: user-uploads for videos, ai-generated-images for images
-            bucket_name = "user-uploads" if is_video else "ai-generated-images"
-            file_path = filename if is_video else f"user-uploads/{filename}"
-            
-            logger.info(f"Uploading {'video' if is_video else 'image'} to Supabase storage: {bucket_name}/{file_path}")
+            logger.info(f"Uploading image to Supabase storage: {file_path}")
             
             # Upload to Supabase storage
-            storage_response = self.supabase.storage.from_(bucket_name).upload(
+            storage_response = self.supabase.storage.from_("ai-generated-images").upload(
                 file_path,
-                media_data,
+                image_data,
                 file_options={"content-type": content_type}
             )
             
@@ -1359,13 +1854,13 @@ class CustomContentAgent:
                 raise Exception(f"Storage upload failed: {storage_response.error}")
             
             # Get public URL
-            public_url = self.supabase.storage.from_(bucket_name).get_public_url(file_path)
+            public_url = self.supabase.storage.from_("ai-generated-images").get_public_url(file_path)
             
-            logger.info(f"Successfully uploaded {'video' if is_video else 'image'} to Supabase: {public_url}")
+            logger.info(f"Successfully uploaded image to Supabase: {public_url}")
             return public_url
             
         except Exception as e:
-            logger.error(f"Error uploading base64 media to Supabase: {e}")
+            logger.error(f"Error uploading base64 image to Supabase: {e}")
             raise e
     
     async def _analyze_uploaded_image(self, image_url: str, user_description: str, business_context: Dict[str, Any]) -> str:
@@ -1442,7 +1937,7 @@ class CustomContentAgent:
         return prompt
 
     def _create_enhanced_content_prompt(self, description: str, platform: str, content_type: str, 
-                                      business_context: Dict[str, Any], image_analysis: str, has_media: bool, video_description: str = "") -> str:
+                                      business_context: Dict[str, Any], image_analysis: str, has_media: bool) -> str:
         """Create an enhanced prompt for content generation with image analysis"""
         base_prompt = f"""
         Create a {content_type} for {platform} based on this description: "{description}"
@@ -1454,10 +1949,6 @@ class CustomContentAgent:
         - Brand Voice: {business_context.get('brand_voice', 'Professional and friendly')}
         - Brand Personality: {business_context.get('brand_personality', 'Approachable and trustworthy')}
         """
-        
-        # Add video description if available (for video content)
-        if video_description and has_media:
-            base_prompt += f"\n\nVIDEO DESCRIPTION:\nThe user has described their video as: \"{video_description}\"\nUse this description to create content that perfectly complements and describes the video."
         
         if has_media and image_analysis:
             enhanced_prompt = f"""
@@ -1493,68 +1984,7 @@ class CustomContentAgent:
               "visual_elements": ["key", "visual", "elements", "to", "highlight"]
             }}
             """
-        elif has_media and video_description:
-            # Video content with description
-            enhanced_prompt = f"""
-            {base_prompt}
-            
-            Requirements:
-            - Create content that perfectly complements and describes the uploaded video
-            - Use the video description to craft engaging, visual storytelling
-            - Optimize for {platform} best practices with video content
-            - Match the brand voice and personality
-            - Include relevant hashtags
-            - Make it engaging and shareable
-            - Create a compelling narrative that connects the video to your business
-            - Write content that helps viewers understand what they'll see in the video
-            
-            CRITICAL INSTRUCTIONS:
-            - Return ONLY a valid JSON object
-            - Do NOT use markdown code blocks (no ```json or ```)
-            - Do NOT include any text before or after the JSON
-            - The JSON must be parseable directly
-            - Use these exact field names:
-            
-            {{
-              "content": "The main post content",
-              "title": "A catchy title",
-              "hashtags": ["array", "of", "relevant", "hashtags"],
-              "call_to_action": "Suggested call to action",
-              "engagement_hooks": "Ways to encourage engagement"
-            }}
-            """
-        elif has_media:
-            # Media exists but no image analysis (could be video or image without analysis)
-            # If video_description is available, it's already added to base_prompt above
-            enhanced_prompt = f"""
-            {base_prompt}
-            
-            Requirements:
-            - Create content that complements the uploaded media
-            - Optimize for {platform} best practices with media content
-            - Match the brand voice and personality
-            - Include relevant hashtags
-            - Make it engaging and shareable
-            - Create a compelling narrative that connects the media to your business
-            - If this is video content, use the description provided to create engaging video-optimized content
-            
-            CRITICAL INSTRUCTIONS:
-            - Return ONLY a valid JSON object
-            - Do NOT use markdown code blocks (no ```json or ```)
-            - Do NOT include any text before or after the JSON
-            - The JSON must be parseable directly
-            - Use these exact field names:
-            
-            {{
-              "content": "The main post content",
-              "title": "A catchy title",
-              "hashtags": ["array", "of", "relevant", "hashtags"],
-              "call_to_action": "Suggested call to action",
-              "engagement_hooks": "Ways to encourage engagement"
-            }}
-            """
         else:
-            # No media - text-only content
             enhanced_prompt = f"""
             {base_prompt}
             
@@ -1644,15 +2074,14 @@ class CustomContentAgent:
             elif current_step == ConversationStep.ASK_DESCRIPTION:
                 # Store user description
                 state["user_description"] = user_input
-                # Transition to next step (ask_media)
+                # Transition to next step
                 state["current_step"] = ConversationStep.ASK_MEDIA
-                logger.info(f"✅ Description stored, transitioning to ASK_MEDIA step")
                 
-            elif current_step == ConversationStep.ASK_VIDEO_DESCRIPTION:
-                # Store video description
-                state["video_description"] = user_input
-                # Transition to content generation
-                state["current_step"] = ConversationStep.GENERATE_CONTENT
+            elif current_step == ConversationStep.APPROVE_CAROUSEL_IMAGES:
+                # Carousel approval is handled in approve_carousel_images method
+                # Don't modify state here - let execute_conversation_step handle it
+                # This prevents adding extra steps
+                pass
                 
             elif current_step == ConversationStep.CONFIRM_CONTENT:
                 # Handle content confirmation
@@ -1723,52 +2152,11 @@ class CustomContentAgent:
                 
             elif current_step == ConversationStep.CONFIRM_MEDIA:
                 # Handle media confirmation
-                user_input_lower = user_input.lower().strip()
-                # Check for various "yes" variations including "yes, proceed"
-                if any(phrase in user_input_lower for phrase in ["yes", "y", "correct", "proceed", "yes proceed", "yes, proceed"]):
+                if user_input.lower().strip() in ["yes", "y", "correct", "proceed"]:
                     state["media_confirmed"] = True
-                    logger.info("✅ Media confirmed by user, transitioning to next step")
-                    
-                    # Add user confirmation message (similar to image approval pattern)
-                    user_message = {
-                        "role": "user",
-                        "content": "Yes, proceed",
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    state["conversation_messages"].append(user_message)
-                    
-                    # Use conditional logic to determine next step (might need video description)
-                    next_step_decision = self._should_ask_video_description(state)
-                    if next_step_decision == "ask_description":
-                        state["current_step"] = ConversationStep.ASK_VIDEO_DESCRIPTION
-                        # Add assistant message for video description
-                        message = {
-                            "role": "assistant",
-                            "content": "Perfect! Media confirmed. Now, could you please provide a brief description of what happens in this video? This will help me create better content for your post.",
-                            "timestamp": datetime.now().isoformat()
-                        }
-                        state["conversation_messages"].append(message)
-                    else:
-                        state["current_step"] = ConversationStep.GENERATE_CONTENT
-                        # Add assistant message for content generation
-                        message = {
-                            "role": "assistant",
-                            "content": "Perfect! Media confirmed. Now let me generate your content...",
-                            "timestamp": datetime.now().isoformat()
-                        }
-                        state["conversation_messages"].append(message)
-                elif any(phrase in user_input_lower for phrase in ["no", "n", "incorrect", "wrong", "upload different"]):
+                    state["current_step"] = ConversationStep.GENERATE_CONTENT
+                elif user_input.lower().strip() in ["no", "n", "incorrect", "wrong"]:
                     state["media_confirmed"] = False
-                    logger.info("❌ Media rejected by user, returning to media selection")
-                    
-                    # Add user rejection message
-                    user_message = {
-                        "role": "user",
-                        "content": "No, upload different",
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    state["conversation_messages"].append(user_message)
-                    
                     # Clear previous media
                     state.pop("uploaded_media_url", None)
                     state.pop("uploaded_media_filename", None)
@@ -1779,7 +2167,15 @@ class CustomContentAgent:
                     state["error_message"] = "Please respond with 'yes' to proceed or 'no' to upload a different file."
                     
             elif current_step == ConversationStep.ASK_MEDIA:
-                # Parse media choice
+                # Check if this is a carousel post - if so, handle carousel image source selection
+                content_type = state.get("selected_content_type", "")
+                if content_type and content_type.lower() == "carousel":
+                    # Carousel handling is done in ask_media() method itself
+                    # It transitions to ASK_CAROUSEL_IMAGE_SOURCE
+                    result = await self.ask_media(state)
+                    return result
+                
+                # Parse media choice for regular posts
                 media_choice = self._parse_media_choice(user_input)
                 logger.info(f"Media choice parsed: '{media_choice}' from input: '{user_input}'")
                 
@@ -1982,30 +2378,6 @@ class CustomContentAgent:
             
         return state
     
-    async def ask_video_description(self, state: CustomContentState) -> CustomContentState:
-        """Ask user to describe the video for content generation"""
-        try:
-            state["current_step"] = ConversationStep.ASK_VIDEO_DESCRIPTION
-            state["progress_percentage"] = 65
-            
-            platform = state.get("selected_platform", "Facebook")
-            
-            message = {
-                "role": "assistant",
-                "content": f"Great! I can see you've uploaded a video for your {platform} post. 📹\n\nTo create the best content for your video, please **describe what's in the video**. For example:\n\n- What is happening in the video?\n- What is the main message or story?\n- Who or what is featured?\n- What emotions or actions should the content convey?\n\nThis description will help me generate engaging text content that complements your video perfectly! ✨",
-                "timestamp": datetime.now().isoformat()
-            }
-            state["conversation_messages"].append(message)
-            
-            logger.info("Asking user to describe video for content generation")
-            
-        except Exception as e:
-            logger.error(f"Error in ask_video_description: {e}")
-            state["error_message"] = f"Failed to ask for video description: {str(e)}"
-            state["current_step"] = ConversationStep.ERROR
-            
-        return state
-    
     def get_conversation_state(self, conversation_id: str) -> Optional[CustomContentState]:
         """Get conversation state by ID (for persistence)"""
         # This would typically load from a database
@@ -2032,37 +2404,18 @@ class CustomContentAgent:
                 return "handle"
         return "skip"
     
-    def _should_ask_video_description(self, state: CustomContentState) -> str:
-        """Determine next step after media confirmation - check if we need to ask for video description"""
+    def _should_proceed_after_media(self, state: CustomContentState) -> str:
+        """Determine next step after media confirmation"""
         if state.get("current_step") == ConversationStep.ERROR:
             return "error"
         
         # Check if user confirmed media or if there was an error
-        if state.get("validation_errors"):
+        if state.get("media_confirmed", False):
+            return "proceed"
+        elif state.get("validation_errors"):
             return "retry"
-        
-        # Check if it's a video and platform supports video description
-        platform = state.get("selected_platform", "").lower()
-        media_type = state.get("uploaded_media_type", "")
-        is_video = media_type.startswith("video/") if media_type else False
-        
-        # If video is uploaded for Facebook or Instagram, check if we need video description
-        # Only ask if user hasn't already provided video details in initial description
-        if is_video and platform in ["facebook", "instagram"] and not state.get("video_description"):
-            user_description = state.get("user_description", "").lower()
-            # Check if user already mentioned video details in initial description
-            video_keywords = ["video", "explain", "show", "demonstrate", "tutorial", "guide", "walkthrough"]
-            has_video_context = any(keyword in user_description for keyword in video_keywords)
-            
-            # Only ask for video description if initial description doesn't have video context
-            if not has_video_context:
-                return "ask_description"
-        
-        return "proceed"  # Default to proceed
-    
-    def _should_proceed_after_media(self, state: CustomContentState) -> str:
-        """Determine next step after media confirmation (legacy - kept for compatibility)"""
-        return self._should_ask_video_description(state)
+        else:
+            return "proceed"  # Default to proceed if no explicit confirmation
     
     def _should_proceed_after_content(self, state: CustomContentState) -> str:
         """Determine next step after content confirmation"""
@@ -2111,7 +2464,7 @@ class CustomContentAgent:
             if user_input:
                 logger.info(f"Processing user input: '{user_input}'")
                 state = await self.process_user_input(state, user_input, "text")
-                logger.info(f"After processing input, current_step: {state.get('current_step')}, media_confirmed: {state.get('media_confirmed')}")
+                logger.info(f"After processing input, current_step: {state.get('current_step')}")
             
             # If there's an error, don't continue with the graph
             if state.get("current_step") == ConversationStep.ERROR:
@@ -2121,18 +2474,6 @@ class CustomContentAgent:
             current_step = state.get("current_step")
             logger.info(f"Executing conversation step: {current_step}")
             
-            # Special handling: If media is confirmed but we're still on CONFIRM_MEDIA step, force transition
-            if current_step == ConversationStep.CONFIRM_MEDIA and state.get("media_confirmed") is True:
-                logger.info("Media confirmed but still on CONFIRM_MEDIA step, forcing transition")
-                next_step_decision = self._should_ask_video_description(state)
-                if next_step_decision == "ask_description":
-                    current_step = ConversationStep.ASK_VIDEO_DESCRIPTION
-                    state["current_step"] = ConversationStep.ASK_VIDEO_DESCRIPTION
-                else:
-                    current_step = ConversationStep.GENERATE_CONTENT
-                    state["current_step"] = ConversationStep.GENERATE_CONTENT
-                logger.info(f"Force transitioned to: {current_step}")
-            
             if current_step == ConversationStep.GREET:
                 result = await self.greet_user(state)
             elif current_step == ConversationStep.ASK_PLATFORM:
@@ -2140,40 +2481,43 @@ class CustomContentAgent:
             elif current_step == ConversationStep.ASK_CONTENT_TYPE:
                 result = await self.ask_content_type(state)
             elif current_step == ConversationStep.ASK_DESCRIPTION:
-                # Only call ask_description if we don't have a description yet
-                # This prevents repeating the question after user has provided input
-                if not state.get("user_description"):
-                    result = await self.ask_description(state)
-                else:
-                    # User already provided description, move to media step
-                    logger.info("User already provided description, moving to ASK_MEDIA")
-                    state["current_step"] = ConversationStep.ASK_MEDIA
-                    result = await self.ask_media(state)
+                result = await self.ask_description(state)
             elif current_step == ConversationStep.ASK_MEDIA:
                 result = await self.ask_media(state)
+            elif current_step == ConversationStep.ASK_CAROUSEL_IMAGE_SOURCE:
+                result = await self.ask_carousel_image_source(state, user_input)
+            elif current_step == ConversationStep.GENERATE_CAROUSEL_IMAGE:
+                result = await self.generate_carousel_image(state, user_input)
+            elif current_step == ConversationStep.APPROVE_CAROUSEL_IMAGES:
+                result = await self.approve_carousel_images(state, user_input)
+            elif current_step == ConversationStep.HANDLE_CAROUSEL_UPLOAD:
+                result = await self.handle_carousel_upload(state)
+            elif current_step == ConversationStep.CONFIRM_CAROUSEL_UPLOAD_DONE:
+                result = await self.confirm_carousel_upload_done(state, user_input)
             elif current_step == ConversationStep.HANDLE_MEDIA:
                 result = await self.handle_media(state)
             elif current_step == ConversationStep.VALIDATE_MEDIA:
                 result = await self.validate_media(state)
             elif current_step == ConversationStep.CONFIRM_MEDIA:
-                # Check if media is already confirmed - if so, move to next step (prevent looping)
-                if state.get("media_confirmed") is True:
-                    logger.info("Media already confirmed, skipping confirm_media to prevent loop")
-                    # Use conditional logic to determine next step
-                    next_step = self._should_ask_video_description(state)
-                    if next_step == "ask_description":
-                        state["current_step"] = ConversationStep.ASK_VIDEO_DESCRIPTION
-                        result = await self.ask_video_description(state)
-                    else:
-                        state["current_step"] = ConversationStep.GENERATE_CONTENT
-                        result = await self.generate_content(state)
-                else:
-                    # Only call confirm_media if media is not yet confirmed
-                    result = await self.confirm_media(state)
-            elif current_step == ConversationStep.ASK_VIDEO_DESCRIPTION:
-                result = await self.ask_video_description(state)
+                result = await self.confirm_media(state)
             elif current_step == ConversationStep.GENERATE_CONTENT:
-                result = await self.generate_content(state)
+                try:
+                    result = await self.generate_content(state)
+                except Exception as e:
+                    logger.error(f"Error in generate_content step: {e}")
+                    # Don't set to ERROR - continue with content generation without images
+                    # The generate_content function should handle errors internally
+                    # If it still fails, create a basic content message
+                    state["current_step"] = ConversationStep.CONFIRM_CONTENT
+                    state["progress_percentage"] = 85
+                    # Create a basic error message but continue
+                    error_message = {
+                        "role": "assistant",
+                        "content": f"I encountered an issue analyzing the images, but I've generated content based on your description. Please review it below.",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    state["conversation_messages"].append(error_message)
+                    result = await self.confirm_content(state)
             elif current_step == ConversationStep.CONFIRM_CONTENT:
                 result = await self.confirm_content(state)
             elif current_step == ConversationStep.SELECT_SCHEDULE:

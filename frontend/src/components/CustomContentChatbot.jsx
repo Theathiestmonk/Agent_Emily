@@ -38,8 +38,17 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
   const [state, setState] = useState({});
   const [showRefreshConfirm, setShowRefreshConfirm] = useState(false);
   
+  // Carousel-specific state
+  const [carouselImages, setCarouselImages] = useState([]);
+  const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
+  const [isGeneratingCarouselImage, setIsGeneratingCarouselImage] = useState(false);
+  const [uploadedCarouselImages, setUploadedCarouselImages] = useState([]);
+  const [showCarouselUpload, setShowCarouselUpload] = useState(false);
+  const [carouselMaxImages, setCarouselMaxImages] = useState(10);
+  
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const carouselFileInputRef = useRef(null);
   const dateInputRef = useRef(null);
   const timeInputRef = useRef(null);
 
@@ -55,6 +64,64 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Watch for step changes and update carousel images from state
+  useEffect(() => {
+    console.log('🔍 useEffect triggered - currentStep:', currentStep, 'carouselImages.length:', carouselImages.length);
+    console.log('🔍 Full state object:', JSON.stringify(state, null, 2));
+    
+    if (currentStep === 'approve_carousel_images') {
+      console.log('🔍 In approve_carousel_images step');
+      console.log('🔍 state.carousel_images:', state?.carousel_images);
+      console.log('🔍 Is array?', Array.isArray(state?.carousel_images));
+      
+      if (state && state.carousel_images && Array.isArray(state.carousel_images) && state.carousel_images.length > 0) {
+        const stateImages = state.carousel_images.map((img, idx) => {
+          // Handle different formats: string URL, object with url property, or object with url nested
+          let imageUrl = '';
+          if (typeof img === 'string') {
+            imageUrl = img;
+          } else if (img && typeof img === 'object') {
+            imageUrl = img.url || img.image_url || img.src || '';
+          }
+          
+          const imagePrompt = typeof img === 'object' ? (img.prompt || '') : '';
+          
+          console.log(`🔍 Image ${idx}:`, { url: imageUrl, prompt: imagePrompt, original: img });
+          
+          return {
+            url: imageUrl,
+            index: idx,
+            prompt: imagePrompt,
+            approved: false
+          };
+        }).filter(img => img.url); // Filter out any images without URLs
+        
+        console.log('🔍 Processed stateImages:', stateImages);
+        console.log('🔍 Filtered images count:', stateImages.length);
+        
+        if (stateImages.length >= 4) {
+          console.log('✅ Setting carousel images:', stateImages);
+          console.log('✅ Image URLs:', stateImages.map(img => img.url));
+          // Set exactly 4 images
+          const imagesToSet = stateImages.slice(0, 4);
+          setCarouselImages(imagesToSet);
+          setIsGeneratingCarouselImage(false);
+          console.log('✅ Carousel images state updated, length:', imagesToSet.length);
+        } else if (stateImages.length > 0) {
+          console.warn('⚠️ Expected 4 images but got:', stateImages.length, 'images:', stateImages);
+          // Still set them if we have some images
+          setCarouselImages(stateImages);
+          setIsGeneratingCarouselImage(false);
+        } else {
+          console.error('❌ No valid image URLs found in carousel_images');
+          setIsGeneratingCarouselImage(false);
+        }
+      } else {
+        console.warn('⚠️ No carousel_images in state or not an array. State keys:', state ? Object.keys(state) : 'state is null');
+      }
+    }
+  }, [currentStep, state]);
 
   // Cleanup media preview URL to prevent memory leaks
   useEffect(() => {
@@ -74,6 +141,14 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
   const startConversation = async () => {
     try {
       setIsLoading(true);
+      // Reset carousel state
+      setCarouselImages([]);
+      setCurrentCarouselIndex(0);
+      setIsGeneratingCarouselImage(false);
+      setUploadedCarouselImages([]);
+      setShowCarouselUpload(false);
+      setCarouselMaxImages(10);
+      
       const token = await getAuthToken();
       if (!token) {
         throw new Error('No authentication token available');
@@ -319,6 +394,70 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
         setMediaType(data.state?.media_type);
       }
 
+      // Handle carousel steps
+      if (data.current_step === 'generate_carousel_image') {
+        // Generate all 4 images at once
+        setIsGeneratingCarouselImage(true);
+        if (data.message.generating_all) {
+          // Auto-trigger generation of all 4 images
+          generateAllCarouselImages();
+        }
+      } else if (data.current_step === 'approve_carousel_images') {
+        // All images generated, show for approval
+        setIsGeneratingCarouselImage(false);
+        
+        // Try to get images from multiple sources
+        let imagesToSet = [];
+        
+        // First, try from message.carousel_images
+        if (data.message && data.message.carousel_images && Array.isArray(data.message.carousel_images)) {
+          imagesToSet = data.message.carousel_images.map((img, idx) => {
+            const imageUrl = typeof img === 'string' ? img : (img.url || img);
+            return {
+              url: imageUrl,
+              index: idx,
+              approved: false
+            };
+          });
+        }
+        // Second, try from state.carousel_images
+        else if (data.state && data.state.carousel_images && Array.isArray(data.state.carousel_images)) {
+          imagesToSet = data.state.carousel_images.map((img, idx) => {
+            const imageUrl = typeof img === 'string' ? img : (img.url || img);
+            const imagePrompt = typeof img === 'object' ? (img.prompt || '') : '';
+            return {
+              url: imageUrl,
+              index: idx,
+              prompt: imagePrompt,
+              approved: false
+            };
+          });
+        }
+        
+        if (imagesToSet.length > 0) {
+          console.log('🔍 Setting carousel images from approve step:', imagesToSet);
+          setCarouselImages(imagesToSet);
+        }
+      } else if (data.current_step === 'handle_carousel_upload') {
+        setShowCarouselUpload(true);
+        setIsGeneratingCarouselImage(false);
+        setCarouselMaxImages(data.message.max_images || 10);
+        // Clear approval UI when switching to manual upload
+        setCarouselImages([]);
+      } else if (data.current_step === 'confirm_carousel_upload_done') {
+        setShowCarouselUpload(false);
+      } else if (data.current_step === 'generate_content') {
+        // Clear carousel-related UI when moving to content generation
+        setShowCarouselUpload(false);
+        setIsGeneratingCarouselImage(false);
+        // Clear approval UI
+        setCarouselImages([]);
+      } else {
+        // Clear carousel UI for all other steps
+        setShowCarouselUpload(false);
+        setShowCarouselUpload(false);
+      }
+
       // Hide media upload UI when content generation starts or other steps
       if (data.current_step === 'generate_content' || 
           data.current_step === 'parse_content' || 
@@ -327,6 +466,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
           data.current_step === 'select_schedule' ||
           data.current_step === 'save_content') {
         setShowMediaUpload(false);
+        setShowCarouselUpload(false);
       }
 
       // Check if conversation is complete
@@ -510,6 +650,365 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
     }
   };
 
+  // Generate all 4 carousel images at once
+  const generateAllCarouselImages = async () => {
+    try {
+      setIsGeneratingCarouselImage(true);
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+
+      const formData = new FormData();
+      formData.append('conversation_id', conversationId);
+
+      const response = await fetch(`${API_BASE_URL}/custom-content/generate-all-carousel-images`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to generate carousel images');
+      }
+
+      const data = await response.json();
+      console.log('🔍 Generated carousel images response:', data);
+      
+      // Set all generated images - handle both formats
+      if (data.images && Array.isArray(data.images) && data.images.length === 4) {
+        const formattedImages = data.images.map((img, idx) => {
+          // Handle both object format {url, prompt} and string format
+          const imageUrl = typeof img === 'string' ? img : (img.url || img);
+          const imagePrompt = typeof img === 'object' ? (img.prompt || '') : '';
+          return {
+            url: imageUrl,
+            index: idx,
+            prompt: imagePrompt,
+            approved: false
+          };
+        });
+        console.log('🔍 Setting carousel images:', formattedImages);
+        setCarouselImages(formattedImages);
+      } else {
+        console.warn('⚠️ Unexpected response format:', data);
+      }
+
+      // Refresh conversation to get approval step and images from state
+      const token2 = await getAuthToken();
+      const convResponse = await fetch(`${API_BASE_URL}/custom-content/conversation/${conversationId}`, {
+        headers: {
+          'Authorization': `Bearer ${token2}`
+        }
+      });
+      
+      if (convResponse.ok) {
+        const convData = await convResponse.json();
+        console.log('🔍 Conversation state after generation:', convData);
+        console.log('🔍 Current step:', convData.current_step);
+        console.log('🔍 Carousel images in state:', convData.state?.carousel_images);
+        
+        // Update step first
+        if (convData.current_step) {
+          setCurrentStep(convData.current_step);
+        }
+        
+        // Update state
+        if (convData.state) {
+          setState(convData.state);
+        }
+        
+        // Get carousel images from state - this is the primary source
+        if (convData.state && convData.state.carousel_images && Array.isArray(convData.state.carousel_images)) {
+          const stateImages = convData.state.carousel_images.map((img, idx) => {
+            const imageUrl = typeof img === 'string' ? img : (img.url || img);
+            const imagePrompt = typeof img === 'object' ? (img.prompt || '') : '';
+            return {
+              url: imageUrl,
+              index: idx,
+              prompt: imagePrompt,
+              approved: false
+            };
+          });
+          console.log('🔍 Setting carousel images from state:', stateImages);
+          if (stateImages.length === 4) {
+            setCarouselImages(stateImages);
+            setIsGeneratingCarouselImage(false); // Only set to false after images are loaded
+          }
+        } else if (data.images && Array.isArray(data.images) && data.images.length === 4) {
+          // Fallback: use images from API response if state doesn't have them
+          console.log('🔍 Using images from API response as fallback');
+          setIsGeneratingCarouselImage(false);
+        } else {
+          console.warn('⚠️ No carousel images found in state or response');
+          setIsGeneratingCarouselImage(false);
+        }
+        
+        // The backend should have transitioned to approve_carousel_images step
+        if (convData.messages && convData.messages.length > 0) {
+          const lastMessage = convData.messages[convData.messages.length - 1];
+          // Only add if not already in messages
+          const existingMessages = messages.map(m => m.content);
+          if (!existingMessages.includes(lastMessage.content)) {
+            addMessage('assistant', lastMessage.content, lastMessage);
+          }
+        }
+      } else {
+        setIsGeneratingCarouselImage(false);
+      }
+
+    } catch (error) {
+      console.error('Error generating carousel images:', error);
+      setIsGeneratingCarouselImage(false);
+      addMessage('assistant', `Sorry, I encountered an error generating the carousel images: ${error.message}. Please try again.`);
+    }
+  };
+
+  // Carousel images approval handler
+  const handleCarouselImagesApproval = async (action) => {
+    try {
+      console.log('🔍 handleCarouselImagesApproval called with action:', action);
+      console.log('🔍 Current carouselImages:', carouselImages);
+      
+      // Don't clear images immediately - keep them visible until backend confirms
+      setIsGeneratingCarouselImage(false);
+      
+      // Add user message to show what they selected
+      const actionText = action === 'approve' ? 'approve' : action === 'regenerate' ? 'regenerate all images' : 'switch to manual upload';
+      addMessage('user', actionText);
+      
+      setIsLoading(true);
+      
+      // Send the action to backend - use simple keywords
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+      
+      // Map actions to simple backend-understandable inputs
+      let backendInput = 'approve';
+      if (action === 'regenerate') {
+        backendInput = 'regenerate';
+      } else if (action === 'manual_upload') {
+        backendInput = 'manual_upload';
+      }
+      
+      console.log('🔍 Sending to backend:', backendInput);
+      
+      const response = await fetch(`${API_BASE_URL}/custom-content/input`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          user_input: backendInput,
+          input_type: 'text'
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to process approval');
+      }
+
+      const data = await response.json();
+      
+      // Update state immediately - this will hide the approval UI
+      if (data.current_step) {
+        setCurrentStep(data.current_step);
+      }
+      if (data.state) {
+        setState(data.state);
+        // Clear carousel images if switching to manual upload
+        if (data.state.carousel_image_source === 'manual_upload') {
+          setCarouselImages([]);
+          setIsGeneratingCarouselImage(false);
+        }
+      }
+      if (data.progress_percentage !== undefined) {
+        setProgress(data.progress_percentage);
+      }
+      
+      // Add assistant response if present
+      if (data.message) {
+        const messageContent = typeof data.message === 'string' ? data.message : (data.message.content || '');
+        if (messageContent) {
+          addMessage('assistant', messageContent, typeof data.message === 'object' ? data.message : {});
+        }
+      }
+      
+      setIsLoading(false);
+      
+      // Clear carousel images and UI after approval
+      if (action === 'approve') {
+        console.log('✅ Approval successful, clearing carousel images');
+        setCarouselImages([]);
+        setShowCarouselUpload(false);
+        
+        // If step is already generate_content, we're good
+        // Otherwise, refresh to get the latest state
+        if (data.current_step !== 'generate_content') {
+          setTimeout(async () => {
+            try {
+              const token2 = await getAuthToken();
+              if (token2) {
+                const convResponse = await fetch(`${API_BASE_URL}/custom-content/conversation/${conversationId}`, {
+                  headers: {
+                    'Authorization': `Bearer ${token2}`
+                  }
+                });
+                
+                if (convResponse.ok) {
+                  const convData = await convResponse.json();
+                  console.log('🔍 Refreshed conversation state:', convData.current_step);
+                  setCurrentStep(convData.current_step);
+                  setState(convData.state || {});
+                  
+                  // Only add new messages that aren't already in the list
+                  if (convData.messages && convData.messages.length > 0) {
+                    const lastConvMessage = convData.messages[convData.messages.length - 1];
+                    const existingMessages = messages.map(m => m.content);
+                    if (!existingMessages.includes(lastConvMessage.content)) {
+                      addMessage(lastConvMessage.role, lastConvMessage.content, lastConvMessage);
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Error refreshing conversation state:', error);
+            }
+          }, 300);
+        }
+      } else if (action === 'regenerate') {
+        // Clear images for regeneration
+        setCarouselImages([]);
+        setShowCarouselUpload(false);
+      } else if (action === 'manual_upload') {
+        // Clear images and approval UI for manual upload
+        setCarouselImages([]);
+        setIsGeneratingCarouselImage(false);
+        // showCarouselUpload will be set by the backend response
+      }
+      
+    } catch (error) {
+      console.error('Error handling carousel approval:', error);
+      setIsLoading(false);
+      addMessage('assistant', `Sorry, I encountered an error: ${error.message}. Please try again.`);
+    }
+  };
+
+  // Carousel bulk upload handler
+  const handleCarouselBulkUpload = async (files) => {
+    try {
+      if (!files || files.length === 0) return;
+
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+
+      // Validate file count
+      const currentCount = uploadedCarouselImages.length;
+      if (currentCount + files.length > carouselMaxImages) {
+        setUploadError(`You can only upload up to ${carouselMaxImages} images total. You currently have ${currentCount} images.`);
+        return;
+      }
+
+      setIsUploading(true);
+      setUploadError(null);
+
+      const formData = new FormData();
+      formData.append('conversation_id', conversationId);
+      for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+      }
+
+      const response = await fetch(`${API_BASE_URL}/custom-content/upload-carousel-images`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to upload carousel images');
+      }
+
+      const data = await response.json();
+      
+      // Update uploaded images
+      setUploadedCarouselImages(prev => [...prev, ...data.image_urls]);
+      
+      // Clear file input
+      if (carouselFileInputRef.current) {
+        carouselFileInputRef.current.value = '';
+      }
+
+      // Fetch updated conversation state to get the current step
+      const token2 = await getAuthToken();
+      if (token2) {
+        const convResponse = await fetch(`${API_BASE_URL}/custom-content/conversation/${conversationId}`, {
+          headers: {
+            'Authorization': `Bearer ${token2}`
+          }
+        });
+        
+        if (convResponse.ok) {
+          const convData = await convResponse.json();
+          // Update state and step from conversation
+          if (convData.state) {
+            setState(convData.state);
+            setUploadedCarouselImages(convData.state.uploaded_carousel_images || []);
+          }
+          if (convData.current_step) {
+            setCurrentStep(convData.current_step);
+          }
+          
+          // Add the latest message if it's new
+          if (convData.messages && convData.messages.length > 0) {
+            const lastMessage = convData.messages[convData.messages.length - 1];
+            const existingMessages = messages.map(m => m.content);
+            if (!existingMessages.includes(lastMessage.content)) {
+              addMessage(lastMessage.role, lastMessage.content, lastMessage);
+            }
+          }
+        }
+      }
+
+      // The backend sets step to confirm_carousel_upload_done after upload
+      // The UI will automatically show confirmation buttons when the step is set
+      // No need to send a message - the buttons will handle user interaction
+
+    } catch (error) {
+      console.error('Error uploading carousel images:', error);
+      setUploadError(error.message || 'Failed to upload images');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleCarouselFileSelect = (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length > 0) {
+      handleCarouselBulkUpload(files);
+    }
+  };
+
+  const handleCarouselUploadDone = async (done) => {
+    if (done) {
+      await sendMessage('yes');
+    } else {
+      await sendMessage('no');
+    }
+  };
+
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -518,6 +1017,16 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
   };
 
   const handleOptionClick = (value, label) => {
+    // Handle carousel image source selection
+    if (value === 'ai_generate' || value === 'manual_upload') {
+      if (value === 'manual_upload') {
+        setShowCarouselUpload(true);
+      }
+      setInputValue(label);
+      sendMessage(value);
+      return;
+    }
+    
     // Handle media choice options specially
     if (value === 'upload_image' || value === 'upload_video') {
       // Show media upload UI and set media type
@@ -678,6 +1187,133 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-white to-purple-25">
+          {/* Carousel Image Generation UI - Show only when generating */}
+          {currentStep === 'generate_carousel_image' && isGeneratingCarouselImage && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] rounded-2xl px-6 py-4 shadow-lg bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200">
+                <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-3">
+                      <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                      <span className="text-sm font-bold text-purple-800">
+                        Generating all 4 carousel images... This may take a moment.
+                      </span>
+                    </div>
+                    <div className="w-full bg-purple-200 rounded-full h-3">
+                      <div
+                        className="bg-gradient-to-r from-pink-400 to-purple-500 h-3 rounded-full transition-all duration-300 animate-pulse"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div className="text-xs text-purple-600 text-center">
+                      Creating a cohesive sequential story across all 4 images...
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Carousel Images Approval UI - Show only when in approval step and not in manual upload */}
+          {currentStep === 'approve_carousel_images' && 
+           carouselImages.length >= 4 && 
+           !isGeneratingCarouselImage &&
+           state?.carousel_image_source !== 'manual_upload' && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] rounded-2xl px-6 py-4 shadow-lg bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200">
+                <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
+                  <div className="space-y-4">
+                    <div className="text-sm font-bold text-purple-800 text-center">
+                      Review all 4 carousel images
+                    </div>
+                    
+                    {/* Image Grid */}
+                    {carouselImages.length >= 4 ? (
+                      <div className="grid grid-cols-2 gap-3 w-full mb-4" style={{ minHeight: '320px' }}>
+                        {carouselImages.slice(0, 4).map((img, idx) => {
+                          console.log(`🔍 Rendering image ${idx + 1}:`, img.url);
+                          return (
+                            <div 
+                              key={`carousel-img-${idx}-${img.url}`} 
+                              className="relative w-full overflow-hidden rounded-lg border-2 border-purple-200 shadow-md bg-gray-100"
+                              style={{ 
+                                minHeight: '160px',
+                                maxHeight: '160px',
+                                height: '160px',
+                                width: '100%',
+                                position: 'relative'
+                              }}
+                            >
+                              <img
+                                src={img.url}
+                                alt={`Carousel image ${idx + 1}`}
+                                className="w-full h-full object-cover"
+                                style={{ 
+                                  display: 'block',
+                                  width: '100%',
+                                  height: '100%',
+                                  objectFit: 'cover',
+                                  opacity: 1,
+                                  visibility: 'visible',
+                                  position: 'relative',
+                                  zIndex: 1
+                                }}
+                                onError={(e) => {
+                                  console.error('❌ Image load error for:', img.url);
+                                  const parent = e.target.parentElement;
+                                  if (parent) {
+                                    parent.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm">Failed to load image</div>';
+                                  }
+                                }}
+                                onLoad={(e) => {
+                                  console.log('✅ Image loaded successfully:', img.url);
+                                  e.target.style.opacity = '1';
+                                  e.target.style.visibility = 'visible';
+                                  e.target.style.display = 'block';
+                                }}
+                              />
+                              <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded z-20 pointer-events-none">
+                                {idx + 1}/4
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-purple-600">
+                        <p>Loading images... ({carouselImages.length}/4)</p>
+                      </div>
+                    )}
+                    
+                    {/* Action Buttons */}
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => handleCarouselImagesApproval('approve')}
+                        className="w-full px-4 py-3 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl hover:from-green-500 hover:to-blue-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
+                      >
+                        ✅ Approve and Continue
+                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleCarouselImagesApproval('regenerate')}
+                          className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-xl hover:from-orange-500 hover:to-red-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
+                        >
+                          🔄 Regenerate All
+                        </button>
+                        <button
+                          onClick={() => handleCarouselImagesApproval('manual_upload')}
+                          className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-400 to-pink-500 text-white rounded-xl hover:from-purple-500 hover:to-pink-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
+                        >
+                          📤 Manual Upload
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {messages.map((message) => (
             <div
               key={message.id}
@@ -690,6 +1326,25 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                     : 'bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200'
                 }`}
               >
+                {/* Show carousel images if available */}
+                {message.carousel_images && Array.isArray(message.carousel_images) && message.carousel_images.length > 0 && (
+                  <div className="mb-6">
+                    <div className="text-sm font-bold text-purple-800 mb-2">
+                      Carousel Images ({message.carousel_images.length}):
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {message.carousel_images.map((imgUrl, idx) => (
+                        <img
+                          key={idx}
+                          src={imgUrl}
+                          alt={`Carousel image ${idx + 1}`}
+                          className="w-full h-32 object-cover rounded-lg border border-purple-200 shadow-md"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
                 {/* Show uploaded media at the top for content review messages */}
                 {message.media_url && message.content && message.content.includes('Content Review') && (
                   <div className="mb-6">
@@ -893,6 +1548,104 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                         className="px-8 py-4 bg-gradient-to-r from-red-400 to-pink-500 text-white rounded-xl hover:from-red-500 hover:to-pink-600 transition-all duration-200 text-base font-semibold shadow-lg hover:shadow-xl"
                       >
                         No, make changes
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+
+                {/* Carousel Bulk Upload UI - Only show for current step and most recent message */}
+                {message.role === 'assistant' && 
+                 showCarouselUpload && 
+                 currentStep === 'handle_carousel_upload' &&
+                 message.id === messages.filter(m => m.role === 'assistant').slice(-1)[0]?.id && (
+                  <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <Image className="w-5 h-5 text-purple-600" />
+                          <span className="text-sm font-bold text-purple-800">
+                            Upload Carousel Images
+                          </span>
+                        </div>
+                        <span className="text-xs text-purple-600 font-medium">
+                          {uploadedCarouselImages.length} / {carouselMaxImages} images
+                        </span>
+                      </div>
+                      
+                      <input
+                        ref={carouselFileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                        multiple
+                        onChange={handleCarouselFileSelect}
+                        className="w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gradient-to-r file:from-pink-400 file:to-purple-500 file:text-white hover:file:from-pink-500 hover:file:to-purple-600 transition-all duration-200"
+                      />
+                      
+                      <div className="text-xs text-purple-600 font-medium">
+                        Supported formats: JPEG, PNG, GIF, WebP (max 10MB per image)
+                        <br />
+                        You can upload up to {carouselMaxImages} images total
+                      </div>
+                      
+                      {uploadedCarouselImages.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-sm font-bold text-purple-800">Uploaded Images:</div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {uploadedCarouselImages.map((url, idx) => (
+                              <img
+                                key={idx}
+                                src={url}
+                                alt={`Carousel ${idx + 1}`}
+                                className="w-full h-24 object-cover rounded-lg border border-purple-200"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {uploadError && (
+                        <div className="flex items-center space-x-2 text-sm text-red-600 bg-red-50 p-2 rounded-md">
+                          <AlertCircle className="w-4 h-4" />
+                          <span>{uploadError}</span>
+                        </div>
+                      )}
+                      
+                      {isUploading && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm text-purple-700 font-medium">
+                            <span>Uploading images...</span>
+                            <span>{uploadProgress}%</span>
+                          </div>
+                          <div className="w-full bg-purple-200 rounded-full h-2">
+                            <div
+                              className="bg-gradient-to-r from-pink-400 to-purple-500 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${uploadProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Carousel Upload Done Confirmation - Only show for most recent message */}
+                {message.role === 'assistant' && 
+                 currentStep === 'confirm_carousel_upload_done' &&
+                 message.id === messages.filter(m => m.role === 'assistant').slice(-1)[0]?.id && (
+                  <div className="mt-4">
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => handleCarouselUploadDone(true)}
+                        className="px-6 py-3 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl hover:from-green-500 hover:to-blue-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
+                      >
+                        ✅ Yes, I'm done
+                      </button>
+                      <button
+                        onClick={() => handleCarouselUploadDone(false)}
+                        className="px-6 py-3 bg-gradient-to-r from-purple-400 to-pink-500 text-white rounded-xl hover:from-purple-500 hover:to-pink-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
+                      >
+                        📤 No, add more images
                       </button>
                     </div>
                   </div>
