@@ -1547,6 +1547,23 @@ class CustomContentAgent:
                 else:
                     raise Exception("Failed to save carousel post to database")
                 
+                # Register with scheduler if post is scheduled
+                if status == "scheduled":
+                    try:
+                        from scheduler.post_publisher import post_publisher
+                        if post_publisher:
+                            scheduled_at = scheduled_datetime.isoformat()
+                            await post_publisher.register_scheduled_post(
+                                post_id,
+                                scheduled_at,
+                                platform,
+                                user_id
+                            )
+                            logger.info(f"Registered scheduled carousel post {post_id} with scheduler")
+                    except Exception as e:
+                        logger.warning(f"Failed to register carousel post with scheduler: {e}")
+                        # Don't fail the save operation if registration fails
+                
                 logger.info(f"Carousel post saved for user {user_id} on {platform}, post_id: {post_id}")
                 return state
             
@@ -1590,11 +1607,26 @@ class CustomContentAgent:
             # Get or create a default campaign for custom content
             campaign_id = await self._get_or_create_custom_content_campaign(user_id)
             
+            # Determine post_type: if video is uploaded, set post_type to "video"
+            media_type = state.get("media_type", "")
+            # Handle both enum and string values
+            media_type_str = str(media_type).lower() if media_type else ""
+            if media_type_str == "video" or media_type == MediaType.VIDEO:
+                post_type = "video"
+            elif media_type_str == "image" or media_type == MediaType.IMAGE:
+                # Only override if content_type is not already image-specific
+                if content_type and content_type.lower() not in ["image", "video", "carousel"]:
+                    post_type = "image"
+                else:
+                    post_type = content_type
+            else:
+                post_type = content_type
+            
             # Create post data for content_posts table
             post_data = {
                 "campaign_id": campaign_id,  # Use the custom content campaign
                 "platform": platform,
-                "post_type": content_type,
+                "post_type": post_type,
                 "title": generated_content.get("title", ""),
                 "content": generated_content.get("content", ""),
                 "hashtags": generated_content.get("hashtags", []),
@@ -1674,6 +1706,23 @@ class CustomContentAgent:
                 state["progress_percentage"] = 100
             else:
                 raise Exception("Failed to save content to database")
+            
+            # Register with scheduler if post is scheduled
+            if status == "scheduled":
+                try:
+                    from scheduler.post_publisher import post_publisher
+                    if post_publisher:
+                        scheduled_at = scheduled_datetime.isoformat()
+                        await post_publisher.register_scheduled_post(
+                            post_id,
+                            scheduled_at,
+                            platform,
+                            user_id
+                        )
+                        logger.info(f"Registered scheduled post {post_id} with scheduler")
+                except Exception as e:
+                    logger.warning(f"Failed to register post with scheduler: {e}")
+                    # Don't fail the save operation if registration fails
             
             logger.info(f"Content saved for user {user_id} on {platform}, post_id: {post_id}")
             
@@ -1843,7 +1892,7 @@ class CustomContentAgent:
         }
 
     async def _upload_base64_image_to_supabase(self, base64_data_url: str, user_id: str, platform: str) -> str:
-        """Upload base64 image data to Supabase storage"""
+        """Upload base64 image or video data to Supabase storage"""
         try:
             import base64
             import uuid
@@ -1857,19 +1906,34 @@ class CustomContentAgent:
             content_type = header.split(":")[1].split(";")[0]
             
             # Decode base64 data
-            image_data = base64.b64decode(data)
+            media_data = base64.b64decode(data)
             
-            # Generate unique filename
-            file_extension = content_type.split("/")[1] if "/" in content_type else "jpg"
+            # Determine if it's a video or image
+            is_video = content_type.startswith("video/")
+            
+            # Generate unique filename with proper extension
+            if "/" in content_type:
+                file_extension = content_type.split("/")[1]
+                # Handle common video extensions
+                if file_extension == "quicktime":
+                    file_extension = "mov"
+                elif file_extension == "x-msvideo":
+                    file_extension = "avi"
+            else:
+                file_extension = "jpg" if not is_video else "mp4"
+            
             filename = f"custom_content_{user_id}_{platform}_{uuid.uuid4().hex[:8]}.{file_extension}"
-            file_path = f"user-uploads/{filename}"
+            file_path = filename  # Store directly in bucket root, not in subfolder
             
-            logger.info(f"Uploading image to Supabase storage: {file_path}")
+            # Use user-uploads bucket for user-uploaded content (both images and videos)
+            bucket_name = "user-uploads"
+            
+            logger.info(f"Uploading {'video' if is_video else 'image'} to Supabase storage: {bucket_name}/{file_path}, content_type: {content_type}")
             
             # Upload to Supabase storage
-            storage_response = self.supabase.storage.from_("ai-generated-images").upload(
+            storage_response = self.supabase.storage.from_(bucket_name).upload(
                 file_path,
-                image_data,
+                media_data,
                 file_options={"content-type": content_type}
             )
             
@@ -1878,13 +1942,13 @@ class CustomContentAgent:
                 raise Exception(f"Storage upload failed: {storage_response.error}")
             
             # Get public URL
-            public_url = self.supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+            public_url = self.supabase.storage.from_(bucket_name).get_public_url(file_path)
             
-            logger.info(f"Successfully uploaded image to Supabase: {public_url}")
+            logger.info(f"Successfully uploaded {'video' if is_video else 'image'} to Supabase: {public_url}")
             return public_url
             
         except Exception as e:
-            logger.error(f"Error uploading base64 image to Supabase: {e}")
+            logger.error(f"Error uploading base64 media to Supabase: {e}")
             raise e
     
     async def _analyze_uploaded_image(self, image_url: str, user_description: str, business_context: Dict[str, Any]) -> str:
@@ -2361,7 +2425,7 @@ class CustomContentAgent:
             return "skip_media"
     
     async def upload_media(self, state: CustomContentState, media_file: bytes, filename: str, content_type: str) -> CustomContentState:
-        """Store media file in session/memory for now"""
+        """Upload media file directly to Supabase storage (for videos) or store as base64 (for small images)"""
         try:
             user_id = state["user_id"]
             platform = state.get("selected_platform", "general")
@@ -2374,30 +2438,72 @@ class CustomContentAgent:
             if not content_type:
                 raise Exception("No content type provided")
             
-            logger.info(f"Storing media in session: {filename}, size: {len(media_file)} bytes, type: {content_type}")
+            is_video = content_type.startswith("video/")
+            file_size = len(media_file)
             
-            # Generate unique filename
-            file_extension = filename.split('.')[-1] if '.' in filename else 'jpg'
-            unique_filename = f"custom_content_{user_id}_{platform}_{uuid.uuid4()}.{file_extension}"
+            logger.info(f"Uploading media: {filename}, size: {file_size} bytes, type: {content_type}, is_video: {is_video}")
             
-            # Store media in session state (base64 encoded for now)
-            media_base64 = base64.b64encode(media_file).decode('utf-8')
-            
-            # Store in state
-            state["uploaded_media_url"] = f"data:{content_type};base64,{media_base64}"
-            state["uploaded_media_filename"] = unique_filename
-            state["uploaded_media_size"] = len(media_file)
-            state["uploaded_media_type"] = content_type
+            # For videos or large files, upload directly to Supabase storage
+            # For small images, we can store as base64 for faster processing
+            if is_video or file_size > 5 * 1024 * 1024:  # 5MB threshold
+                # Upload directly to Supabase storage
+                file_extension = filename.split('.')[-1] if '.' in filename else ('mp4' if is_video else 'jpg')
+                # Handle common video extensions
+                if file_extension.lower() == 'quicktime':
+                    file_extension = 'mov'
+                elif file_extension.lower() == 'x-msvideo':
+                    file_extension = 'avi'
+                
+                unique_filename = f"custom_content_{user_id}_{platform}_{uuid.uuid4().hex[:8]}.{file_extension}"
+                bucket_name = "user-uploads"
+                
+                logger.info(f"Uploading {'video' if is_video else 'large file'} directly to Supabase: {bucket_name}/{unique_filename}")
+                
+                # Upload to Supabase storage
+                storage_response = self.supabase.storage.from_(bucket_name).upload(
+                    unique_filename,
+                    media_file,
+                    file_options={"content-type": content_type}
+                )
+                
+                # Check for upload errors
+                if hasattr(storage_response, 'error') and storage_response.error:
+                    raise Exception(f"Storage upload failed: {storage_response.error}")
+                
+                # Get public URL
+                public_url = self.supabase.storage.from_(bucket_name).get_public_url(unique_filename)
+                
+                logger.info(f"Successfully uploaded {'video' if is_video else 'file'} to Supabase: {public_url}")
+                
+                # Store the public URL in state (not base64)
+                state["uploaded_media_url"] = public_url
+                state["uploaded_media_filename"] = unique_filename
+                state["uploaded_media_size"] = file_size
+                state["uploaded_media_type"] = content_type
+            else:
+                # For small images, store as base64 for faster processing
+                logger.info(f"Storing small image as base64: {filename}")
+                file_extension = filename.split('.')[-1] if '.' in filename else 'jpg'
+                unique_filename = f"custom_content_{user_id}_{platform}_{uuid.uuid4()}.{file_extension}"
+                
+                # Store media in session state (base64 encoded)
+                media_base64 = base64.b64encode(media_file).decode('utf-8')
+                
+                # Store in state
+                state["uploaded_media_url"] = f"data:{content_type};base64,{media_base64}"
+                state["uploaded_media_filename"] = unique_filename
+                state["uploaded_media_size"] = file_size
+                state["uploaded_media_type"] = content_type
             
             # Transition to media confirmation
             state["current_step"] = ConversationStep.CONFIRM_MEDIA
             state["progress_percentage"] = 60
             
-            logger.info(f"Media stored in session for user {user_id}: {unique_filename}")
+            logger.info(f"Media processed for user {user_id}: {unique_filename}")
             
         except Exception as e:
-            logger.error(f"Error storing media: {e}")
-            state["error_message"] = f"Failed to store media: {str(e)}"
+            logger.error(f"Error uploading media: {e}")
+            state["error_message"] = f"Failed to upload media: {str(e)}"
             state["current_step"] = ConversationStep.ERROR
             
         return state

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Edit, Eye, Heart, MessageCircle, Share, Calendar, Hash, Image as ImageIcon, Video, FileText, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Copy, Edit, Eye, Heart, MessageCircle, Share, Calendar, Hash, Image as ImageIcon, Video, FileText, Layers, ChevronLeft, ChevronRight, Play } from 'lucide-react';
 
 const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview }) => {
   const [copied, setCopied] = useState(false);
@@ -58,6 +58,20 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
   const hashtags = content.hashtags || [];
   const mediaUrl = content.media_url || content.mediaUrl;
   
+  // Check if the media file is a video
+  const isVideoFile = (url) => {
+    if (!url) return false;
+    const videoExtensions = ['.mp4', '.avi', '.mov', '.wmv', '.webm', '.mkv'];
+    return videoExtensions.some(ext => url.toLowerCase().includes(ext));
+  };
+  
+  // Determine if media is a video
+  const isVideo = content.post_type === 'video' || 
+                  content.content_type?.toLowerCase() === 'video' ||
+                  contentType?.toLowerCase() === 'video' ||
+                  content.metadata?.media_type === 'video' ||
+                  (mediaUrl && isVideoFile(mediaUrl));
+  
   // Check if this is a carousel post - enhanced detection
   const isCarousel = content.post_type === 'carousel' || 
                      contentType?.toLowerCase() === 'carousel' ||
@@ -88,7 +102,7 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
   // Determine post type for proper rendering
   const getPostType = () => {
     if (isCarousel) return 'carousel';
-    if (content.post_type === 'video' || mediaUrl?.includes('video')) return 'video';
+    if (isVideo) return 'video';
     if (content.post_type === 'image' || mediaUrl) return 'image';
     return 'text';
   };
@@ -237,17 +251,48 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
           </div>
         </div>
       ) : mediaUrl && (
-        <div className="relative">
-          <img
-            src={mediaUrl}
-            alt="Content media"
-            className="w-full h-48 object-cover"
-            onError={(e) => {
-              e.target.style.display = 'none';
-            }}
-          />
-          <div className="absolute top-2 right-2 bg-black/50 text-white px-2 py-1 rounded text-xs">
-            {mediaUrl.includes('video') ? 'Video' : 'Image'}
+        <div className="relative group cursor-pointer" onClick={() => onPreview && onPreview(content)}>
+          {isVideo ? (
+            <video
+              src={mediaUrl}
+              className="w-full h-48 object-cover"
+              controls={false}
+              preload="metadata"
+              muted
+              playsInline
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
+            />
+          ) : (
+            <img
+              src={mediaUrl}
+              alt="Content media"
+              className="w-full h-48 object-cover"
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
+            />
+          )}
+          {isVideo && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+              <div className="bg-white/90 rounded-full p-3 shadow-lg group-hover:scale-110 transition-transform">
+                <Play className="w-6 h-6 text-purple-600 fill-purple-600" />
+              </div>
+            </div>
+          )}
+          <div className="absolute top-2 right-2 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
+            {isVideo ? (
+              <>
+                <Video className="w-3 h-3" />
+                <span>Video</span>
+              </>
+            ) : (
+              <>
+                <ImageIcon className="w-3 h-3" />
+                <span>Image</span>
+              </>
+            )}
           </div>
         </div>
       )}

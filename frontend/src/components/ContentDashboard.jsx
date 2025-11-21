@@ -65,7 +65,8 @@ import {
   XCircle,
   Trash2,
   AlertTriangle,
-  Share2
+  Share2,
+  Play
 } from 'lucide-react'
 
 const ContentDashboard = () => {
@@ -2447,8 +2448,30 @@ const ContentDashboard = () => {
   // Check if the media file is a video
   const isVideoFile = (url) => {
     if (!url) return false
-    const videoExtensions = ['.mp4', '.avi', '.mov', '.wmv', '.webm']
+    const videoExtensions = ['.mp4', '.avi', '.mov', '.wmv', '.webm', '.mkv']
     return videoExtensions.some(ext => url.toLowerCase().includes(ext))
+  }
+  
+  // Check if content is a video (checks multiple sources)
+  const isVideoContent = (content, mediaUrl) => {
+    if (!content) return false
+    // Check post_type
+    if (content.post_type === 'video' || content.post_type?.toLowerCase() === 'video') {
+      return true
+    }
+    // Check content_type
+    if (content.content_type?.toLowerCase() === 'video') {
+      return true
+    }
+    // Check metadata.media_type
+    if (content.metadata?.media_type === 'video') {
+      return true
+    }
+    // Check file extension in URL
+    if (mediaUrl && isVideoFile(mediaUrl)) {
+      return true
+    }
+    return false
   }
 
   // Get full-size image URL for detailed viewing
@@ -2760,6 +2783,21 @@ const ContentDashboard = () => {
                   const thumbnailUrl = imageUrl ? getCardThumbnailUrl(imageUrl) : null
                   const hasImage = isSelectedChannel && !!imageUrl
                   
+                  // Check if this is a video
+                  const isVideo = isVideoContent(content, imageUrl)
+                  
+                  // Debug logging for video detection
+                  if (imageUrl && isSelectedChannel) {
+                    console.log('🔍 Video detection for content:', content.id, {
+                      imageUrl,
+                      post_type: content.post_type,
+                      content_type: content.content_type,
+                      metadata_media_type: content.metadata?.media_type,
+                      isVideo,
+                      isVideoFile: isVideoFile(imageUrl)
+                    })
+                  }
+                  
                   // Debug logging for image URLs
                   if (content.id && !imageUrl && isSelectedChannel) {
                     console.log('⚠️ Content has no image:', content.id, {
@@ -2801,35 +2839,44 @@ const ContentDashboard = () => {
                                 // Always prefer thumbnail for faster loading, fallback to original if thumbnail not available
                                 const mediaThumbnail = isSelectedChannel ? (thumbnailUrl || mediaUrl) : null
                                 
-                                // Check if it's a video file - only load for selected channel
-                                if (mediaUrl && isVideoFile(mediaUrl) && isSelectedChannel) {
+                                // Check if it's a video - only load for selected channel
+                                // Use the isVideo flag we calculated earlier
+                                if (mediaUrl && isVideo && isSelectedChannel) {
                                   return (
-                                    <video 
-                                      src={mediaUrl}
-                                      className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                                      controls={false}
-                                      preload="metadata"
-                                      muted
-                                      playsInline
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleImageClick(mediaUrl, content.title)
-                                      }}
-                                      onLoadStart={() => {
-                                        startImageLoading(content.id)
-                                      }}
-                                      onLoadedData={() => {
-                                        handleImageLoad(content.id)
-                                      }}
-                                      onError={(e) => {
-                                        handleImageError(content.id)
-                                      }}
-                                      style={{
-                                        opacity: imageLoading.has(content.id) ? 0 : 1,
-                                        filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
-                                        transition: 'all 0.5s ease-in-out'
-                                      }}
-                                    />
+                                    <div className="relative w-full h-full group">
+                                      <video 
+                                        src={mediaUrl}
+                                        className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                        controls={false}
+                                        preload="metadata"
+                                        muted
+                                        playsInline
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleImageClick(mediaUrl, content.title)
+                                        }}
+                                        onLoadStart={() => {
+                                          startImageLoading(content.id)
+                                        }}
+                                        onLoadedData={() => {
+                                          handleImageLoad(content.id)
+                                        }}
+                                        onError={(e) => {
+                                          handleImageError(content.id)
+                                        }}
+                                        style={{
+                                          opacity: imageLoading.has(content.id) ? 0 : 1,
+                                          filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
+                                          transition: 'all 0.5s ease-in-out'
+                                        }}
+                                      />
+                                      {/* Play button overlay */}
+                                      <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors pointer-events-none">
+                                        <div className="bg-white/90 rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
+                                          <Play className="w-4 h-4 text-purple-600 fill-purple-600" />
+                                        </div>
+                                      </div>
+                                    </div>
                                   )
                                 }
                                 
