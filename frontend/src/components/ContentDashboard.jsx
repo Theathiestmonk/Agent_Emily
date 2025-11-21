@@ -1231,19 +1231,30 @@ const ContentDashboard = () => {
                          (content.metadata && content.metadata.carousel_images && content.metadata.carousel_images.length > 0)
       const carouselImages = isCarousel ? (content.metadata?.carousel_images || []) : []
       
-      // Get the image URL if available (from content.media_url which comes from primary_image_url)
-      let imageUrl = content.media_url || ''
-      if (imageUrl && !isCarousel) {
-        console.log('📸 Including image in Instagram post:', imageUrl)
+      // Get the media URL if available (from content.media_url which comes from primary_image_url)
+      let mediaUrl = content.media_url || ''
+      
+      // Check if media is a video
+      const isVideo = content.post_type === 'video' || 
+                      content.content_type?.toLowerCase() === 'video' ||
+                      content.metadata?.media_type === 'video' ||
+                      (mediaUrl && isVideoFile(mediaUrl))
+      
+      if (mediaUrl && !isCarousel) {
+        if (isVideo) {
+          console.log('🎥 Including video in Instagram post:', mediaUrl)
+        } else {
+          console.log('📸 Including image in Instagram post:', mediaUrl)
+        }
       }
       
       if (isCarousel) {
         console.log(`🎠 Posting carousel with ${carouselImages.length} images to Instagram`)
       }
       
-      // Instagram requires an image or carousel - check if we have one
-      if (!isCarousel && !imageUrl) {
-        throw new Error('Instagram requires an image to post content. Please click the "Generate Media" button to create an image for this post first.')
+      // Instagram requires an image, video, or carousel - check if we have one
+      if (!isCarousel && !mediaUrl) {
+        throw new Error('Instagram requires an image or video to post content. Please click the "Generate Media" button to create media for this post first.')
       }
       
       if (isCarousel && carouselImages.length === 0) {
@@ -1261,7 +1272,8 @@ const ContentDashboard = () => {
         postData.post_type = 'carousel'
         postData.carousel_images = carouselImages
       } else {
-        postData.image_url = imageUrl
+        // Pass the media URL - backend will detect if it's a video or image
+        postData.image_url = mediaUrl
       }
       
       // Try OAuth method first (original endpoint)

@@ -361,7 +361,39 @@ class PostPublisher:
                 post_data["post_type"] = "carousel"
                 post_data["carousel_images"] = carousel_images
             else:
-                post_data["image_url"] = post.get("primary_image_url", "")
+                # Check if primary_image_url is actually a video
+                image_url = post.get("primary_image_url", "")
+                post_type = post.get("post_type", "")
+                metadata = post.get("metadata", {})
+                
+                # Check post_type first
+                is_video = False
+                if post_type and post_type.lower() == 'video':
+                    is_video = True
+                    logger.info(f"Video detected from post_type for post {post_id}")
+                # Check metadata.media_type
+                elif metadata and metadata.get('media_type') == 'video':
+                    is_video = True
+                    logger.info(f"Video detected from metadata.media_type for post {post_id}")
+                # Check file extension as fallback
+                elif image_url:
+                    video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.3gp']
+                    url_lower = image_url.lower().split('?')[0]
+                    is_video = any(url_lower.endswith(ext) for ext in video_extensions)
+                    if is_video:
+                        logger.info(f"Video detected from file extension for post {post_id}")
+                
+                if image_url:
+                    if is_video:
+                        post_data["is_video"] = True
+                        post_data["video_url"] = image_url
+                        post_data["image_url"] = ""  # Clear image_url for video
+                    else:
+                        post_data["image_url"] = image_url
+                        post_data["video_url"] = ""  # Clear video_url for image
+                else:
+                    post_data["image_url"] = ""
+                    post_data["video_url"] = ""
             
             # Publish based on platform
             success = False
@@ -698,11 +730,25 @@ class PostPublisher:
                         logger.error(f"Failed to publish Instagram carousel: {error_data}")
                         return False
             
-            # Instagram requires image, so check if we have one
+            # Instagram requires image or video, so check if we have one
             image_url = post_data.get("image_url", "")
-            if not image_url:
-                logger.warning("Instagram post requires an image, but none provided")
+            video_url = post_data.get("video_url", "")
+            media_url = video_url if video_url else image_url
+            
+            if not media_url:
+                logger.warning("Instagram post requires an image or video, but none provided")
                 return False
+            
+            # Check if media is a video or image
+            is_video = False
+            if media_url:
+                # Check if URL is a video by file extension (handle URLs with query parameters)
+                video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.3gp']
+                media_url_lower = media_url.lower()
+                # Remove query parameters for extension check
+                url_without_query = media_url_lower.split('?')[0]
+                is_video = any(url_without_query.endswith(ext) for ext in video_extensions)
+                logger.info(f"Media type detection: {'Video/Reel' if is_video else 'Image'} - URL: {media_url[:100]}...")
             
             # Prepare caption
             message = post_data.get("message", "")
@@ -719,13 +765,29 @@ class PostPublisher:
             
             # Step 1: Create media container
             container_url = f"https://graph.facebook.com/v18.0/{page_id}/media"
-            container_params = {
-                "image_url": image_url,
-                "caption": caption,
-                "access_token": access_token
-            }
             
-            async with httpx.AsyncClient() as client:
+            # Prepare container params based on media type
+            if is_video:
+                # For posts with videos/reels
+                container_params = {
+                    "media_type": "REELS",
+                    "video_url": media_url,  # Use video_url for reels
+                    "caption": caption,
+                    "access_token": access_token
+                }
+                logger.info(f"Creating Instagram reel with video")
+            else:
+                # For posts with images
+                container_params = {
+                    "image_url": media_url,
+                    "caption": caption,
+                    "access_token": access_token
+                }
+                logger.info(f"Creating Instagram post with image")
+            
+            # Use longer timeout for videos/reels as they take longer to process
+            timeout = 180.0 if is_video else 60.0
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 # Create container
                 container_response = await client.post(container_url, params=container_params)
                 container_response.raise_for_status()
@@ -735,6 +797,35 @@ class PostPublisher:
                 if not creation_id:
                     logger.error(f"Failed to create Instagram media container: {container_result}")
                     return False
+                
+                # For videos/reels, wait for processing before publishing (with shorter timeout for better UX)
+                if is_video:
+                    # Check status and wait for processing
+                    status_url = f"https://graph.facebook.com/v18.0/{creation_id}"
+                    max_wait_time = 120  # Maximum 2 minutes wait
+                    wait_interval = 5  # Check every 5 seconds
+                    elapsed_time = 0
+                    
+                    while elapsed_time < max_wait_time:
+                        await asyncio.sleep(wait_interval)
+                        elapsed_time += wait_interval
+                        
+                        status_response = await client.get(status_url, params={"access_token": access_token, "fields": "status_code"})
+                        if status_response.status_code == 200:
+                            status_data = status_response.json()
+                            status_code = status_data.get("status_code")
+                            
+                            # Status codes: "FINISHED" = ready, "IN_PROGRESS" = still processing, "ERROR" = failed
+                            if status_code == "FINISHED":
+                                logger.info(f"Video processing finished, ready to publish")
+                                break
+                            elif status_code == "ERROR":
+                                logger.error(f"Video processing failed with error status")
+                                return False
+                            # If IN_PROGRESS, continue waiting
+                        else:
+                            logger.warning(f"Could not check video status, proceeding anyway")
+                            break
                 
                 # Step 2: Publish the container
                 publish_url = f"https://graph.facebook.com/v18.0/{page_id}/media_publish"
@@ -748,7 +839,8 @@ class PostPublisher:
                 publish_result = publish_response.json()
                 
                 if publish_result.get("id"):
-                    logger.info(f"Instagram post published: {publish_result.get('id')}")
+                    post_id = publish_result.get("id")
+                    logger.info(f"Instagram {'reel' if is_video else 'post'} published: {post_id}")
                     return True
                 else:
                     logger.error(f"Instagram post failed: {publish_result}")

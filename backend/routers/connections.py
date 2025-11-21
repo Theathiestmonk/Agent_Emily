@@ -3395,14 +3395,28 @@ async def post_to_facebook(
         
         # Check if media is a video or image
         is_video = False
-        if image_url:
-            # Check if URL is a video by file extension (handle URLs with query parameters)
+        post_type = post_data.get('post_type', '')
+        metadata = post_data.get('metadata', {})
+        
+        # Check post_type first
+        if post_type and post_type.lower() == 'video':
+            is_video = True
+            print(f"🎬 Media type detection: Video (from post_type)")
+        # Check metadata.media_type
+        elif metadata and metadata.get('media_type') == 'video':
+            is_video = True
+            print(f"🎬 Media type detection: Video (from metadata.media_type)")
+        # Check file extension as fallback
+        elif image_url:
             video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.3gp']
             image_url_lower = image_url.lower()
             # Remove query parameters for extension check
             url_without_query = image_url_lower.split('?')[0]
             is_video = any(url_without_query.endswith(ext) for ext in video_extensions)
-            print(f"🎬 Media type detection: {'Video' if is_video else 'Image'} - URL: {image_url[:100]}...")
+            if is_video:
+                print(f"🎬 Media type detection: Video (from file extension) - URL: {image_url[:100]}...")
+            else:
+                print(f"🖼️ Media type detection: Image - URL: {image_url[:100]}...")
         
         # Prepare payload based on whether we have media and what type
         if image_url:
@@ -4918,14 +4932,28 @@ async def post_to_instagram(
         
         # Check if media is a video or image (same logic as Facebook)
         is_video = False
-        if image_url:
-            # Check if URL is a video by file extension (handle URLs with query parameters)
+        post_type = post_data.get('post_type', '')
+        metadata = post_data.get('metadata', {})
+        
+        # Check post_type first
+        if post_type and post_type.lower() == 'video':
+            is_video = True
+            print(f"🎬 Media type detection: Video/Reel (from post_type)")
+        # Check metadata.media_type
+        elif metadata and metadata.get('media_type') == 'video':
+            is_video = True
+            print(f"🎬 Media type detection: Video/Reel (from metadata.media_type)")
+        # Check file extension as fallback
+        elif image_url:
             video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.3gp']
             image_url_lower = image_url.lower()
             # Remove query parameters for extension check
             url_without_query = image_url_lower.split('?')[0]
             is_video = any(url_without_query.endswith(ext) for ext in video_extensions)
-            print(f"🎬 Media type detection: {'Video/Reel' if is_video else 'Image'} - URL: {image_url[:100]}...")
+            if is_video:
+                print(f"🎬 Media type detection: Video/Reel (from file extension) - URL: {image_url[:100]}...")
+            else:
+                print(f"🖼️ Media type detection: Image - URL: {image_url[:100]}...")
         
         
         # Prepare media data based on whether we have media and what type
