@@ -169,6 +169,23 @@ class PostPublisher:
         if not post_id:
             return
         
+        # Check if post is already published - don't schedule published posts
+        post_status = post.get("status", "").lower()
+        if post_status == "published":
+            logger.info(f"Post {post_id} is already published, skipping scheduling")
+            return
+        
+        # Check if post is already scheduled to prevent duplicates
+        if post_id in self.scheduled_tasks:
+            task = self.scheduled_tasks[post_id]
+            # Check if task is still running (not cancelled or done)
+            if not task.done():
+                logger.info(f"Post {post_id} is already scheduled, skipping duplicate registration")
+                return
+            else:
+                # Task is done/cancelled, remove it and reschedule
+                del self.scheduled_tasks[post_id]
+        
         # Store post data
         self.post_data_cache[post_id] = post
         
@@ -740,15 +757,20 @@ class PostPublisher:
                 return False
             
             # Check if media is a video or image
-            is_video = False
-            if media_url:
-                # Check if URL is a video by file extension (handle URLs with query parameters)
+            # First check if is_video flag is already set (from post_type/metadata detection in publish_post)
+            is_video = post_data.get("is_video", False)
+            if not is_video and media_url:
+                # Fallback: Check if URL is a video by file extension (handle URLs with query parameters)
                 video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.3gp']
                 media_url_lower = media_url.lower()
                 # Remove query parameters for extension check
                 url_without_query = media_url_lower.split('?')[0]
                 is_video = any(url_without_query.endswith(ext) for ext in video_extensions)
-                logger.info(f"Media type detection: {'Video/Reel' if is_video else 'Image'} - URL: {media_url[:100]}...")
+            
+            if is_video:
+                logger.info(f"Media type detection: Video/Reel - URL: {media_url[:100] if media_url else 'N/A'}...")
+            else:
+                logger.info(f"Media type detection: Image - URL: {media_url[:100] if media_url else 'N/A'}...")
             
             # Prepare caption
             message = post_data.get("message", "")
