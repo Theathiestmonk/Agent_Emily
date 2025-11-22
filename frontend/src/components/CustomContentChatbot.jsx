@@ -65,63 +65,8 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
     scrollToBottom();
   }, [messages]);
 
-  // Watch for step changes and update carousel images from state
-  useEffect(() => {
-    console.log('🔍 useEffect triggered - currentStep:', currentStep, 'carouselImages.length:', carouselImages.length);
-    console.log('🔍 Full state object:', JSON.stringify(state, null, 2));
-    
-    if (currentStep === 'approve_carousel_images') {
-      console.log('🔍 In approve_carousel_images step');
-      console.log('🔍 state.carousel_images:', state?.carousel_images);
-      console.log('🔍 Is array?', Array.isArray(state?.carousel_images));
-      
-      if (state && state.carousel_images && Array.isArray(state.carousel_images) && state.carousel_images.length > 0) {
-        const stateImages = state.carousel_images.map((img, idx) => {
-          // Handle different formats: string URL, object with url property, or object with url nested
-          let imageUrl = '';
-          if (typeof img === 'string') {
-            imageUrl = img;
-          } else if (img && typeof img === 'object') {
-            imageUrl = img.url || img.image_url || img.src || '';
-          }
-          
-          const imagePrompt = typeof img === 'object' ? (img.prompt || '') : '';
-          
-          console.log(`🔍 Image ${idx}:`, { url: imageUrl, prompt: imagePrompt, original: img });
-          
-          return {
-            url: imageUrl,
-            index: idx,
-            prompt: imagePrompt,
-            approved: false
-          };
-        }).filter(img => img.url); // Filter out any images without URLs
-        
-        console.log('🔍 Processed stateImages:', stateImages);
-        console.log('🔍 Filtered images count:', stateImages.length);
-        
-        if (stateImages.length >= 4) {
-          console.log('✅ Setting carousel images:', stateImages);
-          console.log('✅ Image URLs:', stateImages.map(img => img.url));
-          // Set exactly 4 images
-          const imagesToSet = stateImages.slice(0, 4);
-          setCarouselImages(imagesToSet);
-          setIsGeneratingCarouselImage(false);
-          console.log('✅ Carousel images state updated, length:', imagesToSet.length);
-        } else if (stateImages.length > 0) {
-          console.warn('⚠️ Expected 4 images but got:', stateImages.length, 'images:', stateImages);
-          // Still set them if we have some images
-          setCarouselImages(stateImages);
-          setIsGeneratingCarouselImage(false);
-        } else {
-          console.error('❌ No valid image URLs found in carousel_images');
-          setIsGeneratingCarouselImage(false);
-        }
-      } else {
-        console.warn('⚠️ No carousel_images in state or not an array. State keys:', state ? Object.keys(state) : 'state is null');
-      }
-    }
-  }, [currentStep, state]);
+  // Note: Carousel images are now displayed directly from message.carousel_images metadata
+  // No need to sync from state - images are attached to messages when received from backend
 
   // Cleanup media preview URL to prevent memory leaks
   useEffect(() => {
@@ -137,6 +82,40 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       startConversation();
     }
   }, [isOpen]);
+  
+  // Auto-cleanup duplicate content review messages when in confirm_content step
+  // This useEffect provides a safety net to catch any duplicates that might slip through
+  useEffect(() => {
+    if (currentStep === 'confirm_content') {
+      setMessages(prev => {
+        const contentReviewMessages = prev.filter(msg => 
+          msg.role === 'assistant' && 
+          msg.content && 
+          (msg.content.includes('Please review the content above and let me know') || 
+           msg.content.includes('Please review it above and let me know if you\'d like to save this post'))
+        );
+        
+        // If we have multiple content review messages, keep only the most recent one
+        if (contentReviewMessages.length > 1) {
+          const mostRecent = contentReviewMessages[contentReviewMessages.length - 1];
+          const mostRecentId = mostRecent.id;
+          
+          // Remove all content review messages except the most recent one
+          return prev.filter(msg => {
+            if (msg.role === 'assistant' && 
+                msg.content && 
+                (msg.content.includes('Please review the content above and let me know') || 
+                 msg.content.includes('Please review it above and let me know if you\'d like to save this post'))) {
+              return msg.id === mostRecentId; // Keep only the most recent one
+            }
+            return true; // Keep all other messages
+          });
+        }
+        
+        return prev; // No duplicates, return as is
+      });
+    }
+  }, [currentStep, messages]);
 
   const startConversation = async () => {
     try {
@@ -369,13 +348,159 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
 
       const data = await response.json();
       
-      // Add assistant response
-      addMessage('assistant', data.message.content, data.message);
+      // Extract and attach carousel images to message BEFORE adding it (if in approval step)
+      if (data.current_step === 'approve_carousel_images') {
+        // Extract carousel images from message or state
+        let carouselImageUrls = [];
+        
+        // First, try from message.carousel_images
+        if (data.message && data.message.carousel_images && Array.isArray(data.message.carousel_images)) {
+          carouselImageUrls = data.message.carousel_images.map((img) => {
+            return typeof img === 'string' ? img : (img.url || img);
+          });
+        }
+        // Second, try from state.carousel_images
+        else if (data.state && data.state.carousel_images && Array.isArray(data.state.carousel_images)) {
+          carouselImageUrls = data.state.carousel_images.map((img) => {
+            return typeof img === 'string' ? img : (img.url || img);
+          });
+        }
+        
+        // Attach carousel images to message metadata for display
+        if (carouselImageUrls.length > 0 && data.message) {
+          if (typeof data.message === 'object') {
+            data.message.carousel_images = carouselImageUrls;
+          }
+        }
+        
+        setIsGeneratingCarouselImage(false);
+      }
+      
+      // Skip adding message for generate_carousel_image step - loader will be added by generateAllCarouselImages()
+      // Also skip if we're in approve_carousel_images and a message with carousel images already exists
+      // Check both current messages state and the message content to avoid duplicates
+      const messageContent = typeof data.message === 'object' ? data.message.content : data.message;
+      const hasExistingCarouselMessage = data.current_step === 'approve_carousel_images' && 
+        messages.some(msg => 
+          (msg.carousel_images && Array.isArray(msg.carousel_images) && msg.carousel_images.length > 0) ||
+          (msg.content && msg.content.includes('Perfect! I\'ve generated all 4 carousel images'))
+        );
+      
+      // Check if we're in confirm_content step and a content review message already exists
+      // Use functional update to check the most recent state
+      let hasExistingContentReviewMessage = false;
+      if (data.current_step === 'confirm_content') {
+        // Check current messages state
+        hasExistingContentReviewMessage = messages.some(msg => 
+          msg.role === 'assistant' && 
+          msg.content && 
+          (msg.content.includes('Please review the content above and let me know') || 
+           msg.content.includes('Please review it above and let me know if you\'d like to save this post'))
+        );
+      }
+      
+      // Also check if this exact message content already exists
+      const messageAlreadyExists = messages.some(msg => 
+        msg.role === 'assistant' && 
+        msg.content === messageContent &&
+        msg.carousel_images && Array.isArray(msg.carousel_images) && msg.carousel_images.length > 0
+      );
+      
+      // For content review messages, always clean up old ones and add the new one
+      // This ensures only the most recent content review message exists
+      const messageMetadata = typeof data.message === 'object' ? data.message : { content: messageContent };
+      const isContentReviewMessage = messageContent && 
+        (messageContent.includes('Please review the content above and let me know') || 
+         messageContent.includes('Please review it above and let me know if you\'d like to save this post'));
+      
+      // If this is a content review message, always process it (clean up old ones and add new one)
+      // Otherwise, use the existing duplicate prevention logic
+      if (isContentReviewMessage) {
+        setMessages(prev => {
+          // Remove all old content review messages
+          const cleanedMessages = prev.filter(msg => 
+            !(msg.role === 'assistant' && 
+              msg.content && 
+              (msg.content.includes('Please review the content above and let me know') || 
+               msg.content.includes('Please review it above and let me know if you\'d like to save this post')))
+          );
+          
+          // Add the new content review message
+          const newMessage = {
+            id: Date.now() + Math.random(),
+            role: 'assistant',
+            content: messageContent,
+            timestamp: new Date().toISOString(),
+            ...messageMetadata
+          };
+          
+          return [...cleanedMessages, newMessage];
+        });
+      } else if (data.current_step !== 'generate_carousel_image' && !hasExistingCarouselMessage && !messageAlreadyExists) {
+        // Add assistant response (now with carousel images attached if applicable)
+        const hasCarouselImages = messageMetadata.carousel_images && Array.isArray(messageMetadata.carousel_images) && messageMetadata.carousel_images.length > 0;
+        
+        // Use functional update to add message and clean up duplicates from other messages atomically
+        setMessages(prev => {
+          let cleanedMessages = prev;
+          
+          // Remove carousel_images from all existing messages if this new message has carousel_images
+          if (hasCarouselImages) {
+            cleanedMessages = cleanedMessages.map(msg => {
+              const { carousel_images, ...rest } = msg;
+              return rest;
+            });
+          }
+          
+          // Then add the new message
+          const newMessage = {
+            id: Date.now() + Math.random(),
+            role: 'assistant',
+            content: messageContent,
+            timestamp: new Date().toISOString(),
+            ...messageMetadata
+          };
+          
+          return [...cleanedMessages, newMessage];
+        });
+      }
       
       setCurrentStep(data.current_step);
       setProgress(data.progress_percentage);
       setState(data.state || {});
-
+      
+      // Auto-cleanup duplicate content review messages when in confirm_content step
+      // This provides a safety net even if backend sends duplicates
+      if (data.current_step === 'confirm_content') {
+        setMessages(prev => {
+          const contentReviewMessages = prev.filter(msg => 
+            msg.role === 'assistant' && 
+            msg.content && 
+            (msg.content.includes('Please review the content above and let me know') || 
+             msg.content.includes('Please review it above and let me know if you\'d like to save this post'))
+          );
+          
+          // If we have multiple content review messages, keep only the most recent one
+          if (contentReviewMessages.length > 1) {
+            const mostRecent = contentReviewMessages[contentReviewMessages.length - 1];
+            const mostRecentId = mostRecent.id;
+            
+            // Remove all content review messages except the most recent one
+            return prev.filter(msg => {
+              if (msg.role === 'assistant' && 
+                  msg.content && 
+                  (msg.content.includes('Please review the content above and let me know') || 
+                   msg.content.includes('Please review it above and let me know if you\'d like to save this post'))) {
+                return msg.id === mostRecentId; // Keep only the most recent one
+              }
+              return true; // Keep all other messages
+            });
+          }
+          
+          return prev; // No duplicates, return as is
+        });
+      }
+      
       // Parse generated content if available
       console.log('🔍 Full response data:', data);
       console.log('🔍 Message data:', data.message);
@@ -398,45 +523,19 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       if (data.current_step === 'generate_carousel_image') {
         // Generate all 4 images at once
         setIsGeneratingCarouselImage(true);
-        if (data.message.generating_all) {
+        // Check for generating_all flag or regenerate message
+        const messageObj = typeof data.message === 'object' ? data.message : {};
+        const hasGeneratingFlag = messageObj.generating_all === true;
+        const isRegenerateMessage = messageObj.content?.includes('regenerate') || 
+                                     messageObj.content?.includes('Regenerating') ||
+                                     data.message?.content?.includes('regenerate');
+        
+        if (hasGeneratingFlag || isRegenerateMessage) {
           // Auto-trigger generation of all 4 images
-          generateAllCarouselImages();
-        }
-      } else if (data.current_step === 'approve_carousel_images') {
-        // All images generated, show for approval
-        setIsGeneratingCarouselImage(false);
-        
-        // Try to get images from multiple sources
-        let imagesToSet = [];
-        
-        // First, try from message.carousel_images
-        if (data.message && data.message.carousel_images && Array.isArray(data.message.carousel_images)) {
-          imagesToSet = data.message.carousel_images.map((img, idx) => {
-            const imageUrl = typeof img === 'string' ? img : (img.url || img);
-            return {
-              url: imageUrl,
-              index: idx,
-              approved: false
-            };
-          });
-        }
-        // Second, try from state.carousel_images
-        else if (data.state && data.state.carousel_images && Array.isArray(data.state.carousel_images)) {
-          imagesToSet = data.state.carousel_images.map((img, idx) => {
-            const imageUrl = typeof img === 'string' ? img : (img.url || img);
-            const imagePrompt = typeof img === 'object' ? (img.prompt || '') : '';
-            return {
-              url: imageUrl,
-              index: idx,
-              prompt: imagePrompt,
-              approved: false
-            };
-          });
-        }
-        
-        if (imagesToSet.length > 0) {
-          console.log('🔍 Setting carousel images from approve step:', imagesToSet);
-          setCarouselImages(imagesToSet);
+          // Add a small delay to ensure state is updated
+          setTimeout(() => {
+            generateAllCarouselImages();
+          }, 300);
         }
       } else if (data.current_step === 'handle_carousel_upload') {
         setShowCarouselUpload(true);
@@ -688,9 +787,40 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
   };
 
   // Generate all 4 carousel images at once
-  const generateAllCarouselImages = async () => {
+  const generateAllCarouselImages = async (skipMessage = false) => {
     try {
       setIsGeneratingCarouselImage(true);
+      
+      // Only add loading message if not skipped and one doesn't already exist
+      if (!skipMessage) {
+        // Use functional state update to check the most recent state and add message atomically
+        setMessages(prev => {
+          const hasExistingGeneratingMessage = prev.some(msg => 
+            msg.isGenerating && msg.generatingType === 'carousel'
+          );
+          
+          if (!hasExistingGeneratingMessage) {
+            // Add message directly in the functional update
+            const newMessage = {
+              id: Date.now() + Math.random(),
+              role: 'assistant',
+              content: 'Generating all 4 carousel images... This may take a moment.',
+              timestamp: new Date().toISOString(),
+              isGenerating: true,
+              generatingType: 'carousel'
+            };
+            
+            // Scroll to bottom after state update
+            setTimeout(() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, 100);
+            
+            return [...prev, newMessage];
+          }
+          return prev;
+        });
+      }
+      
       const token = await getAuthToken();
       if (!token) {
         throw new Error('No authentication token available');
@@ -786,25 +916,70 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
           if (stateImages.length === 4) {
             setCarouselImages(stateImages);
             setIsGeneratingCarouselImage(false); // Only set to false after images are loaded
+            
+            // Update the generating message to show completion with images
+            // Also remove carousel_images from all other messages to prevent duplicate approval cards
+            setMessages(prev => prev.map(msg => {
+              if (msg.isGenerating && msg.generatingType === 'carousel') {
+                // Update the generating message with carousel images
+                return { 
+                  ...msg, 
+                  isGenerating: false, 
+                  content: 'Perfect! I\'ve generated all 4 carousel images for you. Please review them below. Do you want to approve these images and continue?',
+                  carousel_images: stateImages.map(img => img.url)
+                };
+              } else {
+                // Remove carousel_images from all other messages
+                const { carousel_images, ...rest } = msg;
+                return rest;
+              }
+            }));
           }
         } else if (data.images && Array.isArray(data.images) && data.images.length === 4) {
           // Fallback: use images from API response if state doesn't have them
           console.log('🔍 Using images from API response as fallback');
+          const fallbackImages = data.images.map((img, idx) => {
+            const imageUrl = typeof img === 'string' ? img : (img.url || img);
+            return {
+              url: imageUrl,
+              index: idx,
+              approved: false
+            };
+          });
+          setCarouselImages(fallbackImages);
           setIsGeneratingCarouselImage(false);
+          
+          // Update the generating message to show completion with images
+          // Also remove carousel_images from all other messages to prevent duplicate approval cards
+          setMessages(prev => prev.map(msg => {
+            if (msg.isGenerating && msg.generatingType === 'carousel') {
+              // Update the generating message with carousel images
+              return { 
+                ...msg, 
+                isGenerating: false, 
+                content: 'Perfect! I\'ve generated all 4 carousel images for you. Please review them below. Do you want to approve these images and continue?',
+                carousel_images: fallbackImages.map(img => img.url)
+              };
+            } else {
+              // Remove carousel_images from all other messages
+              const { carousel_images, ...rest } = msg;
+              return rest;
+            }
+          }));
         } else {
           console.warn('⚠️ No carousel images found in state or response');
           setIsGeneratingCarouselImage(false);
+          
+          // Update the generating message to show error
+          setMessages(prev => prev.map(msg => 
+            msg.isGenerating && msg.generatingType === 'carousel'
+              ? { ...msg, isGenerating: false, content: 'Sorry, I encountered an error generating the carousel images. Please try again.' }
+              : msg
+          ));
         }
         
-        // The backend should have transitioned to approve_carousel_images step
-        if (convData.messages && convData.messages.length > 0) {
-          const lastMessage = convData.messages[convData.messages.length - 1];
-          // Only add if not already in messages
-          const existingMessages = messages.map(m => m.content);
-          if (!existingMessages.includes(lastMessage.content)) {
-            addMessage('assistant', lastMessage.content, lastMessage);
-          }
-        }
+        // Don't add backend message if we've already updated the generating message with carousel images
+        // The generating message already contains the completion text and carousel images
       } else {
         setIsGeneratingCarouselImage(false);
       }
@@ -812,7 +987,13 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
     } catch (error) {
       console.error('Error generating carousel images:', error);
       setIsGeneratingCarouselImage(false);
-      addMessage('assistant', `Sorry, I encountered an error generating the carousel images: ${error.message}. Please try again.`);
+      
+      // Update the generating message to show error
+      setMessages(prev => prev.map(msg => 
+        msg.isGenerating && msg.generatingType === 'carousel'
+          ? { ...msg, isGenerating: false, content: `Sorry, I encountered an error generating the carousel images: ${error.message}. Please try again.` }
+          : msg
+      ));
     }
   };
 
@@ -893,6 +1074,50 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       
       setIsLoading(false);
       
+      // Handle regeneration - trigger image generation if step is generate_carousel_image
+      if (action === 'regenerate') {
+        if (data.current_step === 'generate_carousel_image') {
+          console.log('🔄 Regeneration detected, triggering image generation');
+          // Clear existing images
+          setCarouselImages([]);
+          setIsGeneratingCarouselImage(true);
+          
+          // First, remove all existing generating messages to prevent duplicates
+          setMessages(prev => prev.filter(msg => 
+            !(msg.isGenerating && msg.generatingType === 'carousel')
+          ));
+          
+          // Add loading message (skip if already added by backend)
+          const messageContent = typeof data.message === 'string' ? data.message : (data.message?.content || '');
+          if (!messageContent || !messageContent.includes('regenerat')) {
+            // Add new generating message
+            addMessage('assistant', 'Regenerating all 4 carousel images... This may take a moment.', {
+              isGenerating: true,
+              generatingType: 'carousel'
+            });
+          } else {
+            // Update the backend message to show as generating
+            setMessages(prev => prev.map(msg => 
+              msg.content === messageContent && msg.role === 'assistant'
+                ? { ...msg, isGenerating: true, generatingType: 'carousel' }
+                : msg
+            ));
+          }
+          
+          // Scroll to bottom
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          }, 100);
+          
+          // Trigger regeneration after a short delay to ensure state is updated
+          // Pass skipMessage: true since we already handled message creation/update above
+          setTimeout(() => {
+            generateAllCarouselImages(true);
+          }, 500);
+          return; // Exit early to prevent clearing images
+        }
+      }
+      
       // Clear carousel images and UI after approval
       if (action === 'approve') {
         console.log('✅ Approval successful, clearing carousel images');
@@ -934,7 +1159,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
           }, 300);
         }
       } else if (action === 'regenerate') {
-        // Clear images for regeneration
+        // Clear images for regeneration - actual regeneration will be triggered by backend response
         setCarouselImages([]);
         setShowCarouselUpload(false);
       } else if (action === 'manual_upload') {
@@ -1286,132 +1511,6 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-white to-purple-25">
-          {/* Carousel Image Generation UI - Show only when generating */}
-          {currentStep === 'generate_carousel_image' && isGeneratingCarouselImage && (
-            <div className="flex justify-start">
-              <div className="max-w-[80%] rounded-2xl px-6 py-4 shadow-lg bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200">
-                <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-3">
-                      <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
-                      <span className="text-sm font-bold text-purple-800">
-                        Generating all 4 carousel images... This may take a moment.
-                      </span>
-                    </div>
-                    <div className="w-full bg-purple-200 rounded-full h-3">
-                      <div
-                        className="bg-gradient-to-r from-pink-400 to-purple-500 h-3 rounded-full transition-all duration-300 animate-pulse"
-                        style={{ width: '100%' }}
-                      />
-                    </div>
-                    <div className="text-xs text-purple-600 text-center">
-                      Creating a cohesive sequential story across all 4 images...
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Carousel Images Approval UI - Show only when in approval step and not in manual upload */}
-          {currentStep === 'approve_carousel_images' && 
-           carouselImages.length >= 4 && 
-           !isGeneratingCarouselImage &&
-           state?.carousel_image_source !== 'manual_upload' && (
-            <div className="flex justify-start">
-              <div className="max-w-[80%] rounded-2xl px-6 py-4 shadow-lg bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200">
-                <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
-                  <div className="space-y-4">
-                    <div className="text-sm font-bold text-purple-800 text-center">
-                      Review all 4 carousel images
-                    </div>
-                    
-                    {/* Image Grid */}
-                    {carouselImages.length >= 4 ? (
-                      <div className="grid grid-cols-2 gap-3 w-full mb-4" style={{ minHeight: '320px' }}>
-                        {carouselImages.slice(0, 4).map((img, idx) => {
-                          console.log(`🔍 Rendering image ${idx + 1}:`, img.url);
-                          return (
-                            <div 
-                              key={`carousel-img-${idx}-${img.url}`} 
-                              className="relative w-full overflow-hidden rounded-lg border-2 border-purple-200 shadow-md bg-gray-100"
-                              style={{ 
-                                minHeight: '160px',
-                                maxHeight: '160px',
-                                height: '160px',
-                                width: '100%',
-                                position: 'relative'
-                              }}
-                            >
-                              <img
-                                src={img.url}
-                                alt={`Carousel image ${idx + 1}`}
-                                className="w-full h-full object-cover"
-                                style={{ 
-                                  display: 'block',
-                                  width: '100%',
-                                  height: '100%',
-                                  objectFit: 'cover',
-                                  opacity: 1,
-                                  visibility: 'visible',
-                                  position: 'relative',
-                                  zIndex: 1
-                                }}
-                                onError={(e) => {
-                                  console.error('❌ Image load error for:', img.url);
-                                  const parent = e.target.parentElement;
-                                  if (parent) {
-                                    parent.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm">Failed to load image</div>';
-                                  }
-                                }}
-                                onLoad={(e) => {
-                                  console.log('✅ Image loaded successfully:', img.url);
-                                  e.target.style.opacity = '1';
-                                  e.target.style.visibility = 'visible';
-                                  e.target.style.display = 'block';
-                                }}
-                              />
-                              <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded z-20 pointer-events-none">
-                                {idx + 1}/4
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="text-center py-4 text-purple-600">
-                        <p>Loading images... ({carouselImages.length}/4)</p>
-                      </div>
-                    )}
-                    
-                    {/* Action Buttons */}
-                    <div className="flex flex-col gap-2">
-                      <button
-                        onClick={() => handleCarouselImagesApproval('approve')}
-                        className="w-full px-4 py-3 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl hover:from-green-500 hover:to-blue-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
-                      >
-                        ✅ Approve and Continue
-                      </button>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleCarouselImagesApproval('regenerate')}
-                          className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-xl hover:from-orange-500 hover:to-red-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
-                        >
-                          🔄 Regenerate All
-                        </button>
-                        <button
-                          onClick={() => handleCarouselImagesApproval('manual_upload')}
-                          className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-400 to-pink-500 text-white rounded-xl hover:from-purple-500 hover:to-pink-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
-                        >
-                          📤 Manual Upload
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {messages.map((message) => (
             <div
@@ -1425,15 +1524,15 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                     : 'bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200'
                 }`}
               >
-                {/* Show carousel images if available - display before content text */}
+                {/* Show carousel images if available in message metadata - ONLY use message.carousel_images */}
                 {message.carousel_images && Array.isArray(message.carousel_images) && message.carousel_images.length > 0 && (
                   <div className="mb-6">
-                    <div className="text-sm font-bold text-purple-800 mb-3">
-                      Carousel Images ({message.carousel_images.length}):
+                    <div className="text-sm font-bold text-purple-800 mb-3 text-center">
+                      {currentStep === 'approve_carousel_images' ? 'Review all 4 carousel images' : `Carousel Images (${message.carousel_images.length}):`}
                     </div>
                     <div className={`grid gap-3 ${message.carousel_images.length <= 4 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                      {message.carousel_images.map((imgUrl, idx) => {
-                        const imageUrl = typeof imgUrl === 'string' ? imgUrl : (imgUrl.url || imgUrl);
+                      {message.carousel_images.slice(0, 4).map((img, idx) => {
+                        const imageUrl = typeof img === 'string' ? img : (img.url || img);
                         return (
                           <div key={idx} className="relative group">
                             <img
@@ -1456,6 +1555,42 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                         );
                       })}
                     </div>
+                    
+                    {/* Show approval buttons if in approval step and this is the most recent assistant message */}
+                    {currentStep === 'approve_carousel_images' && 
+                     !isGeneratingCarouselImage &&
+                     state?.carousel_image_source !== 'manual_upload' &&
+                     message.role === 'assistant' &&
+                     message.id === messages.filter(m => m.role === 'assistant').slice(-1)[0]?.id && (
+                      <div className="mt-4 flex flex-col gap-2">
+                        {/* Show completion text above buttons if message content contains it */}
+                        {message.content && message.content.includes("Perfect! I've generated all 4 carousel images") && (
+                          <div className="text-sm text-gray-700 mb-3 px-2">
+                            {message.content}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => handleCarouselImagesApproval('approve')}
+                          className="w-full px-4 py-3 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl hover:from-green-500 hover:to-blue-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
+                        >
+                          ✅ Approve and Continue
+                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleCarouselImagesApproval('regenerate')}
+                            className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-xl hover:from-orange-500 hover:to-red-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
+                          >
+                            🔄 Regenerate All
+                          </button>
+                          <button
+                            onClick={() => handleCarouselImagesApproval('manual_upload')}
+                            className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-400 to-pink-500 text-white rounded-xl hover:from-purple-500 hover:to-pink-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
+                          >
+                            📤 Manual Upload
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 
@@ -1517,25 +1652,55 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                   </div>
                 )}
                 
-                {/* Render content with markdown support */}
-                <div className={`text-sm prose prose-sm max-w-none ${message.role === 'user' ? 'prose-invert' : ''}`}>
-                  <ReactMarkdown
-                    components={{
-                      h1: ({children}) => <h1 className={`text-lg font-bold mb-3 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h1>,
-                      h2: ({children}) => <h2 className={`text-base font-bold mb-2 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h2>,
-                      h3: ({children}) => <h3 className={`text-sm font-bold mb-2 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h3>,
-                      p: ({children}) => <p className={`mb-3 leading-relaxed ${message.role === 'user' ? 'text-white' : 'text-gray-700'}`}>{children}</p>,
-                      strong: ({children}) => <strong className={`font-semibold ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</strong>,
-                      em: ({children}) => <em className={`italic ${message.role === 'user' ? 'text-white' : 'text-gray-600'}`}>{children}</em>,
-                      ul: ({children}) => <ul className={`list-disc list-inside mb-3 space-y-1 ${message.role === 'user' ? 'text-white' : ''}`}>{children}</ul>,
-                      li: ({children}) => <li className={message.role === 'user' ? 'text-white' : 'text-gray-700'}>{children}</li>,
-                      hr: () => <hr className={`my-4 ${message.role === 'user' ? 'border-white/30' : 'border-gray-300'}`} />,
-                      code: ({children}) => <code className={`px-1 py-0.5 rounded text-xs font-mono ${message.role === 'user' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-800'}`}>{children}</code>,
-                    }}
-                  >
-                    {message.content}
-                  </ReactMarkdown>
-                </div>
+                {/* Show carousel generation loader if this is a generating message */}
+                {message.isGenerating && message.generatingType === 'carousel' && isGeneratingCarouselImage && (
+                  <div className="mb-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-3">
+                        <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                        <span className="text-sm font-bold text-purple-800">
+                          Generating all 4 carousel images... This may take a moment.
+                        </span>
+                      </div>
+                      <div className="w-full bg-purple-200 rounded-full h-3">
+                        <div
+                          className="bg-gradient-to-r from-pink-400 to-purple-500 h-3 rounded-full transition-all duration-300 animate-pulse"
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div className="text-xs text-purple-600 text-center">
+                        Creating a cohesive sequential story across all 4 images...
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Render content with markdown support - only if not generating or if generation is complete */}
+                {/* Hide "Generating all 4 carousel images for you..." message since loader already covers it */}
+                {/* Hide "Perfect! I've generated..." text here since it will be shown above approve buttons */}
+                {(!message.isGenerating || !isGeneratingCarouselImage) && 
+                 message.content && 
+                 !message.content.includes('Generating all 4 carousel images for you') &&
+                 !(currentStep === 'approve_carousel_images' && message.content.includes("Perfect! I've generated all 4 carousel images")) && (
+                  <div className={`text-sm prose prose-sm max-w-none ${message.role === 'user' ? 'prose-invert' : ''}`}>
+                    <ReactMarkdown
+                      components={{
+                        h1: ({children}) => <h1 className={`text-lg font-bold mb-3 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h1>,
+                        h2: ({children}) => <h2 className={`text-base font-bold mb-2 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h2>,
+                        h3: ({children}) => <h3 className={`text-sm font-bold mb-2 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h3>,
+                        p: ({children}) => <p className={`mb-3 leading-relaxed ${message.role === 'user' ? 'text-white' : 'text-gray-700'}`}>{children}</p>,
+                        strong: ({children}) => <strong className={`font-semibold ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</strong>,
+                        em: ({children}) => <em className={`italic ${message.role === 'user' ? 'text-white' : 'text-gray-600'}`}>{children}</em>,
+                        ul: ({children}) => <ul className={`list-disc list-inside mb-3 space-y-1 ${message.role === 'user' ? 'text-white' : ''}`}>{children}</ul>,
+                        li: ({children}) => <li className={message.role === 'user' ? 'text-white' : 'text-gray-700'}>{children}</li>,
+                        hr: () => <hr className={`my-4 ${message.role === 'user' ? 'border-white/30' : 'border-gray-300'}`} />,
+                        code: ({children}) => <code className={`px-1 py-0.5 rounded text-xs font-mono ${message.role === 'user' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-800'}`}>{children}</code>,
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
+                )}
                 
                 {/* Show uploaded media for other messages (not content review) */}
                 {message.media_url && (!message.content || !message.content.includes('Content Review')) && (
@@ -1687,7 +1852,23 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                 )}
                 
                 {/* Content Confirmation Options */}
-                {message.role === 'assistant' && message.content && (message.content.includes('Please review the content above and let me know') || message.content.includes('Please review it above and let me know if you\'d like to save this post')) && (
+                {/* Only show buttons for the most recent content review message in confirm_content step */}
+                {message.role === 'assistant' && 
+                 message.content && 
+                 (message.content.includes('Please review the content above and let me know') || message.content.includes('Please review it above and let me know if you\'d like to save this post')) &&
+                 currentStep === 'confirm_content' &&
+                 (() => {
+                   // Find all content review messages
+                   const contentReviewMessages = messages.filter(msg => 
+                     msg.role === 'assistant' && 
+                     msg.content && 
+                     (msg.content.includes('Please review the content above and let me know') || 
+                      msg.content.includes('Please review it above and let me know if you\'d like to save this post'))
+                   );
+                   // Only show buttons for the most recent content review message
+                   const mostRecentContentReview = contentReviewMessages[contentReviewMessages.length - 1];
+                   return mostRecentContentReview && mostRecentContentReview.id === message.id;
+                 })() && (
                   <div className="mt-6">
                     <div className="flex gap-4 justify-center">
                       <button

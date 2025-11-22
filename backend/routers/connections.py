@@ -4910,9 +4910,14 @@ async def post_to_instagram(
                     }
                     supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
                 
+                # Generate post URL (Instagram posts use /p/ format)
+                post_url = f"https://www.instagram.com/p/{post_id}/"
+                
                 return {
                     "success": True,
                     "post_id": post_id,
+                    "post_url": post_url,
+                    "url": post_url,
                     "message": "Instagram carousel post published successfully"
                 }
             else:

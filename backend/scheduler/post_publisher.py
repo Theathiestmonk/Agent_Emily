@@ -301,6 +301,13 @@ class PostPublisher:
             # Publish each post
             for post in posts_to_publish:
                 try:
+                    post_id = post.get("id")
+                    # Double-check status before publishing (in case it was published between query and now)
+                    current_status = post.get("status", "").lower()
+                    if current_status == "published":
+                        logger.info(f"Post {post_id} is already published, skipping")
+                        continue
+                    
                     await self.publish_post(post)
                 except Exception as e:
                     logger.error(f"Error publishing post {post.get('id')}: {e}")
@@ -315,6 +322,39 @@ class PostPublisher:
         try:
             post_id = post.get("id")
             platform = post.get("platform", "").lower()
+            
+            # Check if post is already published - prevent duplicate publishing
+            post_status = post.get("status", "").lower()
+            if post_status == "published":
+                logger.info(f"Post {post_id} is already published, skipping duplicate publish")
+                return
+            
+            # Double-check by querying database for current status
+            try:
+                current_post = self.supabase.table("content_posts").select("status, metadata").eq("id", post_id).execute()
+                if current_post.data:
+                    current_status = current_post.data[0].get("status", "").lower()
+                    current_metadata = current_post.data[0].get("metadata", {}) or {}
+                    
+                    # Check if already published
+                    if current_status == "published":
+                        logger.info(f"Post {post_id} is already published in database, skipping duplicate publish")
+                        return
+                    
+                    # Check if currently being published (prevent concurrent publishes)
+                    if isinstance(current_metadata, dict) and current_metadata.get("_publishing"):
+                        publishing_at = current_metadata.get("_publishing_at")
+                        if publishing_at:
+                            # If publishing flag is older than 5 minutes, allow retry (might be stuck)
+                            try:
+                                publishing_time = datetime.fromisoformat(publishing_at)
+                                if (datetime.now() - publishing_time).total_seconds() < 300:  # 5 minutes
+                                    logger.info(f"Post {post_id} is currently being published, skipping duplicate publish")
+                                    return
+                            except:
+                                pass
+            except Exception as e:
+                logger.warning(f"Could not verify post status from database: {e}, continuing with publish")
             
             # Get user_id from campaign relationship
             user_id = None
@@ -412,6 +452,19 @@ class PostPublisher:
                     post_data["image_url"] = ""
                     post_data["video_url"] = ""
             
+            # Mark as publishing immediately to prevent duplicate attempts
+            # Use a temporary status or metadata flag
+            try:
+                self.supabase.table("content_posts").update({
+                    "metadata": {
+                        **post.get("metadata", {}),
+                        "_publishing": True,
+                        "_publishing_at": datetime.now().isoformat()
+                    }
+                }).eq("id", post_id).execute()
+            except Exception as e:
+                logger.warning(f"Could not set publishing flag: {e}")
+            
             # Publish based on platform
             success = False
             published_at = datetime.now().isoformat()
@@ -431,16 +484,21 @@ class PostPublisher:
                     "status": "draft",
                     "metadata": {
                         **post.get("metadata", {}),
-                        "publish_error": f"Platform {platform} not supported for auto-publishing"
+                        "publish_error": f"Platform {platform} not supported for auto-publishing",
+                        "_publishing": False
                     }
                 }).eq("id", post_id).execute()
                 return
             
-            # Update post status
+            # Update post status immediately after publishing
             if success:
                 self.supabase.table("content_posts").update({
                     "status": "published",
-                    "published_at": published_at
+                    "published_at": published_at,
+                    "metadata": {
+                        **post.get("metadata", {}),
+                        "_publishing": False
+                    }
                 }).eq("id", post_id).execute()
                 logger.info(f"Successfully published post {post_id} to {platform}")
             else:
@@ -449,24 +507,28 @@ class PostPublisher:
                     "status": "draft",
                     "metadata": {
                         **post.get("metadata", {}),
-                        "publish_error": "Failed to publish post"
+                        "publish_error": "Failed to publish post",
+                        "_publishing": False
                     }
                 }).eq("id", post_id).execute()
                 logger.error(f"Failed to publish post {post_id} to {platform}")
                 
         except Exception as e:
             logger.error(f"Error publishing post {post.get('id')}: {e}")
-            # Update status to draft on error
+            # Update status to draft on error and clear publishing flag
             try:
+                post_id = post.get("id")
+                current_metadata = post.get("metadata", {}) or {}
                 self.supabase.table("content_posts").update({
                     "status": "draft",
                     "metadata": {
-                        **post.get("metadata", {}),
-                        "publish_error": str(e)
+                        **current_metadata,
+                        "publish_error": str(e),
+                        "_publishing": False
                     }
-                }).eq("id", post.get("id")).execute()
-            except:
-                pass
+                }).eq("id", post_id).execute()
+            except Exception as cleanup_error:
+                logger.error(f"Error cleaning up publishing flag: {cleanup_error}")
     
     async def _publish_to_facebook(self, connection: Dict[str, Any], post_data: Dict[str, Any]) -> bool:
         """Publish to Facebook"""

@@ -66,7 +66,8 @@ import {
   Trash2,
   AlertTriangle,
   Share2,
-  Play
+  Play,
+  Layers
 } from 'lucide-react'
 
 const ContentDashboard = () => {
@@ -325,6 +326,16 @@ const ContentDashboard = () => {
         }
 
         const { content, scheduledTime } = cached
+        
+        // Skip if post is already published (check status)
+        const status = content.status?.toLowerCase()
+        if (status === 'published') {
+          console.log(`⏰ Skipping post ${postId} - already published`)
+          publishedPosts.add(postId)
+          scheduledPostsCache.delete(postId)
+          return
+        }
+        
         const timeDiff = now - scheduledTime
 
         // Check if scheduled time has passed (with 10 minute window to catch late posts)
@@ -1108,6 +1119,21 @@ const ContentDashboard = () => {
 
   const handlePostContent = async (content) => {
     try {
+      // Prevent duplicate publishing
+      // Check if already being posted
+      if (postingContent.has(content.id)) {
+        console.log('⚠️ Post is already being published, skipping duplicate request')
+        return
+      }
+      
+      // Check if already published
+      const status = content.status?.toLowerCase()
+      if (status === 'published') {
+        console.log('⚠️ Post is already published, skipping duplicate request')
+        showError('Post Already Published', 'This post has already been published. Please refresh the page to see the latest status.')
+        return
+      }
+      
       // Add content to posting set
       setPostingContent(prev => new Set([...prev, content.id]))
       
@@ -1366,7 +1392,14 @@ const ContentDashboard = () => {
         if (response.ok) {
           const result = await response.json()
           console.log('✅ Instagram token post successful:', result)
+          
+          // Show beautiful notification with post URL if available
+          const postUrl = result.post_url || result.url
+          if (postUrl) {
+            showPostNotification('Instagram', postUrl)
+          } else {
           showSuccess(`Successfully posted to Instagram!`)
+          }
           
           // Update the content status to published in cache (with published_at timestamp)
           const publishedAt = new Date().toISOString()
@@ -2269,6 +2302,102 @@ const ContentDashboard = () => {
     }
   }
 
+  const handleReplaceCarouselImage = async (postId, imageIndex) => {
+    try {
+      const authToken = await getAuthToken()
+      
+      // Show loading state
+      showLoading('Generating new carousel image...', 'Please wait while we create a new image for your carousel')
+      
+      // Call backend endpoint to regenerate carousel image
+      const response = await fetch(`${API_BASE_URL}/content/${postId}/regenerate-carousel-image/${imageIndex}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to regenerate carousel image' }))
+        throw new Error(errorData.detail || errorData.message || 'Failed to regenerate carousel image')
+      }
+      
+      const result = await response.json()
+      
+      // Update modal content if it's open
+      if (selectedContentForModal && selectedContentForModal.id === postId) {
+        setSelectedContentForModal(prev => {
+          const updatedCarouselImages = [...(prev.metadata?.carousel_images || prev.carousel_images || [])]
+          updatedCarouselImages[imageIndex] = result.image_url
+          
+          return {
+            ...prev,
+            carousel_images: updatedCarouselImages,
+            metadata: {
+              ...prev.metadata,
+              carousel_images: updatedCarouselImages
+            },
+            // Update primary_image_url to first image
+            media_url: updatedCarouselImages[0],
+            image_url: updatedCarouselImages[0]
+          }
+        })
+      }
+      
+      // Update allContent state
+      setAllContent(prev => prev.map(item => {
+        if (item.id === postId) {
+          const updatedCarouselImages = [...(item.metadata?.carousel_images || item.carousel_images || [])]
+          updatedCarouselImages[imageIndex] = result.image_url
+          
+          return {
+            ...item,
+            carousel_images: updatedCarouselImages,
+            metadata: {
+              ...item.metadata,
+              carousel_images: updatedCarouselImages
+            },
+            media_url: updatedCarouselImages[0],
+            image_url: updatedCarouselImages[0]
+          }
+        }
+        return item
+      }))
+      
+      // Update scheduled content if it exists
+      setScheduledContent(prev => prev.map(item => {
+        if (item.id === postId) {
+          const updatedCarouselImages = [...(item.metadata?.carousel_images || item.carousel_images || [])]
+          updatedCarouselImages[imageIndex] = result.image_url
+          
+          return {
+            ...item,
+            carousel_images: updatedCarouselImages,
+            metadata: {
+              ...item.metadata,
+              carousel_images: updatedCarouselImages
+            },
+            media_url: updatedCarouselImages[0],
+            image_url: updatedCarouselImages[0]
+          }
+        }
+        return item
+      }))
+      
+      // Refresh content to ensure UI is updated
+      setTimeout(() => {
+        fetchAllContent()
+      }, 1000)
+      
+      showSuccess('Carousel image regenerated', `Image ${imageIndex + 1} has been successfully replaced`)
+      
+    } catch (error) {
+      console.error('Error replacing carousel image:', error)
+      showError('Failed to replace carousel image', error.message || 'An error occurred while generating the new image')
+    }
+  }
+
   // Show post success notification
   const showPostNotification = (platform, postUrl = null) => {
     setPostNotification({
@@ -2787,13 +2916,32 @@ const ContentDashboard = () => {
                     (normalizedSelectedChannel === 'whatsapp' && contentPlatform.includes('whatsapp')) ||
                     (normalizedSelectedChannel === 'google business profile' && contentPlatform.includes('google'))
                   
+                  // Detect carousel posts
+                  const isCarousel = content.post_type === 'carousel' || 
+                                     (content.metadata && content.metadata.carousel_images && content.metadata.carousel_images.length > 0) ||
+                                     (content.carousel_images && Array.isArray(content.carousel_images) && content.carousel_images.length > 0)
+                  
+                  // Get carousel images from various possible locations
+                  let carouselImages = []
+                  if (isCarousel) {
+                    if (content.carousel_images && Array.isArray(content.carousel_images) && content.carousel_images.length > 0) {
+                      carouselImages = content.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img))
+                    } else if (content.metadata?.carousel_images && Array.isArray(content.metadata.carousel_images) && content.metadata.carousel_images.length > 0) {
+                      carouselImages = content.metadata.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img))
+                    } else if (content.metadata?.images && Array.isArray(content.metadata.images) && content.metadata.images.length > 0) {
+                      carouselImages = content.metadata.images.map(img => typeof img === 'string' ? img : (img.url || img))
+                    }
+                  }
+                  
                   // Get image URL for left side - only if this is the selected channel
-                  // Use content.media_url (which comes from primary_image_url) directly
+                  // For carousel, use first image; otherwise use primary_image_url
                   const imageUrl = isSelectedChannel 
-                    ? (content.media_url || content.image_url)
+                    ? (isCarousel && carouselImages.length > 0 
+                        ? carouselImages[0] 
+                        : (content.media_url || content.image_url))
                     : null
                   const thumbnailUrl = imageUrl ? getCardThumbnailUrl(imageUrl) : null
-                  const hasImage = isSelectedChannel && !!imageUrl
+                  const hasImage = isSelectedChannel && (!!imageUrl || (isCarousel && carouselImages.length > 0))
                   
                   // Check if this is a video
                   const isVideo = isVideoContent(content, imageUrl)
@@ -2856,37 +3004,97 @@ const ContentDashboard = () => {
                                 if (mediaUrl && isVideo && isSelectedChannel) {
                                   return (
                                     <div className="relative w-full h-full group">
-                                      <video 
-                                        src={mediaUrl}
-                                        className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                                        controls={false}
-                                        preload="metadata"
-                                        muted
-                                        playsInline
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleImageClick(mediaUrl, content.title)
-                                        }}
-                                        onLoadStart={() => {
-                                          startImageLoading(content.id)
-                                        }}
-                                        onLoadedData={() => {
-                                          handleImageLoad(content.id)
-                                        }}
-                                        onError={(e) => {
-                                          handleImageError(content.id)
-                                        }}
-                                        style={{
-                                          opacity: imageLoading.has(content.id) ? 0 : 1,
-                                          filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
-                                          transition: 'all 0.5s ease-in-out'
-                                        }}
-                                      />
+                                    <video 
+                                      src={mediaUrl}
+                                      className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                      controls={false}
+                                      preload="metadata"
+                                      muted
+                                      playsInline
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleImageClick(mediaUrl, content.title)
+                                      }}
+                                      onLoadStart={() => {
+                                        startImageLoading(content.id)
+                                      }}
+                                      onLoadedData={() => {
+                                        handleImageLoad(content.id)
+                                      }}
+                                      onError={(e) => {
+                                        handleImageError(content.id)
+                                      }}
+                                      style={{
+                                        opacity: imageLoading.has(content.id) ? 0 : 1,
+                                        filter: imageLoading.has(content.id) ? 'blur(6px)' : 'blur(0px)',
+                                        transition: 'all 0.5s ease-in-out'
+                                      }}
+                                    />
                                       {/* Play button overlay */}
                                       <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors pointer-events-none">
                                         <div className="bg-white/90 rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
                                           <Play className="w-4 h-4 text-purple-600 fill-purple-600" />
                                         </div>
+                                      </div>
+                                    </div>
+                                  )
+                                }
+                                
+                                // Show carousel images if this is a carousel post
+                                if (isCarousel && carouselImages.length > 0 && isSelectedChannel) {
+                                  // For small card view, show grid of first 4 images or first image with count
+                                  const displayImages = carouselImages.slice(0, 4)
+                                  const remainingCount = carouselImages.length > 4 ? carouselImages.length - 4 : 0
+                                  
+                                  return (
+                                    <div className="relative w-full h-full">
+                                      {displayImages.length === 1 ? (
+                                        // Single image with count badge
+                                        <div className="relative w-full h-full">
+                                          <img
+                                            src={getCardThumbnailUrl(displayImages[0]) || displayImages[0]}
+                                            alt="Carousel image 1"
+                                            className="w-full h-full object-cover rounded-lg"
+                                            onError={(e) => {
+                                              e.target.style.display = 'none'
+                                            }}
+                                          />
+                                          {carouselImages.length > 1 && (
+                                            <div className="absolute top-1 right-1 bg-black/70 text-white px-1.5 py-0.5 rounded text-xs flex items-center gap-1">
+                                              <Layers className="w-3 h-3" />
+                                              <span>{carouselImages.length}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        // Grid of images (2x2 for up to 4 images)
+                                        <div className="grid grid-cols-2 gap-0.5 w-full h-full">
+                                          {displayImages.map((img, idx) => {
+                                            const imgUrl = typeof img === 'string' ? img : (img.url || img)
+                                            return (
+                                              <div key={idx} className="relative">
+                                                <img
+                                                  src={getCardThumbnailUrl(imgUrl) || imgUrl}
+                                                  alt={`Carousel image ${idx + 1}`}
+                                                  className="w-full h-full object-cover"
+                                                  onError={(e) => {
+                                                    e.target.style.display = 'none'
+                                                  }}
+                                                />
+                                                {idx === 3 && remainingCount > 0 && (
+                                                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-xs font-bold">
+                                                    +{remainingCount}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      )}
+                                      {/* Carousel indicator badge */}
+                                      <div className="absolute bottom-1 left-1 bg-black/70 text-white px-1.5 py-0.5 rounded text-xs flex items-center gap-1">
+                                        <Layers className="w-3 h-3" />
+                                        <span>{carouselImages.length}</span>
                                       </div>
                                     </div>
                                   )
@@ -3126,12 +3334,27 @@ const ContentDashboard = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
+                                e.preventDefault()
+                                
+                                // Prevent duplicate clicks
+                                if (postingContent.has(content.id)) {
+                                  console.log('⚠️ Already posting, ignoring click')
+                                  return
+                                }
+                                
+                                // Check if already published
+                                const status = content.status?.toLowerCase()
+                                if (status === 'published') {
+                                  showError('Post Already Published', 'This post has already been published.')
+                                  return
+                                }
+                                
                                 // Publish post to platform
                                 handlePostContent(content)
                               }}
                               onMouseEnter={() => setHoveredButton(`${content.id}-share`)}
                               onMouseLeave={() => setHoveredButton(null)}
-                              disabled={postingContent.has(content.id)}
+                              disabled={postingContent.has(content.id) || content.status?.toLowerCase() === 'published'}
                               className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 rounded-lg transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {postingContent.has(content.id) ? (
@@ -3332,8 +3555,68 @@ const ContentDashboard = () => {
                   {/* Image Section */}
                   <div className="space-y-4">
                     {(() => {
+                      // Detect carousel posts
+                      const isCarousel = selectedContentForModal.post_type === 'carousel' || 
+                                         (selectedContentForModal.metadata && selectedContentForModal.metadata.carousel_images && selectedContentForModal.metadata.carousel_images.length > 0) ||
+                                         (selectedContentForModal.carousel_images && Array.isArray(selectedContentForModal.carousel_images) && selectedContentForModal.carousel_images.length > 0)
+                      
+                      // Get carousel images
+                      let carouselImages = []
+                      if (isCarousel) {
+                        if (selectedContentForModal.carousel_images && Array.isArray(selectedContentForModal.carousel_images) && selectedContentForModal.carousel_images.length > 0) {
+                          carouselImages = selectedContentForModal.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img))
+                        } else if (selectedContentForModal.metadata?.carousel_images && Array.isArray(selectedContentForModal.metadata.carousel_images) && selectedContentForModal.metadata.carousel_images.length > 0) {
+                          carouselImages = selectedContentForModal.metadata.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img))
+                        }
+                      }
+                      
                       // Get image directly from content.media_url (which comes from primary_image_url)
                       const finalImageUrl = selectedContentForModal.media_url || selectedContentForModal.image_url
+                      
+                      // If carousel, show all images; otherwise show single image
+                      if (isCarousel && carouselImages.length > 0) {
+                        return (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                <Layers className="w-5 h-5" />
+                                Carousel Images ({carouselImages.length})
+                              </h4>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              {carouselImages.map((imgUrl, index) => {
+                                const imageUrl = typeof imgUrl === 'string' ? imgUrl : (imgUrl.url || imgUrl)
+                                return (
+                                  <div key={index} className="relative group">
+                                    <img
+                                      src={getFullSizeImageUrl(imageUrl) || imageUrl}
+                                      alt={`Carousel image ${index + 1}`}
+                                      className="w-full h-48 object-cover rounded-lg shadow-md cursor-pointer hover:opacity-90 transition-opacity"
+                                      onClick={() => handleImageClick(getFullSizeImageUrl(imageUrl) || imageUrl, `${selectedContentForModal.title} - Image ${index + 1}`)}
+                                      onError={(e) => {
+                                        console.error('❌ Carousel image failed to load:', imageUrl)
+                                        e.target.style.display = 'none'
+                                      }}
+                                    />
+                                    <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs font-medium">
+                                      {index + 1}/{carouselImages.length}
+                                    </div>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleReplaceCarouselImage(selectedContentForModal.id, index)
+                                      }}
+                                      className="absolute bottom-2 right-2 bg-white/90 hover:bg-white text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium shadow-md transition-colors opacity-0 group-hover:opacity-100"
+                                    >
+                                      Replace
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      }
                       
                       if (!finalImageUrl) {
                         return (

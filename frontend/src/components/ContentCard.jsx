@@ -265,14 +265,14 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
               }}
             />
           ) : (
-            <img
-              src={mediaUrl}
-              alt="Content media"
-              className="w-full h-48 object-cover"
-              onError={(e) => {
-                e.target.style.display = 'none';
-              }}
-            />
+          <img
+            src={mediaUrl}
+            alt="Content media"
+            className="w-full h-48 object-cover"
+            onError={(e) => {
+              e.target.style.display = 'none';
+            }}
+          />
           )}
           {isVideo && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">

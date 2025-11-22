@@ -812,12 +812,7 @@ class CustomContentAgent:
                 state["carousel_images"] = []
                 state["current_carousel_index"] = 0
                 state["current_step"] = ConversationStep.GENERATE_CAROUSEL_IMAGE
-                message = {
-                    "role": "assistant",
-                    "content": "No problem! I'll regenerate all 4 carousel images for you. This may take a moment...",
-                    "timestamp": datetime.now().isoformat()
-                }
-                state["conversation_messages"].append(message)
+                # Call generate_carousel_image which will set generating_all flag
                 return await self.generate_carousel_image(state)
             elif ("manual" in user_input_clean and "upload" in user_input_clean) or \
                  user_input_lower == "manual_upload" or \
@@ -977,11 +972,20 @@ class CustomContentAgent:
                     for idx, img_url in enumerate(carousel_images):
                         try:
                             analysis = await self._analyze_uploaded_image(img_url, user_description, business_context)
-                            image_analyses.append(f"Image {idx + 1}: {analysis}")
-                            logger.info(f"Carousel image {idx + 1} analysis completed successfully")
+                            if analysis and not analysis.startswith("Image analysis failed"):
+                                image_analyses.append(f"Image {idx + 1}: {analysis}")
+                                logger.info(f"Carousel image {idx + 1} analysis completed successfully")
+                            else:
+                                # Analysis failed but handled gracefully - don't log as error
+                                logger.warning(f"Carousel image {idx + 1} analysis skipped (timeout or download issue)")
+                                image_analyses.append(f"Image {idx + 1}: Analysis skipped due to timeout")
                         except Exception as e:
-                            logger.error(f"Carousel image {idx + 1} analysis failed: {e}")
-                            image_analyses.append(f"Image {idx + 1}: Analysis failed: {str(e)}")
+                            # Only log as error if it's not a timeout/download issue
+                            if "timeout" not in str(e).lower() and "downloading" not in str(e).lower():
+                                logger.error(f"Carousel image {idx + 1} analysis failed: {e}")
+                            else:
+                                logger.warning(f"Carousel image {idx + 1} analysis timeout (handled gracefully)")
+                            image_analyses.append(f"Image {idx + 1}: Analysis skipped")
                     image_analysis = "\n\n".join(image_analyses)
                     logger.info("All carousel images analyzed successfully")
                 except Exception as e:
@@ -1311,6 +1315,36 @@ class CustomContentAgent:
     async def confirm_content(self, state: CustomContentState) -> CustomContentState:
         """Ask user to confirm if the generated content is correct and should be saved"""
         try:
+            # Prevent re-entry if we're already in confirm_content step with a recent message
+            current_step = state.get("current_step")
+            conversation_messages = state.get("conversation_messages", [])
+            
+            if current_step == ConversationStep.CONFIRM_CONTENT and conversation_messages:
+                # Check if the last assistant message is a content review message
+                for msg in reversed(conversation_messages):
+                    if msg.get("role") == "assistant" and msg.get("content"):
+                        content = msg.get("content", "")
+                        if ("Please review the content above and let me know" in content or 
+                            "Please review it above and let me know if you'd like to save this post" in content):
+                            # Check timestamp - if message is recent (within last 30 seconds), skip adding new one
+                            msg_timestamp = msg.get("timestamp")
+                            if msg_timestamp:
+                                try:
+                                    msg_time = datetime.fromisoformat(msg_timestamp.replace('Z', '+00:00'))
+                                    now = datetime.now(msg_time.tzinfo) if msg_time.tzinfo else datetime.now()
+                                    time_diff = (now - msg_time).total_seconds()
+                                    if time_diff < 30:  # Message is less than 30 seconds old
+                                        logger.info("Already in confirm_content step with recent message, skipping duplicate")
+                                        return state
+                                except Exception:
+                                    # If timestamp parsing fails, continue to add message
+                                    pass
+                            else:
+                                # No timestamp, but message exists - skip to prevent duplicate
+                                logger.info("Already in confirm_content step with content review message, skipping duplicate")
+                                return state
+                        break  # Only check the last assistant message
+            
             state["current_step"] = ConversationStep.CONFIRM_CONTENT
             state["progress_percentage"] = 90
             
@@ -1356,6 +1390,29 @@ class CustomContentAgent:
                     if not isinstance(carousel_images, list):
                         carousel_images = []
             
+            # Check if a content review message already exists to prevent duplicates
+            # Check both by message content and by checking if we're already in confirm_content step with a recent message
+            existing_content_review_message = None
+            conversation_messages = state.get("conversation_messages", [])
+            
+            # First, remove any existing content review messages to ensure only one exists
+            filtered_messages = []
+            for msg in conversation_messages:
+                if (msg.get("role") == "assistant" and 
+                    msg.get("content") and 
+                    ("Please review the content above and let me know" in msg.get("content") or 
+                     "Please review it above and let me know if you'd like to save this post" in msg.get("content"))):
+                    # Skip this message - it's a duplicate content review
+                    if not existing_content_review_message:
+                        existing_content_review_message = msg
+                    continue
+                filtered_messages.append(msg)
+            
+            # Update conversation messages to remove duplicates
+            state["conversation_messages"] = filtered_messages
+            
+            # Always add the new message after cleaning up old ones
+            # The cleanup already happened above, so we should always add the fresh message
             message = {
                 "role": "assistant",
                 "content": confirmation_message,
@@ -1369,8 +1426,10 @@ class CustomContentAgent:
                 "structured_content": None
             }
             state["conversation_messages"].append(message)
-            
-            logger.info("Asking user to confirm generated content")
+            if existing_content_review_message:
+                logger.info(f"Removed {len(conversation_messages) - len(filtered_messages)} duplicate content review message(s) and added new one")
+            else:
+                logger.info("Asking user to confirm generated content")
             
         except Exception as e:
             logger.error(f"Error in confirm_content: {e}")
@@ -1954,6 +2013,45 @@ class CustomContentAgent:
     async def _analyze_uploaded_image(self, image_url: str, user_description: str, business_context: Dict[str, Any]) -> str:
         """Analyze uploaded image using vision model"""
         try:
+            import httpx
+            import base64
+            
+            # Download image and convert to base64 to avoid timeout issues with Supabase URLs
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    image_response = await client.get(image_url)
+                    image_response.raise_for_status()
+                    image_data = image_response.content
+                    
+                    # Convert to base64
+                    base64_image = base64.b64encode(image_data).decode('utf-8')
+                    
+                    # Determine image format from URL or content type
+                    if image_url.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                        image_format = image_url.lower().split('.')[-1]
+                        if image_format == 'jpg':
+                            image_format = 'jpeg'
+                    else:
+                        # Try to detect from content type
+                        content_type = image_response.headers.get('content-type', 'image/jpeg')
+                        if 'png' in content_type:
+                            image_format = 'png'
+                        elif 'jpeg' in content_type or 'jpg' in content_type:
+                            image_format = 'jpeg'
+                        elif 'gif' in content_type:
+                            image_format = 'gif'
+                        elif 'webp' in content_type:
+                            image_format = 'webp'
+                        else:
+                            image_format = 'jpeg'  # Default
+                    
+                    image_data_url = f"data:image/{image_format};base64,{base64_image}"
+                    
+            except Exception as download_error:
+                logger.warning(f"Failed to download image from {image_url}, trying direct URL: {download_error}")
+                # Fallback: try direct URL (might work for public URLs)
+                image_data_url = image_url
+            
             # Create image analysis prompt
             analysis_prompt = f"""
             Analyze this image in detail for social media content creation. Focus on:
@@ -1974,18 +2072,19 @@ class CustomContentAgent:
             Provide a detailed analysis that will help create engaging social media content.
             """
             
-            # Analyze image using vision model
+            # Analyze image using vision model with base64 data
             response = self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": "You are an expert visual content analyst specializing in social media marketing."},
                     {"role": "user", "content": [
                         {"type": "text", "text": analysis_prompt},
-                        {"type": "image_url", "image_url": {"url": image_url}}
+                        {"type": "image_url", "image_url": {"url": image_data_url}}
                     ]}
                 ],
                 temperature=0.3,
-                max_tokens=500
+                max_tokens=500,
+                timeout=60  # 60 second timeout
             )
             
             analysis = response.choices[0].message.content
@@ -1994,6 +2093,9 @@ class CustomContentAgent:
             
         except Exception as e:
             logger.error(f"Error analyzing image: {e}")
+            # Don't log as error if it's just a timeout - it's handled gracefully
+            if "timeout" in str(e).lower() or "invalid_image_url" in str(e).lower() or "downloading" in str(e).lower():
+                logger.warning(f"Image analysis timeout for {image_url}, continuing without analysis")
             return f"Image analysis failed: {str(e)}"
 
     def _create_content_prompt(self, description: str, platform: str, content_type: str, business_context: Dict[str, Any]) -> str:
@@ -2469,7 +2571,7 @@ class CustomContentAgent:
                 # Check for upload errors
                 if hasattr(storage_response, 'error') and storage_response.error:
                     raise Exception(f"Storage upload failed: {storage_response.error}")
-                
+            
                 # Get public URL
                 public_url = self.supabase.storage.from_(bucket_name).get_public_url(unique_filename)
                 
