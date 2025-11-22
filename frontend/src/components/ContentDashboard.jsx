@@ -2400,11 +2400,16 @@ const ContentDashboard = () => {
 
   // Show post success notification
   const showPostNotification = (platform, postUrl = null) => {
+    // Ensure postUrl is a valid string, not empty or undefined
+    const validPostUrl = postUrl && typeof postUrl === 'string' && postUrl.trim() ? postUrl.trim() : null;
+    
+    console.log('📢 showPostNotification called:', { platform, postUrl, validPostUrl });
+    
     setPostNotification({
       platform,
       show: true,
       timestamp: Date.now(),
-      postUrl
+      postUrl: validPostUrl
     })
     
     // No auto-close - user must manually close with X button
@@ -4767,23 +4772,31 @@ const ContentDashboard = () => {
               </div>
               
               {/* Action Buttons */}
-              {postNotification.postUrl ? (
-                <div className="flex justify-center">
-                  <button
-                    onClick={handleGoToPost}
-                    className="px-6 py-3 bg-white/20 hover:bg-white/30 text-white font-medium rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center space-x-2"
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>Go to Post</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="text-center">
-                  <p className="text-white/80 text-sm">
-                    Post published successfully! Check your {postNotification.platform} account.
-                  </p>
-                </div>
-              )}
+              {(() => {
+                const hasPostUrl = postNotification.postUrl && postNotification.postUrl.trim();
+                console.log('🔍 Button render check:', { hasPostUrl, postUrl: postNotification.postUrl });
+                return hasPostUrl ? (
+                  <div className="flex justify-center">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleGoToPost();
+                      }}
+                      className="px-6 py-3 bg-white/20 hover:bg-white/30 text-white font-medium rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center space-x-2 cursor-pointer"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>Go to Post</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <p className="text-white/80 text-sm">
+                      Post published successfully! Check your {postNotification.platform} account.
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

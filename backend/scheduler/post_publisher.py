@@ -303,8 +303,20 @@ class PostPublisher:
                 try:
                     post_id = post.get("id")
                     # Double-check status before publishing (in case it was published between query and now)
-                    current_status = post.get("status", "").lower()
-                    if current_status == "published":
+                    # Query database directly to get the most current status
+                    try:
+                        current_post = self.supabase.table("content_posts").select("status").eq("id", post_id).execute()
+                        if current_post.data:
+                            current_status = current_post.data[0].get("status", "").lower()
+                            if current_status == "published":
+                                logger.info(f"Post {post_id} is already published in database, skipping scheduled publish")
+                                continue
+                    except Exception as e:
+                        logger.warning(f"Could not verify post {post_id} status before publishing: {e}")
+                    
+                    # Also check the post object status
+                    post_status = post.get("status", "").lower()
+                    if post_status == "published":
                         logger.info(f"Post {post_id} is already published, skipping")
                         continue
                     

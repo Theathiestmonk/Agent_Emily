@@ -4909,9 +4909,33 @@ async def post_to_instagram(
                         "metadata": existing_metadata
                     }
                     supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
+                    
+                    # Cancel any scheduled task for this post to prevent duplicate publishing
+                    try:
+                        from scheduler.post_publisher import post_publisher
+                        if post_publisher:
+                            await post_publisher.cancel_scheduled_post(content_id)
+                            print(f"✅ Cancelled scheduled task for post {content_id}")
+                    except Exception as e:
+                        print(f"⚠️ Could not cancel scheduled task (may not exist): {e}")
                 
-                # Generate post URL (Instagram posts use /p/ format)
-                post_url = f"https://www.instagram.com/p/{post_id}/"
+                # Try to get permalink from Instagram API, fallback to constructed URL
+                post_url = None
+                try:
+                    # Fetch the media object to get permalink
+                    media_url = f"https://graph.facebook.com/v18.0/{post_id}?fields=permalink&access_token={access_token}"
+                    media_response = requests.get(media_url, timeout=10)
+                    if media_response.status_code == 200:
+                        media_data = media_response.json()
+                        post_url = media_data.get('permalink')
+                        print(f"✅ Got Instagram permalink: {post_url}")
+                except Exception as e:
+                    print(f"⚠️ Could not fetch permalink, using constructed URL: {e}")
+                
+                # Fallback to constructed URL if permalink not available
+                if not post_url:
+                    # Instagram posts use /p/ format with media_id
+                    post_url = f"https://www.instagram.com/p/{post_id}/"
                 
                 return {
                     "success": True,
@@ -5194,6 +5218,15 @@ async def post_to_instagram(
                     # Try to get the current content to verify
                     check_response = supabase_admin.table("content_posts").select("id, status").eq("id", content_id).execute()
                     print(f"🔍 Current content status: {check_response.data}")
+                
+                # Cancel any scheduled task for this post to prevent duplicate publishing
+                try:
+                    from scheduler.post_publisher import post_publisher
+                    if post_publisher:
+                        await post_publisher.cancel_scheduled_post(content_id)
+                        print(f"✅ Cancelled scheduled task for post {content_id}")
+                except Exception as e:
+                    print(f"⚠️ Could not cancel scheduled task (may not exist): {e}")
 
             else:
 
@@ -5209,15 +5242,29 @@ async def post_to_instagram(
         
         
         
-        # Determine URL format based on media type (reels use different URL format)
+        # Try to get permalink from Instagram API, fallback to constructed URL
         post_url = None
         if post_id:
-            if is_video:
-                # For reels, use the reel URL format
-                post_url = f"https://www.instagram.com/reel/{post_id}/"
-            else:
-                # For regular posts, use the post URL format
-                post_url = f"https://www.instagram.com/p/{post_id}/"
+            try:
+                # Fetch the media object to get permalink
+                media_url = f"https://graph.facebook.com/v18.0/{post_id}?fields=permalink&access_token={access_token}"
+                media_response = requests.get(media_url, timeout=10)
+                if media_response.status_code == 200:
+                    media_data = media_response.json()
+                    post_url = media_data.get('permalink')
+                    print(f"✅ Got Instagram permalink: {post_url}")
+            except Exception as e:
+                print(f"⚠️ Could not fetch permalink, using constructed URL: {e}")
+            
+            # Fallback to constructed URL if permalink not available
+            if not post_url:
+                # Determine URL format based on media type (reels use different URL format)
+                if is_video:
+                    # For reels, use the reel URL format
+                    post_url = f"https://www.instagram.com/reel/{post_id}/"
+                else:
+                    # For regular posts, use the post URL format
+                    post_url = f"https://www.instagram.com/p/{post_id}/"
         
         return {
 
