@@ -51,6 +51,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
   const carouselFileInputRef = useRef(null);
   const dateInputRef = useRef(null);
   const timeInputRef = useRef(null);
+  const textInputRef = useRef(null);
 
   const getAuthToken = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -116,6 +117,16 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       });
     }
   }, [currentStep, messages]);
+
+  // Auto-focus text input when modal opens and when loading completes
+  useEffect(() => {
+    if (isOpen && !isLoading && textInputRef.current) {
+      // Small delay to ensure input is rendered
+      setTimeout(() => {
+        textInputRef.current?.focus();
+      }, 100);
+    }
+  }, [isOpen, isLoading]);
 
   const startConversation = async () => {
     try {
@@ -618,6 +629,10 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       addMessage('assistant', 'Sorry, I encountered an error processing your message. Please try again.');
     } finally {
       setIsLoading(false);
+      // Refocus input after sending message
+      if (textInputRef.current) {
+        textInputRef.current.focus();
+      }
     }
   };
 
@@ -1466,10 +1481,10 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
         <div className="flex items-center justify-between p-6 border-b border-purple-200 bg-gradient-to-r from-pink-50 to-purple-50 rounded-t-2xl">
           <div className="flex items-center space-x-4">
             <div className="w-12 h-12 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center shadow-lg animate-pulse">
-              <span className="text-white font-bold text-xl">E</span>
+              <span className="text-white font-bold text-xl">L</span>
             </div>
             <div>
-              <h3 className="font-bold text-gray-800 text-lg">Emily - Content Creator</h3>
+              <h3 className="font-bold text-gray-800 text-lg">Leo | Custom Content Creator</h3>
               <div className="text-sm text-purple-600 font-medium">
                 {progress > 0 ? (
                   <span>{getStepName(currentStep)} : {progress}%</span>
@@ -2063,10 +2078,7 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                   <Loader2 className="w-4 h-4 animate-spin text-white" />
                 </div>
                 <span className="text-sm text-purple-700 font-medium">
-                  {currentStep === 'generate_content' 
-                    ? 'Emily is analyzing your image and generating content...' 
-                    : 'Emily is thinking...'
-                  }
+                  Connecting to Leo...
                 </span>
               </div>
             </div>
@@ -2080,12 +2092,14 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
         <div className="p-6 border-t border-purple-200 bg-gradient-to-r from-pink-50 to-purple-50 rounded-b-2xl">
           <div className="flex items-center space-x-3">
             <input
+              ref={textInputRef}
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Type your message..."
               disabled={isLoading}
+              autoFocus
               className="flex-1 px-4 py-3 border border-purple-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 disabled:opacity-50 bg-white shadow-sm text-gray-700 placeholder-purple-400"
             />
             <button

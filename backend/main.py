@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from scheduler.content_scheduler import ContentScheduler
 from scheduler.background_scheduler import start_background_scheduler, stop_background_scheduler
+from scheduler.daily_messages_scheduler import start_daily_messages_scheduler, stop_daily_messages_scheduler
 from routers.connections import router as connections_router
 from routers.content import router as content_router
 from routers.social_media import router as social_media_router
@@ -195,15 +196,38 @@ async def startup_event():
         logger.error(f"Failed to start background scheduler: {e}")
         # Continue without background scheduler for now
         logger.info("Continuing without background scheduler")
+    
+    # Start daily messages scheduler
+    try:
+        await start_daily_messages_scheduler()
+        logger.info("Daily messages scheduler started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start daily messages scheduler: {e}")
+        logger.info("Continuing without daily messages scheduler")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Stop background scheduler on shutdown"""
+    import asyncio
+    
     try:
         await stop_background_scheduler()
         logger.info("Background scheduler stopped successfully")
+    except asyncio.CancelledError:
+        # Normal during shutdown, ignore
+        pass
     except Exception as e:
         logger.error(f"Error stopping background scheduler: {e}")
+    
+    # Stop daily messages scheduler
+    try:
+        await stop_daily_messages_scheduler()
+        logger.info("Daily messages scheduler stopped successfully")
+    except asyncio.CancelledError:
+        # Normal during shutdown, ignore
+        pass
+    except Exception as e:
+        logger.error(f"Error stopping daily messages scheduler: {e}")
 
 # Pydantic models
 class UserCreate(BaseModel):

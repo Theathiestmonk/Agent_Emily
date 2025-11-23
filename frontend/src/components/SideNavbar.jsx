@@ -6,7 +6,7 @@ import {
   Home, 
   FileText, 
   Settings, 
-  LogOut, 
+  Hand, 
   Sparkles,
   BarChart3,
   Share2,
@@ -15,7 +15,11 @@ import {
   CreditCard,
   ChevronDown,
   ChevronRight,
-  UserPlus
+  UserPlus,
+  MessageSquare,
+  Lightbulb,
+  Pen,
+  TrendingUp
 } from 'lucide-react'
 
 const SideNavbar = () => {
@@ -76,42 +80,35 @@ const SideNavbar = () => {
 
   const navigationItems = [
     {
-      name: 'Dashboard',
+      name: 'Discussions',
       href: '/dashboard',
-      icon: Home
+      icon: MessageSquare
     },
     {
-      name: 'Content',
-      icon: FileText,
-      hasSubmenu: true,
-      submenu: [
-        {
-          name: 'Social',
-          href: '/content',
-          icon: FileText
-        },
-        {
-          name: 'Blogs',
-          href: '/blogs',
-          icon: BookOpen
-        }
-      ]
+      name: 'Suggestions',
+      href: '/content',
+      icon: Lightbulb
     },
     {
-      name: 'Social Media',
+      name: 'Writings',
+      href: '/blogs',
+      icon: Pen
+    },
+    {
+      name: 'Happenings',
       href: '/social',
-      icon: Share2
+      icon: TrendingUp
     },
     {
       name: 'Analytics',
       href: '/analytics',
       icon: BarChart3
     },
-    {
-      name: 'Ads',
-      href: '/ads',
-      icon: Megaphone
-    },
+    // {
+    //   name: 'Ads',
+    //   href: '/ads',
+    //   icon: Megaphone
+    // },
     {
       name: 'Leads',
       href: '/leads',
@@ -312,8 +309,8 @@ const SideNavbar = () => {
             onClick={handleLogout}
             className="w-full flex items-center p-2 lg:p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors group"
           >
-            <LogOut className="w-5 h-5 mr-3" />
-            <span className="font-medium">Logout</span>
+            <Hand className="w-5 h-5 mr-3" style={{ transform: 'rotate(-20deg)' }} />
+            <span className="font-medium">Say Bye</span>
           </button>
         </div>
       </div>

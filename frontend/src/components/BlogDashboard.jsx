@@ -1,7 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react'
 
 import { useNotifications } from '../contexts/NotificationContext'
-import { BlogSkeleton } from './LazyLoadingSkeleton'
 
 import { 
 
@@ -1453,29 +1452,11 @@ const BlogDashboard = () => {
             {/* Single Row for ALL Devices */}
             <div className="flex items-center justify-between md:justify-between gap-0.5 md:gap-4 w-full overflow-x-hidden max-w-full">
               
-              {/* Left Side - Stats */}
-              <div className="flex items-center gap-0.5 md:gap-3 flex-shrink-0">
-                {/* Total Blog Stats Card */}
-                <div className="flex items-center space-x-0.5 md:space-x-1 bg-white/80 backdrop-blur-sm rounded-lg px-1 md:px-1.5 py-0.5 md:py-1 lg:px-3 lg:py-2 xl:px-4 xl:py-2.5 shadow-sm">
-                  <div className="p-0.5 md:p-1 lg:p-1.5 bg-gradient-to-r from-pink-500 to-purple-600 rounded-md flex-shrink-0">
-                    <FileText className="w-2.5 h-2.5 md:w-3 md:h-3 lg:w-4 lg:h-5 xl:h-6 text-white" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[7px] md:text-xs text-gray-600 whitespace-nowrap font-medium leading-tight">Total</p>
-                    <p className="text-[9px] md:text-sm lg:text-base font-bold text-gray-900 whitespace-nowrap leading-tight">{calculateStats().total_blogs}</p>
-                  </div>
-                </div>
-
-                {/* Published Stats Card */}
-                <div className="flex items-center space-x-0.5 md:space-x-1 bg-white/80 backdrop-blur-sm rounded-lg px-1 md:px-1.5 py-0.5 md:py-1 lg:px-3 lg:py-2 xl:px-4 xl:py-2.5 shadow-sm">
-                  <div className="p-0.5 md:p-1 lg:p-1.5 bg-gradient-to-r from-green-500 to-emerald-600 rounded-md flex-shrink-0">
-                    <CheckCircle className="w-2.5 h-2.5 md:w-3 md:h-3 lg:w-4 lg:h-5 xl:h-6 text-white" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[7px] md:text-xs text-gray-600 whitespace-nowrap font-medium leading-tight">Published</p>
-                    <p className="text-[9px] md:text-sm lg:text-base font-bold text-gray-900 whitespace-nowrap leading-tight">{calculateStats().published_blogs}</p>
-                  </div>
-                </div>
+              {/* Left Side - Heading */}
+              <div className="flex items-center flex-shrink-0">
+                <h1 className="text-base md:text-lg lg:text-xl font-bold text-gray-900">
+                  The writer inside me
+                </h1>
               </div>
 
               {/* Right Side - Actions */}
@@ -1552,13 +1533,9 @@ const BlogDashboard = () => {
 
         {/* Main Content Area */}
         <div className="w-full px-2 md:px-2.5 lg:px-3 xl:px-4 overflow-x-hidden" style={{maxWidth: '100%', boxSizing: 'border-box'}}>
-          <div className="pt-24 md:pt-28">
+          <div className="pt-24 md:pt-28 pb-8">
 
-          {loading ? (
-
-            <BlogSkeleton />
-
-          ) : filteredBlogs.length === 0 ? (
+          {filteredBlogs.length === 0 && !loading ? (
 
             <div className="p-6 md:p-12 text-center">
 
@@ -1597,15 +1574,31 @@ const BlogDashboard = () => {
                   </div>
 
           ) : (
+            <>
+              {/* Emily Message Bubble - Above blogs */}
+              {(loading || blogs.length > 0) && (
+                <div className="flex justify-start w-full px-4 mb-4">
+                  <div className="flex items-start gap-2 max-w-[50%]">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
+                      <span className="text-white font-bold text-sm">E</span>
+                    </div>
+                    <div className="bg-white rounded-lg px-4 py-3 shadow-md" style={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.15)' }}>
+                      <p className="text-sm text-black">
+                        {loading ? 'Loading my work...' : `Till now I have written ${blogs.length} blog${blogs.length !== 1 ? 's' : ''} for you`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-            <div 
+              <div 
 
-              data-testid="blogs-section"
+                data-testid="blogs-section"
 
-              className={viewMode === 'grid' ? 'p-2 sm:p-3 md:p-3 lg:p-3 xl:p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-2 sm:gap-2 md:gap-2.5 lg:gap-2.5 xl:gap-3 w-full box-border' : 'divide-y'}
-              style={viewMode === 'grid' ? {maxWidth: '100%', width: '100%', boxSizing: 'border-box'} : {}}
+                className={viewMode === 'grid' ? 'p-2 sm:p-3 md:p-3 lg:p-3 xl:p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-2 sm:gap-2 md:gap-2.5 lg:gap-2.5 xl:gap-3 w-full box-border' : 'divide-y'}
+                style={viewMode === 'grid' ? {maxWidth: '100%', width: '100%', boxSizing: 'border-box'} : {}}
 
-            >
+              >
 
               {currentBlogs.map(blog => {
 
@@ -2014,10 +2007,6 @@ const BlogDashboard = () => {
 
             </div>
 
-          )}
-
-
-
           {/* Infinite Scroll Loading Indicator */}
           {hasMoreBlogs && (
             <div className="flex justify-center items-center py-8 mb-6">
@@ -2043,13 +2032,36 @@ const BlogDashboard = () => {
             </div>
           )}
 
-          {/* Show total count when all blogs are loaded */}
-          {!hasMoreBlogs && filteredBlogs.length > 0 && (
-            <div className="text-center py-6 mb-6">
-              <p className="text-sm text-gray-500">
-                Showing all {filteredBlogs.length} blog{filteredBlogs.length !== 1 ? 's' : ''}
-              </p>
+          {/* Emily Message Bubble - Below blogs */}
+          {!loading && blogs.length > 0 && (
+            <div className="flex justify-start w-full px-4 mt-4 mb-6">
+              <div className="flex items-start gap-2 max-w-[50%]">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">E</span>
+                </div>
+                <div className="bg-white rounded-lg px-4 py-3 shadow-md" style={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.15)' }}>
+                  <p className="text-sm text-black mb-3">
+                    I'd be happy to help you create more content. What would you like to do today?
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <div
+                      onClick={() => setShowCustomBlogChatbot(true)}
+                      className="text-sm text-blue-600 hover:text-blue-700 cursor-pointer hover:underline"
+                    >
+                      Custom Blog: Share a topic with me, and I'll craft the content for you
+                    </div>
+                    <div
+                      onClick={generateBlogs}
+                      className={`text-sm text-purple-600 hover:text-purple-700 cursor-pointer hover:underline ${generating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      Suggested Blog: I'll suggest topics and create the posts for you
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
+          )}
+            </>
           )}
           </div>
 

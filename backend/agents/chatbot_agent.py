@@ -43,6 +43,7 @@ class ChatbotState(TypedDict):
     context: Dict[str, Any]
     response: Optional[str]
     current_query: Optional[str]
+    classified_intent: Optional[str]  # The classified intent from the intent classification step
 
 # Tools for the chatbot
 @tool
@@ -304,8 +305,111 @@ def get_user_profile(user_id: str) -> Dict[str, Any]:
             "profile": None
         }
 
+@tool
+def search_business_news(business_description: str, industry: str) -> Dict[str, Any]:
+    """Search for exciting news related to the business using web search"""
+    try:
+        # Use DuckDuckGo for web search (no API key required)
+        search_query = f"{industry} {business_description} latest news today"
+        
+        # Use DuckDuckGo Instant Answer API
+        ddg_url = "https://api.duckduckgo.com/"
+        params = {
+            "q": search_query,
+            "format": "json",
+            "no_html": "1",
+            "skip_disambig": "1"
+        }
+        
+        response = requests.get(ddg_url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            # Try to get abstract or related topics
+            abstract = data.get("Abstract", "")
+            abstract_text = data.get("AbstractText", "")
+            related_topics = data.get("RelatedTopics", [])
+            
+            # If we have an abstract, use it
+            if abstract_text:
+                news_item = {
+                    "title": abstract or f"Latest {industry} News",
+                    "content": abstract_text,
+                    "source": data.get("AbstractURL", ""),
+                    "date": datetime.now().strftime("%Y-%m-%d")
+                }
+                return {
+                    "success": True,
+                    "news": news_item
+                }
+            
+            # If we have related topics, get the first one
+            if related_topics and len(related_topics) > 0:
+                first_topic = related_topics[0]
+                if isinstance(first_topic, dict):
+                    news_item = {
+                        "title": first_topic.get("Text", f"Latest {industry} News"),
+                        "content": first_topic.get("Text", ""),
+                        "source": first_topic.get("FirstURL", ""),
+                        "date": datetime.now().strftime("%Y-%m-%d")
+                    }
+                    return {
+                        "success": True,
+                        "news": news_item
+                    }
+        
+        # Fallback: Use OpenAI to generate a news summary based on industry
+        prompt = f"""Based on the {industry} industry and business description: "{business_description}", 
+        generate an exciting and relevant news item or trend that would be interesting for this business today.
+        
+        Format as JSON:
+        {{
+            "title": "News Title",
+            "content": "Brief description of the news (2-3 sentences)",
+            "source": "Industry News",
+            "date": "{datetime.now().strftime('%Y-%m-%d')}"
+        }}
+        
+        Make it relevant, exciting, and useful for the business."""
+        
+        llm_response = llm.invoke([HumanMessage(content=prompt)])
+        
+        try:
+            # Try to parse JSON from response
+            import re
+            json_match = re.search(r'\{[^}]+\}', llm_response.content, re.DOTALL)
+            if json_match:
+                news_data = json.loads(json_match.group())
+                return {
+                    "success": True,
+                    "news": news_data
+                }
+        except:
+            pass
+        
+        # Final fallback: Create a generic news item
+        news_item = {
+            "title": f"Latest Trends in {industry.title()}",
+            "content": f"Stay updated with the latest developments in the {industry} industry. Keep an eye on emerging trends and opportunities that could benefit your business.",
+            "source": "Industry Insights",
+            "date": datetime.now().strftime("%Y-%m-%d")
+        }
+        
+        return {
+            "success": True,
+            "news": news_item
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "news": None
+        }
+
 # Initialize tools
-tools = [approve_draft_posts, get_scheduled_posts, get_latest_insights, get_industry_trends, get_user_profile]
+tools = [approve_draft_posts, get_scheduled_posts, get_latest_insights, get_industry_trends, get_user_profile, search_business_news]
 tool_node = ToolNode(tools)
 
 class BusinessChatbot:
@@ -315,296 +419,150 @@ class BusinessChatbot:
         self.setup_graph()
     
     def setup_graph(self):
-        """Setup the LangGraph workflow"""
+        """Setup the LangGraph workflow - fresh start with intent classification"""
         workflow = StateGraph(ChatbotState)
         
-        # Add nodes
+        # Add nodes - starting fresh
         workflow.add_node("classify_intent", self.classify_intent)
-        workflow.add_node("handle_scheduled_posts", self.handle_scheduled_posts)
-        workflow.add_node("handle_approve_drafts", self.handle_approve_drafts)
-        workflow.add_node("handle_insights", self.handle_insights)
-        workflow.add_node("handle_trends", self.handle_trends)
         workflow.add_node("generate_response", self.generate_response)
         
-        # Add conditional edges based on intent
-        workflow.add_conditional_edges(
-            "classify_intent",
-            lambda state: state["intent"],
-            {
-                "scheduled_posts": "handle_scheduled_posts",
-                "approve_drafts": "handle_approve_drafts",
-                "insights": "handle_insights", 
-                "trends": "handle_trends",
-                "general": "generate_response"
-            }
-        )
-        
-        # All handler nodes go to generate_response
-        workflow.add_edge("handle_scheduled_posts", "generate_response")
-        workflow.add_edge("handle_approve_drafts", "generate_response")
-        workflow.add_edge("handle_insights", "generate_response")
-        workflow.add_edge("handle_trends", "generate_response")
-        workflow.add_edge("generate_response", END)
-        
-        # Set entry point
+        # Set entry point to classify_intent (second step after receiving message)
         workflow.set_entry_point("classify_intent")
+        
+        # After classifying intent, go to generate_response
+        # TODO: Add specific handler nodes for each intent later
+        workflow.add_edge("classify_intent", "generate_response")
+        workflow.add_edge("generate_response", END)
         
         # Compile the graph
         self.graph = workflow.compile()
     
     def classify_intent(self, state: ChatbotState) -> ChatbotState:
-        """Classify the user's intent"""
+        """Classify the user's intent into one of 7 categories"""
         query = state["current_query"].lower()
         
-        # Intent classification logic
-        if any(keyword in query for keyword in [
-            'next post', 'upcoming post', 'when is', 'what is next',
-            'latest post', 'recent post', 'last post', 'post timing', 'when will',
-            'what time', 'schedule', 'calendar', 'content calendar', 'post schedule',
-            'scheduled', 'what is scheduled', 'my posts', 'show posts'
+        # Use LLM to classify intent more accurately
+        classification_prompt = f"""Classify the following user message into one of these 7 intents:
+
+1. social_media_post_generation - User wants to generate/create a new social media post
+2. greeting_or_normal_chat - Greeting, casual conversation, or general chat
+3. trending_topic_for_today - User wants to know trending topics for today
+4. next_scheduled_post - User wants to know about their next scheduled post
+5. social_media_analytics - User wants social media analytics, insights, or performance data
+6. website_analytics - User wants website analytics or website performance data
+7. social_media_post_suggestion - User wants suggestions for posts (e.g., "suggest me a post for today")
+
+User message: "{state['current_query']}"
+
+Respond with ONLY the intent name (e.g., "social_media_post_generation", "greeting_or_normal_chat", etc.)
+Do not include any explanation or additional text.
+"""
+        
+        try:
+            response = self.llm.invoke([HumanMessage(content=classification_prompt)])
+            classified_intent = response.content.strip().lower()
+            
+            # Validate the classified intent
+            valid_intents = [
+                "social_media_post_generation",
+                "greeting_or_normal_chat",
+                "trending_topic_for_today",
+                "next_scheduled_post",
+                "social_media_analytics",
+                "website_analytics",
+                "social_media_post_suggestion"
+            ]
+            
+            # Check if the response matches any valid intent
+            if classified_intent in valid_intents:
+                state["classified_intent"] = classified_intent
+                state["intent"] = classified_intent
+            else:
+                # Fallback to keyword-based classification if LLM returns invalid intent
+                state["classified_intent"] = self._fallback_classify_intent(query)
+                state["intent"] = state["classified_intent"]
+        except Exception as e:
+            # Fallback to keyword-based classification on error
+            state["classified_intent"] = self._fallback_classify_intent(query)
+            state["intent"] = state["classified_intent"]
+        
+        return state
+    
+    def _fallback_classify_intent(self, query: str) -> str:
+        """Fallback keyword-based intent classification"""
+        query_lower = query.lower()
+        
+        # 1. Social media post generation
+        if any(keyword in query_lower for keyword in [
+            'generate post', 'create post', 'make a post', 'new post', 'create content',
+            'generate content', 'create social media post', 'post generation'
         ]):
-            state["intent"] = "scheduled_posts"
-        elif any(keyword in query for keyword in [
-            'approve', 'approve drafts', 'approve posts', 'schedule drafts', 
-            'approve all', 'approve all drafts', 'make scheduled', 'approve these'
+            return "social_media_post_generation"
+        
+        # 2. Greeting or normal chat
+        elif any(keyword in query_lower for keyword in [
+            'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+            'how are you', 'how do you do', 'how are things', 'how\'s it going',
+            'thanks', 'thank you', 'bye', 'see you'
         ]):
-            state["intent"] = "approve_drafts"
-        elif any(keyword in query for keyword in ['insights', 'performance', 'analytics', 'engagement', 'metrics', 'how did']):
-            state["intent"] = "insights"
-        elif any(keyword in query for keyword in ['trends', 'industry', 'latest', 'what\'s new', 'current trends']):
-            state["intent"] = "trends"
+            return "greeting_or_normal_chat"
+        
+        # 3. Trending topic for today
+        elif any(keyword in query_lower for keyword in [
+            'trending', 'trends', 'trending topic', 'trending topics', 'what\'s trending',
+            'trending today', 'current trends', 'latest trends', 'what are the trends'
+        ]):
+            return "trending_topic_for_today"
+        
+        # 4. Next scheduled post
+        elif any(keyword in query_lower for keyword in [
+            'next post', 'next scheduled post', 'upcoming post', 'when is my next post',
+            'what is my next post', 'next scheduled', 'when will my next post',
+            'show me my next post', 'my next post'
+        ]):
+            return "next_scheduled_post"
+        
+        # 5. Social media analytics
+        elif any(keyword in query_lower for keyword in [
+            'analytics', 'social media analytics', 'performance', 'insights',
+            'engagement', 'metrics', 'how are my posts performing', 'post performance',
+            'social media performance', 'analytics data', 'social media insights'
+        ]):
+            return "social_media_analytics"
+        
+        # 6. Website analytics
+        elif any(keyword in query_lower for keyword in [
+            'website analytics', 'website performance', 'website traffic', 'site analytics',
+            'website insights', 'web analytics', 'site performance', 'website metrics'
+        ]):
+            return "website_analytics"
+        
+        # 7. Social media post suggestion
+        elif any(keyword in query_lower for keyword in [
+            'suggest', 'suggestion', 'suggest me', 'give me a suggestion', 'post suggestion',
+            'suggest a post', 'suggest me a post', 'what should I post', 'post ideas',
+            'content suggestion', 'suggest content', 'what to post today'
+        ]):
+            return "social_media_post_suggestion"
+        
+        # Default to greeting_or_normal_chat if no match
         else:
-            state["intent"] = "general"
-        
-        return state
+            return "greeting_or_normal_chat"
     
-    def handle_scheduled_posts(self, state: ChatbotState) -> ChatbotState:
-        """Handle scheduled posts queries"""
-        try:
-            # Extract platform from query if mentioned
-            platform = None
-            query = state["current_query"].lower()
-            if 'facebook' in query:
-                platform = 'Facebook'
-            elif 'instagram' in query:
-                platform = 'Instagram'
-            elif 'linkedin' in query:
-                platform = 'LinkedIn'
-            elif 'twitter' in query:
-                platform = 'Twitter'
-            elif 'youtube' in query:
-                platform = 'YouTube'
-            
-            # Get scheduled posts
-            result = get_scheduled_posts.invoke({"user_id": state["user_id"], "platform": platform or ""})
-            
-            if result["success"]:
-                scheduled_posts = result["scheduled_posts"]
-                draft_posts = result["draft_posts"]
-                published_posts = result["published_posts"]
-                
-                if scheduled_posts:
-                    # Find next scheduled post
-                    next_post = scheduled_posts[0]  # Already ordered by scheduled_at asc
-                    
-                    state["context"]["scheduled_posts"] = {
-                        "next_post": next_post,
-                        "all_scheduled": scheduled_posts,
-                        "draft_posts": draft_posts,
-                        "recent_published": published_posts,
-                        "total_scheduled": result["scheduled_count"],
-                        "total_drafts": result["draft_count"],
-                        "total_published": result["published_count"],
-                        "platform": platform or "all platforms",
-                        "scheduled_at": next_post.get("scheduled_at"),
-                        "content_preview": next_post.get("content", "")[:200] + "..." if len(next_post.get("content", "")) > 200 else next_post.get("content", "")
-                    }
-                elif draft_posts:
-                    # No scheduled posts, but there are drafts
-                    state["context"]["scheduled_posts"] = {
-                        "message": "No scheduled posts found",
-                        "draft_posts": draft_posts,
-                        "recent_published": published_posts,
-                        "total_scheduled": 0,
-                        "total_drafts": result["draft_count"],
-                        "total_published": result["published_count"],
-                        "platform": platform or "all platforms",
-                        "has_drafts": True,
-                        "next_draft": draft_posts[0] if draft_posts else None
-                    }
-                else:
-                    # No scheduled posts and no drafts
-                    state["context"]["scheduled_posts"] = {
-                        "message": f"No scheduled posts or drafts found for {platform or 'any platform'}",
-                        "recent_published": published_posts,
-                        "total_scheduled": 0,
-                        "total_drafts": 0,
-                        "total_published": result["published_count"],
-                        "platform": platform or "all platforms",
-                        "has_drafts": False
-                    }
-            else:
-                state["context"]["scheduled_posts"] = {
-                    "error": f"Error fetching posts: {result.get('error', 'Unknown error')}"
-                }
-        except Exception as e:
-            state["context"]["scheduled_posts"] = {
-                "error": f"Error fetching posts: {str(e)}"
-            }
-        
-        return state
-    
-    def handle_approve_drafts(self, state: ChatbotState) -> ChatbotState:
-        """Handle approve drafts queries"""
-        try:
-            # First get the user's draft posts
-            result = get_scheduled_posts.invoke({"user_id": state["user_id"], "platform": ""})
-            
-            if result["success"] and result["draft_posts"]:
-                draft_posts = result["draft_posts"]
-                post_ids = [post["id"] for post in draft_posts]
-                
-                # Approve all draft posts
-                approve_result = approve_draft_posts.invoke({"user_id": state["user_id"], "post_ids": post_ids})
-                
-                if approve_result["success"]:
-                    state["context"]["approve_drafts"] = {
-                        "success": True,
-                        "approved_count": approve_result["approved_count"],
-                        "message": f"Successfully approved {approve_result['approved_count']} draft posts to scheduled status",
-                        "draft_posts": draft_posts
-                    }
-                else:
-                    state["context"]["approve_drafts"] = {
-                        "success": False,
-                        "error": approve_result.get("error", "Failed to approve drafts"),
-                        "draft_posts": draft_posts
-                    }
-            else:
-                state["context"]["approve_drafts"] = {
-                    "success": False,
-                    "message": "No draft posts found to approve",
-                    "draft_posts": []
-                }
-        except Exception as e:
-            state["context"]["approve_drafts"] = {
-                "success": False,
-                "error": f"Error approving drafts: {str(e)}",
-                "draft_posts": []
-            }
-        
-        return state
-    
-    def handle_insights(self, state: ChatbotState) -> ChatbotState:
-        """Handle insights queries"""
-        try:
-            # Extract platform from query if mentioned
-            platform = None
-            query = state["current_query"].lower()
-            if 'facebook' in query:
-                platform = 'facebook'
-            elif 'instagram' in query:
-                platform = 'instagram'
-            elif 'linkedin' in query:
-                platform = 'linkedin'
-            elif 'twitter' in query:
-                platform = 'twitter'
-            
-            # Get insights
-            result = get_latest_insights.invoke({"user_id": state["user_id"], "platform": platform})
-            
-            if result["success"] and result["insights"]:
-                state["context"]["insights"] = {
-                    "insights": result["insights"],
-                    "count": result["count"],
-                    "platform": platform or "all platforms"
-                }
-            else:
-                state["context"]["insights"] = {
-                    "message": "No insights data available",
-                    "count": 0
-                }
-        except Exception as e:
-            state["context"]["insights"] = {
-                "error": f"Error fetching insights: {str(e)}"
-            }
-        
-        return state
-    
-    def handle_trends(self, state: ChatbotState) -> ChatbotState:
-        """Handle industry trends queries"""
-        try:
-            # First, try to extract industry from the query itself
-            query = state["current_query"].lower()
-            industry_from_query = None
-            
-            # Look for industry mentions in the query
-            industry_keywords = {
-                'technology': ['tech', 'technology', 'software', 'it', 'digital'],
-                'healthcare': ['healthcare', 'health', 'medical', 'pharma', 'hospital'],
-                'retail': ['retail', 'ecommerce', 'shopping', 'fashion', 'consumer'],
-                'finance': ['finance', 'banking', 'fintech', 'financial', 'investment'],
-                'education': ['education', 'edtech', 'learning', 'school', 'university'],
-                'real estate': ['real estate', 'property', 'housing', 'construction'],
-                'manufacturing': ['manufacturing', 'production', 'industrial', 'factory']
-            }
-            
-            for industry, keywords in industry_keywords.items():
-                if any(keyword in query for keyword in keywords):
-                    industry_from_query = industry
-                    break
-            
-            # If no industry found in query, try to get from user profile
-            if not industry_from_query:
-                profile_result = get_user_profile.invoke({"user_id": state["user_id"]})
-                
-                if profile_result["success"] and profile_result["profile"]:
-                    industry_from_query = profile_result["profile"].get("industry", "technology")
-                    business_name = profile_result["profile"].get("business_name", "Your Business")
-                else:
-                    # If no profile found, ask user for their industry
-                    state["context"]["trends"] = {
-                        "error": "No user profile found",
-                        "message": "I need to know your industry to provide relevant trends. Please either:",
-                        "suggestions": [
-                            "Complete your profile setup in the onboarding section",
-                            "Ask me: 'What are the latest trends in [your industry]?' (e.g., 'What are the latest trends in healthcare?')"
-                        ]
-                    }
-                    return state
-            else:
-                business_name = "Your Business"
-            
-            # Now get trends for the identified industry
-            trends_result = get_industry_trends.invoke({"industry": industry_from_query})
-            
-            if trends_result["success"] and trends_result["trends"]:
-                state["context"]["trends"] = {
-                    "industry": industry_from_query,
-                    "business_name": business_name,
-                    "trends": trends_result["trends"]["trends"],
-                    "last_updated": trends_result["trends"]["last_updated"]
-                }
-            else:
-                state["context"]["trends"] = {
-                    "error": f"Unable to fetch trends for {industry_from_query} industry",
-                    "industry": industry_from_query
-                }
-        except Exception as e:
-            state["context"]["trends"] = {
-                "error": f"Error fetching trends: {str(e)}"
-            }
-        
-        return state
+    # Handler nodes will be added later based on intent
+    # For now, all intents go directly to generate_response
     
     def generate_response(self, state: ChatbotState) -> ChatbotState:
-        """Generate the final response using LLM"""
+        """Generate the final response using LLM based on classified intent"""
         try:
-            # Create system prompt based on context
+            # Add classified intent to context
+            state["context"]["classified_intent"] = state.get("classified_intent", "greeting_or_normal_chat")
+            
+            # Create system prompt based on classified intent
             system_prompt = self.create_system_prompt(state["context"])
             
             # Create user message
-            user_message = f"User query: {state['current_query']}\n\nContext: {json.dumps(state['context'], indent=2)}"
+            user_message = f"User query: {state['current_query']}\n\nClassified Intent: {state.get('classified_intent', 'greeting_or_normal_chat')}"
             
             # Generate response
             messages = [
@@ -621,58 +579,52 @@ class BusinessChatbot:
         return state
     
     def create_system_prompt(self, context: Dict[str, Any]) -> str:
-        """Create system prompt based on available context"""
-        prompt = """You are a helpful business assistant chatbot that helps users understand their social media and business data. 
+        """Create system prompt based on classified intent"""
+        intent = context.get("classified_intent", "greeting_or_normal_chat")
         
-        You can help with:
-        1. Scheduled posts - tell users about their upcoming content
-        2. Performance insights - analyze their social media performance
-        3. Industry trends - provide relevant industry information
+        prompt = """You are Emily, a helpful AI marketing assistant chatbot. 
         
+        Based on the classified intent, respond appropriately to the user's query.
         Always be helpful, concise, and provide actionable insights when possible.
-        Use the context data provided to give specific, relevant answers.
-        
-        IMPORTANT: If the context shows an error about missing user profile or industry information, guide the user to complete their profile setup or ask them to specify their industry in their question.
         """
         
-        if "scheduled_posts" in context:
-            if "error" in context["scheduled_posts"]:
-                prompt += f"\n\nIMPORTANT: The posts context shows an error: {context['scheduled_posts']['error']}. Help the user resolve this issue."
-            else:
-                scheduled_data = context["scheduled_posts"]
-                if scheduled_data.get("total_scheduled", 0) > 0:
-                    prompt += f"\n\nYou have access to scheduled posts data. The user has {scheduled_data['total_scheduled']} scheduled posts. Show them their upcoming content, including next posts, timing, and content previews."
-                elif scheduled_data.get("has_drafts", False):
-                    prompt += f"\n\nIMPORTANT: The user has NO scheduled posts, but they have {scheduled_data['total_drafts']} draft posts. Tell them that scheduled posts are nil, but they have drafts that can be approved to schedule them. Show them the draft posts and suggest they approve them to schedule them up."
-                else:
-                    prompt += f"\n\nThe user has no scheduled posts or drafts. Suggest they create new content or check their content generation settings."
+        # Add intent-specific instructions
+        if intent == "social_media_post_generation":
+            prompt += "\n\nThe user wants to generate/create a new social media post. Guide them through the process or direct them to the content creation feature."
         
-        if "approve_drafts" in context:
-            approve_data = context["approve_drafts"]
-            if approve_data.get("success", False):
-                prompt += f"\n\nIMPORTANT: The user successfully approved {approve_data['approved_count']} draft posts to scheduled status. Confirm this action and let them know their posts are now scheduled."
-            else:
-                prompt += f"\n\nIMPORTANT: There was an issue approving draft posts: {approve_data.get('error', 'Unknown error')}. Help the user understand what went wrong."
+        elif intent == "greeting_or_normal_chat":
+            prompt += "\n\nThe user is greeting you or having a normal conversation. Respond warmly and helpfully. You can ask how you can assist them with their marketing needs."
         
-        if "insights" in context:
-            prompt += "\n\nYou have access to performance insights data. Help the user understand their social media performance."
+        elif intent == "trending_topic_for_today":
+            prompt += "\n\nThe user wants to know trending topics for today. Provide relevant trending topics that would be useful for their social media content."
         
-        if "trends" in context:
-            if "error" in context["trends"]:
-                prompt += f"\n\nIMPORTANT: The trends context shows an error: {context['trends']['error']}. Guide the user to resolve this issue."
-            else:
-                prompt += "\n\nYou have access to industry trends data. Help the user understand relevant industry trends."
+        elif intent == "next_scheduled_post":
+            prompt += "\n\nThe user wants to know about their next scheduled post. Check their scheduled posts and provide details about when and what is scheduled next."
+        
+        elif intent == "social_media_analytics":
+            prompt += "\n\nThe user wants social media analytics or performance insights. Provide analytics data about their social media posts and performance."
+        
+        elif intent == "website_analytics":
+            prompt += "\n\nThe user wants website analytics or website performance data. Provide insights about their website traffic and performance."
+        
+        elif intent == "social_media_post_suggestion":
+            prompt += "\n\nThe user wants suggestions for social media posts. Provide creative and relevant post suggestions based on their business and industry."
+        
+        # Add context information if available
+        if context.get("data"):
+            prompt += f"\n\nAvailable context data: {json.dumps(context.get('data'), indent=2)}"
         
         return prompt
     
-    def chat(self, user_id: str, query: str) -> str:
-        """Main chat interface"""
+    def chat(self, user_id: str, query: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
+        """Main chat interface with conversation memory"""
         # Create initial state
         state = {
             "user_id": user_id,
             "current_query": query,
-            "messages": [],
+            "messages": conversation_history or [],
             "intent": None,
+            "classified_intent": None,
             "context": {},
             "response": None
         }
@@ -680,111 +632,84 @@ class BusinessChatbot:
         # Run the graph
         result = self.graph.invoke(state)
         
-        return result["response"]
+        # Add classified intent to context for system prompt
+        state["context"]["classified_intent"] = result.get("classified_intent", "greeting_or_normal_chat")
+        
+        # Create system prompt based on classified intent
+        system_prompt = self.create_system_prompt(state["context"])
+        
+        # Build message history for LLM
+        messages = [SystemMessage(content=system_prompt)]
+        
+        # Add conversation history if available
+        if conversation_history:
+            for msg in conversation_history:
+                if msg.get("type") == "user" or msg.get("role") == "user":
+                    messages.append(HumanMessage(content=msg.get("content", "")))
+                elif msg.get("type") == "bot" or msg.get("role") == "assistant" or msg.get("role") == "bot":
+                    messages.append(AIMessage(content=msg.get("content", "")))
+        
+        # Add current user query
+        user_message = f"User query: {query}\n\nClassified Intent: {result.get('classified_intent', 'greeting_or_normal_chat')}"
+        messages.append(HumanMessage(content=user_message))
+        
+        # Generate response
+        response = self.llm.invoke(messages)
+        return response.content
     
-    def chat_stream(self, user_id: str, query: str) -> Generator[str, None, None]:
-        """Streaming chat interface with progress updates"""
+    def chat_stream(self, user_id: str, query: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> Generator[str, None, None]:
+        """Streaming chat interface - streams only the final message with conversation memory"""
         # Create initial state
         state = {
             "user_id": user_id,
             "current_query": query,
-            "messages": [],
+            "messages": conversation_history or [],
             "intent": None,
+            "classified_intent": None,
             "context": {},
             "response": None
         }
         
         try:
-            # Show initial progress
-            yield "🔍 Analyzing your request...\n"
-            time.sleep(0.5)  # Small delay for better UX
-            
-            # Run the graph to get context
+            # Run the graph to classify intent and generate response
             result = self.graph.invoke(state)
             
-            # Show progress based on intent
-            intent = result.get("intent", "general")
-            context = result.get("context", {})
+            # Add classified intent to context for system prompt
+            state["context"]["classified_intent"] = result.get("classified_intent", "greeting_or_normal_chat")
             
-            if intent == "scheduled_posts":
-                yield "📅 Searching your database for posts...\n"
-                time.sleep(0.8)
-                yield "🔍 Looking for scheduled posts...\n"
-                time.sleep(0.6)
-                
-                if "scheduled_posts" in context:
-                    scheduled_data = context["scheduled_posts"]
-                    if scheduled_data.get("total_scheduled", 0) > 0:
-                        yield f"✅ Found {scheduled_data['total_scheduled']} scheduled posts\n"
-                    elif scheduled_data.get("has_drafts", False):
-                        yield f"📝 Found {scheduled_data['total_drafts']} draft posts (no scheduled posts)\n"
-                    else:
-                        yield "❌ No scheduled posts or drafts found\n"
-                        
-            elif intent == "approve_drafts":
-                yield "📝 Checking for draft posts...\n"
-                time.sleep(0.8)
-                yield "🔍 Looking for posts in drafts...\n"
-                time.sleep(0.6)
-                
-                if "approve_drafts" in context:
-                    approve_data = context["approve_drafts"]
-                    if approve_data.get("success", False):
-                        yield f"✅ Successfully approved {approve_data['approved_count']} draft posts\n"
-                    else:
-                        yield "❌ Failed to approve draft posts\n"
-                        
-            elif intent == "insights":
-                yield "📊 Analyzing your social media performance...\n"
-                time.sleep(0.8)
-                yield "🔍 Gathering insights data...\n"
-                time.sleep(0.6)
-                
-            elif intent == "trends":
-                yield "📈 Researching industry trends...\n"
-                time.sleep(0.8)
-                yield "🔍 Gathering latest trend data...\n"
-                time.sleep(0.6)
-                
-            else:
-                yield "🤖 Processing your request...\n"
-                time.sleep(0.5)
+            # Create system prompt based on classified intent
+            system_prompt = self.create_system_prompt(state["context"])
             
-            # Show final progress
-            yield "✨ Generating final response...\n"
-            time.sleep(0.3)
+            # Build message history for LLM
+            messages = [SystemMessage(content=system_prompt)]
             
-            # Clear all progress messages by sending clear commands
-            # This will make the frontend clear the progress display
-            yield "\n\n---CLEAR_PROGRESS---\n\n"
+            # Add conversation history if available
+            if conversation_history:
+                for msg in conversation_history:
+                    if msg.get("type") == "user" or msg.get("role") == "user":
+                        messages.append(HumanMessage(content=msg.get("content", "")))
+                    elif msg.get("type") == "bot" or msg.get("role") == "assistant" or msg.get("role") == "bot":
+                        messages.append(AIMessage(content=msg.get("content", "")))
             
-            # Create system prompt based on context
-            system_prompt = self.create_system_prompt(context)
+            # Add current user query
+            user_message = f"User query: {query}\n\nClassified Intent: {result.get('classified_intent', 'greeting_or_normal_chat')}"
+            messages.append(HumanMessage(content=user_message))
             
-            # Create user message
-            user_message = f"User query: {query}\n\nContext: {json.dumps(context, indent=2)}"
-            
-            # Generate streaming response
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_message)
-            ]
-            
-            # Stream the response
+            # Stream the response directly without progress messages
             for chunk in self.llm.stream(messages):
                 if hasattr(chunk, 'content') and chunk.content:
                     yield chunk.content
                     
         except Exception as e:
-            yield f"\n\n❌ I apologize, but I encountered an error while processing your request: {str(e)}"
+            yield f"I apologize, but I encountered an error while processing your request: {str(e)}"
 
 # Initialize the chatbot
 chatbot = BusinessChatbot()
 
-def get_chatbot_response(user_id: str, query: str) -> str:
-    """Get response from the business chatbot"""
-    return chatbot.chat(user_id, query)
+def get_chatbot_response(user_id: str, query: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
+    """Get response from the business chatbot with conversation memory"""
+    return chatbot.chat(user_id, query, conversation_history)
 
-def get_chatbot_response_stream(user_id: str, query: str) -> Generator[str, None, None]:
-    """Get streaming response from the business chatbot"""
-    return chatbot.chat_stream(user_id, query)
+def get_chatbot_response_stream(user_id: str, query: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> Generator[str, None, None]:
+    """Get streaming response from the business chatbot with conversation memory"""
+    return chatbot.chat_stream(user_id, query, conversation_history)

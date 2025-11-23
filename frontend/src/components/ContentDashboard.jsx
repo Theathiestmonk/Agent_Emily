@@ -107,6 +107,7 @@ const ContentDashboard = () => {
   const [availableChannels, setAvailableChannels] = useState([]) // Available channels from profile
   const [allContent, setAllContent] = useState([]) // All content fetched from API
   const [profile, setProfile] = useState(null) // User profile data
+  const [channelContentCounts, setChannelContentCounts] = useState({}) // Content counts per channel
   const [editingContent, setEditingContent] = useState(null) // Content being edited
   const [editForm, setEditForm] = useState({}) // Edit form data
   const [saving, setSaving] = useState(false) // Saving state
@@ -255,7 +256,7 @@ const ContentDashboard = () => {
           console.log('Channels from profile:', uniquePlatforms)
           console.log('Original platforms from profile:', platforms)
           
-          // Set first channel as default if no channel is selected
+          // Auto-select first channel to show its content
           if (uniquePlatforms.length > 0 && selectedChannel === null) {
             setSelectedChannel(uniquePlatforms[0])
           }
@@ -267,6 +268,28 @@ const ContentDashboard = () => {
     
     fetchProfile()
   }, [user])
+
+  // Calculate content counts for all channels using scheduledContent
+  useEffect(() => {
+    if (availableChannels.length > 0 && scheduledContent) {
+      const counts = {}
+      for (const channel of availableChannels) {
+        const normalizedChannel = channel.toLowerCase().trim()
+        const channelCount = scheduledContent.filter(content => {
+          const contentPlatform = content.platform?.toLowerCase().trim() || ''
+          return contentPlatform === normalizedChannel ||
+            (normalizedChannel === 'twitter' && (contentPlatform === 'x' || contentPlatform === 'x (twitter)')) ||
+            (normalizedChannel === 'whatsapp' && contentPlatform.includes('whatsapp')) ||
+            (normalizedChannel === 'google business profile' && contentPlatform.includes('google'))
+        }).length
+        
+        if (channelCount > 0) {
+          counts[channel] = channelCount
+        }
+      }
+      setChannelContentCounts(counts)
+    }
+  }, [availableChannels, scheduledContent])
 
   // Refresh content when generation completes or channel changes
   useEffect(() => {
@@ -2809,53 +2832,15 @@ const ContentDashboard = () => {
       
       {/* Main Content */}
       <div className="md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden">
-        {/* Header with Channel Tabs */}
+        {/* Header */}
         <div className="bg-white shadow-sm border-b">
           <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4">
             {/* Layout */}
             <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 md:gap-0">
               <div className="flex-1">
-                {/* Channel Tabs */}
-                <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                  {availableChannels.map((channel) => {
-                    // Count only shows for currently selected channel (since we only fetch for selected channel)
-                    const channelCount = selectedChannel === channel ? allContent.length : 0
-                    return (
-                      <button
-                        key={channel}
-                        onClick={() => setSelectedChannel(channel)}
-                        className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 whitespace-nowrap flex items-center space-x-2 ${
-                          selectedChannel === channel
-                            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        <span>{getPlatformIcon(channel)}</span>
-                        <span className="capitalize">{channel}</span>
-                        {selectedChannel === channel && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-white/20">
-                            {channelCount}
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
-                  <button
-                    onClick={() => setSelectedChannel('all')}
-                    className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 whitespace-nowrap flex items-center space-x-2 ${
-                      selectedChannel === 'all'
-                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <span>All Channels</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      selectedChannel === 'all' ? 'bg-white/20' : 'bg-gray-200'
-                    }`}>
-                      {allContent.length}
-                    </span>
-                  </button>
-                </div>
+                <h1 className="text-sm md:text-base lg:text-lg font-semibold text-gray-900">
+                  Inspirations for your social media posts
+                </h1>
               </div>
               
               <div className="flex items-center space-x-4 md:ml-4 flex-shrink-0">
@@ -2886,27 +2871,104 @@ const ContentDashboard = () => {
 
           {/* Content Cards - 2 Row Grid Layout */}
           <div className="space-y-6">
-            {!selectedChannel && (
-              <div className="text-center py-12">
-                <p className="text-gray-500">Please select a channel to view content</p>
+            {/* Emily Message Bubble - Always show all channels from profile */}
+            {availableChannels.length > 0 && (
+              <div className="flex justify-start w-full mb-4">
+                <div className="flex items-start gap-2 max-w-[50%]">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
+                    <span className="text-white font-bold text-sm">E</span>
+                  </div>
+                  <div className="bg-white rounded-lg px-4 py-3 shadow-md" style={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.15)' }}>
+                    {fetchingContent ? (
+                      <p className="text-sm text-black">
+                        Loading suggestions...
+                      </p>
+                    ) : (
+                      <>
+                        {availableChannels.length > 0 && (
+                          <>
+                            {selectedChannel && selectedChannel !== availableChannels[0] ? (
+                              <>
+                                <p className="text-sm text-black mb-2">
+                                  Here are some of my <span className="text-blue-600 font-semibold">{selectedChannel.charAt(0).toUpperCase() + selectedChannel.slice(1)}</span> post suggestions for you
+                                </p>
+                                <p className="text-sm text-black mb-2">
+                                  Check post suggestions for :
+                                </p>
+                                <div className="flex flex-col gap-1">
+                                  {availableChannels.filter(ch => ch !== selectedChannel).map((channel) => {
+                                    const channelCount = channelContentCounts[channel] || 0
+                                    return (
+                                      <div
+                                        key={channel}
+                                        onClick={() => setSelectedChannel(channel)}
+                                        className="text-sm cursor-pointer hover:underline flex items-center gap-2 text-blue-600 hover:text-blue-700"
+                                      >
+                                        <span className="flex-shrink-0 w-6 h-6 rounded border border-gray-200 flex items-center justify-center bg-gray-50">
+                                          {getPlatformIcon(channel)}
+                                        </span>
+                                        <span>
+                                          {channel.charAt(0).toUpperCase() + channel.slice(1)} {channelCount > 0 && `• ${channelCount} ${channelCount === 1 ? 'post' : 'posts'}`}
+                                        </span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-sm text-black mb-2">
+                                  Here are some of my <span className="text-blue-600 font-semibold">{availableChannels[0].charAt(0).toUpperCase() + availableChannels[0].slice(1)}</span> post suggestions for you
+                                </p>
+                                {availableChannels.length > 1 && (
+                                  <>
+                                    <p className="text-sm text-black mb-2">
+                                      Checkout the post suggestions for :
+                                    </p>
+                                    <div className="flex flex-col gap-1">
+                                      {availableChannels.slice(1).map((channel) => {
+                                        const channelCount = channelContentCounts[channel] || 0
+                                        const isSelected = selectedChannel === channel
+                                        return (
+                                          <div
+                                            key={channel}
+                                            onClick={() => setSelectedChannel(channel)}
+                                            className={`text-sm cursor-pointer hover:underline flex items-center gap-2 ${
+                                              isSelected 
+                                                ? 'text-purple-600 font-semibold' 
+                                                : 'text-blue-600 hover:text-blue-700'
+                                            }`}
+                                          >
+                                            <span className="flex-shrink-0 w-6 h-6 rounded border border-gray-200 flex items-center justify-center bg-gray-50">
+                                              {getPlatformIcon(channel)}
+                                            </span>
+                                            <span>
+                                              {channel.charAt(0).toUpperCase() + channel.slice(1)} {channelCount > 0 && `• ${channelCount} ${channelCount === 1 ? 'post' : 'posts'}`}
+                                            </span>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
-            {selectedChannel && fetchingContent && (
-              <div className="text-center py-12">
-                <p className="text-gray-600 font-medium">Loading content for {selectedChannel}...</p>
-              </div>
-            )}
-            {selectedChannel && !fetchingContent && filteredContent.length === 0 && !generating && !fetchingFreshData && (
-              <div className="text-center py-12">
-                <p className="text-gray-500">No content found for {selectedChannel}</p>
-                <p className="text-sm text-gray-400 mt-2">Try selecting a different channel or generate new content</p>
-              </div>
-            )}
-            {!fetchingContent && filteredContent.length > 0 && (
-              <div className="relative">
-                <div 
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                >
+
+            {selectedChannel && !fetchingContent && filteredContent.length > 0 && (
+              <>
+
+                <div className="relative">
+                  <div 
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pl-10"
+                  >
                 {filteredContent.map((content) => {
                   const theme = getPlatformCardTheme(content.platform)
                   console.log('Content platform:', content.platform, 'Theme:', theme)
@@ -3410,6 +3472,43 @@ const ContentDashboard = () => {
                   )
                 })}
                 </div>
+                </div>
+                
+                {/* Emily Message Bubble - After Content Cards */}
+                {!fetchingContent && filteredContent.length > 0 && (
+                  <div className="flex justify-start w-full mt-6">
+                    <div className="flex items-start gap-2 max-w-[50%]">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">E</span>
+                      </div>
+                      <div className="bg-white rounded-lg px-4 py-3 shadow-md" style={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.15)' }}>
+                        <p className="text-sm text-black mb-3">
+                          Want to create more inspiring content ?
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          <div className="text-sm text-black">
+                            Leo can help you craft personalised post for you{' '}
+                            <span
+                              onClick={() => setShowCustomContentChatbot(true)}
+                              className="text-blue-600 hover:text-blue-700 cursor-pointer hover:underline"
+                            >
+                              Talk to Leo
+                            </span>
+                          </div>
+                          <div className="text-sm text-black">
+                            I can generate fresh ideas beyond what you've already approved :{' '}
+                            <span
+                              onClick={handleGenerateContent}
+                              className={`text-purple-600 hover:text-purple-700 cursor-pointer hover:underline ${generating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              Let's do that
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Load More Button */}
                 {hasMoreContent && !loadingAllContent && (
@@ -3427,7 +3526,7 @@ const ContentDashboard = () => {
                     <p className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 text-sm font-medium">Loading all content...</p>
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
         </div>

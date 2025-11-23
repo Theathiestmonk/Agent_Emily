@@ -380,24 +380,36 @@ class CustomContentAgent:
             connected_platforms = user_profile.get("social_media_platforms", [])
             state["platform_content_types"] = {platform: PLATFORM_CONTENT_TYPES.get(platform, []) for platform in connected_platforms}
             
+            # Get business name from profile
+            business_name = user_profile.get("business_name", "")
+            if not business_name:
+                business_name = "there"  # Fallback if no business name
+            
             if not connected_platforms:
                 # No platforms connected
                 welcome_message = {
                     "role": "assistant",
-                    "content": "Hi, I'm Emily! 👋 I'd love to help you create amazing content, but I don't see any connected social media platforms in your profile. Please connect your platforms first in the Settings dashboard, then come back to create content!",
+                    "content": f"Thanks Emily, I'll take care from here. Hi {business_name}, Leo here! I'd love to help you create amazing content, but I don't see any connected social media platforms in your profile. Please connect your platforms first in the Settings dashboard, then come back to create content!",
                     "timestamp": datetime.now().isoformat()
                 }
                 state["conversation_messages"].append(welcome_message)
                 state["current_step"] = ConversationStep.ERROR
                 return state
             
-            # Create platform selection message with options
+            # Create platform selection message with options - more humanized
+            # Format platform names for display (capitalize first letter)
+            platform_options = []
+            for platform in connected_platforms:
+                # Capitalize first letter of each word for display
+                display_name = ' '.join(word.capitalize() for word in platform.split('_'))
+                platform_options.append({"value": platform, "label": display_name})
+            
             welcome_message = {
                 "role": "assistant",
-                "content": "Hi, I'm Emily! 👋 I'll help you create amazing content for your social media platforms. Please select a platform:",
+                "content": f"Thanks Emily, I'll take care from here. Hi {business_name}, Leo here! Let's create some amazing content together. Which platform are you thinking about creating content for today?",
                 "timestamp": datetime.now().isoformat(),
                 "platforms": connected_platforms,
-                "options": [{"value": str(i+1), "label": platform} for i, platform in enumerate(connected_platforms)]
+                "options": platform_options
             }
             
             state["conversation_messages"].append(welcome_message)
