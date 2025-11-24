@@ -635,6 +635,7 @@ async def generate_today_messages(
         import pytz
         from agents.scheduled_messages import (
             generate_morning_message,
+            generate_leads_reminder_message,
             generate_mid_morning_message,
             generate_afternoon_message,
             generate_evening_message,
@@ -677,6 +678,7 @@ async def generate_today_messages(
         # Define message types and their target times (in user's timezone)
         message_configs = [
             ("morning", 9, 0, generate_morning_message),
+            ("leads_reminder", 10, 0, generate_leads_reminder_message),
             ("mid_morning", 11, 30, generate_mid_morning_message),
             ("afternoon", 14, 0, generate_afternoon_message),
             ("evening", 18, 0, generate_evening_message),

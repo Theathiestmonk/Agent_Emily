@@ -356,6 +356,25 @@ Return a JSON object with:
                         "gmail_message_id": result.get('id')
                     }
                 }).execute()
+                
+                # Update lead status from "new" to "contacted" if it's currently "new"
+                lead = supabase_admin.table("leads").select("status").eq("id", state.lead_id).execute()
+                if lead.data and lead.data[0].get("status") == "new":
+                    from datetime import datetime
+                    supabase_admin.table("leads").update({
+                        "status": "contacted",
+                        "updated_at": datetime.now().isoformat()
+                    }).eq("id", state.lead_id).execute()
+                    
+                    # Create status history entry
+                    supabase_admin.table("lead_status_history").insert({
+                        "lead_id": state.lead_id,
+                        "old_status": "new",
+                        "new_status": "contacted",
+                        "changed_by": "system",
+                        "reason": "Automatic welcome email sent"
+                    }).execute()
+                    logger.info(f"Updated lead {state.lead_id} status from 'new' to 'contacted' after sending email")
             
             state.email_sent = True
             state.progress = 60

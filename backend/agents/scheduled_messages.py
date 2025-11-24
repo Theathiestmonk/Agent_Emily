@@ -67,6 +67,8 @@ def format_whatsapp_message(message_type: str, data: Dict[str, Any]) -> str:
         return format_morning_message(data)
     elif message_type == "mid_morning":
         return format_mid_morning_message(data)
+    elif message_type == "leads_reminder":
+        return format_leads_reminder_message(data)
     elif message_type == "afternoon":
         return format_afternoon_message(data)
     elif message_type == "evening":
@@ -98,6 +100,39 @@ def format_morning_message(data: Dict[str, Any]) -> str:
     
     if data.get("posting_times"):
         message += f"🔹 Best Posting Times Today:\n\n{data['posting_times']}\n"
+    
+    return message
+
+
+def format_leads_reminder_message(data: Dict[str, Any]) -> str:
+    """Format leads reminder message with clickable lead cards"""
+    business_name = data.get("business_name", "there")
+    total_new_leads = data.get("total_new_leads", 0)
+    leads_today = data.get("leads_today", [])
+    
+    message = f"Dear {business_name}, reminder to check leads for today:\n\n"
+    message += f"Total New leads: {total_new_leads}\n\n"
+    
+    if leads_today and len(leads_today) > 0:
+        message += "Reminding you to follow up with the following leads today:\n\n"
+        # Format leads as clickable cards
+        for lead in leads_today:
+            lead_name = lead.get("name", "Unknown Lead")
+            lead_email = lead.get("email", "")
+            lead_phone = lead.get("phone_number", "")
+            lead_id = lead.get("id", "")
+            lead_status = lead.get("status", "new")
+            
+            # Create clickable card format
+            message += f"📋 {lead_name}\n"
+            if lead_email:
+                message += f"   📧 {lead_email}\n"
+            if lead_phone:
+                message += f"   📞 {lead_phone}\n"
+            message += f"   Status: {lead_status}\n"
+            message += f"   [View Lead](leads/{lead_id})\n\n"
+    else:
+        message += "No leads scheduled for follow-up today.\n"
     
     return message
 
@@ -337,6 +372,88 @@ def generate_morning_message(user_id: str, timezone: str = "UTC") -> Dict[str, A
         }
     except Exception as e:
         logger.error(f"Error generating morning message for user {user_id}: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+def fetch_leads_for_today(user_id: str, timezone: str = "UTC") -> Dict[str, Any]:
+    """Fetch new leads and leads with follow-up date for today"""
+    try:
+        user_tz = pytz.timezone(timezone)
+        now = datetime.now(user_tz)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        # Convert to UTC for database query
+        today_start_utc = today_start.astimezone(pytz.UTC)
+        today_end_utc = today_end.astimezone(pytz.UTC)
+        
+        # Get new leads created today
+        new_leads_response = supabase.table("leads").select("*").eq(
+            "user_id", user_id
+        ).gte("created_at", today_start_utc.isoformat()).lt(
+            "created_at", today_end_utc.isoformat()
+        ).execute()
+        
+        new_leads = new_leads_response.data if new_leads_response.data else []
+        
+        # Get leads with follow-up date for today
+        follow_up_leads_response = supabase.table("leads").select("*").eq(
+            "user_id", user_id
+        ).gte("follow_up_at", today_start_utc.isoformat()).lt(
+            "follow_up_at", today_end_utc.isoformat()
+        ).execute()
+        
+        follow_up_leads = follow_up_leads_response.data if follow_up_leads_response.data else []
+        
+        # Combine and deduplicate (a lead might be both new and have follow-up today)
+        all_lead_ids = set()
+        unique_leads = []
+        for lead in new_leads + follow_up_leads:
+            if lead.get("id") not in all_lead_ids:
+                all_lead_ids.add(lead.get("id"))
+                unique_leads.append(lead)
+        
+        return {
+            "total_new_leads": len(new_leads),
+            "leads_today": unique_leads
+        }
+    except Exception as e:
+        logger.error(f"Error fetching leads for user {user_id}: {e}")
+        return {
+            "total_new_leads": 0,
+            "leads_today": []
+        }
+
+
+def generate_leads_reminder_message(user_id: str, timezone: str = "UTC") -> Dict[str, Any]:
+    """Generate leads reminder message at 10 AM"""
+    try:
+        logger.info(f"Generating leads reminder message for user {user_id}")
+        profile = get_user_profile(user_id)
+        if not profile:
+            logger.error(f"Profile not found for user {user_id}")
+            return {"success": False, "error": "Profile not found"}
+        
+        business_name = profile.get("business_name", "there")
+        
+        # Fetch leads data
+        leads_data = fetch_leads_for_today(user_id, timezone)
+        
+        data = {
+            "business_name": business_name,
+            "total_new_leads": leads_data["total_new_leads"],
+            "leads_today": leads_data["leads_today"]
+        }
+        
+        message = format_leads_reminder_message(data)
+        
+        return {
+            "success": True,
+            "content": message,
+            "metadata": data
+        }
+    except Exception as e:
+        logger.error(f"Error generating leads reminder message: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 

@@ -128,6 +128,14 @@ async def get_subscription_status(
         
         user_info = result.data[0]
         
+        # Also fetch subscription_end_date directly from profiles table
+        profile_result = supabase.table("profiles").select("subscription_end_date, subscription_start_date").eq("id", current_user.id).execute()
+        subscription_end_date = None
+        subscription_start_date = None
+        if profile_result.data:
+            subscription_end_date = profile_result.data[0].get("subscription_end_date")
+            subscription_start_date = profile_result.data[0].get("subscription_start_date")
+        
         return JSONResponse(content={
             "success": True,
             "status": user_info["subscription_status"],
@@ -135,7 +143,9 @@ async def get_subscription_status(
             "has_active_subscription": user_info["has_active_subscription"],
             "migration_status": user_info["migration_status"],
             "grace_period_end": user_info["grace_period_end"],
-            "days_left": user_info["days_left"]
+            "days_left": user_info["days_left"],
+            "subscription_end_date": subscription_end_date,
+            "subscription_start_date": subscription_start_date
         })
         
     except Exception as e:

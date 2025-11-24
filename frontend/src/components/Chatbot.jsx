@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
@@ -11,6 +12,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onren
 const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 'idle', onSpeakingChange }, ref) => {
   const { user } = useAuth()
   const { showError, showSuccess } = useNotifications()
+  const navigate = useNavigate()
   const [messages, setMessages] = useState([])
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -959,7 +961,34 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                         blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
                         strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
                         em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
-                        a: ({ children, href }) => <a href={href} className={`underline ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`} target="_blank" rel="noopener noreferrer">{children}</a>,
+                        a: ({ children, href }) => {
+                          // Handle lead links - navigate to leads dashboard
+                          if (href && href.startsWith('leads/')) {
+                            const leadId = href.replace('leads/', '')
+                            return (
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  navigate(`/leads?leadId=${leadId}`)
+                                }}
+                                className={`underline cursor-pointer ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`}
+                              >
+                                {children}
+                              </button>
+                            )
+                          }
+                          // Regular links
+                          return (
+                            <a 
+                              href={href} 
+                              className={`underline ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                            >
+                              {children}
+                            </a>
+                          )
+                        },
                         table: ({ children }) => <div className="overflow-x-auto mb-2"><table className={`min-w-full border rounded ${message.type === 'user' ? 'border-white/30' : 'border-purple-300'}`}>{children}</table></div>,
                         th: ({ children }) => <th className={`border px-2 py-1 text-left text-xs font-semibold ${message.type === 'user' ? 'border-white/30 bg-white/10 text-white' : 'border-purple-300 bg-purple-100 text-black'}`}>{children}</th>,
                         td: ({ children }) => <td className={`border px-2 py-1 text-xs ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-300 text-black/90'}`}>{children}</td>,
@@ -1021,7 +1050,34 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                         blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
                         strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
                         em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
-                        a: ({ children, href }) => <a href={href} className={`underline ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`} target="_blank" rel="noopener noreferrer">{children}</a>,
+                        a: ({ children, href }) => {
+                          // Handle lead links - navigate to leads dashboard
+                          if (href && href.startsWith('leads/')) {
+                            const leadId = href.replace('leads/', '')
+                            return (
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  navigate(`/leads?leadId=${leadId}`)
+                                }}
+                                className={`underline cursor-pointer ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`}
+                              >
+                                {children}
+                              </button>
+                            )
+                          }
+                          // Regular links
+                          return (
+                            <a 
+                              href={href} 
+                              className={`underline ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                            >
+                              {children}
+                            </a>
+                          )
+                        },
                         table: ({ children }) => <div className="overflow-x-auto mb-2"><table className={`min-w-full border rounded ${message.type === 'user' ? 'border-white/30' : 'border-purple-300'}`}>{children}</table></div>,
                         th: ({ children }) => <th className={`border px-2 py-1 text-left text-xs font-semibold ${message.type === 'user' ? 'border-white/30 bg-white/10 text-white' : 'border-purple-300 bg-purple-100 text-black'}`}>{children}</th>,
                         td: ({ children }) => <td className={`border px-2 py-1 text-xs ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-300 text-black/90'}`}>{children}</td>,

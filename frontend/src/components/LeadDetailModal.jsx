@@ -26,14 +26,15 @@ import {
   ChevronDown,
   RefreshCw,
   Sparkles,
-  FileText
+  FileText,
+  Bot
 } from 'lucide-react'
 import { leadsAPI } from '../services/leads'
 import { useNotifications } from '../contexts/NotificationContext'
 
 const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const { showSuccess, showError } = useNotifications()
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState('timeline')
   const [conversations, setConversations] = useState([])
   const [loadingConversations, setLoadingConversations] = useState(false)
   const [statusHistory, setStatusHistory] = useState([])
@@ -392,11 +393,11 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
         acc.push(current)
       }
     } else {
-      // Fallback: use old_status, new_status, and created_at (within 1 second)
+      // Fallback: use old_status, new_status, and created_at (within 5 seconds to catch duplicates)
       const isDuplicate = acc.some(item => 
         item.old_status === current.old_status &&
         item.new_status === current.new_status &&
-        Math.abs(new Date(item.created_at) - new Date(current.created_at)) < 1000 // Within 1 second
+        Math.abs(new Date(item.created_at) - new Date(current.created_at)) < 5000 // Within 5 seconds
       )
       if (!isDuplicate) {
         acc.push(current)
@@ -406,36 +407,168 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   }, [])
 
   // Build timeline from conversations and status changes
+  // Determine if lead is manual or from social media
+  const isManualLead = lead.source_platform === 'manual'
+  const isSocialMediaLead = ['facebook', 'instagram'].includes(lead.source_platform?.toLowerCase())
+  
+  // Format Chase's message based on lead source
+  const getChaseMessage = () => {
+    const timeStr = formatTime(lead.created_at)
+    const leadName = lead.name || 'Unknown'
+    
+    if (isManualLead) {
+      return {
+        text: `Hi, I am Chase, your leads manager. You just entered a new lead manually for `,
+        boldPart: leadName,
+        textAfter: ` at `,
+        boldTime: timeStr,
+        textEnd: `.`
+      }
+    } else if (isSocialMediaLead) {
+      const platformName = lead.source_platform.charAt(0).toUpperCase() + lead.source_platform.slice(1)
+      return {
+        text: `Hi, I am Chase, your leads manager. I just captured a new lead from ${platformName} for `,
+        boldPart: leadName,
+        textAfter: ` at `,
+        boldTime: timeStr,
+        textEnd: `.`
+      }
+    } else {
+      // Fallback for other platforms
+      const platformName = lead.source_platform?.charAt(0).toUpperCase() + lead.source_platform?.slice(1) || 'Unknown'
+      return {
+        text: `Hi, I am Chase, your leads manager. I just captured a new lead from ${platformName} for `,
+        boldPart: leadName,
+        textAfter: ` at `,
+        boldTime: timeStr,
+        textEnd: `.`
+      }
+    }
+  }
+
+  const chaseMessage = getChaseMessage()
   const timeline = [
     {
       type: 'lead_captured',
-      title: 'Lead Captured',
-      description: `Lead captured from ${lead.source_platform}`,
+      title: 'Chase',
+      description: chaseMessage,
       timestamp: lead.created_at,
-      icon: UserCheck,
+      icon: Bot,
       color: 'text-purple-600 bg-purple-50'
     },
-    ...deduplicatedStatusHistory.map(history => ({
-      type: 'status_change',
-      title: `Status Changed: ${history.old_status} → ${history.new_status}`,
-      description: history.reason || 'Status updated',
-      remarks: history.reason,
-      timestamp: history.created_at,
-      icon: TrendingUp,
-      color: 'text-blue-600 bg-blue-50',
-      oldStatus: history.old_status,
-      newStatus: history.new_status
-    })),
-    ...conversations.map(conv => ({
-      type: conv.message_type,
-      title: conv.sender === 'agent' ? `${conv.message_type === 'email' ? 'Email' : 'WhatsApp'} Sent` : 'Lead Responded',
-      description: conv.content.substring(0, 100) + (conv.content.length > 100 ? '...' : ''),
-      timestamp: conv.created_at,
-      icon: conv.message_type === 'email' ? MailIcon : MessageSquare,
-      color: conv.sender === 'agent' ? 'text-purple-600 bg-purple-50' : 'text-pink-600 bg-pink-50',
-      status: conv.status,
-      fullContent: conv.content
-    }))
+    ...deduplicatedStatusHistory.map(history => {
+      const timeStr = formatTime(history.created_at)
+      const oldStatus = history.old_status?.toLowerCase() || ''
+      const newStatus = history.new_status?.toLowerCase() || ''
+      const remarks = history.reason || ''
+      
+      // Format all status changes as Chase messages
+      // Capitalize status names for display
+      const capitalizeStatus = (status) => {
+        if (!status) return ''
+        return status.charAt(0).toUpperCase() + status.slice(1)
+      }
+      
+      // Build the message based on status change
+      let statusText = ''
+      if (newStatus === 'contacted') {
+        statusText = 'Contacted'
+      } else if (newStatus === 'responded') {
+        statusText = 'Responded'
+      } else if (newStatus === 'qualified') {
+        statusText = 'Qualified'
+      } else if (newStatus === 'converted') {
+        statusText = 'Converted'
+      } else if (newStatus === 'lost') {
+        statusText = 'Lost'
+      } else if (newStatus === 'invalid') {
+        statusText = 'Invalid'
+      } else {
+        statusText = capitalizeStatus(newStatus)
+      }
+      
+      // Format message: if remarks exist, show them first, otherwise show status
+      if (remarks) {
+        return {
+          type: 'status_change',
+          title: 'Chase',
+          description: {
+            text: '',
+            boldPart: remarks,
+            textAfter: ' at ',
+            boldTime: timeStr,
+            textEnd: '.'
+          },
+          remarks: history.reason,
+          timestamp: history.created_at,
+          icon: Bot,
+          color: 'text-purple-600 bg-purple-50',
+          oldStatus: history.old_status,
+          newStatus: history.new_status,
+          isChaseMessage: true
+        }
+      } else {
+        return {
+          type: 'status_change',
+          title: 'Chase',
+          description: {
+            text: `${statusText} at `,
+            boldPart: '',
+            textAfter: '',
+            boldTime: timeStr,
+            textEnd: '.'
+          },
+          remarks: history.reason,
+          timestamp: history.created_at,
+          icon: Bot,
+          color: 'text-purple-600 bg-purple-50',
+          oldStatus: history.old_status,
+          newStatus: history.new_status,
+          isChaseMessage: true
+        }
+      }
+    }),
+    ...conversations.map(conv => {
+      // Format email messages as Chase messages
+      if (conv.message_type === 'email' && conv.sender === 'agent') {
+        const recipientName = lead.name || 'the lead'
+        const messageContent = conv.content || ''
+        const timeStr = formatTime(conv.created_at)
+        
+        return {
+          type: conv.message_type,
+          title: 'Chase',
+          description: {
+            text: 'Sent an email to ',
+            boldPart: recipientName,
+            textAfter: ' with the message ',
+            boldMessage: messageContent,
+            textAfter2: ' at ',
+            boldTime: timeStr,
+            textEnd: '.'
+          },
+          timestamp: conv.created_at,
+          icon: Bot,
+          color: 'text-purple-600 bg-purple-50',
+          status: conv.status,
+          fullContent: conv.content,
+          isChaseMessage: true
+        }
+      }
+      
+      // Default format for other conversations
+      return {
+        type: conv.message_type,
+        title: conv.sender === 'agent' ? `${conv.message_type === 'email' ? 'Email' : 'WhatsApp'} Sent` : 'Lead Responded',
+        description: conv.content.substring(0, 100) + (conv.content.length > 100 ? '...' : ''),
+        timestamp: conv.created_at,
+        icon: conv.message_type === 'email' ? MailIcon : MessageSquare,
+        color: conv.sender === 'agent' ? 'text-purple-600 bg-purple-50' : 'text-pink-600 bg-pink-50',
+        status: conv.status,
+        fullContent: conv.content,
+        isChaseMessage: false
+      }
+    })
   ].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
 
   const emailConversations = conversations.filter(c => c.message_type === 'email')
@@ -452,12 +585,27 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                 {getPlatformIcon(lead.source_platform)}
               </div>
               <div>
-                <h2 className="text-2xl font-bold">{lead.name || 'Unknown Lead'}</h2>
-                <div className="flex items-center space-x-3 mt-1 text-sm opacity-90">
-                  <span className="capitalize">{lead.source_platform}</span>
-                  <span>•</span>
-                  <span>{formatTimeAgo(lead.created_at)}</span>
-                </div>
+                <h2 className="text-2xl font-bold">
+                  {lead.name || 'Unknown Lead'}
+                </h2>
+                {/* Contact Information */}
+                {(lead.email || lead.phone_number) && (
+                  <div className="flex items-center gap-3 mt-1 text-xs opacity-80">
+                    {lead.email && (
+                      <div className="flex items-center gap-1">
+                        <Mail className="w-3 h-3" />
+                        <span>{lead.email}</span>
+                      </div>
+                    )}
+                    {lead.email && lead.phone_number && <span>•</span>}
+                    {lead.phone_number && (
+                      <div className="flex items-center gap-1">
+                        <Phone className="w-3 h-3" />
+                        <span>{lead.phone_number}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <button
@@ -468,65 +616,95 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
             </button>
           </div>
 
-          {/* Status Badge */}
-          <div className="mt-4 space-y-3">
-            <div className="flex items-center space-x-3">
-              <span className="text-sm font-medium">Status:</span>
-              <div className="relative status-dropdown-container">
-                <button
-                  onClick={() => !updatingStatus && !showRemarksInput && setStatusDropdownOpen(!statusDropdownOpen)}
-                  disabled={updatingStatus || showRemarksInput}
-                  className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 flex items-center space-x-2 min-w-[140px] justify-between"
-                >
-                  <span className="capitalize">{pendingStatus || selectedStatus}</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${statusDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-                
-                {/* Custom Dropdown with Glassmorphism */}
-                {statusDropdownOpen && (
-                  <div 
-                    className="absolute top-full mt-2 left-0 w-full min-w-[160px] z-50"
-                    onClick={(e) => e.stopPropagation()}
+          {/* Status and Follow-up Inline */}
+          <div className="mt-4">
+            <div className="flex items-center gap-4 flex-wrap">
+              {/* Status */}
+              <div className="flex items-center space-x-3">
+                <span className="text-sm font-medium text-white">Status:</span>
+                <div className="relative status-dropdown-container">
+                  <button
+                    onClick={() => !updatingStatus && !showRemarksInput && setStatusDropdownOpen(!statusDropdownOpen)}
+                    disabled={updatingStatus || showRemarksInput}
+                    className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 flex items-center space-x-2 min-w-[140px] justify-between"
                   >
-                    <div className="bg-white/95 backdrop-blur-lg border border-white/40 rounded-lg shadow-2xl overflow-hidden ring-1 ring-black/5">
-                      <div className="py-1">
-                        {[
-                          { value: 'new', label: 'New' },
-                          { value: 'contacted', label: 'Contacted' },
-                          { value: 'responded', label: 'Responded' },
-                          { value: 'qualified', label: 'Qualified' },
-                          { value: 'converted', label: 'Converted' },
-                          { value: 'lost', label: 'Lost' },
-                          { value: 'invalid', label: 'Invalid' }
-                        ].map((option) => (
-                          <button
-                            key={option.value}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleStatusChange(option.value)
-                              setStatusDropdownOpen(false)
-                            }}
-                disabled={updatingStatus || showRemarksInput}
-                            className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors flex items-center space-x-2 ${
-                              (pendingStatus || selectedStatus) === option.value
-                                ? 'bg-purple-100 text-purple-700'
-                                : 'text-gray-700 hover:bg-purple-50 hover:text-purple-700'
-                            } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                          >
-                            <span className="capitalize">{option.label}</span>
-                          </button>
-                        ))}
+                    <span className="capitalize">{pendingStatus || selectedStatus}</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${statusDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {/* Custom Dropdown with Glassmorphism */}
+                  {statusDropdownOpen && (
+                    <div 
+                      className="absolute top-full mt-2 left-0 w-full min-w-[160px] z-50"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="bg-white/95 backdrop-blur-lg border border-white/40 rounded-lg shadow-2xl overflow-hidden ring-1 ring-black/5">
+                        <div className="py-1">
+                          {[
+                            { value: 'new', label: 'New' },
+                            { value: 'contacted', label: 'Contacted' },
+                            { value: 'responded', label: 'Responded' },
+                            { value: 'qualified', label: 'Qualified' },
+                            { value: 'converted', label: 'Converted' },
+                            { value: 'lost', label: 'Lost' },
+                            { value: 'invalid', label: 'Invalid' }
+                          ].map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleStatusChange(option.value)
+                                setStatusDropdownOpen(false)
+                              }}
+                              disabled={updatingStatus || showRemarksInput}
+                              className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors flex items-center space-x-2 ${
+                                (pendingStatus || selectedStatus) === option.value
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : 'text-gray-700 hover:bg-purple-50 hover:text-purple-700'
+                              } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                              <span className="capitalize">{option.label}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+                {updatingStatus && <Loader2 className="w-4 h-4 animate-spin text-white" />}
               </div>
-              {updatingStatus && <Loader2 className="w-4 h-4 animate-spin" />}
+
+              {/* Follow-up Date & Time */}
+              <div className="flex items-center space-x-3 flex-1 min-w-[280px]">
+                <CalendarCheck className="w-4 h-4 text-white flex-shrink-0" />
+                <span className="text-sm font-medium text-white flex-shrink-0">Follow-up:</span>
+                <div className="flex items-center space-x-2 flex-1">
+                  <input
+                    type="datetime-local"
+                    value={followUpAt ? new Date(followUpAt).toISOString().slice(0, 16) : ''}
+                    onChange={handleFollowUpChange}
+                    disabled={updatingFollowUp}
+                    className="flex-1 px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
+                    placeholder="Set follow-up date & time"
+                  />
+                  {followUpAt && (
+                    <button
+                      onClick={clearFollowUp}
+                      disabled={updatingFollowUp}
+                      className="px-2 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-xs font-medium transition-colors disabled:opacity-50 flex-shrink-0"
+                      title="Clear follow-up"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                  {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-white flex-shrink-0" />}
+                </div>
+              </div>
             </div>
             
             {/* Remarks Input */}
             {showRemarksInput && pendingStatus && (
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 space-y-2">
+              <div className="mt-3 bg-white/10 backdrop-blur-sm rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium text-white">
                     Changing status to: <span className="capitalize font-semibold">{pendingStatus}</span>
@@ -558,40 +736,12 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                 </div>
               </div>
             )}
-            
-            {/* Follow-up Date & Time */}
-            <div className="flex items-center space-x-3">
-              <CalendarCheck className="w-4 h-4 text-white" />
-              <span className="text-sm font-medium text-white">Follow-up:</span>
-              <div className="flex items-center space-x-2 flex-1">
-                <input
-                  type="datetime-local"
-                  value={followUpAt ? new Date(followUpAt).toISOString().slice(0, 16) : ''}
-                  onChange={handleFollowUpChange}
-                  disabled={updatingFollowUp}
-                  className="flex-1 px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
-                  placeholder="Set follow-up date & time"
-                />
-                {followUpAt && (
-                  <button
-                    onClick={clearFollowUp}
-                    disabled={updatingFollowUp}
-                    className="px-2 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-xs font-medium transition-colors disabled:opacity-50"
-                    title="Clear follow-up"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-                {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-white" />}
-              </div>
-            </div>
           </div>
         </div>
 
         {/* Tabs */}
         <div className="border-b border-gray-200 flex space-x-1 px-6 bg-gradient-to-r from-pink-50 to-purple-50">
           {[
-            { id: 'overview', label: 'Overview', icon: User },
             { id: 'timeline', label: 'Timeline', icon: Clock },
             { id: 'conversations', label: 'Conversations', icon: MessageCircle },
             { id: 'email', label: 'Email', icon: MailIcon }
@@ -616,83 +766,6 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'overview' && (
-            <div className="space-y-6">
-              {/* Contact Information */}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {lead.email && (
-                    <div className="flex items-center space-x-3 p-3 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg border border-purple-200">
-                      <Mail className="w-5 h-5 text-purple-500" />
-                      <div>
-                        <div className="text-xs text-gray-500">Email</div>
-                        <div className="text-sm font-medium text-gray-900">{lead.email}</div>
-                      </div>
-                    </div>
-                  )}
-                  {lead.phone_number && (
-                    <div className="flex items-center space-x-3 p-3 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg border border-purple-200">
-                      <Phone className="w-5 h-5 text-purple-500" />
-                      <div>
-                        <div className="text-xs text-gray-500">Phone</div>
-                        <div className="text-sm font-medium text-gray-900">{lead.phone_number}</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Lead Metadata */}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Lead Details</h3>
-                <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-4 space-y-2 border border-purple-200">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Source Platform:</span>
-                    <span className="text-sm font-medium text-gray-900 capitalize">{lead.source_platform}</span>
-                  </div>
-                  {lead.ad_id && (
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Ad ID:</span>
-                      <span className="text-sm font-medium text-gray-900">{lead.ad_id}</span>
-                    </div>
-                  )}
-                  {lead.campaign_id && (
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Campaign ID:</span>
-                      <span className="text-sm font-medium text-gray-900">{lead.campaign_id}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Created:</span>
-                    <span className="text-sm font-medium text-gray-900">{formatTime(lead.created_at)}</span>
-                  </div>
-                  {lead.updated_at && (
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Last Updated:</span>
-                      <span className="text-sm font-medium text-gray-900">{formatTime(lead.updated_at)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Form Data */}
-              {lead.form_data && Object.keys(lead.form_data).length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Form Responses</h3>
-                  <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-4 space-y-3 border border-purple-200">
-                    {Object.entries(lead.form_data).map(([key, value]) => (
-                      <div key={key} className="border-b border-gray-200 last:border-0 pb-3 last:pb-0">
-                        <div className="text-xs text-gray-500 mb-1 capitalize">{key.replace(/_/g, ' ')}</div>
-                        <div className="text-sm font-medium text-gray-900">{String(value)}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           {activeTab === 'timeline' && (
             <div className="space-y-4">
               {loadingConversations ? (
@@ -706,11 +779,61 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                 </div>
               ) : (
                 <div className="relative">
-                  {/* Timeline line */}
-                  <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
-                  
                   {timeline.map((event, index) => {
                     const Icon = event.icon
+                    const isChaseMessage = event.type === 'lead_captured' || event.isChaseMessage
+                    
+                    if (isChaseMessage) {
+                      // Render Chase message as chatbot-style bubble
+                      return (
+                        <div key={index} className="flex flex-col items-start w-full mb-4">
+                          <div className="flex items-start gap-2 max-w-[50%] justify-start">
+                            {/* Chase Icon */}
+                            <div className="flex-shrink-0">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center shadow-md">
+                                <span className="text-white font-bold text-sm">C</span>
+                              </div>
+                            </div>
+                            {/* Message Bubble */}
+                            <div className="px-4 py-3 rounded-lg bg-white text-black chatbot-bubble-shadow">
+                              <p className="text-sm leading-relaxed">
+                                {typeof event.description === 'object' ? (
+                                  <>
+                                    {event.description.text}
+                                    <strong>{event.description.boldPart}</strong>
+                                    {event.description.textAfter}
+                                    {event.description.boldMessage ? (
+                                      <div className="mt-2 p-2 bg-gray-50 border border-gray-200 rounded text-xs">
+                                        <div 
+                                          className="text-gray-800"
+                                          dangerouslySetInnerHTML={{ __html: event.description.boldMessage }}
+                                        />
+                                      </div>
+                                    ) : null}
+                                    {event.description.textAfter2}
+                                    {event.description.boldTime ? (
+                                      <strong>{event.description.boldTime}</strong>
+                                    ) : null}
+                                    {event.description.textEnd}
+                                  </>
+                                ) : (
+                                  event.description
+                                )}
+                              </p>
+                              {event.timestamp && (
+                                <div className="mt-2">
+                                  <div className="text-xs text-gray-500">
+                                    {formatTimeAgo(event.timestamp)}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    }
+                    
+                    // Render other timeline events in original style
                     return (
                       <div key={index} className="relative flex items-start space-x-4 mb-6">
                         <div className={`relative z-10 w-8 h-8 rounded-full ${event.color} flex items-center justify-center flex-shrink-0`}>
@@ -1223,6 +1346,12 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
           )}
         </div>
       </div>
+      
+      <style>{`
+        .chatbot-bubble-shadow {
+          box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+        }
+      `}</style>
     </div>
   )
 }

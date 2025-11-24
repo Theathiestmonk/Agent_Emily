@@ -517,7 +517,142 @@ async def create_lead(
         if not result.data:
             raise HTTPException(status_code=500, detail="Failed to create lead")
         
-        return result.data[0]
+        created_lead = result.data[0]
+        lead_id = created_lead["id"]
+        
+        # Automatically send welcome email if lead has email address
+        if request.email and request.status == "new":
+            try:
+                # Get user profile for business context
+                profile = supabase_admin.table("profiles").select("*").eq("id", current_user["id"]).execute()
+                profile_data = profile.data[0] if profile.data else {}
+                
+                business_name = profile_data.get("business_name", "our business")
+                business_description = profile_data.get("business_description", "")
+                brand_voice = profile_data.get("brand_voice", "professional")
+                brand_tone = profile_data.get("brand_tone", "friendly")
+                
+                # Generate welcome email using LLM
+                openai_api_key = os.getenv("OPENAI_API_KEY")
+                if openai_api_key:
+                    openai_client = openai.OpenAI(api_key=openai_api_key)
+                    
+                    prompt = f"""
+You are an expert email marketer writing a personalized thanking email to a new lead.
+
+Business Information:
+- Business Name: {business_name}
+- Business Description: {business_description}
+- Brand Voice: {brand_voice}
+- Brand Tone: {brand_tone}
+
+Lead Information:
+- Name: {request.name}
+- Email: {request.email}
+
+Create a personalized, warm, and engaging thanking email that:
+1. Thanks them for contacting {business_name}
+2. Shows understanding of the business context: {business_description if business_description else 'their interest in our services'}
+3. Provides an introductory message for further contact and engagement
+4. Matches the brand voice ({brand_voice}) and tone ({brand_tone})
+5. Is concise (under 200 words)
+6. Uses HTML format with proper paragraph tags (<p>), line breaks (<br>), and formatting
+7. Does NOT include links unless absolutely necessary
+8. Is professional yet friendly and inviting
+
+Return a JSON object with:
+- "subject": Email subject line (engaging and personalized, no HTML)
+- "body": Email body in HTML format with proper tags (<p>, <br>, etc.)
+"""
+                    
+                    response = openai_client.chat.completions.create(
+                        model="gpt-4",
+                        messages=[
+                            {"role": "system", "content": "You are an expert email marketer. Always respond with valid JSON."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.7,
+                        max_tokens=600
+                    )
+                    
+                    try:
+                        email_data = json.loads(response.choices[0].message.content)
+                        email_subject = email_data.get("subject", f"Thank you for contacting {business_name}")
+                        email_body = email_data.get("body", f"Thank you {request.name} for contacting {business_name}!")
+                    except json.JSONDecodeError:
+                        content = response.choices[0].message.content
+                        email_subject = f"Thank you for contacting {business_name}"
+                        email_body = content
+                    
+                    # Check for Google connection and send email
+                    connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user["id"]).execute()
+                    
+                    if connection.data:
+                        try:
+                            from routers.google_connections import send_gmail_message, User as GoogleUser
+                            
+                            # Create User object for send_gmail_message
+                            created_at_value = current_user.get("created_at", "")
+                            if created_at_value and hasattr(created_at_value, 'isoformat'):
+                                created_at_str = created_at_value.isoformat()
+                            elif created_at_value:
+                                created_at_str = str(created_at_value)
+                            else:
+                                created_at_str = ""
+                            
+                            google_user = GoogleUser(
+                                id=current_user["id"],
+                                email=current_user["email"],
+                                name=current_user["name"],
+                                created_at=created_at_str
+                            )
+                            
+                            # Send email
+                            email_result = await send_gmail_message(
+                                to=request.email,
+                                subject=email_subject,
+                                body=email_body,
+                                current_user=google_user
+                            )
+                            
+                            if email_result.get("success"):
+                                # Store conversation
+                                supabase_admin.table("lead_conversations").insert({
+                                    "lead_id": lead_id,
+                                    "message_type": "email",
+                                    "content": email_body,
+                                    "sender": "agent",
+                                    "direction": "outbound",
+                                    "message_id": email_result.get("message_id"),
+                                    "status": "sent"
+                                }).execute()
+                                
+                                # Update status to "contacted"
+                                supabase_admin.table("leads").update({
+                                    "status": "contacted",
+                                    "updated_at": datetime.now().isoformat()
+                                }).eq("id", lead_id).execute()
+                                
+                                # Create status history entry
+                                supabase_admin.table("lead_status_history").insert({
+                                    "lead_id": lead_id,
+                                    "old_status": "new",
+                                    "new_status": "contacted",
+                                    "changed_by": "system",
+                                    "reason": "Automatic welcome email sent"
+                                }).execute()
+                                
+                                logger.info(f"Welcome email sent to lead {lead_id} and status updated to contacted")
+                        except Exception as email_error:
+                            logger.error(f"Error sending welcome email: {email_error}")
+                            # Don't fail lead creation if email fails
+                    else:
+                        logger.info(f"No Google connection found, skipping automatic welcome email for lead {lead_id}")
+            except Exception as auto_email_error:
+                logger.error(f"Error in automatic email sending: {auto_email_error}")
+                # Don't fail lead creation if auto-email fails
+        
+        return created_lead
         
     except HTTPException:
         raise

@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS chatbot_scheduled_messages (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-    message_type VARCHAR(20) NOT NULL CHECK (message_type IN ('morning', 'mid_morning', 'afternoon', 'evening', 'night')),
+    message_type VARCHAR(20) NOT NULL CHECK (message_type IN ('morning', 'leads_reminder', 'mid_morning', 'afternoon', 'evening', 'night')),
     content TEXT NOT NULL,
     scheduled_time TIMESTAMP WITH TIME ZONE NOT NULL,
     delivered_at TIMESTAMP WITH TIME ZONE,
@@ -61,8 +61,8 @@ BEGIN
 END $$;
 
 -- Add comment to table
-COMMENT ON TABLE chatbot_scheduled_messages IS 'Stores scheduled daily WhatsApp-style messages sent to users at specific times (9 AM, 11:30 AM, 2 PM, 6 PM, 9:30 PM)';
-COMMENT ON COLUMN chatbot_scheduled_messages.message_type IS 'Type of scheduled message: morning, mid_morning, afternoon, evening, night';
+COMMENT ON TABLE chatbot_scheduled_messages IS 'Stores scheduled daily WhatsApp-style messages sent to users at specific times (9 AM, 10 AM, 11:30 AM, 2 PM, 6 PM, 9:30 PM)';
+COMMENT ON COLUMN chatbot_scheduled_messages.message_type IS 'Type of scheduled message: morning, leads_reminder, mid_morning, afternoon, evening, night';
 COMMENT ON COLUMN chatbot_scheduled_messages.scheduled_time IS 'When the message should be sent (stored in UTC, converted from user timezone)';
 COMMENT ON COLUMN chatbot_scheduled_messages.delivered_at IS 'When the message was actually delivered to the user in the chat';
 COMMENT ON COLUMN chatbot_scheduled_messages.metadata IS 'Stores data used to generate the message (trends, analytics, etc.)';

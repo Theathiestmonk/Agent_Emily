@@ -14,6 +14,7 @@ from apscheduler.triggers.cron import CronTrigger
 from agents.scheduled_messages import (
     generate_morning_message,
     generate_mid_morning_message,
+    generate_leads_reminder_message,
     generate_afternoon_message,
     generate_evening_message,
     generate_night_message,
@@ -30,7 +31,7 @@ scheduler: Optional[AsyncIOScheduler] = None
 
 async def check_and_send_all_messages():
     """Check all message types and send to users where it's the right time"""
-    message_types = ["morning", "mid_morning", "afternoon", "evening", "night"]
+    message_types = ["morning", "leads_reminder", "mid_morning", "afternoon", "evening", "night"]
     for msg_type in message_types:
         await send_scheduled_messages(msg_type)
 
@@ -58,6 +59,7 @@ async def send_scheduled_messages(message_type: str):
         # Define target times for each message type
         target_times = {
             "morning": (9, 0),
+            "leads_reminder": (10, 0),
             "mid_morning": (11, 30),
             "afternoon": (14, 0),
             "evening": (18, 0),
@@ -93,6 +95,8 @@ async def send_scheduled_messages(message_type: str):
                     result = None
                     if message_type == "morning":
                         result = generate_morning_message(user_id, user_tz)
+                    elif message_type == "leads_reminder":
+                        result = generate_leads_reminder_message(user_id, user_tz)
                     elif message_type == "mid_morning":
                         result = generate_mid_morning_message(user_id, user_tz)
                     elif message_type == "afternoon":

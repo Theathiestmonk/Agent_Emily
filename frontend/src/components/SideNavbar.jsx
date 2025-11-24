@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import SettingsMenu from './SettingsMenu'
 import { 
   Home, 
   FileText, 
@@ -12,7 +13,6 @@ import {
   Share2,
   Megaphone,
   BookOpen,
-  CreditCard,
   ChevronDown,
   ChevronRight,
   UserPlus,
@@ -29,6 +29,7 @@ const SideNavbar = () => {
   const [profile, setProfile] = useState(null)
   const [profileFetched, setProfileFetched] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState({})
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false)
 
   // Cache key for localStorage
   const getCacheKey = (userId) => `profile_${userId}`
@@ -113,23 +114,6 @@ const SideNavbar = () => {
       name: 'Leads',
       href: '/leads',
       icon: UserPlus
-    },
-    {
-      name: 'Settings',
-      icon: Settings,
-      hasSubmenu: true,
-      submenu: [
-        {
-          name: 'Connections',
-          href: '/settings',
-          icon: Settings
-        },
-        {
-          name: 'Billing',
-          href: '/billing',
-          icon: CreditCard
-        }
-      ]
     }
   ]
 
@@ -191,13 +175,17 @@ const SideNavbar = () => {
     <div className="hidden md:block bg-white shadow-lg transition-all duration-300 fixed left-0 top-0 h-screen z-50 w-48 xl:w-64 flex flex-col overflow-hidden" style={{position: 'fixed', zIndex: 50}}>
       {/* Header */}
       <div className="p-3 lg:p-4 border-b border-gray-200">
-        <div className="flex items-center">
-          <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mr-2 lg:mr-3">
-            <span className="text-white font-bold text-sm lg:text-lg">E</span>
-          </div>
-          <div>
-            <h1 className="text-base lg:text-lg font-bold text-gray-900">Emily</h1>
-            <p className="text-xs text-gray-500">AI Marketing</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center flex-1 min-w-0">
+            <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mr-2 lg:mr-3 flex-shrink-0">
+              <span className="text-white font-bold text-sm lg:text-lg">E</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-base lg:text-lg font-bold text-gray-900 truncate">Emily</h1>
+              <p className="text-xs text-gray-500 truncate">
+                {profile?.business_name ? `For ${profile.business_name}` : 'AI Marketing'}
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -265,7 +253,13 @@ const SideNavbar = () => {
           return (
             <button
               key={item.name}
-              onClick={() => navigate(item.href)}
+              onClick={() => {
+                if (item.onClick) {
+                  item.onClick()
+                } else if (item.href) {
+                  navigate(item.href)
+                }
+              }}
               className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-all duration-200 group ${
                 active
                   ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
@@ -282,38 +276,28 @@ const SideNavbar = () => {
       </nav>
 
       {/* User Section */}
-      <div className="p-4 border-t border-gray-200 flex-shrink-0">
-        <div className="space-y-3">
-          <button
-            onClick={() => navigate('/profile')}
-            className="w-full flex items-center p-2 lg:p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
-          >
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mr-3 overflow-hidden">
-              {profile?.logo_url && (
-                <img 
-                  src={profile.logo_url} 
-                  alt="Profile Logo" 
-                  className="w-full h-full object-cover rounded-full"
-                />
-              )}
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                {displayName}
-              </p>
-              <p className="text-xs text-gray-500">Click to view profile</p>
-            </div>
-          </button>
-          
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center p-2 lg:p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors group"
-          >
-            <Hand className="w-5 h-5 mr-3" style={{ transform: 'rotate(-20deg)' }} />
-            <span className="font-medium">Say Bye</span>
-          </button>
-        </div>
+      <div className="p-4 border-t border-gray-200 flex-shrink-0 space-y-1">
+        <button
+          onClick={() => setIsSettingsMenuOpen(true)}
+          className="w-full flex items-center p-2 lg:p-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-lg transition-colors group"
+        >
+          <Settings className="w-5 h-5 mr-3" />
+          <span className="font-medium">Settings</span>
+        </button>
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center p-2 lg:p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors group"
+        >
+          <Hand className="w-5 h-5 mr-3" style={{ transform: 'rotate(-20deg)' }} />
+          <span className="font-medium">Say Bye</span>
+        </button>
       </div>
+
+      {/* Settings Menu */}
+      <SettingsMenu 
+        isOpen={isSettingsMenuOpen} 
+        onClose={() => setIsSettingsMenuOpen(false)} 
+      />
     </div>
   )
 }

@@ -1677,7 +1677,7 @@ const BlogDashboard = () => {
 
                     {/* Blog Image Header */}
 
-                    <div className="relative h-32 sm:h-40 md:h-44 lg:h-48 bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 overflow-hidden flex-shrink-0">
+                    <div className="relative h-20 sm:h-24 md:h-28 lg:h-32 bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 overflow-hidden flex-shrink-0">
 
                       {(blog.metadata?.featured_image || blog.featured_image) ? (
                         <img 
@@ -1736,21 +1736,16 @@ const BlogDashboard = () => {
                         </>
                       )}
 
-                      <div className="absolute top-2 sm:top-3 md:top-4 left-2 sm:left-3 md:left-4 right-2 sm:right-3 md:right-4 flex items-center justify-between">
-                        <span className={`px-2 sm:px-2.5 md:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs rounded-full ${statusColors[blog.status]} flex items-center space-x-1 backdrop-blur-sm`}>
-                          <StatusIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                          <span className="capitalize font-medium hidden xs:inline">{blog.status}</span>
-                        </span>
-                        
-                        {/* Click hint for unpublished blogs */}
-                        {blog.status !== 'published' && (
+                      {/* Click hint for unpublished blogs */}
+                      {blog.status !== 'published' && (
+                        <div className="absolute top-2 sm:top-3 md:top-4 left-2 sm:left-3 md:left-4 right-2 sm:right-3 md:right-4 flex items-center justify-end">
                           <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 transition-all cursor-pointer group">
                             <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs font-medium">
                               Click to manage image
                             </div>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
 
                       <div className="absolute bottom-2 sm:bottom-3 md:bottom-4 left-2 sm:left-3 md:left-4 right-2 sm:right-3 md:right-4">
 
@@ -1786,15 +1781,15 @@ const BlogDashboard = () => {
 
                     {/* Card Content */}
 
-                    <div className="p-3 sm:p-4 md:p-5 flex-1 flex flex-col">
+                    <div className="p-2 sm:p-2.5 md:p-3 flex-1 flex flex-col">
 
                       {/* Author and Meta Info */}
 
-                      <div className="flex items-center justify-between mb-2 sm:mb-3 md:mb-4">
+                      <div className="flex items-center justify-between mb-1 sm:mb-1.5">
 
-                        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+                        <div className="flex items-center space-x-1.5 sm:space-x-2 min-w-0 flex-1">
 
-                          <div className="w-5 h-5 sm:w-6 sm:h-6 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-[10px] sm:text-xs flex-shrink-0">
+                          <div className="w-4 h-4 sm:w-5 sm:h-5 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-[9px] sm:text-[10px] flex-shrink-0">
 
                             A
 
@@ -1802,9 +1797,9 @@ const BlogDashboard = () => {
 
                           <div className="min-w-0 flex-1">
 
-                            <div className="text-sm sm:text-base font-semibold text-gray-900 truncate">Admin</div>
+                            <div className="text-xs sm:text-sm font-semibold text-gray-900 truncate">Admin</div>
 
-                            <div className="text-xs sm:text-sm text-gray-500 truncate">
+                            <div className="text-[10px] sm:text-xs text-gray-500 truncate">
 
                               {blog.published_at ? formatDate(blog.published_at) : 
                                blog.scheduled_at ? formatDate(blog.scheduled_at) : 
@@ -1816,9 +1811,9 @@ const BlogDashboard = () => {
 
                         </div>
 
-                        <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
+                        <div className="flex items-center space-x-1 sm:space-x-1.5 flex-shrink-0">
 
-                          <div className="text-xs sm:text-sm bg-gray-100 text-gray-600 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full whitespace-nowrap">
+                          <div className="text-[10px] sm:text-xs bg-gray-100 text-gray-600 px-1.5 sm:px-2 py-0.5 rounded-full whitespace-nowrap">
 
                             {blog.reading_time || 5} min
 
@@ -1842,15 +1837,15 @@ const BlogDashboard = () => {
                       
                       {/* Blog Title */}
 
-                      <h3 className="font-bold text-gray-900 text-sm sm:text-base md:text-lg mb-2 sm:mb-3 line-clamp-2 leading-tight">{blog.title}</h3>
+                      <h3 className="font-bold text-gray-900 text-xs sm:text-sm md:text-base mb-1 sm:mb-1.5 line-clamp-2 leading-tight">{blog.title}</h3>
 
                       
                       
                       {/* Blog Content Preview */}
 
-                      <div className="mb-2 sm:mb-3 md:mb-4 flex-1">
+                      <div className="mb-1 sm:mb-1.5 flex-1">
 
-                        <p className="text-gray-600 text-xs sm:text-sm leading-relaxed line-clamp-2 sm:line-clamp-3">
+                        <p className="text-gray-600 text-[10px] sm:text-xs leading-snug line-clamp-2 sm:line-clamp-2">
 
                           {blog.excerpt || blog.meta_description || blog.content.substring(0, 150) + '...'}
 
@@ -1858,44 +1853,22 @@ const BlogDashboard = () => {
 
                       </div>
 
-                      
-                      
-                      {/* Categories and Tags */}
-
-                      <div className="mb-2 sm:mb-3 md:mb-4">
-
-                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
-
-                          {blog.categories && blog.categories.slice(0, 2).map((category, index) => (
-
-                            <span key={index} className="text-[10px] sm:text-xs bg-gradient-to-r from-pink-100 to-purple-100 text-pink-800 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full font-medium truncate max-w-full">
-
-                              {category}
-
-                            </span>
-
-                          ))}
-
-                          {blog.categories && blog.categories.length > 2 && (
-                            <span className="text-[10px] sm:text-xs bg-gray-100 text-gray-600 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full font-medium">
-                              +{blog.categories.length - 2}
-                            </span>
-                          )}
-
-                        </div>
-
-                      </div>
 
 
 
                       {/* Card Footer with Stats and Actions */}
 
-                      <div className="flex items-center justify-between pt-2 sm:pt-3 md:pt-4 border-t border-gray-100 mt-auto">
+                      <div className="flex items-center justify-between pt-1.5 sm:pt-2 border-t border-gray-100 mt-auto">
 
-                        {/* Removed views and likes display for published blogs */}
-                        <div></div>
+                        {/* Status Badge */}
+                        <div className="flex items-center">
+                          <span className={`px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] rounded-full ${statusColors[blog.status]} flex items-center space-x-1`}>
+                            <StatusIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                            <span className="capitalize font-medium">{blog.status}</span>
+                          </span>
+                        </div>
 
-                        <div className="flex items-center space-x-1.5 sm:space-x-2 md:space-x-3 flex-shrink-0">
+                        <div className="flex items-center space-x-1 sm:space-x-1.5 md:space-x-2 flex-shrink-0">
 
                           {/* Only show edit/publish buttons for non-published blogs */}
 

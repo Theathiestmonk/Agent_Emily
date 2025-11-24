@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { connectionsCache } from '../services/connectionsCache'
 
 const AuthContext = createContext()
 
@@ -51,6 +52,13 @@ export function AuthProvider({ children }) {
           // Run profile creation in background without blocking
           ensureProfileExists(session.user).catch(error => {
             console.log('⚠️ Profile creation failed, will be created during onboarding:', error.message)
+          })
+          
+          // Load connections in background and cache them
+          import('../services/fetchConnections').then(({ fetchAllConnections }) => {
+            fetchAllConnections(true).catch(error => {
+              console.log('⚠️ Failed to load connections in background:', error.message)
+            })
           })
         }
       } else {
@@ -331,6 +339,9 @@ Please check:
       // Clear any other cached data
       localStorage.removeItem('socialMediaCache')
       localStorage.removeItem('contentCache')
+      
+      // Clear connections cache
+      connectionsCache.clearCache()
       
       console.log('✅ User logged out successfully')
       
