@@ -23,7 +23,10 @@ import {
   Users,
   LogIn,
   CalendarCheck,
-  ChevronDown
+  ChevronDown,
+  RefreshCw,
+  Sparkles,
+  FileText
 } from 'lucide-react'
 import { leadsAPI } from '../services/leads'
 import { useNotifications } from '../contexts/NotificationContext'
@@ -44,12 +47,147 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const [followUpAt, setFollowUpAt] = useState(lead.follow_up_at || '')
   const [updatingFollowUp, setUpdatingFollowUp] = useState(false)
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
+  const [emailTemplates, setEmailTemplates] = useState([])
+  const [selectedTemplate, setSelectedTemplate] = useState('welcome')
+  const [selectedCategory, setSelectedCategory] = useState('general')
+  const [customTemplate, setCustomTemplate] = useState('')
+  const [customPrompt, setCustomPrompt] = useState('')
+  const [useCustomPrompt, setUseCustomPrompt] = useState(false)
+  const [generatedEmail, setGeneratedEmail] = useState(null)
+  const [editableSubject, setEditableSubject] = useState('')
+  const [editableBody, setEditableBody] = useState('')
+  const [isEditing, setIsEditing] = useState(false)
+  const [previousEmails, setPreviousEmails] = useState([])
+  const [selectedPreviousEmail, setSelectedPreviousEmail] = useState(null)
+  const [generatingEmail, setGeneratingEmail] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
 
   useEffect(() => {
     fetchConversations()
     fetchStatusHistory()
     setFollowUpAt(lead.follow_up_at || '')
+    fetchEmailTemplates()
+    fetchPreviousEmails()
   }, [lead.id, lead.follow_up_at])
+
+  const fetchPreviousEmails = async () => {
+    try {
+      const response = await leadsAPI.getConversations(lead.id, { message_type: 'email', limit: 10 })
+      if (response.data) {
+        const emails = response.data
+          .filter(conv => conv.direction === 'outbound' && conv.content)
+          .map(conv => ({
+            id: conv.id,
+            subject: `Re: ${lead.name || 'Lead'}`,
+            body: conv.content,
+            date: conv.created_at
+          }))
+        setPreviousEmails(emails)
+      }
+    } catch (error) {
+      console.error('Error fetching previous emails:', error)
+    }
+  }
+
+  const fetchEmailTemplates = async () => {
+    try {
+      const response = await leadsAPI.getEmailTemplates()
+      setEmailTemplates(response.data?.templates || [])
+    } catch (error) {
+      console.error('Error fetching email templates:', error)
+    }
+  }
+
+  const handleGenerateEmail = async () => {
+    if (!lead.email) {
+      showError('Error', 'Lead has no email address')
+      return
+    }
+
+    try {
+      setGeneratingEmail(true)
+      const response = await leadsAPI.generateEmail(lead.id, {
+        template: selectedTemplate,
+        category: selectedCategory,
+        customTemplate: selectedTemplate === 'custom' ? customTemplate : null,
+        customPrompt: useCustomPrompt ? customPrompt : null
+      })
+
+      if (response.data.success) {
+        const email = {
+          subject: response.data.subject,
+          body: response.data.body
+        }
+        setGeneratedEmail(email)
+        setEditableSubject(email.subject)
+        setEditableBody(email.body)
+        setIsEditing(false)
+        showSuccess('Email Generated', 'Email has been generated successfully. You can edit it before sending.')
+      } else {
+        showError('Error', 'Failed to generate email')
+      }
+    } catch (error) {
+      console.error('Error generating email:', error)
+      showError('Error', 'Failed to generate email')
+    } finally {
+      setGeneratingEmail(false)
+    }
+  }
+
+  const handleSendGeneratedEmail = async () => {
+    const emailToSend = isEditing ? {
+      subject: editableSubject,
+      body: editableBody
+    } : generatedEmail
+
+    if (!emailToSend || !emailToSend.body) {
+      showError('Error', 'No email to send. Please generate an email first.')
+      return
+    }
+
+    try {
+      setSendingEmail(true)
+      // Use the editable content if editing, otherwise use generated
+      const emailBody = isEditing ? editableBody : emailToSend.body
+      await leadsAPI.sendMessageToLead(lead.id, emailBody, 'email')
+      showSuccess('Email Sent', 'Email has been sent successfully')
+      setGeneratedEmail(null)
+      setEditableSubject('')
+      setEditableBody('')
+      setIsEditing(false)
+      fetchConversations()
+      fetchPreviousEmails()
+      if (onUpdate) onUpdate()
+    } catch (error) {
+      console.error('Error sending email:', error)
+      showError('Error', 'Failed to send email')
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
+  const handleUsePreviousEmail = (email) => {
+    setSelectedPreviousEmail(email.id)
+    setGeneratedEmail({
+      subject: email.subject,
+      body: email.body
+    })
+    setEditableSubject(email.subject)
+    setEditableBody(email.body)
+    setIsEditing(true)
+    showSuccess('Template Loaded', 'Previous email loaded. You can edit it before sending.')
+  }
+
+  const handleSaveEdits = () => {
+    if (editableSubject && editableBody) {
+      setGeneratedEmail({
+        subject: editableSubject,
+        body: editableBody
+      })
+      setIsEditing(false)
+      showSuccess('Changes Saved', 'Email updated successfully')
+    }
+  }
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -455,7 +593,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
           {[
             { id: 'overview', label: 'Overview', icon: User },
             { id: 'timeline', label: 'Timeline', icon: Clock },
-            { id: 'conversations', label: 'Conversations', icon: MessageCircle }
+            { id: 'conversations', label: 'Conversations', icon: MessageCircle },
+            { id: 'email', label: 'Email', icon: MailIcon }
           ].map(tab => {
             const Icon = tab.icon
             return (
@@ -740,6 +879,344 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                 <div className="text-center py-12">
                   <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                   <p className="text-gray-500">No conversations yet</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'email' && (
+            <div className="space-y-6">
+              {/* Email Generation Section */}
+              <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-6 border border-purple-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                  <Sparkles className="w-5 h-5 text-purple-600" />
+                  <span>Generate Personalized Email</span>
+                </h3>
+                
+                {/* Template Selection */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Email Category
+                    </label>
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => {
+                        setSelectedCategory(e.target.value)
+                        setGeneratedEmail(null)
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="general">General</option>
+                      <option value="welcome">Welcome</option>
+                      <option value="follow-up">Follow-up</option>
+                      <option value="product-inquiry">Product/Service Inquiry</option>
+                      <option value="pricing">Pricing Information</option>
+                      <option value="demo">Demo Request</option>
+                      <option value="support">Support</option>
+                      <option value="newsletter">Newsletter</option>
+                      <option value="promotional">Promotional</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Email Template
+                    </label>
+                    <select
+                      value={selectedTemplate}
+                      onChange={(e) => {
+                        setSelectedTemplate(e.target.value)
+                        setGeneratedEmail(null)
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      {emailTemplates.map(template => (
+                        <option key={template.id} value={template.id}>
+                          {template.name} - {template.description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Custom Prompt Toggle */}
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="useCustomPrompt"
+                      checked={useCustomPrompt}
+                      onChange={(e) => {
+                        setUseCustomPrompt(e.target.checked)
+                        setGeneratedEmail(null)
+                      }}
+                      className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                    />
+                    <label htmlFor="useCustomPrompt" className="text-sm font-medium text-gray-700">
+                      Use Custom Prompt
+                    </label>
+                  </div>
+
+                  {/* Custom Prompt Input */}
+                  {useCustomPrompt && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Custom Prompt Instructions
+                      </label>
+                      <textarea
+                        value={customPrompt}
+                        onChange={(e) => setCustomPrompt(e.target.value)}
+                        placeholder="Describe exactly what you want in the email, e.g., 'A friendly follow-up email asking about their interest in our premium plan, mentioning the 30-day free trial, and asking for a call to discuss their needs'"
+                        rows={4}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
+
+                  {/* Custom Template Input */}
+                  {selectedTemplate === 'custom' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Custom Template Instructions
+                      </label>
+                      <textarea
+                        value={customTemplate}
+                        onChange={(e) => setCustomTemplate(e.target.value)}
+                        placeholder="Describe the type of email you want to generate, e.g., 'A follow-up email about our premium service offering'"
+                        rows={4}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
+
+                  {/* Generate Button */}
+                  <button
+                    onClick={handleGenerateEmail}
+                    disabled={generatingEmail || (selectedTemplate === 'custom' && !customTemplate.trim()) || (useCustomPrompt && !customPrompt.trim()) || !lead.email}
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                  >
+                    {generatingEmail ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-5 h-5" />
+                        <span>Generate Email</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Previous Emails Section */}
+              {previousEmails.length > 0 && !generatedEmail && (
+                <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                    <MailIcon className="w-5 h-5 text-purple-600" />
+                    <span>Use Previous Email as Template</span>
+                  </h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {previousEmails.map((email) => (
+                      <button
+                        key={email.id}
+                        onClick={() => handleUsePreviousEmail(email)}
+                        className={`w-full text-left p-3 rounded-lg border transition-all ${
+                          selectedPreviousEmail === email.id
+                            ? 'bg-purple-50 border-purple-300'
+                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{email.subject}</p>
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{email.body.replace(/<[^>]*>/g, '').substring(0, 100)}...</p>
+                          </div>
+                          <span className="text-xs text-gray-400 ml-2">{new Date(email.date).toLocaleDateString()}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Generated Email Preview */}
+              {generatedEmail && (
+                <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                      <FileText className="w-5 h-5 text-purple-600" />
+                      <span>{isEditing ? 'Edit Email' : 'Email Preview'}</span>
+                    </h3>
+                    <div className="flex items-center space-x-2">
+                      {!isEditing && (
+                        <button
+                          onClick={() => {
+                            setIsEditing(true)
+                            setEditableSubject(generatedEmail.subject)
+                            setEditableBody(generatedEmail.body)
+                          }}
+                          className="px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 rounded-lg border border-purple-200"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          setGeneratedEmail(null)
+                          setEditableSubject('')
+                          setEditableBody('')
+                          setIsEditing(false)
+                        }}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Subject
+                      </label>
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editableSubject}
+                          onChange={(e) => setEditableSubject(e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          placeholder="Email subject"
+                        />
+                      ) : (
+                        <div className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-900">
+                          {generatedEmail.subject}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Body
+                      </label>
+                      {isEditing ? (
+                        <textarea
+                          value={editableBody}
+                          onChange={(e) => setEditableBody(e.target.value)}
+                          rows={12}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
+                          placeholder="Email body (HTML supported)"
+                        />
+                      ) : (
+                        <div 
+                          className="px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 max-h-96 overflow-y-auto email-preview"
+                          style={{ 
+                            lineHeight: '1.6',
+                            fontSize: '14px'
+                          }}
+                          dangerouslySetInnerHTML={{ 
+                            __html: generatedEmail.body || ''
+                          }}
+                        />
+                      )}
+                      <style>{`
+                        .email-preview p {
+                          margin: 0.75rem 0;
+                          color: #374151;
+                        }
+                        .email-preview p:first-child {
+                          margin-top: 0;
+                        }
+                        .email-preview p:last-child {
+                          margin-bottom: 0;
+                        }
+                        .email-preview a {
+                          color: #9333ea;
+                          text-decoration: underline;
+                        }
+                        .email-preview ul, .email-preview ol {
+                          margin: 0.75rem 0;
+                          padding-left: 1.5rem;
+                        }
+                        .email-preview li {
+                          margin: 0.5rem 0;
+                        }
+                        .email-preview br {
+                          line-height: 1.6;
+                        }
+                      `}</style>
+                    </div>
+
+                    {isEditing && (
+                      <div className="flex space-x-3">
+                        <button
+                          onClick={handleSaveEdits}
+                          className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 shadow-md"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Save Changes</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsEditing(false)
+                            setEditableSubject(generatedEmail.subject)
+                            setEditableBody(generatedEmail.body)
+                          }}
+                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex space-x-3 pt-4">
+                      <button
+                        onClick={handleSendGeneratedEmail}
+                        disabled={sendingEmail || (isEditing && (!editableSubject || !editableBody))}
+                        className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                      >
+                        {sendingEmail ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>Sending...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-5 h-5" />
+                            <span>Send Email</span>
+                          </>
+                        )}
+                      </button>
+                      {!isEditing && (
+                        <button
+                          onClick={handleGenerateEmail}
+                          disabled={generatingEmail}
+                          className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                        >
+                          {generatingEmail ? (
+                            <>
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                              <span>Regenerating...</span>
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="w-5 h-5" />
+                              <span>Regenerate</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* No Email Generated State */}
+              {!generatedEmail && (
+                <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
+                  <MailIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 mb-2">No email generated yet</p>
+                  <p className="text-sm text-gray-400">Select a template and click "Generate Email" to create a personalized email for this lead</p>
                 </div>
               )}
             </div>

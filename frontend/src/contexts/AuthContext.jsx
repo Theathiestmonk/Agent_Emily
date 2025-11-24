@@ -152,6 +152,9 @@ export function AuthProvider({ children }) {
 
   const loginWithGoogle = async () => {
     try {
+      console.log('🔐 Initiating Google OAuth login via Supabase Auth...')
+      console.log('   Redirect URL:', `${window.location.origin}/auth/callback`)
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -159,22 +162,60 @@ export function AuthProvider({ children }) {
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
-          }
+          },
+          // Explicitly request email scope (required for Google Workspace accounts)
+          scopes: 'email profile'
         }
       })
 
       if (error) {
+        console.error('❌ Supabase Auth Google OAuth error:', error)
+        console.error('   Error message:', error.message)
+        console.error('   Error status:', error.status)
+        console.error('   Error details:', JSON.stringify(error, null, 2))
+        
+        // Provide more helpful error messages
+        let errorMessage = error.message || 'Google sign-in failed'
+        
+        // Check for specific error types
+        if (error.message?.includes('Internal server error') || 
+            error.message?.includes('500') || 
+            error.status === 500 ||
+            error.message?.includes('556')) {
+          errorMessage = `Supabase Auth Error (HTTP ${error.status || '556'}): This usually means:
+1. Google OAuth provider not configured in Supabase Dashboard
+2. Database trigger/function issue (check handle_new_user function)
+3. Supabase project database connection issue
+4. RLS policies blocking profile creation
+
+Please check:
+- Supabase Dashboard → Authentication → Providers → Google (should be enabled)
+- Supabase Dashboard → Logs → API Logs (for detailed error)
+- Run diagnostic SQL: database/check_supabase_auth_setup.sql`
+        } else if (error.message?.includes('redirect') || error.message?.includes('unauthorized')) {
+          errorMessage = 'Redirect URL not authorized. Please add the redirect URL to Supabase Dashboard (Authentication → URL Configuration).'
+        } else if (error.message?.includes('invalid_client') || error.message?.includes('unauthorized_client')) {
+          errorMessage = 'Invalid Google OAuth credentials. Please verify Client ID and Secret in Supabase Dashboard.'
+        }
+        
         return { 
           success: false, 
-          error: error.message 
+          error: errorMessage,
+          errorDetails: {
+            status: error.status,
+            message: error.message,
+            originalError: error
+          }
         }
       }
 
+      console.log('✅ Google OAuth initiated successfully')
       return { success: true }
     } catch (error) {
+      console.error('❌ Google sign-in exception:', error)
       return { 
         success: false, 
-        error: 'Google sign-in failed' 
+        error: error.message || 'Google sign-in failed. Please check Supabase Auth configuration.' 
       }
     }
   }
@@ -209,6 +250,16 @@ export function AuthProvider({ children }) {
 
       if (fetchError) {
         console.error('❌ Error checking profile:', fetchError)
+        
+        // Check if it's a CORS error
+        if (fetchError.message?.includes('CORS') || 
+            fetchError.message?.includes('Access-Control-Allow-Origin') ||
+            fetchError.code === 'PGRST301') {
+          console.error('🚫 CORS Error: Supabase is blocking requests from localhost:3000')
+          console.error('   Fix: Go to Supabase Dashboard → Settings → API → Add "http://localhost:3000" to allowed origins')
+          console.error('   See SUPABASE_CORS_FIX.md for detailed instructions')
+        }
+        
         return
       }
 
@@ -242,6 +293,15 @@ export function AuthProvider({ children }) {
 
         if (insertError) {
           console.error('❌ Error creating profile for Google user:', insertError)
+          
+          // Check if it's a CORS error
+          if (insertError.message?.includes('CORS') || 
+              insertError.message?.includes('Access-Control-Allow-Origin') ||
+              insertError.code === 'PGRST301') {
+            console.error('🚫 CORS Error: Supabase is blocking requests from localhost:3000')
+            console.error('   Fix: Go to Supabase Dashboard → Settings → API → Add "http://localhost:3000" to allowed origins')
+            console.error('   See SUPABASE_CORS_FIX.md for detailed instructions')
+          }
         } else {
           console.log('✅ Profile created successfully for Google user:', user.id)
         }

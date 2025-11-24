@@ -18,7 +18,7 @@ import {
   Calendar
 } from 'lucide-react'
 
-const LeadCard = ({ lead, onClick, onDelete }) => {
+const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null, selectionMode = false }) => {
   const getStatusConfig = (status) => {
     const configs = {
       new: {
@@ -154,15 +154,41 @@ const LeadCard = ({ lead, onClick, onDelete }) => {
   const StatusIcon = statusConfig.icon
   const platformColor = getPlatformColor(lead.source_platform)
 
+  const handleCardClick = (e) => {
+    // Don't trigger onClick if clicking on checkbox or delete button
+    if (e.target.closest('input[type="checkbox"]') || e.target.closest('button')) {
+      return
+    }
+    if (onClick && !selectionMode) {
+      onClick(lead)
+    }
+  }
+
+  const handleCheckboxChange = (e) => {
+    e.stopPropagation()
+    if (onSelect) {
+      onSelect(lead.id, e.target.checked)
+    }
+  }
+
   return (
     <div
-      onClick={() => onClick && onClick(lead)}
-      className={`bg-gradient-to-br from-white ${statusConfig.bgColor} rounded-lg shadow-md overflow-hidden cursor-pointer border ${statusConfig.borderColor}`}
+      onClick={handleCardClick}
+      className={`bg-gradient-to-br from-white ${statusConfig.bgColor} rounded-lg shadow-md overflow-hidden ${selectionMode ? 'cursor-default' : 'cursor-pointer'} border ${statusConfig.borderColor} ${isSelected ? 'ring-2 ring-purple-500' : ''}`}
     >
       {/* Header with gradient */}
       <div className={`bg-gradient-to-r ${statusConfig.color} p-2 text-white`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-1.5 flex-1 min-w-0">
+            {selectionMode && (
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={handleCheckboxChange}
+                onClick={(e) => e.stopPropagation()}
+                className="w-4 h-4 rounded border-white/30 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-2 cursor-pointer flex-shrink-0"
+              />
+            )}
             <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm flex-shrink-0">
               {getPlatformIcon(lead.source_platform)}
             </div>
@@ -177,16 +203,18 @@ const LeadCard = ({ lead, onClick, onDelete }) => {
               </div>
             </div>
           </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onClick && onClick(lead)
-            }}
-            className="p-1 bg-white/20 rounded flex-shrink-0 ml-0.5"
-            title="View details"
-          >
-            <Eye className="w-3 h-3" />
-          </button>
+          {!selectionMode && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onClick && onClick(lead)
+              }}
+              className="p-1 bg-white/20 rounded flex-shrink-0 ml-0.5"
+              title="View details"
+            >
+              <Eye className="w-3 h-3" />
+            </button>
+          )}
         </div>
       </div>
 

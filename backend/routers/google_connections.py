@@ -166,12 +166,22 @@ def refresh_and_update_tokens(user_id: str, credentials: Credentials) -> bool:
             print("✅ Tokens refreshed successfully")
             
             # Update the database with new tokens
-            supabase_admin.table('platform_connections').update({
-                'access_token_encrypted': encrypt_token(credentials.token),
-                'refresh_token_encrypted': encrypt_token(credentials.refresh_token) if credentials.refresh_token else None,
-                'token_expires_at': credentials.expiry.isoformat() if credentials.expiry else None,
-                'updated_at': datetime.now().isoformat()
-            }).eq('user_id', user_id).eq('platform', 'google').execute()
+            try:
+                update_data = {
+                    'access_token_encrypted': encrypt_token(credentials.token),
+                    'refresh_token_encrypted': encrypt_token(credentials.refresh_token) if credentials.refresh_token else None,
+                    'token_expires_at': credentials.expiry.isoformat() if credentials.expiry else None,
+                    'updated_at': datetime.now().isoformat()
+                }
+                # Remove None values to avoid Supabase issues
+                update_data = {k: v for k, v in update_data.items() if v is not None}
+                
+                result = supabase_admin.table('platform_connections').update(update_data).eq('user_id', user_id).eq('platform', 'google').execute()
+                print(f"✅ Database updated with new tokens: {result.data}")
+            except Exception as db_error:
+                print(f"❌ Database update failed: {str(db_error)}")
+                print(f"   Update data: {update_data}")
+                raise
             
             print("✅ Database updated with new tokens")
             return True
@@ -189,11 +199,43 @@ async def google_auth(current_user: User = Depends(get_current_user)):
         client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
         redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
         
-        if not all([client_id, client_secret, redirect_uri]):
+        # If GOOGLE_REDIRECT_URI is not set, construct it from API_BASE_URL
+        if not redirect_uri:
+            api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+            if not api_base_url:
+                api_base_url = 'https://agent-emily.onrender.com'
+            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
+            print(f"⚠️  GOOGLE_REDIRECT_URI not set, using constructed URI: {redirect_uri}")
+        
+        # Validate redirect URI format - ensure it's a full URL
+        if redirect_uri and not (redirect_uri.startswith('http://') or redirect_uri.startswith('https://')):
+            print(f"⚠️  Redirect URI doesn't start with http:// or https://: {redirect_uri}")
+            # Try to construct full URL if only path is provided
+            api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+            if not api_base_url:
+                api_base_url = 'https://agent-emily.onrender.com'
+            if redirect_uri.startswith('/'):
+                redirect_uri = f"{api_base_url}{redirect_uri}"
+                print(f"✅ Constructed full redirect URI: {redirect_uri}")
+        
+        if not all([client_id, client_secret]):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Google OAuth not configured. Please set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI"
+                detail="Google OAuth not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET"
             )
+        
+        # Final validation - redirect URI must be set and valid
+        if not redirect_uri:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="GOOGLE_REDIRECT_URI is not configured. Please set it in environment variables."
+            )
+        
+        print(f"🔍 OAuth Configuration Check:")
+        print(f"   Client ID: {client_id[:20] if client_id else 'NOT SET'}...")
+        print(f"   Client Secret: {'SET' if client_secret else 'NOT SET'}")
+        print(f"   Redirect URI: {redirect_uri}")
+        print(f"   ⚠️  IMPORTANT: This redirect URI MUST exactly match what's in Google Cloud Console!")
         
         # Generate secure state
         state = generate_oauth_state()
@@ -223,19 +265,44 @@ async def google_auth(current_user: User = Depends(get_current_user)):
         )
         flow.redirect_uri = redirect_uri
         
-        # Generate authorization URL
+        # Generate authorization URL with additional parameters for enterprise accounts
         auth_url, _ = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
             state=state,
-            prompt='consent'  # Force consent screen to get refresh token
+            prompt='consent',  # Force consent screen to get refresh token
+            hd=None  # Allow any hosted domain (can be set to specific domain if needed)
         )
         
-        print(f"Google OAuth initiated for user {current_user.id}")
-        print(f"Generated state: {state}")
-        print(f"State expires at: {oauth_state_data['expires_at']}")
-        print(f"Redirect URI: {redirect_uri}")
-        print(f"Auth URL: {auth_url}")
+        print(f"✅ Google OAuth initiated for user {current_user.id}")
+        print(f"   Generated state: {state}")
+        print(f"   State expires at: {oauth_state_data['expires_at']}")
+        print(f"   🔴 CRITICAL - Redirect URI being sent to Google: {redirect_uri}")
+        print(f"   ⚠️  This MUST exactly match Google Cloud Console authorized redirect URIs!")
+        print(f"   Client ID: {client_id[:20] if client_id else 'NOT SET'}...")
+        print(f"   Scopes: {len(GOOGLE_SCOPES)} scopes requested")
+        print(f"   Auth URL (first 150 chars): {auth_url[:150]}...")
+        
+        # Extract redirect_uri from auth_url to verify it's correct
+        import urllib.parse
+        parsed_url = urllib.parse.urlparse(auth_url)
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+        redirect_in_url = query_params.get('redirect_uri', [None])[0]
+        if redirect_in_url:
+            decoded_redirect = urllib.parse.unquote(redirect_in_url)
+            print(f"   🔍 Redirect URI in auth URL: {decoded_redirect}")
+            if decoded_redirect != redirect_uri:
+                print(f"   ⚠️  WARNING: Redirect URI mismatch!")
+                print(f"      Flow has: {redirect_uri}")
+                print(f"      URL has:  {decoded_redirect}")
+                print(f"   ❌ This mismatch will cause 'unauthorized_client' error!")
+        
+        # Validate redirect URI format
+        if redirect_uri:
+            if not redirect_uri.startswith('http://') and not redirect_uri.startswith('https://'):
+                logger.warning(f"⚠️  Redirect URI doesn't start with http:// or https://: {redirect_uri}")
+            if 'localhost' in redirect_uri and not redirect_uri.startswith('http://localhost'):
+                logger.warning(f"⚠️  Localhost redirect URI should use http:// not https://: {redirect_uri}")
         
         return {
             "auth_url": auth_url,
@@ -261,17 +328,66 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
         # Check for OAuth error
         if error:
             frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+            
+            # Log detailed error information for debugging
+            redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
+            client_id = os.getenv('GOOGLE_CLIENT_ID')
+            print(f"❌ Google OAuth Error: {error}")
+            print(f"   Redirect URI: {redirect_uri}")
+            print(f"   Client ID: {client_id[:20] if client_id else 'NOT SET'}...")
+            
+            # Provide more helpful error message for unauthorized_client
+            error_message = error
+            error_details = ""
+            
+            if "unauthorized_client" in error.lower():
+                error_details = f"{error} - This usually means:\n1. The redirect URI doesn't match Google Cloud Console\n2. The OAuth client ID/secret is incorrect\n3. The app is in testing mode and your email isn't added as a test user\n4. For WORK EMAIL: The app may need to be verified by Google or your organization may block unverified apps\n\nCurrent redirect URI: {redirect_uri}\nPlease verify this matches exactly in Google Cloud Console."
+            elif "access_denied" in error.lower():
+                error_details = f"{error} - Access was denied. This can happen if:\n1. The app is in testing mode and your email isn't added as a test user\n2. For WORK EMAIL: Your organization's admin needs to approve the app\n3. For WORK EMAIL: The app needs to be verified by Google for sensitive scopes (Gmail, Drive, etc.)\n4. You clicked 'Cancel' on the consent screen"
+            elif "invalid_scope" in error.lower():
+                error_details = f"{error} - Invalid scope requested. For WORK EMAIL accounts, some scopes require app verification. Contact your Google Workspace admin or verify the app in Google Cloud Console."
+            
+            # URL encode the error message
+            import urllib.parse
+            encoded_error = urllib.parse.quote(error_details if error_details else error)
+            
             return f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <title>Google Connection Failed</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }}
+                    .error-box {{ background: #fee; border: 1px solid #fcc; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+                    .work-email-note {{ background: #e3f2fd; border: 1px solid #90caf9; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+                    h2 {{ color: #c62828; }}
+                    ul {{ line-height: 1.8; }}
+                </style>
             </head>
             <body>
+                <h2>Google Connection Failed</h2>
+                <div class="error-box">
+                    <p><strong>Error:</strong> {error}</p>
+                    {f'<p>{error_details}</p>' if error_details else ''}
+                </div>
+                <div class="work-email-note">
+                    <h3>⚠️ For Work/Enterprise Email Accounts:</h3>
+                    <p>If you're using a work email (Google Workspace), you may encounter additional restrictions:</p>
+                    <ul>
+                        <li><strong>App Verification Required:</strong> Gmail, Drive, and other sensitive scopes require Google to verify your app for enterprise accounts</li>
+                        <li><strong>Admin Approval:</strong> Your organization's Google Workspace admin may need to approve the app</li>
+                        <li><strong>Domain Restrictions:</strong> Your organization may have policies blocking unverified apps</li>
+                    </ul>
+                    <p><strong>Solutions:</strong></p>
+                    <ul>
+                        <li>Ask your Google Workspace admin to approve the app</li>
+                        <li>Complete Google's app verification process in Google Cloud Console</li>
+                        <li>Use a personal Gmail account for testing (if allowed by your organization)</li>
+                    </ul>
+                </div>
                 <script>
-                    window.location.href = '{frontend_url}/google-callback?error={error}';
+                    window.location.href = '{frontend_url}/google-callback?error={encoded_error}';
                 </script>
-                <p>Google OAuth error: {error}</p>
             </body>
             </html>
             """
@@ -325,9 +441,42 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
                 detail="OAuth state has expired"
             )
         
+        # Verify user profile exists (required for foreign key constraint)
+        print(f"🔍 Verifying user profile exists for user_id: {user_id}")
+        profile_check = supabase_admin.table('profiles').select('id').eq('id', user_id).execute()
+        if not profile_check.data:
+            print(f"⚠️  Profile not found for user_id: {user_id}, creating profile...")
+            try:
+                # Create profile if it doesn't exist
+                supabase_admin.table('profiles').insert({
+                    'id': user_id,
+                    'name': None,
+                    'onboarding_completed': False
+                }).execute()
+                print(f"✅ Created profile for user: {user_id}")
+            except Exception as profile_error:
+                print(f"❌ Error creating profile: {str(profile_error)}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"User profile does not exist and could not be created: {str(profile_error)}"
+                )
+        
         client_id = os.getenv('GOOGLE_CLIENT_ID')
         client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
         redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
+        
+        # If GOOGLE_REDIRECT_URI is not set, construct it from API_BASE_URL
+        if not redirect_uri:
+            api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
+            logger.info(f"GOOGLE_REDIRECT_URI not set in callback, using constructed URI: {redirect_uri}")
+        
+        # Validate redirect URI format
+        if redirect_uri and not (redirect_uri.startswith('http://') or redirect_uri.startswith('https://')):
+            api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+            if api_base_url and redirect_uri.startswith('/'):
+                redirect_uri = f"{api_base_url}{redirect_uri}"
+                logger.info(f"Constructed full redirect URI in callback: {redirect_uri}")
         
         # Create OAuth flow
         flow = Flow.from_client_config(
@@ -360,35 +509,93 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
         # Check if connection already exists
         existing_connection = supabase_admin.table('platform_connections').select('*').eq('user_id', user_id).eq('platform', 'google').execute()
         
+        # Prepare connection data
+        now_iso = datetime.now().isoformat()
+        token_expires_iso = credentials.expiry.isoformat() if credentials.expiry else None
+        
+        # Encrypt tokens with validation
+        try:
+            access_token_enc = encrypt_token(credentials.token)
+            if not access_token_enc or len(access_token_enc) == 0:
+                raise ValueError("Access token encryption failed - empty result")
+            print(f"✅ Access token encrypted (length: {len(access_token_enc)})")
+        except Exception as e:
+            print(f"❌ Error encrypting access token: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to encrypt access token: {str(e)}"
+            )
+        
+        refresh_token_enc = None
+        if credentials.refresh_token:
+            try:
+                refresh_token_enc = encrypt_token(credentials.refresh_token)
+                if not refresh_token_enc or len(refresh_token_enc) == 0:
+                    print(f"⚠️  Refresh token encryption returned empty, setting to None")
+                    refresh_token_enc = None
+                else:
+                    print(f"✅ Refresh token encrypted (length: {len(refresh_token_enc)})")
+            except Exception as e:
+                print(f"⚠️  Error encrypting refresh token: {str(e)}, continuing without it")
+                refresh_token_enc = None
+        
         if existing_connection.data:
             # Update existing connection
-            supabase_admin.table('platform_connections').update({
-                'access_token_encrypted': encrypt_token(credentials.token),
-                'refresh_token_encrypted': encrypt_token(credentials.refresh_token) if credentials.refresh_token else None,
-                'token_expires_at': credentials.expiry.isoformat() if credentials.expiry else None,
-                'updated_at': datetime.now().isoformat(),
-                'is_active': True,
-                'connection_status': 'active'
-            }).eq('user_id', user_id).eq('platform', 'google').execute()
+            print(f"🔄 Updating existing Google connection for user: {user_id}")
+            try:
+                update_data = {
+                    'access_token_encrypted': access_token_enc,
+                    'refresh_token_encrypted': refresh_token_enc,
+                    'token_expires_at': token_expires_iso,
+                    'updated_at': now_iso,
+                    'is_active': True,
+                    'connection_status': 'active'
+                }
+                # Only update page_name if name is available
+                if name:
+                    update_data['page_name'] = name
+                
+                result = supabase_admin.table('platform_connections').update(update_data).eq('user_id', user_id).eq('platform', 'google').execute()
+                print(f"✅ Updated Google connection: {result.data}")
+            except Exception as e:
+                print(f"❌ Error updating connection: {str(e)}")
+                print(f"   Update data: {update_data}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to update Google connection: {str(e)}"
+                )
         else:
             # Create new connection
-            connection_data = {
-                'id': str(uuid.uuid4()),
-                'user_id': user_id,
-                'platform': 'google',
-                'page_id': google_user_id,  # Use Google user ID as page_id
-                'page_name': name,
-                'access_token_encrypted': encrypt_token(credentials.token),
-                'refresh_token_encrypted': encrypt_token(credentials.refresh_token) if credentials.refresh_token else None,
-                'token_expires_at': credentials.expiry.isoformat() if credentials.expiry else None,
-                'is_active': True,
-                'connection_status': 'active',
-                'connected_at': datetime.now().isoformat(),
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat()
-            }
-            
-            supabase_admin.table('platform_connections').insert(connection_data).execute()
+            print(f"🆕 Creating new Google connection for user: {user_id}")
+            try:
+                connection_data = {
+                    'user_id': user_id,
+                    'platform': 'google',
+                    'page_id': google_user_id if google_user_id else None,  # Use Google user ID as page_id
+                    'page_name': name if name else None,
+                    'access_token_encrypted': access_token_enc,
+                    'refresh_token_encrypted': refresh_token_enc,
+                    'token_expires_at': token_expires_iso,
+                    'is_active': True,
+                    'connection_status': 'active',
+                    'connected_at': now_iso,
+                    'created_at': now_iso,
+                    'updated_at': now_iso
+                }
+                
+                # Remove None values to avoid issues
+                connection_data = {k: v for k, v in connection_data.items() if v is not None}
+                
+                print(f"   Connection data keys: {list(connection_data.keys())}")
+                result = supabase_admin.table('platform_connections').insert(connection_data).execute()
+                print(f"✅ Created Google connection: {result.data}")
+            except Exception as e:
+                print(f"❌ Error creating connection: {str(e)}")
+                print(f"   Connection data: {connection_data}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to create Google connection: {str(e)}"
+                )
         
         # Clean up used state
         supabase_admin.table("oauth_states").delete().eq("state", state).execute()
@@ -416,6 +623,14 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
         frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
         error_message = str(e).replace("'", "\\'").replace('"', '\\"')
         
+        # Log detailed error for debugging
+        redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
+        client_id = os.getenv('GOOGLE_CLIENT_ID')
+        logger.error(f"❌ Google OAuth callback error: {e}")
+        logger.error(f"   Redirect URI: {redirect_uri}")
+        logger.error(f"   Client ID: {client_id[:20] if client_id else 'NOT SET'}...")
+        logger.error(f"   Error type: {type(e).__name__}")
+        
         # Provide more specific error messages
         if "Invalid or expired OAuth state" in str(e):
             error_message = "Invalid or expired OAuth state. Please try connecting again."
@@ -423,6 +638,10 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
             error_message = "Access denied. The app may be in testing mode. Please contact the administrator."
         elif "invalid_grant" in str(e).lower():
             error_message = "Invalid authorization code. Please try connecting again."
+        elif "unauthorized_client" in str(e).lower():
+            error_message = f"Unauthorized client. Please verify: 1) Redirect URI matches Google Cloud Console exactly, 2) OAuth client credentials are correct, 3) Your email is added as a test user if app is in testing mode. Current redirect URI: {redirect_uri}"
+        elif "redirect_uri_mismatch" in str(e).lower():
+            error_message = f"Redirect URI mismatch. The redirect URI ({redirect_uri}) must exactly match what's configured in Google Cloud Console."
         
         return f"""
         <!DOCTYPE html>
@@ -666,12 +885,79 @@ async def send_gmail_message(
         # Build Gmail service
         service = build('gmail', 'v1', credentials=credentials)
         
-        # Create message
-        message = {
-            'raw': base64.urlsafe_b64encode(
-                f"To: {to}\r\nSubject: {subject}\r\n\r\n{body}".encode()
-            ).decode()
-        }
+        # Create proper HTML email message
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        import re
+        
+        # Check if body contains HTML tags (comprehensive check)
+        html_pattern = re.compile(r'<[^>]+>')
+        has_html_tags = bool(html_pattern.search(body))
+        
+        print(f"📧 Email body contains HTML: {has_html_tags}")
+        print(f"📧 Body preview: {body[:200]}...")
+        
+        # Create multipart message
+        msg = MIMEMultipart('alternative')
+        msg['To'] = to
+        msg['Subject'] = subject
+        msg['MIME-Version'] = '1.0'
+        
+        if has_html_tags:
+            print("📧 Creating HTML email with multipart structure")
+            
+            # For multipart/alternative, order matters:
+            # 1. Plain text first (for clients that don't support HTML)
+            # 2. HTML second (for clients that support HTML - they'll prefer this)
+            
+            # Create plain text version (strip HTML tags for fallback)
+            plain_text = re.sub(r'<[^>]+>', '', body)  # Remove HTML tags
+            # Decode HTML entities
+            plain_text = plain_text.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+            plain_text = plain_text.replace('&quot;', '"').replace('&#39;', "'")
+            # Clean up extra whitespace
+            plain_text = re.sub(r'\n\s*\n+', '\n\n', plain_text).strip()
+            
+            # Attach plain text part first
+            text_part = MIMEText(plain_text, 'plain', 'utf-8')
+            text_part.add_header('Content-Type', 'text/plain; charset=utf-8')
+            msg.attach(text_part)
+            print(f"📧 Plain text part: {plain_text[:100]}...")
+            
+            # Wrap HTML in proper document structure if not already wrapped
+            # Some email clients require full HTML document structure
+            if not body.strip().lower().startswith('<!doctype') and not body.strip().lower().startswith('<html'):
+                html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+{body}
+</body>
+</html>"""
+            else:
+                html_body = body
+            
+            # Attach HTML part second (email clients will use this if they support HTML)
+            # Explicitly set Content-Type to ensure it's recognized as HTML
+            html_part = MIMEText(html_body, 'html', 'utf-8')
+            html_part.add_header('Content-Type', 'text/html; charset=utf-8')
+            msg.attach(html_part)
+            print("📧 HTML part attached with proper document structure and Content-Type header")
+        else:
+            print("📧 Creating plain text email")
+            # Plain text email only
+            text_part = MIMEText(body, 'plain', 'utf-8')
+            msg.attach(text_part)
+        
+        # Encode message properly for Gmail API
+        raw_message = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
+        print(f"📧 Message encoded, length: {len(raw_message)}")
+        
+        # Create message dict
+        message = {'raw': raw_message}
         
         # Send message
         result = service.users().messages().send(userId='me', body=message).execute()
@@ -752,16 +1038,34 @@ async def reconnect_google_account(current_user: User = Depends(get_current_user
         print(f"🔄 Reconnecting Google account for user: {current_user.id}")
         
         # Mark current connection as inactive
-        supabase_admin.table('platform_connections').update({
-            'is_active': False,
-            'connection_status': 'reconnect_required',
-            'updated_at': datetime.now().isoformat()
-        }).eq('platform', 'google').eq('user_id', current_user.id).execute()
+        try:
+            update_result = supabase_admin.table('platform_connections').update({
+                'is_active': False,
+                'connection_status': 'reconnect_required',
+                'updated_at': datetime.now().isoformat()
+            }).eq('platform', 'google').eq('user_id', current_user.id).execute()
+            print(f"✅ Marked existing connection as inactive: {update_result.data}")
+        except Exception as update_error:
+            print(f"⚠️  Warning: Could not mark connection as inactive (may not exist): {str(update_error)}")
+            # Continue anyway - connection might not exist yet
         
         # Generate new OAuth URL
         client_id = os.getenv('GOOGLE_CLIENT_ID')
         client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
         redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
+        
+        # If GOOGLE_REDIRECT_URI is not set, construct it from API_BASE_URL
+        if not redirect_uri:
+            api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
+            logger.info(f"GOOGLE_REDIRECT_URI not set in callback, using constructed URI: {redirect_uri}")
+        
+        # Validate redirect URI format
+        if redirect_uri and not (redirect_uri.startswith('http://') or redirect_uri.startswith('https://')):
+            api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+            if api_base_url and redirect_uri.startswith('/'):
+                redirect_uri = f"{api_base_url}{redirect_uri}"
+                logger.info(f"Constructed full redirect URI in callback: {redirect_uri}")
         
         if not all([client_id, client_secret, redirect_uri]):
             return {
@@ -797,12 +1101,13 @@ async def reconnect_google_account(current_user: User = Depends(get_current_user
         )
         flow.redirect_uri = redirect_uri
         
-        # Generate authorization URL
+        # Generate authorization URL with additional parameters for enterprise accounts
         auth_url, _ = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
             state=state,
-            prompt='consent'  # Force consent screen to get refresh token
+            prompt='consent',  # Force consent screen to get refresh token
+            hd=None  # Allow any hosted domain (can be set to specific domain if needed)
         )
         
         return {

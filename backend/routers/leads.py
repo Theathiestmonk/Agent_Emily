@@ -20,6 +20,7 @@ from agents.lead_management_agent import LeadManagementAgent
 from services.whatsapp_service import WhatsAppService
 from supabase import create_client, Client
 from dotenv import load_dotenv
+import openai
 
 # Load environment variables
 load_dotenv()
@@ -111,6 +112,15 @@ class UpdateLeadStatusRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     message: str
     message_type: str = "whatsapp"  # whatsapp or email
+
+class GenerateEmailRequest(BaseModel):
+    template: Optional[str] = "welcome"  # welcome, follow-up, inquiry, custom
+    category: Optional[str] = "general"  # general, welcome, follow-up, product-inquiry, pricing, demo, support, newsletter, promotional
+    custom_template: Optional[str] = None  # Custom template text when template is "custom"
+    custom_prompt: Optional[str] = None  # Custom prompt instructions for email generation
+
+class BulkDeleteRequest(BaseModel):
+    lead_ids: List[str]
 
 class CreateLeadRequest(BaseModel):
     name: str
@@ -1022,10 +1032,60 @@ async def send_message_to_lead(
             if not lead_data.get("email"):
                 raise HTTPException(status_code=400, detail="Lead has no email address")
             
+            # Check for Google connection
+            connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user["id"]).execute()
+            
+            if not connection.data:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No active Google connection found. Please connect your Google account to send emails."
+                )
+            
             # Use Gmail API to send email
-            from routers.google_connections import send_gmail_message
-            # This would need to be adapted to work here
-            raise HTTPException(status_code=501, detail="Email sending via this endpoint not yet implemented")
+            # Import here to avoid circular dependency
+            from routers.google_connections import send_gmail_message, User as GoogleUser
+            
+            try:
+                # Create User object for send_gmail_message
+                # Convert created_at to string if it's a datetime object
+                created_at_value = current_user.get("created_at", "")
+                if created_at_value and hasattr(created_at_value, 'isoformat'):
+                    created_at_str = created_at_value.isoformat()
+                elif created_at_value:
+                    created_at_str = str(created_at_value)
+                else:
+                    created_at_str = ""
+                
+                google_user = GoogleUser(
+                    id=current_user["id"],
+                    email=current_user["email"],
+                    name=current_user["name"],
+                    created_at=created_at_str
+                )
+                
+                result = await send_gmail_message(
+                    to=lead_data["email"],
+                    subject=f"Message from {current_user.get('name', 'Your Business')}",
+                    body=request.message,
+                    current_user=google_user
+                )
+                
+                if result.get("success"):
+                    # Store conversation
+                    supabase_admin.table("lead_conversations").insert({
+                        "lead_id": lead_id,
+                        "message_type": "email",
+                        "content": request.message,
+                        "sender": "agent",
+                        "direction": "outbound",
+                        "message_id": result.get("message_id"),
+                        "status": "sent"
+                    }).execute()
+                
+                return result
+            except Exception as e:
+                logger.error(f"Error sending email via Gmail: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
         
         else:
             raise HTTPException(status_code=400, detail="Invalid message_type")
@@ -1080,5 +1140,303 @@ async def get_whatsapp_connection(current_user: dict = Depends(get_current_user)
         raise
     except Exception as e:
         logger.error(f"Error getting WhatsApp connection: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/email-templates")
+async def get_email_templates(current_user: dict = Depends(get_current_user)):
+    """Get available email templates"""
+    templates = [
+        {
+            "id": "welcome",
+            "name": "Welcome Email",
+            "description": "A warm welcome email for new leads",
+            "category": "welcome"
+        },
+        {
+            "id": "follow-up",
+            "name": "Follow-up Email",
+            "description": "A follow-up email to re-engage leads",
+            "category": "follow-up"
+        },
+        {
+            "id": "inquiry",
+            "name": "Product/Service Inquiry",
+            "description": "An email responding to product or service inquiries",
+            "category": "product-inquiry"
+        },
+        {
+            "id": "pricing",
+            "name": "Pricing Information",
+            "description": "An email providing pricing details and value proposition",
+            "category": "pricing"
+        },
+        {
+            "id": "demo",
+            "name": "Demo Request",
+            "description": "An email for scheduling or confirming demo requests",
+            "category": "demo"
+        },
+        {
+            "id": "support",
+            "name": "Support Response",
+            "description": "A helpful support email addressing customer questions",
+            "category": "support"
+        },
+        {
+            "id": "custom",
+            "name": "Custom Template",
+            "description": "Create your own custom email template",
+            "category": "general"
+        }
+    ]
+    return {"templates": templates}
+
+@router.post("/{lead_id}/generate-email")
+async def generate_email(
+    lead_id: str,
+    request: GenerateEmailRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate personalized email for a lead"""
+    try:
+        # Verify lead belongs to user and fetch lead data
+        lead = supabase_admin.table("leads").select("*").eq("id", lead_id).eq("user_id", current_user["id"]).execute()
+        if not lead.data:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        lead_data = lead.data[0]
+        
+        if not lead_data.get("email"):
+            raise HTTPException(status_code=400, detail="Lead has no email address")
+        
+        # Get user profile for business context
+        profile = supabase_admin.table("profiles").select("*").eq("id", current_user["id"]).execute()
+        profile_data = profile.data[0] if profile.data else {}
+        
+        # Prepare business context
+        business_name = profile_data.get("business_name", "our business")
+        business_description = profile_data.get("business_description", "")
+        brand_voice = profile_data.get("brand_voice", "professional")
+        brand_tone = profile_data.get("brand_tone", "friendly")
+        
+        # Prepare lead context
+        lead_name = lead_data.get("name", "there")
+        lead_email = lead_data.get("email", "")
+        form_data = lead_data.get("form_data", {})
+        form_context = "\n".join([f"- {k}: {v}" for k, v in form_data.items()]) if form_data else ""
+        
+        # Use custom prompt if provided, otherwise use category/template-based prompts
+        if request.custom_prompt:
+            email_instructions = request.custom_prompt
+        else:
+            # Category-based prompts
+            category_prompts = {
+                "general": """Create a personalized email that:
+1. Is professional and engaging
+2. Matches the brand voice and tone
+3. Is concise and clear
+4. Does NOT require links unless specifically needed""",
+                "welcome": """Create a personalized welcome email that:
+1. Thanks them for their interest
+2. Introduces the business briefly
+3. Highlights key value propositions
+4. Is warm and inviting
+5. Matches the brand voice and tone
+6. Does NOT require links unless specifically needed
+7. Is concise (under 200 words)""",
+                "follow-up": """Create a personalized follow-up email that:
+1. References their previous interest
+2. Provides additional value or information
+3. Addresses potential concerns
+4. Is helpful and non-pushy
+5. Matches the brand voice and tone
+6. Does NOT require links unless specifically needed
+7. Is concise (under 200 words)""",
+                "product-inquiry": """Create a personalized response email that:
+1. Acknowledges their inquiry
+2. Provides detailed information about the product/service
+3. Answers any specific questions from their form responses
+4. Is informative and helpful
+5. Matches the brand voice and tone
+6. Does NOT require links unless specifically needed
+7. Is concise (under 300 words)""",
+                "pricing": """Create a personalized pricing information email that:
+1. Acknowledges their interest in pricing
+2. Provides clear pricing information
+3. Explains value proposition
+4. Is transparent and helpful
+5. Matches the brand voice and tone
+6. Does NOT require links unless specifically needed
+7. Is concise (under 250 words)""",
+                "demo": """Create a personalized demo request email that:
+1. Acknowledges their demo request
+2. Provides next steps
+3. Sets expectations
+4. Is professional and helpful
+5. Matches the brand voice and tone
+6. Does NOT require links unless specifically needed
+7. Is concise (under 200 words)""",
+                "support": """Create a personalized support email that:
+1. Acknowledges their support request
+2. Provides helpful information
+3. Offers solutions
+4. Is empathetic and professional
+5. Matches the brand voice and tone
+6. Does NOT require links unless specifically needed
+7. Is concise (under 250 words)""",
+                "newsletter": """Create a personalized newsletter email that:
+1. Provides valuable content
+2. Is engaging and informative
+3. Matches the brand voice and tone
+4. Does NOT require links unless specifically needed
+5. Is concise (under 300 words)""",
+                "promotional": """Create a personalized promotional email that:
+1. Highlights special offers or features
+2. Creates urgency if appropriate
+3. Is exciting but not pushy
+4. Matches the brand voice and tone
+5. Does NOT require links unless specifically needed
+6. Is concise (under 250 words)"""
+            }
+            
+            # Template-based prompts (fallback)
+            template_prompts = {
+                "welcome": category_prompts["welcome"],
+                "follow-up": category_prompts["follow-up"],
+                "inquiry": category_prompts["product-inquiry"],
+                "custom": request.custom_template or "Create a personalized email based on the custom template provided. Do NOT require links unless specifically needed."
+            }
+            
+            # Use category if available, otherwise use template
+            if request.category and request.category in category_prompts:
+                email_instructions = category_prompts[request.category]
+            else:
+                email_instructions = template_prompts.get(request.template, category_prompts["general"])
+        
+        # Build OpenAI prompt
+        prompt = f"""
+You are an expert email marketer writing a personalized email to a lead.
+
+Business Information:
+- Business Name: {business_name}
+- Business Description: {business_description}
+- Brand Voice: {brand_voice}
+- Brand Tone: {brand_tone}
+
+Lead Information:
+- Name: {lead_name}
+- Email: {lead_email}
+- Form Responses: {form_context if form_context else "None provided"}
+
+Email Requirements:
+{email_instructions}
+
+IMPORTANT:
+- Use HTML format for the email body with proper paragraph tags (<p>), line breaks (<br>), and formatting
+- Do NOT include links unless they are absolutely necessary for the email purpose
+- If you must include a link, use a placeholder like "your website" or "contact us" instead of actual URLs
+- Format the email body as clean HTML with proper structure
+- Keep paragraphs concise and well-formatted
+
+Return a JSON object with:
+- "subject": Email subject line (engaging and personalized, no HTML)
+- "body": Email body in HTML format with proper tags (<p>, <br>, etc.) but NO links unless absolutely necessary
+"""
+        
+        # Initialize OpenAI client
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+        
+        openai_client = openai.OpenAI(api_key=openai_api_key)
+        
+        # Generate email
+        response = openai_client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an expert email marketer. Always respond with valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=800
+        )
+        
+        try:
+            email_data = json.loads(response.choices[0].message.content)
+            subject = email_data.get("subject", f"Thank you for your interest in {business_name}")
+            body = email_data.get("body", f"Thank you {lead_name} for your interest!")
+        except json.JSONDecodeError:
+            # Fallback if JSON parsing fails
+            content = response.choices[0].message.content
+            subject = f"Thank you for your interest in {business_name}"
+            body = content
+        
+        return {
+            "success": True,
+            "subject": subject,
+            "body": body,
+            "lead_name": lead_name,
+            "lead_email": lead_email
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating email: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk-delete")
+async def bulk_delete_leads(
+    request: BulkDeleteRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete multiple leads"""
+    try:
+        if not request.lead_ids or len(request.lead_ids) == 0:
+            raise HTTPException(status_code=400, detail="No lead IDs provided")
+        
+        success_count = 0
+        failed_count = 0
+        failed_ids = []
+        
+        for lead_id in request.lead_ids:
+            try:
+                # Verify lead belongs to user
+                lead = supabase_admin.table("leads").select("*").eq("id", lead_id).eq("user_id", current_user["id"]).execute()
+                if not lead.data:
+                    failed_count += 1
+                    failed_ids.append(lead_id)
+                    continue
+                
+                # Delete associated data
+                supabase_admin.table("lead_status_history").delete().eq("lead_id", lead_id).execute()
+                supabase_admin.table("lead_conversations").delete().eq("lead_id", lead_id).execute()
+                
+                # Delete the lead
+                result = supabase_admin.table("leads").delete().eq("id", lead_id).execute()
+                
+                if result.data:
+                    success_count += 1
+                else:
+                    failed_count += 1
+                    failed_ids.append(lead_id)
+                    
+            except Exception as e:
+                logger.error(f"Error deleting lead {lead_id}: {e}")
+                failed_count += 1
+                failed_ids.append(lead_id)
+        
+        return {
+            "success": True,
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "failed_ids": failed_ids,
+            "message": f"Deleted {success_count} lead(s), {failed_count} failed"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in bulk delete: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 

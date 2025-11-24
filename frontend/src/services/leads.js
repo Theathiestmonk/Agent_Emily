@@ -66,6 +66,21 @@ export const leadsAPI = {
   },
 
   /**
+   * Get conversations (alias for getLeadConversations for consistency)
+   * @param {string} leadId - Lead ID
+   * @param {Object} params - Query parameters
+   * @returns {Promise} API response with conversations array
+   */
+  getConversations: (leadId, params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.message_type) queryParams.append('message_type', params.message_type)
+    if (params.limit) queryParams.append('limit', params.limit)
+    
+    const queryString = queryParams.toString()
+    return api.get(`/leads/${leadId}/conversations${queryString ? `?${queryString}` : ''}`)
+  },
+
+  /**
    * Get status history for a lead
    * @param {string} leadId - Lead ID
    * @returns {Promise} API response with status history array
@@ -158,6 +173,42 @@ export const leadsAPI = {
    */
   connectWhatsApp: (connectionData) => {
     return api.post('/leads/whatsapp/connect', connectionData)
+  },
+
+  /**
+   * Get available email templates
+   * @returns {Promise} API response with templates array
+   */
+  getEmailTemplates: () => {
+    return api.get('/leads/email-templates')
+  },
+
+  /**
+   * Generate personalized email for a lead
+   * @param {string} leadId - Lead ID
+   * @param {Object} options - Generation options
+   * @param {string} options.template - Template type (welcome, follow-up, inquiry, custom)
+   * @param {string} options.customTemplate - Custom template text when template is "custom"
+   * @returns {Promise} API response with generated email (subject, body)
+   */
+  generateEmail: (leadId, options = {}) => {
+    return api.post(`/leads/${leadId}/generate-email`, {
+      template: options.template || 'welcome',
+      category: options.category || 'general',
+      custom_template: options.customTemplate || null,
+      custom_prompt: options.customPrompt || null
+    })
+  },
+
+  /**
+   * Bulk delete multiple leads
+   * @param {string[]} leadIds - Array of lead IDs to delete
+   * @returns {Promise} API response with deletion results
+   */
+  bulkDeleteLeads: (leadIds) => {
+    return api.post('/leads/bulk-delete', {
+      lead_ids: leadIds
+    })
   }
 }
 

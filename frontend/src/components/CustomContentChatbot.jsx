@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+  import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Upload, Image, Video, Loader2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useAuth } from '../contexts/AuthContext';

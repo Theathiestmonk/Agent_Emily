@@ -22,7 +22,8 @@ import {
   XCircle,
   AlertCircle,
   Facebook,
-  Instagram
+  Instagram,
+  X
 } from 'lucide-react'
 
 const LeadsDashboard = () => {
@@ -50,6 +51,9 @@ const LeadsDashboard = () => {
   })
   const [lastFetchTime, setLastFetchTime] = useState(null)
   const [pollingInterval, setPollingInterval] = useState(null)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedLeadIds, setSelectedLeadIds] = useState(new Set())
+  const [deletingBulk, setDeletingBulk] = useState(false)
 
   const fetchLeads = useCallback(async (showLoading = true) => {
     try {
@@ -174,9 +178,83 @@ const LeadsDashboard = () => {
         setShowDetailModal(false)
         setSelectedLead(null)
       }
+      // Remove from selection if in selection mode
+      if (selectionMode) {
+        setSelectedLeadIds(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(lead.id)
+          return newSet
+        })
+      }
     } catch (error) {
       console.error('Error deleting lead:', error)
       showError('Error', 'Failed to delete lead')
+    }
+  }
+
+  const handleToggleSelectionMode = () => {
+    setSelectionMode(!selectionMode)
+    if (selectionMode) {
+      setSelectedLeadIds(new Set())
+    }
+  }
+
+  const handleSelectLead = (leadId, isSelected) => {
+    setSelectedLeadIds(prev => {
+      const newSet = new Set(prev)
+      if (isSelected) {
+        newSet.add(leadId)
+      } else {
+        newSet.delete(leadId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = () => {
+    if (selectedLeadIds.size === filteredLeads.length) {
+      setSelectedLeadIds(new Set())
+    } else {
+      setSelectedLeadIds(new Set(filteredLeads.map(lead => lead.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedLeadIds.size === 0) {
+      showError('Error', 'No leads selected')
+      return
+    }
+
+    if (!window.confirm(`Are you sure you want to delete ${selectedLeadIds.size} lead(s)? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      setDeletingBulk(true)
+      const leadIdsArray = Array.from(selectedLeadIds)
+      const result = await leadsAPI.bulkDeleteLeads(leadIdsArray)
+      
+      if (result.data.success) {
+        showSuccess(
+          'Leads Deleted',
+          `Successfully deleted ${result.data.success_count} lead(s)${result.data.failed_count > 0 ? `. ${result.data.failed_count} failed.` : ''}`
+        )
+        // Refresh leads list
+        await fetchLeads(false)
+        // Clear selection
+        setSelectedLeadIds(new Set())
+        // Exit selection mode if all selected leads are deleted
+        if (result.data.failed_count === 0) {
+          setSelectionMode(false)
+        }
+      } else {
+        showError('Error', 'Failed to delete some leads')
+      }
+    } catch (error) {
+      console.error('Error bulk deleting leads:', error)
+      showError('Error', 'Failed to delete leads')
+    } finally {
+      setDeletingBulk(false)
     }
   }
 
@@ -508,21 +586,64 @@ const LeadsDashboard = () => {
 
               {/* Action Buttons */}
               <div className="flex items-center space-x-2 flex-shrink-0">
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>Add Lead</span>
-                </button>
-                <button
-                  onClick={handleRefresh}
-                  disabled={loading}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition-all duration-200 disabled:opacity-50 shadow-lg hover:shadow-xl"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                  <span>Refresh</span>
-                </button>
+                {selectionMode && (
+                  <>
+                    <button
+                      onClick={handleSelectAll}
+                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      <span>{selectedLeadIds.size === filteredLeads.length ? 'Deselect All' : 'Select All'}</span>
+                    </button>
+                    {selectedLeadIds.size > 0 && (
+                      <button
+                        onClick={handleBulkDelete}
+                        disabled={deletingBulk}
+                        className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 disabled:opacity-50 shadow-lg hover:shadow-xl"
+                      >
+                        {deletingBulk ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <XCircle className="w-4 h-4" />
+                        )}
+                        <span>Delete ({selectedLeadIds.size})</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={handleToggleSelectionMode}
+                      className="flex items-center space-x-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-all duration-200 shadow-lg hover:shadow-xl"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>Cancel</span>
+                    </button>
+                  </>
+                )}
+                {!selectionMode && (
+                  <>
+                    <button
+                      onClick={handleToggleSelectionMode}
+                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-purple-600 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Select</span>
+                    </button>
+                    <button
+                      onClick={() => setShowAddModal(true)}
+                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Add Lead</span>
+                    </button>
+                    <button
+                      onClick={handleRefresh}
+                      disabled={loading}
+                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition-all duration-200 disabled:opacity-50 shadow-lg hover:shadow-xl"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -583,6 +704,9 @@ const LeadsDashboard = () => {
                               lead={lead}
                               onClick={handleLeadClick}
                               onDelete={handleDeleteLead}
+                              isSelected={selectedLeadIds.has(lead.id)}
+                              onSelect={handleSelectLead}
+                              selectionMode={selectionMode}
                             />
                           ))
                         )}
