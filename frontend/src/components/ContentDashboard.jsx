@@ -359,6 +359,13 @@ const ContentDashboard = () => {
           return
         }
         
+        // Check if backend is already publishing this post (prevent duplicate publishing)
+        const isPublishing = content.metadata?._publishing === true
+        if (isPublishing) {
+          console.log(`⏰ Skipping post ${postId} - backend is already publishing`)
+          return
+        }
+        
         const timeDiff = now - scheduledTime
 
         // Check if scheduled time has passed (with 10 minute window to catch late posts)
@@ -372,6 +379,25 @@ const ContentDashboard = () => {
       // Publish each post that's ready
       for (const content of postsToPublish) {
         try {
+          // Query database for fresh status before publishing (prevent duplicate publishing)
+          const freshStatus = await fetchPostStatusFromDB(content.id)
+          if (freshStatus === 'published') {
+            console.log(`⏰ Skipping post ${content.id} - already published in database`)
+            publishedPosts.add(content.id)
+            scheduledPostsCache.delete(content.id)
+            continue
+          }
+          
+          // Double-check publishing flag from fresh data
+          if (freshStatus === null) {
+            // If we can't fetch status, check the content metadata again
+            const isPublishing = content.metadata?._publishing === true
+            if (isPublishing) {
+              console.log(`⏰ Skipping post ${content.id} - backend is publishing (from metadata)`)
+              continue
+            }
+          }
+          
           console.log(`⏰ Auto-publishing scheduled post ${content.id} (scheduled for ${content.scheduled_at})`)
           await handlePostContent(content)
           // Remove from cache after successful publishing
@@ -1138,6 +1164,29 @@ const ContentDashboard = () => {
     })
   }
 
+  // Fetch fresh post status from database
+  const fetchPostStatusFromDB = async (postId) => {
+    try {
+      const authToken = await getAuthToken()
+      const response = await fetch(`${API_BASE_URL}/content/all`, {
+        headers: { 
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const post = data.content?.find(p => p.id === postId)
+        if (post) {
+          return post.status?.toLowerCase()
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching post status from database:', error)
+    }
+    return null
+  }
+
   // Remove the early return for loading - we'll handle it in the main content area
 
   const handlePostContent = async (content) => {
@@ -1149,10 +1198,26 @@ const ContentDashboard = () => {
         return
       }
       
-      // Check if already published
+      // Check if backend is already publishing this post (prevent duplicate publishing)
+      const isPublishing = content.metadata?._publishing === true
+      if (isPublishing) {
+        console.log('⚠️ Backend is already publishing this post, skipping duplicate request')
+        showError('Post Being Published', 'This post is currently being published by the system. Please wait a moment and refresh the page.')
+        return
+      }
+      
+      // Query database for fresh status before publishing
+      const freshStatus = await fetchPostStatusFromDB(content.id)
+      if (freshStatus === 'published') {
+        console.log('⚠️ Post is already published in database, skipping duplicate request')
+        showError('Post Already Published', 'This post has already been published. Please refresh the page to see the latest status.')
+        return
+      }
+      
+      // Check if already published (from cache)
       const status = content.status?.toLowerCase()
       if (status === 'published') {
-        console.log('⚠️ Post is already published, skipping duplicate request')
+        console.log('⚠️ Post is already published (from cache), skipping duplicate request')
         showError('Post Already Published', 'This post has already been published. Please refresh the page to see the latest status.')
         return
       }
@@ -1258,10 +1323,20 @@ const ContentDashboard = () => {
           : item
       ))
       
-      // Refresh content after successful publishing
-      setTimeout(() => {
+      // Wait longer for backend to update database, then verify status before final cache update
+      setTimeout(async () => {
+        // Verify status from database before final update
+        const freshStatus = await fetchPostStatusFromDB(content.id)
+        if (freshStatus === 'published') {
+          // Database confirms published status, ensure cache is updated
+          updateContentInCache(content.id, { 
+            status: 'published',
+            published_at: publishedAt,
+            facebook_post_id: result.post_id
+          })
+        }
         fetchAllContent()
-      }, 1500)
+      }, 3000) // Increased from 1500ms to 3000ms for better sync
       
     } catch (error) {
       console.error('Error posting to Facebook:', error)
@@ -1374,10 +1449,20 @@ const ContentDashboard = () => {
                 ? { ...item, status: 'published', published_at: publishedAt, instagram_post_id: result.post_id }
                 : item
             ))
-            // Refresh content after successful publishing
-            setTimeout(() => {
+            // Wait longer for backend to update database, then verify status before final cache update
+            setTimeout(async () => {
+              // Verify status from database before final update
+              const freshStatus = await fetchPostStatusFromDB(content.id)
+              if (freshStatus === 'published') {
+                // Database confirms published status, ensure cache is updated
+                updateContentInCache(content.id, { 
+                  status: 'published',
+                  published_at: publishedAt,
+                  instagram_post_id: result.post_id
+                })
+              }
               fetchAllContent()
-            }, 1500)
+            }, 3000) // Increased from 1500ms to 3000ms for better sync
             return
           } else {
             const errorText = await response.text()
@@ -1527,10 +1612,20 @@ const ContentDashboard = () => {
             : item
         ))
         
-        // Refresh content after successful publishing
-        setTimeout(() => {
+        // Wait longer for backend to update database, then verify status before final cache update
+        setTimeout(async () => {
+          // Verify status from database before final update
+          const freshStatus = await fetchPostStatusFromDB(content.id)
+          if (freshStatus === 'published') {
+            // Database confirms published status, ensure cache is updated
+            updateContentInCache(content.id, { 
+              status: 'published',
+              published_at: publishedAt,
+              linkedin_post_id: result.post_id || result.id
+            })
+          }
           fetchAllContent()
-        }, 1500)
+        }, 3000) // Increased from 1500ms to 3000ms for better sync
         
         // Show beautiful notification with post URL if available
         showPostNotification('LinkedIn', result.post_url || result.url)

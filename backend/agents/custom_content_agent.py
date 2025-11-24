@@ -1516,6 +1516,9 @@ class CustomContentAgent:
                 scheduled_for = state.get("scheduled_for")
                 if scheduled_for:
                     scheduled_datetime = datetime.fromisoformat(scheduled_for.replace('Z', '+00:00'))
+                    # Remove timezone info for comparison with timezone-naive datetime.now()
+                    if scheduled_datetime.tzinfo:
+                        scheduled_datetime = scheduled_datetime.replace(tzinfo=None)
                     status = "scheduled" if scheduled_datetime > datetime.now() else "draft"
                 else:
                     scheduled_datetime = datetime.now()
@@ -1553,6 +1556,19 @@ class CustomContentAgent:
                 # Use first image as primary for preview
                 if all_carousel_images:
                     post_data["primary_image_url"] = all_carousel_images[0]
+                
+                # Validate status matches scheduled time
+                now = datetime.now()
+                if scheduled_datetime > now:
+                    if status != "scheduled":
+                        logger.warning(f"Status mismatch: scheduled_datetime is in future but status is '{status}'. Correcting to 'scheduled'.")
+                        status = "scheduled"
+                        post_data["status"] = "scheduled"
+                else:
+                    if status != "draft":
+                        logger.warning(f"Status mismatch: scheduled_datetime is not in future but status is '{status}'. Correcting to 'draft'.")
+                        status = "draft"
+                        post_data["status"] = "draft"
                 
                 # Save to Supabase
                 logger.info(f"Saving carousel post to database: {post_data}")
@@ -1607,9 +1623,11 @@ class CustomContentAgent:
                             logger.error(f"Failed to save carousel image {idx + 1} to content_images: {e}")
                             # Continue even if one image save fails
                     
+                    # Determine status text for message
+                    status_text = "scheduled" if status == "scheduled" else "draft"
                     message = {
                         "role": "assistant",
-                        "content": f"🎉 Perfect! Your carousel post with {len(all_carousel_images)} image(s) for {platform} has been saved as a draft post! 📝\n\n✅ Content generated and optimized\n✅ {len(all_carousel_images)} image(s) saved\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard.",
+                        "content": f"🎉 Perfect! Your carousel post with {len(all_carousel_images)} image(s) for {platform} has been saved as a {status_text} post! 📝\n\n✅ Content generated and optimized\n✅ {len(all_carousel_images)} image(s) saved\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard.",
                         "timestamp": datetime.now().isoformat()
                     }
                     state["conversation_messages"].append(message)
@@ -1670,6 +1688,9 @@ class CustomContentAgent:
             if scheduled_for:
                 # Parse the scheduled time
                 scheduled_datetime = datetime.fromisoformat(scheduled_for.replace('Z', '+00:00'))
+                # Remove timezone info for comparison with timezone-naive datetime.now()
+                if scheduled_datetime.tzinfo:
+                    scheduled_datetime = scheduled_datetime.replace(tzinfo=None)
                 status = "scheduled" if scheduled_datetime > datetime.now() else "draft"
             else:
                 scheduled_datetime = datetime.now()
@@ -1733,6 +1754,19 @@ class CustomContentAgent:
                 post_data["primary_image_prompt"] = image_prompt
                 post_data["primary_image_approved"] = True  # User uploads/generated images in custom content are auto-approved
             
+            # Validate status matches scheduled time
+            now = datetime.now()
+            if scheduled_datetime > now:
+                if status != "scheduled":
+                    logger.warning(f"Status mismatch: scheduled_datetime is in future but status is '{status}'. Correcting to 'scheduled'.")
+                    status = "scheduled"
+                    post_data["status"] = "scheduled"
+            else:
+                if status != "draft":
+                    logger.warning(f"Status mismatch: scheduled_datetime is not in future but status is '{status}'. Correcting to 'draft'.")
+                    status = "draft"
+                    post_data["status"] = "draft"
+            
             # Save to Supabase
             logger.info(f"Saving post to database: {post_data}")
             result = self.supabase.table("content_posts").insert(post_data).execute()
@@ -1767,9 +1801,12 @@ class CustomContentAgent:
                 # Determine if image was uploaded or generated
                 image_source = "generated" if generated_media_url else "uploaded"
                 
+                # Determine status text for message
+                status_text = "scheduled" if status == "scheduled" else "draft"
+                
                 message = {
                     "role": "assistant",
-                    "content": f"🎉 Perfect! Your {content_type} for {platform} has been saved as a draft post! 📝\n\n✅ Content generated and optimized\n✅ Image {image_source} and saved to storage\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard. The post includes your {image_source} image and is ready to go!",
+                    "content": f"🎉 Perfect! Your {content_type} for {platform} has been saved as a {status_text} post! 📝\n\n✅ Content generated and optimized\n✅ Image {image_source} and saved to storage\n✅ Post saved to your dashboard\n\nYou can now review, edit, or schedule this post from your content dashboard. The post includes your {image_source} image and is ready to go!",
                     "timestamp": datetime.now().isoformat()
                 }
                 state["conversation_messages"].append(message)
