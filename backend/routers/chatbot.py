@@ -385,16 +385,16 @@ async def get_conversations(
             query = supabase_client.table("chatbot_conversations").select("*").eq("user_id", user_id)
             
             if not all:
-                # Get today's date
-                today = date.today()
-                today_start = datetime.combine(today, datetime.min.time())
-                today_end = datetime.combine(today, datetime.max.time())
+                # Get today's date in UTC
+                today_utc = datetime.now(timezone.utc).date()
+                today_start = datetime.combine(today_utc, datetime.min.time()).replace(tzinfo=timezone.utc)
+                today_end = datetime.combine(today_utc, datetime.max.time()).replace(tzinfo=timezone.utc)
                 
                 # Format as ISO strings for Supabase query
                 today_start_str = today_start.isoformat()
                 today_end_str = today_end.isoformat()
                 
-                logger.info(f"Date range: {today_start_str} to {today_end_str}")
+                logger.info(f"Date range (UTC): {today_start_str} to {today_end_str}")
                 query = query.gte("created_at", today_start_str).lt("created_at", today_end_str)
             
             response = query.order("created_at", desc=False).execute()

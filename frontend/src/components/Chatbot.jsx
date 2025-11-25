@@ -9,7 +9,7 @@ import remarkGfm from 'remark-gfm'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 
-const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 'idle', onSpeakingChange }, ref) => {
+const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 'idle', onSpeakingChange, messageFilter = 'all' }, ref) => {
   const { user } = useAuth()
   const { showError, showSuccess } = useNotifications()
   const navigate = useNavigate()
@@ -18,6 +18,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [expandedMessages, setExpandedMessages] = useState(new Set())
+  const [expandedEmailBoxes, setExpandedEmailBoxes] = useState(new Set())
   const [hoveredMessageId, setHoveredMessageId] = useState(null)
   const [replyingToMessage, setReplyingToMessage] = useState(null)
   const messagesEndRef = useRef(null)
@@ -28,6 +29,8 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   const isListeningRef = useRef(false)
   const currentAudioRef = useRef(null)
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const inputRecognitionRef = useRef(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -243,6 +246,87 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     }
   }, [profile?.id, user?.id]) // Reload when profile or user changes
 
+  // Subscribe to new chatbot messages via Supabase realtime
+  useEffect(() => {
+    if (!user?.id) return
+
+    const channel = supabase
+      .channel('chatbot_conversations')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chatbot_conversations',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          const newMessage = payload.new
+          const metadata = newMessage.metadata || {}
+          const isChase = metadata.sender === 'chase'
+          
+          // Only add if it's a new message (not already in messages)
+          setMessages(prev => {
+            // Check if message already exists
+            const exists = prev.some(msg => 
+              msg.conversationId === newMessage.id || 
+              (msg.id && msg.id === `conv-${newMessage.id}`)
+            )
+            
+            if (exists) return prev
+            
+            // Add new message
+            const messageObj = {
+              id: `conv-${newMessage.id}`,
+              conversationId: newMessage.id,
+              type: newMessage.message_type === 'user' ? 'user' : 'bot',
+              content: newMessage.content,
+              timestamp: newMessage.created_at,
+              isNew: true,
+              scheduledMessageId: metadata.scheduled_message_id || null,
+              isChase: isChase,
+              chaseMetadata: isChase ? {
+                leadId: metadata.lead_id,
+                leadName: metadata.lead_name,
+                emailContent: metadata.email_content,
+                emailSubject: metadata.email_subject
+              } : null
+            }
+            
+            // Remove isNew flag after animation
+            setTimeout(() => {
+              setMessages(current => current.map(msg => 
+                msg.id === messageObj.id && msg.isNew
+                  ? { ...msg, isNew: false }
+                  : msg
+              ))
+            }, 400)
+            
+            return [...prev, messageObj]
+          })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user?.id])
+
+  // Cleanup input recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (inputRecognitionRef.current) {
+        try {
+          inputRecognitionRef.current.stop()
+        } catch (e) {
+          // Ignore errors on cleanup
+        }
+        inputRecognitionRef.current = null
+      }
+    }
+  }, [])
+
   const loadTodayConversations = async () => {
     // Prevent concurrent loads
     if (isLoadingConversationsRef.current) {
@@ -284,15 +368,30 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       if (data.success && data.conversations) {
         if (data.conversations.length > 0) {
           // Convert conversations to message format
-          const conversationMessages = data.conversations.map(conv => ({
-            id: `conv-${conv.id}`,
-            conversationId: conv.id, // Store Supabase ID for deletion
-            type: conv.message_type === 'user' ? 'user' : 'bot',
-            content: conv.content,
-            timestamp: conv.created_at,
-            isNew: false,
-            scheduledMessageId: conv.metadata?.scheduled_message_id || null
-          }))
+          const conversationMessages = data.conversations.map(conv => {
+            const metadata = conv.metadata || {}
+            const isChase = metadata.sender === 'chase'
+            const isLeo = metadata.sender === 'leo'
+            const isEmily = conv.message_type === 'bot' && !isChase && !isLeo
+            return {
+              id: `conv-${conv.id}`,
+              conversationId: conv.id, // Store Supabase ID for deletion
+              type: conv.message_type === 'user' ? 'user' : 'bot',
+              content: conv.content,
+              timestamp: conv.created_at,
+              isNew: false,
+              scheduledMessageId: metadata.scheduled_message_id || null,
+              isChase: isChase,
+              isLeo: isLeo,
+              isEmily: isEmily,
+              chaseMetadata: isChase ? {
+                leadId: metadata.lead_id,
+                leadName: metadata.lead_name,
+                emailContent: metadata.email_content,
+                emailSubject: metadata.email_subject
+              } : null
+            }
+          })
           
           // Remove duplicates based on scheduled_message_id
           const seenScheduledIds = new Set()
@@ -633,14 +732,29 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       }
       
       // Convert scheduled messages to message format
-      const scheduledMessageObjects = newScheduledMessages.map(scheduledMsg => ({
-        id: `scheduled-${scheduledMsg.id}`,
-        type: 'bot',
-        content: scheduledMsg.content,
-        timestamp: scheduledMsg.scheduled_time || new Date().toISOString(),
-        isNew: true,
-        scheduledMessageId: scheduledMsg.id
-      }))
+      const scheduledMessageObjects = newScheduledMessages.map(scheduledMsg => {
+        const metadata = scheduledMsg.metadata || {}
+        const isChase = metadata.sender === 'chase'
+        const isLeo = metadata.sender === 'leo'
+        const isEmily = !isChase && !isLeo
+        return {
+          id: `scheduled-${scheduledMsg.id}`,
+          type: 'bot',
+          content: scheduledMsg.content,
+          timestamp: scheduledMsg.scheduled_time || new Date().toISOString(),
+          isNew: true,
+          scheduledMessageId: scheduledMsg.id,
+          isChase: isChase,
+          isLeo: isLeo,
+          isEmily: isEmily,
+          chaseMetadata: isChase ? {
+            leadId: metadata.lead_id,
+            leadName: metadata.lead_name,
+            emailContent: metadata.email_content,
+            emailSubject: metadata.email_subject
+          } : null
+        }
+      })
       
       // Merge with existing messages
       const allMessages = [...prev, ...scheduledMessageObjects]
@@ -750,6 +864,91 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     inputRef.current?.focus()
   }
 
+  const handleMicClick = () => {
+    if (isListening) {
+      // Stop listening
+      if (inputRecognitionRef.current) {
+        inputRecognitionRef.current.stop()
+        setIsListening(false)
+      }
+      return
+    }
+
+    // Check if browser supports speech recognition
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      showError('Speech recognition not supported', 'Your browser does not support speech recognition. Please use Chrome, Edge, or Safari.')
+      return
+    }
+
+    // Initialize speech recognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    const recognition = new SpeechRecognition()
+    recognition.continuous = false
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+
+    recognition.onstart = () => {
+      setIsListening(true)
+    }
+
+    recognition.onresult = (event) => {
+      let interimTranscript = ''
+      let finalTranscript = ''
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' '
+        } else {
+          interimTranscript += transcript
+        }
+      }
+
+      // Update input with interim results
+      if (interimTranscript) {
+        setInputMessage(finalTranscript + interimTranscript)
+      }
+
+      // If we have final results, send the message
+      if (finalTranscript.trim()) {
+        setInputMessage(finalTranscript.trim())
+        recognition.stop()
+        setIsListening(false)
+        // Send the message after a short delay
+        setTimeout(() => {
+          sendMessage(finalTranscript.trim())
+        }, 100)
+      }
+    }
+
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error)
+      setIsListening(false)
+      
+      if (event.error === 'not-allowed') {
+        showError('Microphone permission denied', 'Please allow microphone access to use speech-to-text.')
+      } else if (event.error === 'no-speech') {
+        showError('No speech detected', 'Please try speaking again.')
+      } else {
+        showError('Speech recognition error', event.error)
+      }
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+    }
+
+    inputRecognitionRef.current = recognition
+    
+    try {
+      recognition.start()
+    } catch (error) {
+      console.error('Error starting recognition:', error)
+      showError('Failed to start speech recognition', error.message)
+      setIsListening(false)
+    }
+  }
+
   const handleDeleteMessage = async (message) => {
     if (!message.conversationId) {
       // If it's a local message (not saved to Supabase), just remove from UI
@@ -851,10 +1050,18 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   }))
 
   return (
-    <div className="flex flex-col" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div className="flex flex-col bg-gray-50" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Messages */}
-      <div className="flex-1 p-4 space-y-2 messages-container" style={{ overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
-        {messages.map((message) => (
+      <div className="flex-1 p-4 space-y-4 messages-container" style={{ overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+        {messages
+          .filter(message => {
+            if (messageFilter === 'all') return true
+            if (messageFilter === 'emily') return message.isEmily
+            if (messageFilter === 'chase') return message.isChase
+            if (messageFilter === 'leo') return message.isLeo
+            return true
+          })
+          .map((message) => (
           <div
             key={message.id}
             className={`flex flex-col ${message.type === 'user' ? 'items-end' : 'items-start'} w-full px-4 ${message.isNew ? 'animate-slide-in' : ''}`}
@@ -875,8 +1082,14 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                     </div>
                   )
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center shadow-md">
-                    <span className="text-white font-bold text-sm">E</span>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-md ${
+                    message.isChase 
+                      ? 'bg-gradient-to-br from-blue-400 to-blue-600' 
+                      : 'bg-gradient-to-br from-pink-400 to-purple-500'
+                  }`}>
+                    <span className="text-white font-bold text-sm">
+                      {message.isChase ? 'C' : message.isLeo ? 'L' : 'E'}
+                    </span>
                   </div>
                 )}
               </div>
@@ -890,6 +1103,14 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                 onMouseEnter={() => setHoveredMessageId(message.id)}
                 onMouseLeave={() => setHoveredMessageId(null)}
               >
+                {/* Agent Name - Only show for bot messages, inside bubble at top */}
+                {message.type === 'bot' && (
+                  <div className="mb-2">
+                    <span className="text-xs font-medium text-purple-600">
+                      {message.isChase ? 'Chase' : message.isLeo ? 'Leo' : 'Emily'}
+                    </span>
+                  </div>
+                )}
                 {/* Hover Actions */}
                 {hoveredMessageId === message.id && (
                   <div className={`absolute ${message.type === 'user' ? 'left-0 -left-24' : 'right-0 -right-24'} top-0 flex gap-1 bg-white rounded-lg shadow-lg border border-gray-200 p-1 z-10`}>
@@ -1018,6 +1239,48 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                         </div>
                       </div>
                     ) : null}
+                    
+                    {/* Email Content Box for Chase Messages */}
+                    {message.isChase && message.chaseMetadata && message.chaseMetadata.emailContent && (
+                      <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => {
+                            setExpandedEmailBoxes(prev => {
+                              const newSet = new Set(prev)
+                              if (newSet.has(message.id)) {
+                                newSet.delete(message.id)
+                              } else {
+                                newSet.add(message.id)
+                              }
+                              return newSet
+                            })
+                          }}
+                          className="w-full px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-left flex items-center justify-between"
+                        >
+                          <div className="flex-1">
+                            <div className="text-xs font-semibold text-gray-700 mb-1">
+                              {message.chaseMetadata.emailSubject || 'Email Content'}
+                            </div>
+                            {!expandedEmailBoxes.has(message.id) && (
+                              <div className="text-xs text-gray-500 line-clamp-3">
+                                {message.chaseMetadata.emailContent.replace(/<[^>]*>/g, '').substring(0, 150)}...
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-500 ml-2">
+                            {expandedEmailBoxes.has(message.id) ? '▼' : '▶'}
+                          </span>
+                        </button>
+                        {expandedEmailBoxes.has(message.id) && (
+                          <div className="px-3 py-2 bg-white border-t border-gray-200">
+                            <div 
+                              className="text-xs text-gray-700 prose prose-sm max-w-none"
+                              dangerouslySetInnerHTML={{ __html: message.chaseMetadata.emailContent }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : message.isStreaming ? (
                   <div className="flex items-center space-x-1">
@@ -1107,6 +1370,48 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                         </div>
                       </div>
                     ) : null}
+                    
+                    {/* Email Content Box for Chase Messages */}
+                    {message.isChase && message.chaseMetadata && message.chaseMetadata.emailContent && (
+                      <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => {
+                            setExpandedEmailBoxes(prev => {
+                              const newSet = new Set(prev)
+                              if (newSet.has(message.id)) {
+                                newSet.delete(message.id)
+                              } else {
+                                newSet.add(message.id)
+                              }
+                              return newSet
+                            })
+                          }}
+                          className="w-full px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-left flex items-center justify-between"
+                        >
+                          <div className="flex-1">
+                            <div className="text-xs font-semibold text-gray-700 mb-1">
+                              {message.chaseMetadata.emailSubject || 'Email Content'}
+                            </div>
+                            {!expandedEmailBoxes.has(message.id) && (
+                              <div className="text-xs text-gray-500 line-clamp-3">
+                                {message.chaseMetadata.emailContent.replace(/<[^>]*>/g, '').substring(0, 150)}...
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-500 ml-2">
+                            {expandedEmailBoxes.has(message.id) ? '▼' : '▶'}
+                          </span>
+                        </button>
+                        {expandedEmailBoxes.has(message.id) && (
+                          <div className="px-3 py-2 bg-white border-t border-gray-200">
+                            <div 
+                              className="text-xs text-gray-700 prose prose-sm max-w-none"
+                              dangerouslySetInnerHTML={{ __html: message.chaseMetadata.emailContent }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1185,13 +1490,29 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
               />
             </div>
             <div className="absolute right-3 bottom-3 flex items-center space-x-2">
-              <button className="p-2 text-purple-500 hover:text-purple-700 transition-colors">
+              <button 
+                onClick={handleMicClick}
+                disabled={isLoading || isStreaming}
+                className={`p-2 transition-colors ${
+                  isListening 
+                    ? 'text-red-500 hover:text-red-700 animate-pulse' 
+                    : 'text-purple-500 hover:text-purple-700'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                title={isListening ? 'Stop listening' : 'Start voice input'}
+              >
                 <Mic className="w-5 h-5" />
               </button>
               <button
-                onClick={sendMessage}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (inputMessage.trim() && !isLoading && !isStreaming) {
+                    sendMessage()
+                  }
+                }}
                 disabled={!inputMessage.trim() || isLoading || isStreaming}
                 className="p-2 text-purple-500 hover:text-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                type="button"
               >
                 <Send className="w-5 h-5" />
               </button>
@@ -1254,6 +1575,13 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         
         .chatbot-bubble-shadow {
           box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .line-clamp-3 {
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
       `}</style>
     </div>

@@ -643,6 +643,55 @@ Return a JSON object with:
                                 }).execute()
                                 
                                 logger.info(f"Welcome email sent to lead {lead_id} and status updated to contacted")
+                                
+                                # Create chatbot message from Chase
+                                try:
+                                    # Get business name from profile
+                                    business_name = profile_data.get("business_name", "your business")
+                                    
+                                    # Get user's timezone from profile, default to UTC
+                                    user_timezone_str = profile_data.get("timezone", "UTC")
+                                    
+                                    # Format date and time in user's timezone
+                                    now_utc = datetime.now(timezone.utc)
+                                    
+                                    # Convert to user's timezone for display
+                                    try:
+                                        import pytz
+                                        user_tz = pytz.timezone(user_timezone_str)
+                                        now_user_tz = now_utc.astimezone(user_tz)
+                                        date_time_str = now_user_tz.strftime("%B %d, %Y at %I:%M %p")
+                                    except Exception:
+                                        # If timezone conversion fails, use UTC
+                                        date_time_str = now_utc.strftime("%B %d, %Y at %I:%M %p")
+                                    
+                                    # Create message content
+                                    message_content = f"Dear {business_name}, you just received a new lead: **{request.name}** on {date_time_str}.\n\nI have contacted the lead and sent an Email for now."
+                                    
+                                    # Create chatbot conversation message
+                                    # Use UTC timezone to match database storage
+                                    chatbot_message_data = {
+                                        "user_id": current_user["id"],
+                                        "message_type": "bot",
+                                        "content": message_content,
+                                        "intent": "lead_notification",
+                                        "created_at": now_utc.isoformat(),
+                                        "metadata": {
+                                            "sender": "chase",
+                                            "lead_id": lead_id,
+                                            "lead_name": request.name,
+                                            "email_content": email_body,
+                                            "email_subject": email_subject,
+                                            "notification_type": "new_lead_email_sent"
+                                        }
+                                    }
+                                    
+                                    supabase_admin.table("chatbot_conversations").insert(chatbot_message_data).execute()
+                                    logger.info(f"Created Chase notification message for lead {lead_id}")
+                                except Exception as chatbot_msg_error:
+                                    logger.error(f"Error creating chatbot message: {chatbot_msg_error}")
+                                    # Don't fail lead creation if chatbot message fails
+                                
                         except Exception as email_error:
                             logger.error(f"Error sending welcome email: {email_error}")
                             # Don't fail lead creation if email fails

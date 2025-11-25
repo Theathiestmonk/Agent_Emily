@@ -3556,36 +3556,66 @@ const ContentDashboard = () => {
                 </div>
                 
                 {/* Emily Message Bubble - After Content Cards */}
-                {!fetchingContent && filteredContent.length > 0 && (
+                {!fetchingContent && selectedChannel && (
                   <div className="flex justify-start w-full mt-6">
                     <div className="flex items-start gap-2 max-w-[50%]">
                       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
                         <span className="text-white font-bold text-sm">E</span>
                       </div>
                       <div className="bg-white rounded-lg px-4 py-3 shadow-md" style={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.15)' }}>
-                        <p className="text-sm text-black mb-3">
-                          Want to create more inspiring content ?
-                        </p>
-                        <div className="flex flex-col gap-2">
-                          <div className="text-sm text-black">
-                            Leo can help you craft personalised post for you{' '}
-                            <span
-                              onClick={() => setShowCustomContentChatbot(true)}
-                              className="text-blue-600 hover:text-blue-700 cursor-pointer hover:underline"
-                            >
-                              Talk to Leo
-                            </span>
-                          </div>
-                          <div className="text-sm text-black">
-                            I can generate fresh ideas beyond what you've already approved :{' '}
-                            <span
-                              onClick={handleGenerateContent}
-                              className={`text-purple-600 hover:text-purple-700 cursor-pointer hover:underline ${generating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                              Let's do that
-                            </span>
-                          </div>
-                        </div>
+                        {filteredContent.length > 0 ? (
+                          <>
+                            <p className="text-sm text-black mb-3">
+                              Want to create more inspiring content ?
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              <div className="text-sm text-black">
+                                Leo can help you craft personalised post for you{' '}
+                                <span
+                                  onClick={() => setShowCustomContentChatbot(true)}
+                                  className="text-blue-600 hover:text-blue-700 cursor-pointer hover:underline"
+                                >
+                                  Talk to Leo
+                                </span>
+                              </div>
+                              <div className="text-sm text-black">
+                                I can generate fresh ideas beyond what you've already approved :{' '}
+                                <span
+                                  onClick={handleGenerateContent}
+                                  className={`text-purple-600 hover:text-purple-700 cursor-pointer hover:underline ${generating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                  Let's do that
+                                </span>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm text-black mb-3">
+                              Ready to create your first content?
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              <div className="text-sm text-black">
+                                Leo can help you craft personalised post for you{' '}
+                                <span
+                                  onClick={() => setShowCustomContentChatbot(true)}
+                                  className="text-blue-600 hover:text-blue-700 cursor-pointer hover:underline"
+                                >
+                                  Talk to Leo
+                                </span>
+                              </div>
+                              <div className="text-sm text-black">
+                                I can generate fresh content ideas for you :{' '}
+                                <span
+                                  onClick={handleGenerateContent}
+                                  className={`text-purple-600 hover:text-purple-700 cursor-pointer hover:underline ${generating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                  Let's do that
+                                </span>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

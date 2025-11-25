@@ -12,7 +12,7 @@ import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import Chatbot from './Chatbot'
 import RecentTasks from './RecentTasks'
-import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar, PanelRight, PanelLeft, X, ChevronRight, Video, Phone } from 'lucide-react'
+import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar, PanelRight, PanelLeft, X, ChevronRight, Video, Phone, ChevronDown } from 'lucide-react'
 
 // Voice Orb Component with animated border (spring-like animation)
 const VoiceOrb = ({ isSpeaking }) => {
@@ -156,6 +156,8 @@ function Dashboard() {
   const [isCallActive, setIsCallActive] = useState(false)
   const [callStatus, setCallStatus] = useState('idle') // 'idle', 'requesting', 'connecting', 'connected'
   const [isCallSpeaking, setIsCallSpeaking] = useState(false)
+  const [messageFilter, setMessageFilter] = useState('all') // 'all', 'emily', 'chase', 'leo'
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false)
 
   const handleCallClick = async () => {
     if (isCallActive) {
@@ -421,6 +423,17 @@ function Dashboard() {
     )
   }
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (filterDropdownOpen && !event.target.closest('.filter-dropdown-container')) {
+        setFilterDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [filterDropdownOpen])
+
   return (
     <div className="min-h-screen bg-white">
       {/* Mobile Navigation */}
@@ -441,8 +454,63 @@ function Dashboard() {
           <div className="px-4 lg:px-6 py-3 lg:py-4">
             <div className="flex justify-between items-center">
               <div className="hidden md:flex items-center gap-3">
-                <div className="text-sm lg:text-base text-gray-900">
-                  Discussions
+                <Users className="w-5 h-5 text-gray-600" />
+                <div className="relative filter-dropdown-container">
+                  <button
+                    onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors text-sm lg:text-base text-gray-900"
+                  >
+                    <span>Discussions</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${filterDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {filterDropdownOpen && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[160px]">
+                      <button
+                        onClick={() => {
+                          setMessageFilter('all')
+                          setFilterDropdownOpen(false)
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
+                          messageFilter === 'all' ? 'bg-gray-50 font-medium' : ''
+                        }`}
+                      >
+                        All Messages
+                      </button>
+                      <button
+                        onClick={() => {
+                          setMessageFilter('emily')
+                          setFilterDropdownOpen(false)
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
+                          messageFilter === 'emily' ? 'bg-gray-50 font-medium' : ''
+                        }`}
+                      >
+                        Emily
+                      </button>
+                      <button
+                        onClick={() => {
+                          setMessageFilter('chase')
+                          setFilterDropdownOpen(false)
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
+                          messageFilter === 'chase' ? 'bg-gray-50 font-medium' : ''
+                        }`}
+                      >
+                        Chase
+                      </button>
+                      <button
+                        onClick={() => {
+                          setMessageFilter('leo')
+                          setFilterDropdownOpen(false)
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
+                          messageFilter === 'leo' ? 'bg-gray-50 font-medium' : ''
+                        }`}
+                      >
+                        Leo
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <span className="text-gray-400">|</span>
                 <div className="text-sm lg:text-base text-gray-900">
@@ -496,12 +564,12 @@ function Dashboard() {
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex items-start px-4 lg:px-6" style={{ minHeight: 0, overflow: 'hidden' }}>
+        <div className="flex-1 flex items-start px-4 lg:px-6 bg-gray-50" style={{ minHeight: 0, overflow: 'hidden' }}>
             <div className="w-full h-full flex gap-2">
                 {/* Main Chat Area */}
               <div className={`flex-1 transition-all duration-300 ${isPanelOpen ? 'max-w-4xl' : 'max-w-5xl xl:max-w-6xl'} mx-auto h-full`}>
                 <div className="bg-transparent rounded-lg h-full relative">
-                  <Chatbot profile={profile} ref={chatbotRef} isCallActive={isCallActive} callStatus={callStatus} onSpeakingChange={setIsCallSpeaking} />
+                  <Chatbot profile={profile} ref={chatbotRef} isCallActive={isCallActive} callStatus={callStatus} onSpeakingChange={setIsCallSpeaking} messageFilter={messageFilter} />
                 </div>
               </div>
 
