@@ -997,6 +997,55 @@ async def get_leads(
         logger.error(f"Error getting leads: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/email-templates")
+async def get_email_templates(current_user: dict = Depends(get_current_user)):
+    """Get available email templates"""
+    templates = [
+        {
+            "id": "welcome",
+            "name": "Welcome Email",
+            "description": "A warm welcome email for new leads",
+            "category": "welcome"
+        },
+        {
+            "id": "follow-up",
+            "name": "Follow-up Email",
+            "description": "A follow-up email to re-engage leads",
+            "category": "follow-up"
+        },
+        {
+            "id": "inquiry",
+            "name": "Product/Service Inquiry",
+            "description": "An email responding to product or service inquiries",
+            "category": "product-inquiry"
+        },
+        {
+            "id": "pricing",
+            "name": "Pricing Information",
+            "description": "An email providing pricing details and value proposition",
+            "category": "pricing"
+        },
+        {
+            "id": "demo",
+            "name": "Demo Request",
+            "description": "An email for scheduling or confirming demo requests",
+            "category": "demo"
+        },
+        {
+            "id": "support",
+            "name": "Support Response",
+            "description": "A helpful support email addressing customer questions",
+            "category": "support"
+        },
+        {
+            "id": "custom",
+            "name": "Custom Template",
+            "description": "Create your own custom email template",
+            "category": "general"
+        }
+    ]
+    return {"templates": templates}
+
 @router.get("/{lead_id}", response_model=LeadResponse)
 async def get_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
     """Get lead by ID"""
@@ -1325,55 +1374,6 @@ async def get_whatsapp_connection(current_user: dict = Depends(get_current_user)
     except Exception as e:
         logger.error(f"Error getting WhatsApp connection: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/email-templates")
-async def get_email_templates(current_user: dict = Depends(get_current_user)):
-    """Get available email templates"""
-    templates = [
-        {
-            "id": "welcome",
-            "name": "Welcome Email",
-            "description": "A warm welcome email for new leads",
-            "category": "welcome"
-        },
-        {
-            "id": "follow-up",
-            "name": "Follow-up Email",
-            "description": "A follow-up email to re-engage leads",
-            "category": "follow-up"
-        },
-        {
-            "id": "inquiry",
-            "name": "Product/Service Inquiry",
-            "description": "An email responding to product or service inquiries",
-            "category": "product-inquiry"
-        },
-        {
-            "id": "pricing",
-            "name": "Pricing Information",
-            "description": "An email providing pricing details and value proposition",
-            "category": "pricing"
-        },
-        {
-            "id": "demo",
-            "name": "Demo Request",
-            "description": "An email for scheduling or confirming demo requests",
-            "category": "demo"
-        },
-        {
-            "id": "support",
-            "name": "Support Response",
-            "description": "A helpful support email addressing customer questions",
-            "category": "support"
-        },
-        {
-            "id": "custom",
-            "name": "Custom Template",
-            "description": "Create your own custom email template",
-            "category": "general"
-        }
-    ]
-    return {"templates": templates}
 
 @router.post("/{lead_id}/generate-email")
 async def generate_email(
