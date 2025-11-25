@@ -31,6 +31,8 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const inputRecognitionRef = useRef(null)
+  const isSelectingTextRef = useRef(false)
+  const mouseDownTimeRef = useRef(0)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -38,10 +40,12 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
 
   useEffect(() => {
     scrollToBottom()
-    // Refocus input after messages update (when not in call)
-    if (inputRef.current && !isCallActive && !isLoading) {
+    // Don't auto-refocus if user is selecting text
+    if (inputRef.current && !isCallActive && !isLoading && !isSelectingTextRef.current) {
       setTimeout(() => {
-        inputRef.current?.focus()
+        if (!isSelectingTextRef.current) {
+          inputRef.current?.focus()
+        }
       }, 100)
     }
   }, [messages, isLoading, isCallActive])
@@ -53,33 +57,83 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     }
   }, [])
 
-  // Keep focus on input field at all times (when not in call)
+  // Keep focus on input field at all times (when not in call), but allow text selection
   useEffect(() => {
     if (isCallActive) return // Don't focus during calls
     
     const maintainFocus = () => {
+      // Don't refocus if user is selecting text
+      if (isSelectingTextRef.current) return
+      
       if (inputRef.current && document.activeElement !== inputRef.current) {
+        // Check if user has selected text
+        const selection = window.getSelection()
+        if (selection && selection.toString().length > 0) {
+          return // Don't refocus if text is selected
+        }
         inputRef.current.focus()
       }
     }
 
-    // Focus immediately
-    maintainFocus()
+    // Set up interval to check and maintain focus (less aggressive)
+    const focusInterval = setInterval(maintainFocus, 500) // Increased from 100ms to 500ms
 
-    // Set up interval to check and maintain focus
-    const focusInterval = setInterval(maintainFocus, 100)
-
-    // Also focus on any click outside the input
-    const handleClick = (e) => {
-      if (e.target !== inputRef.current && !inputRef.current.contains(e.target)) {
-        setTimeout(maintainFocus, 50)
+    // Track mouse down/up for text selection
+    const handleMouseDown = (e) => {
+      mouseDownTimeRef.current = Date.now()
+      // Check if clicking on a message bubble or its content
+      const target = e.target
+      const messageBubble = target.closest('.message-bubble, [class*="chatbot-bubble"]')
+      if (messageBubble) {
+        isSelectingTextRef.current = true
       }
     }
 
+    const handleMouseUp = (e) => {
+      const timeDiff = Date.now() - mouseDownTimeRef.current
+      // If mouse was held down for more than 100ms, likely a text selection
+      if (timeDiff > 100) {
+        const selection = window.getSelection()
+        if (selection && selection.toString().length > 0) {
+          isSelectingTextRef.current = true
+          // Clear selection flag after a delay
+          setTimeout(() => {
+            isSelectingTextRef.current = false
+          }, 2000)
+          return
+        }
+      }
+      // Clear selection flag after a short delay
+      setTimeout(() => {
+        isSelectingTextRef.current = false
+      }, 300)
+    }
+
+    // Also focus on any click outside the input, but not if selecting text
+    const handleClick = (e) => {
+      if (isSelectingTextRef.current) return
+      
+      const target = e.target
+      const messageBubble = target.closest('.message-bubble, [class*="chatbot-bubble"]')
+      if (messageBubble) return // Don't refocus if clicking on message
+      
+      if (target !== inputRef.current && !inputRef.current.contains(target)) {
+        setTimeout(() => {
+          if (!isSelectingTextRef.current) {
+            maintainFocus()
+          }
+        }, 200)
+      }
+    }
+
+    document.addEventListener('mousedown', handleMouseDown)
+    document.addEventListener('mouseup', handleMouseUp)
     document.addEventListener('click', handleClick)
 
     return () => {
       clearInterval(focusInterval)
+      document.removeEventListener('mousedown', handleMouseDown)
+      document.removeEventListener('mouseup', handleMouseUp)
       document.removeEventListener('click', handleClick)
     }
   }, [isCallActive])
@@ -1095,13 +1149,31 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
               </div>
               {/* Message Bubble */}
               <div 
-                className={`px-4 py-3 rounded-lg relative group ${
+                className={`px-4 py-3 rounded-lg relative group message-bubble ${
                   message.type === 'user'
                     ? 'bg-pink-500 text-white'
                     : 'bg-white text-black chatbot-bubble-shadow'
                 }`}
                 onMouseEnter={() => setHoveredMessageId(message.id)}
                 onMouseLeave={() => setHoveredMessageId(null)}
+                onMouseDown={() => {
+                  isSelectingTextRef.current = true
+                }}
+                onMouseUp={() => {
+                  // Keep selection flag active if text is selected
+                  setTimeout(() => {
+                    const selection = window.getSelection()
+                    if (selection && selection.toString().length > 0) {
+                      isSelectingTextRef.current = true
+                      setTimeout(() => {
+                        isSelectingTextRef.current = false
+                      }, 2000)
+                    } else {
+                      isSelectingTextRef.current = false
+                    }
+                  }, 100)
+                }}
+                style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
               >
                 {/* Agent Name - Only show for bot messages, inside bubble at top */}
                 {message.type === 'bot' && (
@@ -1474,11 +1546,16 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                   }
                 }}
                 onBlur={(e) => {
+                  // Don't refocus if user is selecting text
+                  if (isSelectingTextRef.current) return
+                  
                   // Immediately refocus if not in call
                   if (!isCallActive && !isLoading && !isStreaming) {
                     setTimeout(() => {
-                      e.target.focus()
-                    }, 10)
+                      if (!isSelectingTextRef.current) {
+                        e.target.focus()
+                      }
+                    }, 200)
                   }
                 }}
                 placeholder={replyingToMessage ? `Replying to: ${replyingToMessage.content.substring(0, 30)}...` : "Ask Emily..."}
