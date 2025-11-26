@@ -1793,6 +1793,152 @@ class GenerateFromTitleRequest(BaseModel):
     existing_content: Optional[str] = None
     existing_excerpt: Optional[str] = None
 
+class AIEditBlogRequest(BaseModel):
+    content: str
+    instruction: str
+    edit_type: str  # 'title', 'content', or 'excerpt'
+
+@router.post("/ai/edit")
+async def ai_edit_blog(
+    request: AIEditBlogRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Edit blog content using AI while preserving HTML structure"""
+    try:
+        # Check if OpenAI API key is available
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OpenAI API key not configured"
+            )
+        
+        # Create OpenAI client
+        client = openai.OpenAI(api_key=openai_api_key)
+        
+        # Determine if content is HTML or plain text
+        has_html_tags = bool(re.search(r'<[a-z][a-z0-9]*[^>]*>', request.content, re.IGNORECASE))
+        
+        # Create the edit prompt based on content type
+        if request.edit_type == 'title':
+            # For titles, no HTML needed
+            edit_prompt = f"""You are an expert content editor. Edit the following title based on the user's instructions.
+
+ORIGINAL TITLE:
+{request.content}
+
+USER INSTRUCTIONS:
+{request.instruction}
+
+REQUIREMENTS:
+- Follow the user's instructions precisely
+- Keep it concise and engaging
+- Return only the edited title, nothing else
+
+Return the edited title:"""
+            
+            system_message = "You are an expert content editor. Always return only the edited title without any explanations or additional text."
+        elif request.edit_type == 'excerpt':
+            # For excerpts, plain text
+            edit_prompt = f"""You are an expert content editor. Edit the following excerpt based on the user's instructions.
+
+ORIGINAL EXCERPT:
+{request.content}
+
+USER INSTRUCTIONS:
+{request.instruction}
+
+REQUIREMENTS:
+- Follow the user's instructions precisely
+- Keep it concise (150-200 characters ideal)
+- Return only the edited excerpt, nothing else
+
+Return the edited excerpt:"""
+            
+            system_message = "You are an expert content editor. Always return only the edited excerpt without any explanations or additional text."
+        else:
+            # For content, preserve HTML structure
+            if has_html_tags:
+                # Content has HTML - preserve structure
+                edit_prompt = f"""You are an expert blog content editor. Edit the following HTML content based on the user's instructions while preserving the HTML structure.
+
+ORIGINAL CONTENT (HTML):
+{request.content}
+
+USER INSTRUCTIONS:
+{request.instruction}
+
+CRITICAL REQUIREMENTS:
+- Follow the user's instructions precisely
+- PRESERVE ALL HTML TAGS AND STRUCTURE (h1, h2, h3, p, ul, li, etc.)
+- Maintain proper HTML formatting throughout
+- Keep the same semantic structure unless specifically requested to change it
+- Ensure the edited content is clear, engaging, and professional
+- Do not add any information that wasn't in the original or requested by the user
+- Return the edited content with proper HTML structure, nothing else
+- Use proper HTML tags: <h2> for main sections, <h3> for subsections, <p> for paragraphs, <ul>/<li> for lists
+
+Return the edited HTML content:"""
+                
+                system_message = "You are an expert blog content editor specializing in HTML-formatted content. Always preserve HTML structure and return only the edited HTML content without any explanations or additional text."
+            else:
+                # Plain text content - convert to HTML
+                edit_prompt = f"""You are an expert blog content editor. Edit the following content based on the user's instructions and return it in proper HTML format.
+
+ORIGINAL CONTENT:
+{request.content}
+
+USER INSTRUCTIONS:
+{request.instruction}
+
+CRITICAL REQUIREMENTS:
+- Follow the user's instructions precisely
+- Return the edited content in clean, professional HTML format
+- Use proper HTML tags: <h2> for main sections, <h3> for subsections, <p> for paragraphs, <ul>/<li> for lists
+- Structure the content with clear sections using proper HTML headings
+- Each section should have a clear purpose and flow logically
+- Use proper paragraph tags (<p>) for body text
+- Ensure the edited content is clear, engaging, and professional
+- Do not add any information that wasn't in the original or requested by the user
+- Return only the edited HTML content, nothing else
+
+Return the edited HTML content:"""
+                
+                system_message = "You are an expert blog content editor. Always return edited content in proper HTML format with proper structure (h2, h3, p tags, lists) without any explanations or additional text."
+        
+        # Call OpenAI to edit the content
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": edit_prompt}
+            ],
+            temperature=0.7,
+            max_tokens=4000
+        )
+        
+        edited_content = response.choices[0].message.content.strip()
+        
+        # Remove any markdown code blocks if present
+        if edited_content.startswith("```html"):
+            edited_content = edited_content.split("```html")[1].split("```")[0].strip()
+        elif edited_content.startswith("```"):
+            edited_content = edited_content.split("```")[1].split("```")[0].strip()
+        
+        return {
+            "success": True,
+            "edited_content": edited_content
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error editing blog with AI: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to edit blog with AI: {str(e)}"
+        )
+
 @router.post("/generate-from-title")
 async def generate_from_title(
     request: GenerateFromTitleRequest,
@@ -1838,9 +1984,24 @@ Your task:
 3. Suggest 2-3 relevant categories that match the title and content
 4. Suggest 5-8 relevant tags that are specific to the content
 
+CRITICAL STRUCTURE REQUIREMENTS:
+- Write in clean, professional HTML format with proper semantic structure
+- Structure the content with clear sections using proper HTML headings (h2, h3)
+- Each section should have a clear purpose and flow logically
+- Use proper paragraph tags (<p>) for body text
+- Create well-organized sections that can be displayed in a structured layout
+- Avoid redundant titles or headings - the title is already set, focus on content sections
+- Include sections like:
+  * Introduction paragraph (hook the reader)
+  * Main content sections with subheadings
+  * Key points or benefits (use lists where appropriate)
+  * Conclusion that ties everything together
+- Make sections scannable and easy to read
+- Use proper HTML formatting: <h2> for main sections, <h3> for subsections, <p> for paragraphs, <ul>/<li> for lists
+
 Return your response as a valid JSON object with this exact structure:
 {{
-    "content": "<h1>Blog Title</h1><p>Full blog content with proper HTML formatting...</p>",
+    "content": "<h2>Introduction</h2><p>Full blog content with proper HTML formatting...</p><h2>Main Section</h2><p>More content...</p>",
     "excerpt": "Brief description of the blog post...",
     "categories": ["Category1", "Category2", "Category3"],
     "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6"]
@@ -1848,8 +2009,8 @@ Return your response as a valid JSON object with this exact structure:
 
 Requirements:
 - Content must be comprehensive, well-structured, and match the title
-- Use proper HTML formatting (h1, h2, p, strong, ul, li tags)
-- Excerpt should be engaging and 150-160 characters
+- Use proper HTML formatting (h2, h3, p, strong, ul, li tags) - DO NOT use h1 (title is separate)
+- Excerpt should be engaging and 150-160 characters (plain text, no HTML)
 - Categories should be broad, general topics
 - Tags should be specific keywords
 - All content should be relevant to the title

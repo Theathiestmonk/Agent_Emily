@@ -841,16 +841,17 @@ const BlogDashboard = () => {
       scheduledTime = `${hours}:${minutes}`
     }
     
-    const strippedContent = stripHtmlTags(blog.content)
+    // Preserve HTML structure for content (blogs use HTML for posting)
+    // Users can see formatted version in preview mode, or edit HTML directly in textarea
     // Don't set lastCheckedContent here - let it stay empty so first change triggers update
     
     setEditForm({
 
       title: blog.title,
 
-      content: strippedContent, // Strip HTML tags for editing
+      content: blog.content, // Preserve HTML structure
 
-      excerpt: stripHtmlTags(blog.excerpt), // Strip HTML tags for editing
+      excerpt: blog.excerpt || '', // Keep excerpt as-is
 
       categories: blog.categories.join(', '),
 
@@ -1132,10 +1133,11 @@ const BlogDashboard = () => {
           
           if (result.success) {
             // Update form with generated content
+            // Preserve HTML structure for content (blogs use HTML for posting)
             setEditForm(prev => ({
               ...prev,
-              content: stripHtmlTags(result.content || prev.content), // Strip HTML for editing
-              excerpt: stripHtmlTags(result.excerpt || prev.excerpt), // Strip HTML for editing
+              content: result.content || prev.content, // Keep HTML structure
+              excerpt: result.excerpt || prev.excerpt, // Keep excerpt as plain text
               categories: (result.categories || []).join(', '),
               tags: (result.tags || []).join(', ')
             }))
@@ -1207,23 +1209,39 @@ const BlogDashboard = () => {
       setAiEditing(true)
 
       // Get the current text based on type and which modal we're in
-      // Use plain text (already stripped in editForm, or strip from selectedBlog)
+      // For content, preserve HTML structure; for title/excerpt, use plain text
       let currentText = ''
       if (editingBlog) {
-        // In edit modal, use editForm values (already plain text)
+        // In edit modal, use editForm values
         if (aiEditType === 'title') {
           currentText = editForm.title || ''
         } else if (aiEditType === 'content') {
-          currentText = editForm.content || ''
+          // For content, we need to get the original HTML from the blog object
+          // editingBlog should have the original content with HTML
+          if (editingBlog.content && /<[a-z][a-z0-9]*[^>]*>/i.test(editingBlog.content)) {
+            // Original has HTML, use that
+            currentText = editingBlog.content
+          } else {
+            // Check if editForm.content has HTML (might have been pasted)
+            if (editForm.content && /<[a-z][a-z0-9]*[^>]*>/i.test(editForm.content)) {
+              currentText = editForm.content
+            } else {
+              // Plain text, use editForm value
+              currentText = editForm.content || ''
+            }
+          }
         } else if (aiEditType === 'excerpt') {
           currentText = editForm.excerpt || ''
         }
       } else {
-        // In detail modal, strip HTML from selectedBlog values
+        // In detail modal, use selectedBlog values
         if (aiEditType === 'title') {
           currentText = selectedBlog.title || ''
-        } else {
-          currentText = stripHtmlTags(selectedBlog.content || '')
+        } else if (aiEditType === 'content') {
+          // For content, preserve HTML structure
+          currentText = selectedBlog.content || ''
+        } else if (aiEditType === 'excerpt') {
+          currentText = selectedBlog.excerpt || ''
         }
       }
 
@@ -1234,8 +1252,8 @@ const BlogDashboard = () => {
       const API_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
       const API_BASE_URL = API_URL.replace(/\/+$/, '')
       
-      // Call AI service to edit content
-      const response = await fetch(`${API_BASE_URL}/content/ai/edit-content`, {
+      // Call blog-specific AI edit endpoint that preserves HTML
+      const response = await fetch(`${API_BASE_URL}/api/blogs/ai/edit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1243,7 +1261,8 @@ const BlogDashboard = () => {
         },
         body: JSON.stringify({
           content: currentText,
-          instruction: aiEditInstruction
+          instruction: aiEditInstruction,
+          edit_type: aiEditType
         })
       })
 
@@ -3347,17 +3366,13 @@ const BlogDashboard = () => {
       {/* AI Edit Modal */}
       {showAIEditModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-75 z-[60]"
+          className="fixed inset-0 bg-black bg-opacity-75 z-[60] flex items-center justify-center p-4"
           onClick={handleCancelAIEdit}
         >
           <div 
-            className="fixed inset-0 flex items-center justify-center p-4 pb-20"
-            style={{ left: '12rem', right: '0' }}
+            className="relative max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div 
-              className="relative max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
               {/* Header */}
               <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
                 <div className="flex items-center justify-between">
@@ -3479,24 +3494,19 @@ const BlogDashboard = () => {
                 </div>
               </div>
             </div>
-          </div>
         </div>
       )}
 
       {/* AI Edit Confirmation Modal */}
       {showAIConfirmModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-75 z-[60]"
+          className="fixed inset-0 bg-black bg-opacity-75 z-[60] flex items-center justify-center p-4"
           onClick={handleAIConfirmCancel}
         >
           <div 
-            className="fixed inset-0 flex items-center justify-center p-4 pb-20"
-            style={{ left: '12rem', right: '0' }}
+            className="relative max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div 
-              className="relative max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
               {/* Header */}
               <div className="p-6 border-b border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50">
                 <div className="flex items-center justify-between">
@@ -3578,7 +3588,6 @@ const BlogDashboard = () => {
                 </div>
               </div>
             </div>
-          </div>
         </div>
       )}
 
