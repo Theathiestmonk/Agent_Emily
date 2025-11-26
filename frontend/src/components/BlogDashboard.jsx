@@ -119,6 +119,14 @@ const BlogDashboard = () => {
   })
 
   const [saving, setSaving] = useState(false)
+  const [generatingTagsCategories, setGeneratingTagsCategories] = useState(false)
+  const [autoUpdatingTagsCategories, setAutoUpdatingTagsCategories] = useState(false)
+  const [tagsCategoriesManuallyEdited, setTagsCategoriesManuallyEdited] = useState(false)
+  const [lastCheckedContent, setLastCheckedContent] = useState('')
+  const [autoUpdatingFromTitle, setAutoUpdatingFromTitle] = useState(false)
+  const [lastCheckedTitle, setLastCheckedTitle] = useState('')
+  const [contentManuallyEdited, setContentManuallyEdited] = useState(false)
+  const [excerptManuallyEdited, setExcerptManuallyEdited] = useState(false)
 
   const [showGenerationModal, setShowGenerationModal] = useState(false)
 
@@ -163,6 +171,21 @@ const BlogDashboard = () => {
   const [selectedBlogForImage, setSelectedBlogForImage] = useState(null)
   const [expandedPreviewImage, setExpandedPreviewImage] = useState(false)
   const [showCustomBlogChatbot, setShowCustomBlogChatbot] = useState(false)
+
+  // AI Edit state
+  const [showAIEditModal, setShowAIEditModal] = useState(false)
+  const [aiEditInstruction, setAiEditInstruction] = useState('')
+  const [aiEditing, setAiEditing] = useState(false)
+  const [showAIConfirmModal, setShowAIConfirmModal] = useState(false)
+  const [aiEditedContent, setAiEditedContent] = useState('')
+  const [aiEditType, setAiEditType] = useState(null) // 'title' or 'content'
+  
+  // Manual Edit state for modal
+  const [editingTitleInModal, setEditingTitleInModal] = useState(false)
+  const [editingContentInModal, setEditingContentInModal] = useState(false)
+  const [editTitleValue, setEditTitleValue] = useState('')
+  const [editContentValue, setEditContentValue] = useState('')
+  const [savingModalEdit, setSavingModalEdit] = useState(false)
 
 
 
@@ -688,9 +711,34 @@ const BlogDashboard = () => {
 
 
 
+  // Helper function to strip HTML tags and convert to plain text
+  const stripHtmlTags = (html) => {
+    if (!html) return ''
+    // Create a temporary div element
+    const tmp = document.createElement('div')
+    tmp.innerHTML = html
+    // Get text content and replace multiple spaces/newlines with single space
+    let text = tmp.textContent || tmp.innerText || ''
+    // Clean up extra whitespace
+    text = text.replace(/\s+/g, ' ').trim()
+    // Replace common HTML entities
+    text = text.replace(/&nbsp;/g, ' ')
+    text = text.replace(/&amp;/g, '&')
+    text = text.replace(/&lt;/g, '<')
+    text = text.replace(/&gt;/g, '>')
+    text = text.replace(/&quot;/g, '"')
+    text = text.replace(/&#39;/g, "'")
+    return text
+  }
+
   const handleEditBlog = (blog) => {
 
     setEditingBlog(blog)
+    setTagsCategoriesManuallyEdited(false)
+    setLastCheckedContent('')
+    setLastCheckedTitle('')
+    setContentManuallyEdited(false)
+    setExcerptManuallyEdited(false)
     
     // Format scheduled date and time for input fields
     let scheduledDate = ''
@@ -706,13 +754,16 @@ const BlogDashboard = () => {
       scheduledTime = `${hours}:${minutes}`
     }
     
+    const strippedContent = stripHtmlTags(blog.content)
+    // Don't set lastCheckedContent here - let it stay empty so first change triggers update
+    
     setEditForm({
 
       title: blog.title,
 
-      content: blog.content,
+      content: strippedContent, // Strip HTML tags for editing
 
-      excerpt: blog.excerpt,
+      excerpt: stripHtmlTags(blog.excerpt), // Strip HTML tags for editing
 
       categories: blog.categories.join(', '),
 
@@ -789,8 +840,237 @@ const BlogDashboard = () => {
     setEditingBlog(null)
 
     setEditForm({ title: '', content: '', excerpt: '', categories: '', tags: '', scheduled_date: '', scheduled_time: '' })
+    setTagsCategoriesManuallyEdited(false)
+    setLastCheckedContent('')
 
   }
+
+  // Debounce hook for content changes
+  const useDebounce = (value, delay) => {
+    const [debouncedValue, setDebouncedValue] = useState(value)
+
+    useEffect(() => {
+      const handler = setTimeout(() => {
+        setDebouncedValue(value)
+      }, delay)
+
+      return () => {
+        clearTimeout(handler)
+      }
+    }, [value, delay])
+
+    return debouncedValue
+  }
+
+  const handleGenerateTagsCategories = async () => {
+    if (!editForm.content || !editForm.content.trim()) {
+      showError('Content Required', 'Please add content to the blog before generating tags and categories.')
+      return
+    }
+
+    try {
+      setGeneratingTagsCategories(true)
+      
+      const result = await blogService.generateTagsCategories(editForm.content, editForm.title)
+      
+      if (result.success) {
+        // Update form with generated tags and categories
+        const categories = result.categories || []
+        const tags = result.tags || []
+        
+        setEditForm(prev => ({
+          ...prev,
+          categories: categories.join(', '),
+          tags: tags.join(', ')
+        }))
+        
+        setTagsCategoriesManuallyEdited(false) // Reset manual edit flag
+        setLastCheckedContent(editForm.content) // Update last checked content
+        
+        showSuccess('Success', 'Tags and categories generated successfully!')
+      } else {
+        throw new Error(result.error || result.detail || 'Failed to generate tags and categories')
+      }
+    } catch (error) {
+      console.error('Error generating tags and categories:', error)
+      // Extract error message from different error formats
+      let errorMessage = 'Failed to generate tags and categories. Please try again.'
+      if (error.message) {
+        errorMessage = error.message
+      } else if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail
+      } else if (error.detail) {
+        errorMessage = error.detail
+      }
+      showError('Generation Failed', errorMessage)
+    } finally {
+      setGeneratingTagsCategories(false)
+    }
+  }
+
+  // Debounce content changes (wait 2 seconds after user stops typing)
+  const debouncedContent = useDebounce(editForm.content, 2000)
+
+  // Auto-update tags and categories when content changes
+  useEffect(() => {
+    // Only auto-update if:
+    // 1. We're in edit mode
+    // 2. Content exists and is substantial (> 20 chars)
+    // 3. User hasn't manually edited tags/categories
+    // 4. Content actually changed (not initial load)
+    // 5. We're not already updating
+    if (
+      editingBlog &&
+      debouncedContent &&
+      debouncedContent.trim().length > 20 &&
+      !tagsCategoriesManuallyEdited &&
+      debouncedContent !== lastCheckedContent &&
+      !autoUpdatingTagsCategories
+    ) {
+      const autoUpdateTagsCategories = async () => {
+        try {
+          setAutoUpdatingTagsCategories(true)
+          
+          // Get existing categories and tags
+          const existingCategories = editForm.categories
+            ? editForm.categories.split(',').map(c => c.trim()).filter(c => c)
+            : []
+          const existingTags = editForm.tags
+            ? editForm.tags.split(',').map(t => t.trim()).filter(t => t)
+            : []
+          
+          // Check relevance if we have existing tags/categories
+          if (existingCategories.length > 0 || existingTags.length > 0) {
+            const relevanceResult = await blogService.checkTagsCategoriesRelevance(
+              debouncedContent,
+              editForm.title,
+              existingCategories,
+              existingTags
+            )
+            
+            if (relevanceResult.success) {
+              // Only update if majority are irrelevant (should_update = true)
+              if (relevanceResult.should_update) {
+                // Generate new tags and categories
+                const generateResult = await blogService.generateTagsCategories(
+                  debouncedContent,
+                  editForm.title
+                )
+                
+                if (generateResult.success) {
+                  const categories = generateResult.categories || []
+                  const tags = generateResult.tags || []
+                  
+                  setEditForm(prev => ({
+                    ...prev,
+                    categories: categories.join(', '),
+                    tags: tags.join(', ')
+                  }))
+                  
+                  setLastCheckedContent(debouncedContent)
+                  console.log('Tags and categories auto-updated due to content change')
+                }
+              } else {
+                // Content is still relevant, no update needed
+                setLastCheckedContent(debouncedContent)
+                console.log('Tags and categories are still relevant, no update needed')
+              }
+            }
+          } else {
+            // No existing tags/categories, generate new ones
+            const generateResult = await blogService.generateTagsCategories(
+              debouncedContent,
+              editForm.title
+            )
+            
+            if (generateResult.success) {
+              const categories = generateResult.categories || []
+              const tags = generateResult.tags || []
+              
+              setEditForm(prev => ({
+                ...prev,
+                categories: categories.join(', '),
+                tags: tags.join(', ')
+              }))
+              
+              setLastCheckedContent(debouncedContent)
+              console.log('Tags and categories auto-generated for new content')
+            }
+          }
+        } catch (error) {
+          // Silently fail for auto-update (don't show error to user)
+          console.error('Auto-update failed:', error)
+          // Still update lastCheckedContent to prevent repeated attempts
+          setLastCheckedContent(debouncedContent)
+        } finally {
+          setAutoUpdatingTagsCategories(false)
+        }
+      }
+      
+      autoUpdateTagsCategories()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedContent, editForm.title, tagsCategoriesManuallyEdited, editingBlog])
+
+  // Debounce title changes (wait 2 seconds after user stops typing)
+  const debouncedTitle = useDebounce(editForm.title, 2000)
+
+  // Auto-update content, excerpt, categories, and tags when title changes
+  useEffect(() => {
+    // Only auto-update if:
+    // 1. We're in edit mode
+    // 2. Title exists and is substantial (> 5 chars)
+    // 3. User hasn't manually edited content/excerpt
+    // 4. Title actually changed (not initial load)
+    // 5. We're not already updating
+    if (
+      editingBlog &&
+      debouncedTitle &&
+      debouncedTitle.trim().length > 5 &&
+      !contentManuallyEdited &&
+      !excerptManuallyEdited &&
+      debouncedTitle !== lastCheckedTitle &&
+      !autoUpdatingFromTitle
+    ) {
+      const autoUpdateFromTitle = async () => {
+        try {
+          setAutoUpdatingFromTitle(true)
+          
+          // Generate new content, excerpt, categories, and tags based on title
+          const result = await blogService.generateFromTitle(
+            debouncedTitle,
+            editForm.content, // Pass existing content as reference
+            editForm.excerpt  // Pass existing excerpt as reference
+          )
+          
+          if (result.success) {
+            // Update form with generated content
+            setEditForm(prev => ({
+              ...prev,
+              content: stripHtmlTags(result.content || prev.content), // Strip HTML for editing
+              excerpt: stripHtmlTags(result.excerpt || prev.excerpt), // Strip HTML for editing
+              categories: (result.categories || []).join(', '),
+              tags: (result.tags || []).join(', ')
+            }))
+            
+            setLastCheckedTitle(debouncedTitle)
+            setLastCheckedContent(debouncedTitle) // Update to prevent content-based update from triggering
+            console.log('Blog content, excerpt, categories, and tags auto-updated from title')
+          }
+        } catch (error) {
+          // Silently fail for auto-update (don't show error to user)
+          console.error('Auto-update from title failed:', error)
+          // Still update lastCheckedTitle to prevent repeated attempts
+          setLastCheckedTitle(debouncedTitle)
+        } finally {
+          setAutoUpdatingFromTitle(false)
+        }
+      }
+      
+      autoUpdateFromTitle()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedTitle, editingBlog, contentManuallyEdited, excerptManuallyEdited])
 
 
 
@@ -809,7 +1089,233 @@ const BlogDashboard = () => {
     setSelectedBlog(null)
 
     setShowBlogModal(false)
+    
+    // Reset edit states
+    setEditingTitleInModal(false)
+    setEditingContentInModal(false)
+    setEditTitleValue('')
+    setEditContentValue('')
 
+  }
+
+  // AI Edit functions
+  const handleAIEdit = (type) => {
+    setAiEditType(type)
+    setShowAIEditModal(true)
+    setAiEditInstruction('')
+  }
+
+  const handleAISaveEdit = async () => {
+    // Check if we're editing in the edit modal or the detail modal
+    const currentBlog = editingBlog || selectedBlog
+    if (!currentBlog || !aiEditInstruction.trim()) return
+
+    // Validate instruction length
+    if (aiEditInstruction.length > 500) {
+      showError('Instruction too long', 'Please keep your instruction under 500 characters')
+      return
+    }
+
+    try {
+      setAiEditing(true)
+
+      // Get the current text based on type and which modal we're in
+      // Use plain text (already stripped in editForm, or strip from selectedBlog)
+      let currentText = ''
+      if (editingBlog) {
+        // In edit modal, use editForm values (already plain text)
+        if (aiEditType === 'title') {
+          currentText = editForm.title || ''
+        } else if (aiEditType === 'content') {
+          currentText = editForm.content || ''
+        } else if (aiEditType === 'excerpt') {
+          currentText = editForm.excerpt || ''
+        }
+      } else {
+        // In detail modal, strip HTML from selectedBlog values
+        if (aiEditType === 'title') {
+          currentText = selectedBlog.title || ''
+        } else {
+          currentText = stripHtmlTags(selectedBlog.content || '')
+        }
+      }
+
+      // Get auth token from blogService
+      const authToken = await blogService.getAuthToken()
+      
+      // Get API URL
+      const API_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+      const API_BASE_URL = API_URL.replace(/\/+$/, '')
+      
+      // Call AI service to edit content
+      const response = await fetch(`${API_BASE_URL}/content/ai/edit-content`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          content: currentText,
+          instruction: aiEditInstruction
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}: ${errorText}`)
+      }
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Show confirmation modal with AI-edited content
+        setAiEditedContent(result.edited_content)
+        setShowAIEditModal(false)
+        setShowAIConfirmModal(true)
+      } else {
+        throw new Error(result.error || result.detail || 'Failed to edit content with AI')
+      }
+
+    } catch (error) {
+      console.error('Error editing blog with AI:', error)
+      showError('Failed to edit blog with AI', error.message)
+    } finally {
+      setAiEditing(false)
+    }
+  }
+
+  const handleCancelAIEdit = () => {
+    setShowAIEditModal(false)
+    setAiEditInstruction('')
+    setAiEditType(null)
+  }
+
+  const handleAIConfirmSave = async () => {
+    // Check if we're editing in the edit modal or the detail modal
+    const currentBlog = editingBlog || selectedBlog
+    if (!currentBlog || !aiEditedContent) return
+
+    try {
+      setSavingModalEdit(true)
+
+      const updateData = {}
+      if (aiEditType === 'title') {
+        updateData.title = aiEditedContent
+      } else if (aiEditType === 'content') {
+        updateData.content = aiEditedContent
+      } else if (aiEditType === 'excerpt') {
+        updateData.excerpt = aiEditedContent
+      }
+
+      await blogService.updateBlog(currentBlog.id, updateData)
+
+      // Update the blog in state
+      const updatedBlog = { ...currentBlog, ...updateData }
+      setBlogs(prev => prev.map(item => 
+        item.id === currentBlog.id ? updatedBlog : item
+      ))
+
+      // Update the appropriate modal state
+      if (editingBlog) {
+        // Update editForm with the new value
+        if (aiEditType === 'title') {
+          setEditForm(prev => ({ ...prev, title: aiEditedContent }))
+        } else if (aiEditType === 'content') {
+          setEditForm(prev => ({ ...prev, content: aiEditedContent }))
+        } else if (aiEditType === 'excerpt') {
+          setEditForm(prev => ({ ...prev, excerpt: aiEditedContent }))
+        }
+        setEditingBlog(updatedBlog)
+      } else {
+        // Update the detail modal blog - keep modal open
+        setSelectedBlog(updatedBlog)
+      }
+
+      // Close only the confirmation modal, keep the main modal open
+      setShowAIConfirmModal(false)
+      setAiEditedContent('')
+      setAiEditInstruction('')
+      setAiEditType(null)
+
+      showSuccess('Success', 'Blog updated with AI assistance')
+
+    } catch (error) {
+      console.error('Error updating blog:', error)
+      showError('Failed to update blog', error.message)
+    } finally {
+      setSavingModalEdit(false)
+    }
+  }
+
+  const handleAIConfirmCancel = () => {
+    setShowAIConfirmModal(false)
+    setAiEditedContent('')
+    setAiEditInstruction('')
+    setAiEditType(null)
+  }
+
+  // Manual Edit functions for modal
+  const handleManualEdit = (type) => {
+    if (type === 'title') {
+      setEditingTitleInModal(true)
+      setEditTitleValue(selectedBlog.title || '')
+    } else {
+      setEditingContentInModal(true)
+      setEditContentValue(selectedBlog.content || '')
+    }
+  }
+
+  const handleSaveManualEdit = async (type) => {
+    if (!selectedBlog) return
+
+    try {
+      setSavingModalEdit(true)
+
+      const updateData = {}
+      if (type === 'title') {
+        updateData.title = editTitleValue
+      } else {
+        updateData.content = editContentValue
+      }
+
+      await blogService.updateBlog(selectedBlog.id, updateData)
+
+      // Update the blog in state
+      const updatedBlog = { ...selectedBlog, ...updateData }
+      setBlogs(prev => prev.map(item => 
+        item.id === selectedBlog.id ? updatedBlog : item
+      ))
+
+      // Update the modal blog
+      setSelectedBlog(updatedBlog)
+
+      // Reset edit states
+      if (type === 'title') {
+        setEditingTitleInModal(false)
+        setEditTitleValue('')
+      } else {
+        setEditingContentInModal(false)
+        setEditContentValue('')
+      }
+
+      showSuccess('Success', 'Blog updated successfully')
+
+    } catch (error) {
+      console.error('Error updating blog:', error)
+      showError('Failed to update blog', error.message)
+    } finally {
+      setSavingModalEdit(false)
+    }
+  }
+
+  const handleCancelManualEdit = (type) => {
+    if (type === 'title') {
+      setEditingTitleInModal(false)
+      setEditTitleValue('')
+    } else {
+      setEditingContentInModal(false)
+      setEditContentValue('')
+    }
   }
 
 
@@ -2076,7 +2582,21 @@ const BlogDashboard = () => {
 
               <div>
 
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Title</label>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleAIEdit('title')
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
+                      title="Edit with AI"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
 
                 <input
 
@@ -2084,7 +2604,10 @@ const BlogDashboard = () => {
 
                   value={editForm.title}
 
-                  onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                  onChange={(e) => {
+                    setEditForm(prev => ({ ...prev, title: e.target.value }))
+                    // Don't mark as manually edited - allow auto-update from title
+                  }}
 
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 
@@ -2096,13 +2619,30 @@ const BlogDashboard = () => {
               
               <div>
 
-                <label className="block text-sm font-medium text-gray-700 mb-1">Excerpt</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Excerpt</label>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleAIEdit('excerpt')
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
+                      title="Edit with AI"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
 
                 <textarea
 
                   value={editForm.excerpt}
 
-                  onChange={(e) => setEditForm(prev => ({ ...prev, excerpt: e.target.value }))}
+                  onChange={(e) => {
+                    setEditForm(prev => ({ ...prev, excerpt: e.target.value }))
+                    setExcerptManuallyEdited(true) // Mark as manually edited
+                  }}
 
                   rows={3}
 
@@ -2116,17 +2656,36 @@ const BlogDashboard = () => {
               
               <div>
 
-                <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Content</label>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleAIEdit('content')
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
+                      title="Edit with AI"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
 
                 <textarea
 
                   value={editForm.content}
 
-                  onChange={(e) => setEditForm(prev => ({ ...prev, content: e.target.value }))}
+                  onChange={(e) => {
+                    setEditForm(prev => ({ ...prev, content: e.target.value }))
+                    setContentManuallyEdited(true) // Mark as manually edited
+                  }}
 
                   rows={10}
 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+
+                  placeholder="Enter your content here. You can use HTML tags for formatting if needed (e.g., &lt;h1&gt;, &lt;p&gt;, &lt;strong&gt;)..."
 
                 />
 
@@ -2134,50 +2693,79 @@ const BlogDashboard = () => {
 
               
               
-              <div className="grid grid-cols-1 min-[640px]:grid-cols-2 gap-3 md:gap-4">
-
-                <div>
-
-                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Categories (comma-separated)</label>
-
-                  <input
-
-                    type="text"
-
-                    value={editForm.categories}
-
-                    onChange={(e) => setEditForm(prev => ({ ...prev, categories: e.target.value }))}
-
-                    placeholder="Technology, Business, Lifestyle"
-
-                    className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-
-                  />
-
+              <div className="space-y-3 md:space-y-4">
+                {/* Auto-update indicator */}
+                <div className="flex items-center">
+                  {autoUpdatingFromTitle && (
+                    <div className="flex items-center text-xs text-purple-600">
+                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                      <span>Auto-updating content, excerpt, categories, and tags from title...</span>
+                    </div>
+                  )}
+                  {autoUpdatingTagsCategories && !autoUpdatingFromTitle && (
+                    <div className="flex items-center text-xs text-purple-600">
+                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                      <span>Auto-updating tags and categories...</span>
+                    </div>
+                  )}
+                  {!autoUpdatingTagsCategories && !autoUpdatingFromTitle && (
+                    <div className="text-xs text-gray-500">
+                      Content, excerpt, categories, and tags update automatically when title or content changes
+                    </div>
+                  )}
                 </div>
 
-                
-                
-                <div>
+                <div className="grid grid-cols-1 min-[640px]:grid-cols-2 gap-3 md:gap-4">
 
-                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+                  <div>
 
-                  <input
+                    <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Categories (comma-separated)</label>
 
-                    type="text"
+                    <input
 
-                    value={editForm.tags}
+                      type="text"
 
-                    onChange={(e) => setEditForm(prev => ({ ...prev, tags: e.target.value }))}
+                      value={editForm.categories}
 
-                    placeholder="AI, Marketing, Innovation"
+                      onChange={(e) => {
+                        setEditForm(prev => ({ ...prev, categories: e.target.value }))
+                        setTagsCategoriesManuallyEdited(true) // Mark as manually edited
+                      }}
 
-                    className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Technology, Business, Lifestyle"
 
-                  />
+                      className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+
+                    />
+
+                  </div>
+
+                  
+                  
+                  <div>
+
+                    <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+
+                    <input
+
+                      type="text"
+
+                      value={editForm.tags}
+
+                      onChange={(e) => {
+                        setEditForm(prev => ({ ...prev, tags: e.target.value }))
+                        setTagsCategoriesManuallyEdited(true) // Mark as manually edited
+                      }}
+
+                      placeholder="AI, Marketing, Innovation"
+
+                      className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+
+                    />
+
+                  </div>
 
                 </div>
-
               </div>
 
               {/* Schedule Date and Time */}
@@ -2275,7 +2863,67 @@ const BlogDashboard = () => {
 
                 <div className="min-w-0 flex-1">
 
-                  <h2 className="text-base md:text-xl font-semibold text-gray-900 truncate">{selectedBlog.title}</h2>
+                  <div className="flex items-center justify-between gap-2">
+                    {editingTitleInModal ? (
+                      <div className="flex-1 space-y-2">
+                        <input
+                          type="text"
+                          value={editTitleValue}
+                          onChange={(e) => setEditTitleValue(e.target.value)}
+                          className="w-full px-3 py-2 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all duration-200 text-base md:text-xl font-semibold"
+                          placeholder="Enter title"
+                        />
+                        <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => handleSaveManualEdit('title')}
+                            disabled={savingModalEdit}
+                            className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors duration-200 disabled:opacity-50"
+                            title="Save"
+                          >
+                            {savingModalEdit ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleCancelManualEdit('title')}
+                            disabled={savingModalEdit}
+                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200 disabled:opacity-50"
+                            title="Cancel"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <h2 className="text-base md:text-xl font-semibold text-gray-900 truncate flex-1">{selectedBlog.title}</h2>
+                        <div className="flex items-center space-x-1 flex-shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleManualEdit('title')
+                            }}
+                            className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                            title="Edit manually"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleAIEdit('title')
+                            }}
+                            className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
+                            title="Edit with AI"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
 
                   <div className="flex items-center space-x-2 mt-1">
 
@@ -2452,15 +3100,70 @@ const BlogDashboard = () => {
 
               <div className="prose prose-lg max-w-none">
 
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Content</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Content</h3>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleManualEdit('content')
+                      }}
+                      className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                      title="Edit manually"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleAIEdit('content')
+                      }}
+                      className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
+                      title="Edit with AI"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
 
-                <div 
-
-                  className="text-gray-700 leading-relaxed whitespace-pre-wrap"
-
-                  dangerouslySetInnerHTML={{ __html: selectedBlog.content.replace(/\n/g, '<br>') }}
-
-                />
+                {editingContentInModal ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={editContentValue}
+                      onChange={(e) => setEditContentValue(e.target.value)}
+                      className="w-full px-3 py-2 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all duration-200 resize-none"
+                      rows={10}
+                      placeholder="Enter content"
+                    />
+                    <div className="flex items-center space-x-1">
+                      <button
+                        onClick={() => handleSaveManualEdit('content')}
+                        disabled={savingModalEdit}
+                        className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors duration-200 disabled:opacity-50"
+                        title="Save"
+                      >
+                        {savingModalEdit ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <CheckCircle className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleCancelManualEdit('content')}
+                        disabled={savingModalEdit}
+                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200 disabled:opacity-50"
+                        title="Cancel"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div 
+                    className="text-gray-700 leading-relaxed whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: selectedBlog.content.replace(/\n/g, '<br>') }}
+                  />
+                )}
 
               </div>
 
@@ -2526,6 +3229,244 @@ const BlogDashboard = () => {
 
         </div>
 
+      )}
+
+      {/* AI Edit Modal */}
+      {showAIEditModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 z-[60]"
+          onClick={handleCancelAIEdit}
+        >
+          <div 
+            className="fixed inset-0 flex items-center justify-center p-4 pb-20"
+            style={{ left: '12rem', right: '0' }}
+          >
+            <div 
+              className="relative max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900">Edit {aiEditType === 'title' ? 'Title' : aiEditType === 'excerpt' ? 'Excerpt' : 'Content'} with AI</h3>
+                      <p className="text-sm text-gray-600">Provide instructions to modify the {aiEditType === 'title' ? 'title' : aiEditType === 'excerpt' ? 'excerpt' : 'content'}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleCancelAIEdit}
+                    className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full flex items-center justify-center transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              
+              {/* Content */}
+              <div className="p-6">
+                <div className="space-y-4">
+                  {/* Current Content Preview */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Current {aiEditType === 'title' ? 'Title' : aiEditType === 'excerpt' ? 'Excerpt' : 'Content'}</label>
+                    <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-700 max-h-32 overflow-y-auto">
+                      {(() => {
+                        if (editingBlog) {
+                          if (aiEditType === 'title') return editForm.title || ''
+                          if (aiEditType === 'excerpt') return editForm.excerpt || ''
+                          return editForm.content || ''
+                        } else {
+                          if (aiEditType === 'title') return selectedBlog?.title || ''
+                          // Strip HTML for content display in AI modal
+                          return stripHtmlTags(selectedBlog?.content || '')
+                        }
+                      })()}
+                    </div>
+                  </div>
+                  
+                  {/* AI Instruction */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      AI Instruction <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <textarea
+                        value={aiEditInstruction}
+                        onChange={(e) => setAiEditInstruction(e.target.value)}
+                        className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm"
+                        rows={5}
+                        placeholder="Describe how you want the content to be modified..."
+                      />
+                      <div className="absolute bottom-3 right-3 text-xs text-gray-400">
+                        {aiEditInstruction.length}/500
+                      </div>
+                    </div>
+                    
+                    {/* Instruction Examples */}
+                    <div className="mt-3">
+                      <p className="text-xs text-gray-500 mb-2">💡 Example instructions:</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <button
+                          onClick={() => setAiEditInstruction("Make it more engaging and add relevant emojis")}
+                          className="text-left p-2 text-xs bg-purple-50 hover:bg-purple-100 rounded border border-purple-200 transition-colors"
+                        >
+                          ✨ Make it more engaging
+                        </button>
+                        <button
+                          onClick={() => setAiEditInstruction("Make it shorter and more concise")}
+                          className="text-left p-2 text-xs bg-purple-50 hover:bg-purple-100 rounded border border-purple-200 transition-colors"
+                        >
+                          📝 Make it shorter
+                        </button>
+                        <button
+                          onClick={() => setAiEditInstruction("Change the tone to be more professional")}
+                          className="text-left p-2 text-xs bg-purple-50 hover:bg-purple-100 rounded border border-purple-200 transition-colors"
+                        >
+                          💼 Professional tone
+                        </button>
+                        <button
+                          onClick={() => setAiEditInstruction("Add a call-to-action at the end")}
+                          className="text-left p-2 text-xs bg-purple-50 hover:bg-purple-100 rounded border border-purple-200 transition-colors"
+                        >
+                          🎯 Add call-to-action
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end space-x-3 mt-6 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={handleCancelAIEdit}
+                    className="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAISaveEdit}
+                    disabled={aiEditing || !aiEditInstruction.trim() || aiEditInstruction.length > 500}
+                    className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 disabled:opacity-50 flex items-center space-x-2"
+                  >
+                    {aiEditing ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>AI Editing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        <span>Edit with AI</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Edit Confirmation Modal */}
+      {showAIConfirmModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 z-[60]"
+          onClick={handleAIConfirmCancel}
+        >
+          <div 
+            className="fixed inset-0 flex items-center justify-center p-4 pb-20"
+            style={{ left: '12rem', right: '0' }}
+          >
+            <div 
+              className="relative max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900">AI Edit Complete</h3>
+                      <p className="text-sm text-gray-600">Review the AI-edited {aiEditType === 'title' ? 'title' : aiEditType === 'excerpt' ? 'excerpt' : 'content'} before saving</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleAIConfirmCancel}
+                    className="w-8 h-8 bg-purple-100 hover:bg-purple-200 text-purple-600 rounded-full flex items-center justify-center transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              
+              {/* Content */}
+              <div className="p-6">
+                <div className="space-y-4">
+                  {/* Original Content */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Original {aiEditType === 'title' ? 'Title' : aiEditType === 'excerpt' ? 'Excerpt' : 'Content'}</label>
+                    <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-sm text-gray-700 max-h-32 overflow-y-auto">
+                      {(() => {
+                        if (editingBlog) {
+                          if (aiEditType === 'title') return editForm.title || ''
+                          if (aiEditType === 'excerpt') return editForm.excerpt || ''
+                          return editForm.content || ''
+                        } else {
+                          if (aiEditType === 'title') return selectedBlog?.title || ''
+                          // Strip HTML for content display in AI confirmation modal
+                          return stripHtmlTags(selectedBlog?.content || '')
+                        }
+                      })()}
+                    </div>
+                  </div>
+                  
+                  {/* AI Edited Content */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Edited {aiEditType === 'title' ? 'Title' : aiEditType === 'excerpt' ? 'Excerpt' : 'Content'} <span className="text-pink-600">✨</span>
+                    </label>
+                    <div className="p-3 bg-pink-50 border border-pink-200 rounded-lg text-sm text-gray-700 max-h-32 overflow-y-auto">
+                      {aiEditedContent}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end space-x-3 mt-6 pt-4 border-t border-purple-200">
+                  <button
+                    onClick={handleAIConfirmCancel}
+                    className="px-4 py-2 text-purple-600 bg-purple-100 hover:bg-purple-200 rounded-lg font-medium transition-colors"
+                  >
+                    Keep Original
+                  </button>
+                  <button
+                    onClick={handleAIConfirmSave}
+                    disabled={savingModalEdit}
+                    className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 disabled:opacity-50 flex items-center space-x-2"
+                  >
+                    {savingModalEdit ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Save Changes</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
 

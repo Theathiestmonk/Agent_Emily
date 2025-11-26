@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, status, File, UploadFile, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Optional
+from typing import Optional, List
 import os
 import uuid
 import re
@@ -11,6 +11,8 @@ from pydantic import BaseModel
 import logging
 from cryptography.fernet import Fernet
 import requests
+import openai
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -1448,5 +1450,495 @@ async def publish_blog(
     except Exception as e:
         logger.error(f"Error publishing blog: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to publish blog: {str(e)}")
+
+class GenerateTagsCategoriesRequest(BaseModel):
+    content: str
+    title: Optional[str] = None
+
+class CheckRelevanceRequest(BaseModel):
+    content: str
+    title: Optional[str] = None
+    existing_categories: List[str] = []
+    existing_tags: List[str] = []
+
+@router.post("/generate-tags-categories")
+async def generate_tags_categories(
+    request: GenerateTagsCategoriesRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate tags and categories from blog content using AI"""
+    try:
+        # Check if OpenAI API key is available
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OpenAI API key not configured"
+            )
+        
+        # Create OpenAI client
+        client = openai.OpenAI(api_key=openai_api_key)
+        
+        # Validate content
+        if not request.content or not request.content.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Content is required to generate tags and categories"
+            )
+        
+        # Strip HTML tags from content for better analysis
+        import re
+        text_content = re.sub(r'<[^>]+>', '', request.content)
+        text_content = text_content.strip()
+        
+        # Check if content is too short
+        if len(text_content) < 50:
+            logger.warning(f"Content is very short: {len(text_content)} characters")
+        
+        # Limit content length for API efficiency
+        if len(text_content) > 3000:
+            text_content = text_content[:3000]
+            logger.info(f"Content truncated to 3000 characters")
+        
+        # Create the prompt
+        prompt = f"""Analyze the following blog content and generate relevant tags and categories.
+
+Title: {request.title if request.title else 'Not provided'}
+
+Content:
+{text_content}
+
+Based on the content above, generate:
+1. Categories (2-3): Broad topic categories that best describe the main themes
+2. Tags (5-8): Specific keywords and topics that are relevant to the content
+
+Return your response as a valid JSON object with this exact structure:
+{{
+    "categories": ["Category1", "Category2", "Category3"],
+    "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6"]
+}}
+
+Requirements:
+- Categories should be broad, general topics (e.g., "Technology", "Business", "Health")
+- Tags should be specific keywords related to the content
+- All items should be relevant to the actual content
+- Use title case for categories
+- Use lowercase for tags (unless they are proper nouns)
+- Return only valid JSON, no additional text or explanations"""
+
+        logger.info(f"Generating tags and categories for content length: {len(text_content)}")
+        
+        # Call OpenAI
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are an expert content analyst. Always return valid JSON only, no additional text."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=500
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            logger.info(f"OpenAI response received, length: {len(result_text)}")
+            
+        except Exception as openai_error:
+            logger.error(f"OpenAI API error: {str(openai_error)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"OpenAI API error: {str(openai_error)}"
+            )
+        
+        # Remove markdown code blocks if present
+        if result_text.startswith("```json"):
+            lines = result_text.split("\n")
+            result_text = "\n".join(lines[1:-1]) if len(lines) > 2 else result_text
+        elif result_text.startswith("```"):
+            lines = result_text.split("\n")
+            result_text = "\n".join(lines[1:-1]) if len(lines) > 2 else result_text
+        
+        # Clean up the result text
+        result_text = result_text.strip()
+        
+        # Parse JSON response
+        try:
+            result = json.loads(result_text)
+            logger.info(f"Successfully parsed JSON: categories={len(result.get('categories', []))}, tags={len(result.get('tags', []))}")
+            
+            # Validate and clean the response
+            categories = result.get("categories", [])
+            tags = result.get("tags", [])
+            
+            # Ensure they are lists
+            if not isinstance(categories, list):
+                logger.warning(f"Categories is not a list: {type(categories)}")
+                categories = []
+            if not isinstance(tags, list):
+                logger.warning(f"Tags is not a list: {type(tags)}")
+                tags = []
+            
+            # Convert all to strings and clean
+            categories = [str(c).strip() for c in categories if c]
+            tags = [str(t).strip() for t in tags if t]
+            
+            # Limit counts
+            categories = categories[:3]
+            tags = tags[:8]
+            
+            logger.info(f"Returning: categories={categories}, tags={tags}")
+            
+            return {
+                "success": True,
+                "categories": categories,
+                "tags": tags
+            }
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON. Error: {str(e)}")
+            logger.error(f"Response text: {result_text[:500]}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to parse AI response. Error: {str(e)}"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating tags and categories: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate tags and categories: {str(e)}"
+        )
+
+@router.post("/check-tags-categories-relevance")
+async def check_tags_categories_relevance(
+    request: CheckRelevanceRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Check if existing tags and categories are still relevant to the content using AI"""
+    try:
+        # Check if OpenAI API key is available
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OpenAI API key not configured"
+            )
+        
+        # Validate input
+        if not request.content or not request.content.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Content is required to check relevance"
+            )
+        
+        if not request.existing_categories and not request.existing_tags:
+            # No existing tags/categories, so they're not relevant (need to generate new ones)
+            return {
+                "success": True,
+                "relevant": False,
+                "categories_relevant": [],
+                "tags_relevant": [],
+                "categories_irrelevant": [],
+                "tags_irrelevant": [],
+                "should_update": True
+            }
+        
+        # Create OpenAI client
+        client = openai.OpenAI(api_key=openai_api_key)
+        
+        # Strip HTML tags from content
+        import re
+        text_content = re.sub(r'<[^>]+>', '', request.content)
+        text_content = text_content.strip()
+        
+        # Limit content length
+        if len(text_content) > 3000:
+            text_content = text_content[:3000]
+        
+        # Prepare existing tags/categories for analysis
+        categories_str = ', '.join(request.existing_categories) if request.existing_categories else 'None'
+        tags_str = ', '.join(request.existing_tags) if request.existing_tags else 'None'
+        
+        # Create the prompt
+        prompt = f"""Analyze the following blog content and determine if the existing tags and categories are still relevant.
+
+Title: {request.title if request.title else 'Not provided'}
+
+Content:
+{text_content}
+
+Existing Categories: {categories_str}
+Existing Tags: {tags_str}
+
+Your task:
+1. Determine which categories are still relevant to the new content
+2. Determine which tags are still relevant to the new content
+3. Calculate the percentage of relevant items
+
+Return your response as a valid JSON object with this exact structure:
+{{
+    "categories_relevant": ["Category1", "Category2"],
+    "categories_irrelevant": ["Category3"],
+    "tags_relevant": ["tag1", "tag2", "tag3"],
+    "tags_irrelevant": ["tag4", "tag5"],
+    "relevance_percentage": 60
+}}
+
+Requirements:
+- A category/tag is relevant if it still accurately describes or relates to the content
+- A category/tag is irrelevant if it no longer matches the content's main themes or topics
+- Calculate relevance_percentage as: (relevant_items / total_items) * 100
+- Return only valid JSON, no additional text or explanations"""
+
+        logger.info(f"Checking relevance for {len(request.existing_categories)} categories and {len(request.existing_tags)} tags")
+        
+        # Call OpenAI
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are an expert content analyst. Always return valid JSON only, no additional text."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,  # Lower temperature for more consistent relevance checking
+                max_tokens=500
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            logger.info(f"OpenAI relevance check response received")
+            
+        except Exception as openai_error:
+            logger.error(f"OpenAI API error: {str(openai_error)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"OpenAI API error: {str(openai_error)}"
+            )
+        
+        # Remove markdown code blocks if present
+        if result_text.startswith("```json"):
+            lines = result_text.split("\n")
+            result_text = "\n".join(lines[1:-1]) if len(lines) > 2 else result_text
+        elif result_text.startswith("```"):
+            lines = result_text.split("\n")
+            result_text = "\n".join(lines[1:-1]) if len(lines) > 2 else result_text
+        
+        result_text = result_text.strip()
+        
+        # Parse JSON response
+        try:
+            result = json.loads(result_text)
+            
+            categories_relevant = result.get("categories_relevant", [])
+            categories_irrelevant = result.get("categories_irrelevant", [])
+            tags_relevant = result.get("tags_relevant", [])
+            tags_irrelevant = result.get("tags_irrelevant", [])
+            relevance_percentage = result.get("relevance_percentage", 0)
+            
+            # Ensure they are lists
+            if not isinstance(categories_relevant, list):
+                categories_relevant = []
+            if not isinstance(categories_irrelevant, list):
+                categories_irrelevant = []
+            if not isinstance(tags_relevant, list):
+                tags_relevant = []
+            if not isinstance(tags_irrelevant, list):
+                tags_irrelevant = []
+            
+            # Determine if we should update (if majority >50% are irrelevant)
+            should_update = relevance_percentage < 50
+            
+            logger.info(f"Relevance check: {relevance_percentage}% relevant, should_update: {should_update}")
+            
+            return {
+                "success": True,
+                "relevant": relevance_percentage >= 50,
+                "categories_relevant": categories_relevant,
+                "tags_relevant": tags_relevant,
+                "categories_irrelevant": categories_irrelevant,
+                "tags_irrelevant": tags_irrelevant,
+                "relevance_percentage": relevance_percentage,
+                "should_update": should_update
+            }
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON. Error: {str(e)}")
+            logger.error(f"Response text: {result_text[:500]}")
+            # If parsing fails, assume we should update (safer default)
+            return {
+                "success": True,
+                "relevant": False,
+                "categories_relevant": [],
+                "tags_relevant": [],
+                "categories_irrelevant": request.existing_categories,
+                "tags_irrelevant": request.existing_tags,
+                "should_update": True
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking relevance: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to check relevance: {str(e)}"
+        )
+
+class GenerateFromTitleRequest(BaseModel):
+    title: str
+    existing_content: Optional[str] = None
+    existing_excerpt: Optional[str] = None
+
+@router.post("/generate-from-title")
+async def generate_from_title(
+    request: GenerateFromTitleRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate blog content, excerpt, categories, and tags based on title"""
+    try:
+        # Check if OpenAI API key is available
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OpenAI API key not configured"
+            )
+        
+        # Validate input
+        if not request.title or not request.title.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Title is required"
+            )
+        
+        # Create OpenAI client
+        client = openai.OpenAI(api_key=openai_api_key)
+        
+        # Strip HTML from existing content if provided
+        import re
+        existing_content_text = ''
+        if request.existing_content:
+            existing_content_text = re.sub(r'<[^>]+>', '', request.existing_content)
+            existing_content_text = existing_content_text.strip()
+        
+        # Create the prompt
+        prompt = f"""Based on the following blog title, generate comprehensive blog content, excerpt, categories, and tags.
+
+Title: {request.title}
+
+{f"Existing Content (for reference, but generate new content based on title): {existing_content_text[:500]}" if existing_content_text else ""}
+
+Your task:
+1. Generate comprehensive blog content (800-1500 words) that matches the title
+2. Create a compelling excerpt (150-160 characters) that summarizes the content
+3. Suggest 2-3 relevant categories that match the title and content
+4. Suggest 5-8 relevant tags that are specific to the content
+
+Return your response as a valid JSON object with this exact structure:
+{{
+    "content": "<h1>Blog Title</h1><p>Full blog content with proper HTML formatting...</p>",
+    "excerpt": "Brief description of the blog post...",
+    "categories": ["Category1", "Category2", "Category3"],
+    "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6"]
+}}
+
+Requirements:
+- Content must be comprehensive, well-structured, and match the title
+- Use proper HTML formatting (h1, h2, p, strong, ul, li tags)
+- Excerpt should be engaging and 150-160 characters
+- Categories should be broad, general topics
+- Tags should be specific keywords
+- All content should be relevant to the title
+- Return only valid JSON, no additional text or explanations"""
+
+        logger.info(f"Generating blog content from title: {request.title}")
+        
+        # Call OpenAI
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are an expert blog writer. Always return valid JSON only, no additional text."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=3000
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            logger.info(f"OpenAI response received for title-based generation")
+            
+        except Exception as openai_error:
+            logger.error(f"OpenAI API error: {str(openai_error)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"OpenAI API error: {str(openai_error)}"
+            )
+        
+        # Remove markdown code blocks if present
+        if result_text.startswith("```json"):
+            lines = result_text.split("\n")
+            result_text = "\n".join(lines[1:-1]) if len(lines) > 2 else result_text
+        elif result_text.startswith("```"):
+            lines = result_text.split("\n")
+            result_text = "\n".join(lines[1:-1]) if len(lines) > 2 else result_text
+        
+        result_text = result_text.strip()
+        
+        # Parse JSON response
+        try:
+            result = json.loads(result_text)
+            
+            content = result.get("content", "")
+            excerpt = result.get("excerpt", "")
+            categories = result.get("categories", [])
+            tags = result.get("tags", [])
+            
+            # Ensure they are the correct types
+            if not isinstance(categories, list):
+                categories = []
+            if not isinstance(tags, list):
+                tags = []
+            
+            # Limit counts
+            categories = categories[:3]
+            tags = tags[:8]
+            
+            # Clean and validate
+            categories = [str(c).strip() for c in categories if c]
+            tags = [str(t).strip() for t in tags if t]
+            
+            logger.info(f"Successfully generated content from title: {len(content)} chars, {len(categories)} categories, {len(tags)} tags")
+            
+            return {
+                "success": True,
+                "content": content,
+                "excerpt": excerpt,
+                "categories": categories,
+                "tags": tags
+            }
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON. Error: {str(e)}")
+            logger.error(f"Response text: {result_text[:500]}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to parse AI response. Error: {str(e)}"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating from title: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate from title: {str(e)}"
+        )
 
 
