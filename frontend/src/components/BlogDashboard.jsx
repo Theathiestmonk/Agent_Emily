@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react'
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
 
 import { useNotifications } from '../contexts/NotificationContext'
 
@@ -52,7 +52,11 @@ import {
 
   Maximize2,
 
-  Minimize2
+  Minimize2,
+
+  Eye,
+
+  EyeOff
 
 } from 'lucide-react'
 
@@ -127,6 +131,7 @@ const BlogDashboard = () => {
   const [lastCheckedTitle, setLastCheckedTitle] = useState('')
   const [contentManuallyEdited, setContentManuallyEdited] = useState(false)
   const [excerptManuallyEdited, setExcerptManuallyEdited] = useState(false)
+  const [showContentPreview, setShowContentPreview] = useState(false)
 
   const [showGenerationModal, setShowGenerationModal] = useState(false)
 
@@ -729,6 +734,88 @@ const BlogDashboard = () => {
     text = text.replace(/&quot;/g, '"')
     text = text.replace(/&#39;/g, "'")
     return text
+  }
+
+  // Helper function to decode HTML entities and ensure proper HTML rendering
+  // Similar to HTML Online Viewer - directly renders HTML without escaping
+  const prepareHtmlContent = (content) => {
+    if (!content || typeof content !== 'string') return ''
+    
+    // Trim whitespace
+    let processedContent = content.trim()
+    if (!processedContent) return ''
+    
+    // First, decode any double-encoded entities (like &amp;lt; should become <)
+    processedContent = processedContent
+      .replace(/&amp;lt;/g, '<')
+      .replace(/&amp;gt;/g, '>')
+      .replace(/&amp;amp;/g, '&')
+      .replace(/&amp;quot;/g, '"')
+      .replace(/&amp;#39;/g, "'")
+      .replace(/&amp;nbsp;/g, ' ')
+    
+    // Check if content contains HTML tags (like <h1>, <p>, etc.)
+    const hasHtmlTags = /<[a-z][a-z0-9]*[^>]*>/i.test(processedContent)
+    
+    if (hasHtmlTags) {
+      // Content has HTML tags - decode standard HTML entities and return as-is
+      // Decode entities manually to preserve HTML structure
+      processedContent = processedContent
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+      
+      // Return HTML as-is for rendering - don't process further
+      return processedContent
+    }
+    
+    // If content contains escaped HTML entities (like &lt; or &gt;)
+    if (processedContent.includes('&lt;') || processedContent.includes('&gt;') || processedContent.includes('&amp;')) {
+      // Decode HTML entities using browser's built-in decoder
+      const tmp = document.createElement('div')
+      tmp.innerHTML = processedContent
+      const decodedContent = tmp.innerHTML
+      
+      // Check if decoded content now has HTML tags
+      if (/<[a-z][a-z0-9]*[^>]*>/i.test(decodedContent)) {
+        return decodedContent
+      }
+    }
+    
+    // If content is plain text, convert to HTML paragraphs
+    return processedContent
+      .split(/\n\n+/)
+      .map(para => para.trim())
+      .filter(para => para)
+      .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+      .join('')
+  }
+
+  // Separate component to render HTML content using ref (bypasses React escaping)
+  const BlogContentRenderer = ({ content }) => {
+    const contentRef = useRef(null)
+    
+    useEffect(() => {
+      if (contentRef.current && content) {
+        const htmlContent = prepareHtmlContent(content)
+        
+        // Clear existing content first
+        contentRef.current.innerHTML = ''
+        
+        // Directly set innerHTML to bypass React's escaping
+        contentRef.current.innerHTML = htmlContent
+      }
+    }, [content])
+    
+    return (
+      <div 
+        ref={contentRef}
+        className="prose prose-sm md:prose-lg max-w-none text-gray-700 leading-relaxed"
+      />
+    )
   }
 
   const handleEditBlog = (blog) => {
@@ -2170,11 +2257,8 @@ const BlogDashboard = () => {
                         }
 
                       } else {
-
                         setSelectedBlog(blog)
-
                         setShowBlogPreview(true)
-
                       }
 
                     }}
@@ -2662,6 +2746,20 @@ const BlogDashboard = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
+                        setShowContentPreview(!showContentPreview)
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                      title={showContentPreview ? "Show HTML Editor" : "Show Preview"}
+                    >
+                      {showContentPreview ? (
+                        <Edit className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
                         handleAIEdit('content')
                       }}
                       className="p-1.5 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
@@ -2672,22 +2770,37 @@ const BlogDashboard = () => {
                   </div>
                 </div>
 
-                <textarea
+                {showContentPreview ? (
+                  <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white min-h-[250px] max-h-[500px] overflow-y-auto">
+                    <div 
+                      className="prose prose-sm md:prose-base max-w-none text-gray-700 leading-relaxed"
+                      dangerouslySetInnerHTML={{ 
+                        __html: editForm.content 
+                          ? (editForm.content.includes('<') 
+                              ? editForm.content 
+                              : editForm.content.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>').replace(/^/, '<p>').replace(/$/, '</p>'))
+                          : ''
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <textarea
 
-                  value={editForm.content}
+                    value={editForm.content}
 
-                  onChange={(e) => {
-                    setEditForm(prev => ({ ...prev, content: e.target.value }))
-                    setContentManuallyEdited(true) // Mark as manually edited
-                  }}
+                    onChange={(e) => {
+                      setEditForm(prev => ({ ...prev, content: e.target.value }))
+                      setContentManuallyEdited(true) // Mark as manually edited
+                    }}
 
-                  rows={10}
+                    rows={10}
 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
 
-                  placeholder="Enter your content here. You can use HTML tags for formatting if needed (e.g., &lt;h1&gt;, &lt;p&gt;, &lt;strong&gt;)..."
+                    placeholder="Enter your content here. You can use HTML tags for formatting if needed (e.g., &lt;h1&gt;, &lt;p&gt;, &lt;strong&gt;)..."
 
-                />
+                  />
+                )}
 
               </div>
 
@@ -2714,56 +2827,56 @@ const BlogDashboard = () => {
                     </div>
                   )}
                 </div>
+              
+              <div className="grid grid-cols-1 min-[640px]:grid-cols-2 gap-3 md:gap-4">
 
-                <div className="grid grid-cols-1 min-[640px]:grid-cols-2 gap-3 md:gap-4">
+                <div>
 
-                  <div>
+                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Categories (comma-separated)</label>
 
-                    <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Categories (comma-separated)</label>
+                  <input
 
-                    <input
+                    type="text"
 
-                      type="text"
-
-                      value={editForm.categories}
+                    value={editForm.categories}
 
                       onChange={(e) => {
                         setEditForm(prev => ({ ...prev, categories: e.target.value }))
                         setTagsCategoriesManuallyEdited(true) // Mark as manually edited
                       }}
 
-                      placeholder="Technology, Business, Lifestyle"
+                    placeholder="Technology, Business, Lifestyle"
 
-                      className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 
-                    />
+                  />
 
-                  </div>
+                </div>
 
-                  
-                  
-                  <div>
+                
+                
+                <div>
 
-                    <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
 
-                    <input
+                  <input
 
-                      type="text"
+                    type="text"
 
-                      value={editForm.tags}
+                    value={editForm.tags}
 
                       onChange={(e) => {
                         setEditForm(prev => ({ ...prev, tags: e.target.value }))
                         setTagsCategoriesManuallyEdited(true) // Mark as manually edited
                       }}
 
-                      placeholder="AI, Marketing, Innovation"
+                    placeholder="AI, Marketing, Innovation"
 
-                      className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 
-                    />
+                  />
 
-                  </div>
+                </div>
 
                 </div>
               </div>
@@ -3160,9 +3273,9 @@ const BlogDashboard = () => {
                   </div>
                 ) : (
                   <div 
-                    className="text-gray-700 leading-relaxed whitespace-pre-wrap"
-                    dangerouslySetInnerHTML={{ __html: selectedBlog.content.replace(/\n/g, '<br>') }}
-                  />
+                  className="prose prose-sm max-w-none text-gray-700 leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: prepareHtmlContent(selectedBlog.content || '') }}
+                />
                 )}
 
               </div>
@@ -3676,13 +3789,10 @@ const BlogDashboard = () => {
                   
                   {/* Blog Content */}
                   <div className="p-3 md:p-6">
-                    <div 
-                      className="prose prose-sm md:prose-lg max-w-none text-gray-700 leading-relaxed text-sm md:text-base"
-                      dangerouslySetInnerHTML={{ __html: selectedBlog.content.replace(/\n/g, '<br>') }}
-                                  />
-                                </div>
-                              </div>
-                          </div>
+                    <BlogContentRenderer content={selectedBlog.content || ''} />
+                  </div>
+                </div>
+              </div>
 
               {/* 3. Insights and Categories */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
