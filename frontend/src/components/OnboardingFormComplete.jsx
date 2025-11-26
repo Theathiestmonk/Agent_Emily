@@ -65,7 +65,6 @@ const OnboardingForm = ({
     target_audience_professional_types: [],
     target_audience_lifestyle_interests: [],
     target_audience_buyer_behavior: [],
-    target_audience_other: '',
     platform_tone_instagram: [],
     platform_tone_facebook: [],
     platform_tone_linkedin: [],
@@ -86,7 +85,6 @@ const OnboardingForm = ({
     contentTypeOther: '',
     contentThemeOther: '',
     postingTimeOther: '',
-    targetAudienceOther: '',
     currentPresenceOther: '',
     topPerformingContentTypeOther: ''
   })
@@ -97,8 +95,7 @@ const OnboardingForm = ({
     lifeStages: false,
     professionalTypes: false,
     lifestyleInterests: false,
-    buyerBehavior: false,
-    other: false
+    buyerBehavior: false
   })
 
   // Load initial data if provided
@@ -272,8 +269,7 @@ const OnboardingForm = ({
     buyerBehavior: [
       'Premium Buyers/High-Income Consumers', 'Budget-Conscious Shoppers', 'Impulse Buyers', 
       'Ethical/Sustainable Shoppers', 'Frequent Online Buyers'
-    ],
-    other: ['Not Sure', 'Other (please specify)']
+    ]
   }
 
   const handleInputChange = (field, value) => {
@@ -321,8 +317,7 @@ const OnboardingForm = ({
                 formData.target_audience_life_stages.length > 0 || 
                 formData.target_audience_professional_types.length > 0 || 
                 formData.target_audience_lifestyle_interests.length > 0 || 
-                formData.target_audience_buyer_behavior.length > 0 || 
-                formData.target_audience_other)
+                formData.target_audience_buyer_behavior.length > 0)
       case 2: // Brand & Contact
         return formData.brand_voice && formData.brand_tone && formData.phone_number && 
                formData.street_address && formData.city && formData.state && formData.country
@@ -381,8 +376,7 @@ const OnboardingForm = ({
           ...formData.target_audience_life_stages,
           ...formData.target_audience_professional_types,
           ...formData.target_audience_lifestyle_interests,
-          ...formData.target_audience_buyer_behavior,
-          ...(formData.target_audience_other ? [formData.target_audience_other] : [])
+          ...formData.target_audience_buyer_behavior
         ].filter(Boolean), // Remove any empty values
         
         // Include all "Other" input fields

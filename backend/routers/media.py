@@ -12,6 +12,7 @@ from supabase import create_client, Client
 
 from routers.connections import get_current_user, User
 from agents.media_agent import create_media_agent, ImageStyle, ImageSize
+from services.color_extraction_service import ColorExtractionService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -558,6 +559,107 @@ async def upload_logo(
         logger.error(f"Error uploading logo: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error uploading logo: {str(e)}")
 
+@router.post("/extract-colors-from-logo")
+async def extract_colors_from_logo(
+    logo_url: str = Form(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Extract dominant colors from a logo image"""
+    try:
+        logger.info(f"Color extraction request received - logo_url: {logo_url}, user: {current_user.id}")
+        
+        # Initialize color extraction service
+        color_service = ColorExtractionService()
+        
+        # Extract colors from logo URL
+        colors = color_service.extract_colors_from_url(logo_url, num_colors=4)
+        
+        logger.info(f"Extracted {len(colors)} colors: {colors}")
+        
+        return {
+            "success": True,
+            "colors": colors
+        }
+        
+    except Exception as e:
+        logger.error(f"Error extracting colors from logo: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error extracting colors: {str(e)}")
+
+@router.post("/upload-media")
+async def upload_media(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload a media file (image or video) to Supabase storage for onboarding/profile use"""
+    try:
+        logger.info(f"Media upload request received - filename: {file.filename}, user: {current_user.id}")
+        
+        # Validate file type - support both images and videos
+        allowed_image_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+        allowed_video_types = ['video/mp4', 'video/mpeg', 'video/quicktime', 'video/x-msvideo', 'video/webm']
+        allowed_types = allowed_image_types + allowed_video_types
+        
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid file type. Please upload an image (JPEG, PNG, GIF, WebP) or video (MP4, MOV, AVI, WebM)."
+            )
+        
+        # Read file content
+        file_content = await file.read()
+        file_size = len(file_content)
+        logger.info(f"File content read - size: {file_size} bytes")
+        
+        # Validate file size (max 50MB for videos, 10MB for images)
+        is_video = file.content_type in allowed_video_types
+        max_size = 50 * 1024 * 1024 if is_video else 10 * 1024 * 1024  # 50MB for videos, 10MB for images
+        size_limit_mb = 50 if is_video else 10
+        
+        if file_size > max_size:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"File size too large. Maximum size is {size_limit_mb}MB for {'videos' if is_video else 'images'}."
+            )
+        
+        # Generate filename
+        import uuid
+        file_ext = file.filename.split('.')[-1] if '.' in file.filename else ('mp4' if is_video else 'png')
+        filename = f"{current_user.id}-{uuid.uuid4().hex[:8]}.{file_ext}"
+        file_path = f"onboarding-media/{filename}"
+        logger.info(f"Generated file path: {file_path}")
+        
+        # Use user-uploads bucket for media (supports both images and videos)
+        bucket_name = "user-uploads"
+        logger.info(f"Using bucket: {bucket_name} for media upload")
+        
+        # Upload using admin client (bypasses RLS)
+        storage_response = supabase_admin.storage.from_(bucket_name).upload(
+            file_path,
+            file_content,
+            file_options={"content-type": file.content_type}
+        )
+        
+        if hasattr(storage_response, 'error') and storage_response.error:
+            raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_response.error}")
+        
+        # Get public URL
+        public_url = supabase_admin.storage.from_(bucket_name).get_public_url(file_path)
+        logger.info(f"Media uploaded successfully: {public_url}")
+        
+        return {
+            "success": True,
+            "url": public_url,
+            "filename": filename,
+            "size": file_size,
+            "type": "video" if is_video else "image"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading media: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading media: {str(e)}")
+
 @router.post("/upload-image")
 async def upload_image(
     file: UploadFile = File(...),
@@ -578,6 +680,306 @@ async def upload_image(
         filename = f"{post_id}-{uuid.uuid4().hex[:8]}.{file_ext}"
         file_path = filename
         logger.info(f"Generated file path: {file_path}")
+        
+        # Determine content type based on file type
+        if file.content_type and file.content_type.startswith('video/'):
+            content_type = file.content_type
+        elif file_ext.lower() in ['mp4', 'avi', 'mov', 'wmv', 'webm']:
+            content_type = f"video/{file_ext}"
+        else:
+            content_type = f"image/{file_ext}"
+        
+        logger.info(f"Determined content type: {content_type}")
+        
+        # Use user-uploads bucket for all uploads (now public, supports both images and videos)
+        bucket_name = "user-uploads"
+        logger.info(f"Using bucket: {bucket_name} for uploads")
+        
+        # Upload using admin client (bypasses RLS)
+        storage_response = supabase_admin.storage.from_(bucket_name).upload(
+            file_path,
+            file_content,
+            file_options={"content-type": content_type}
+        )
+        
+        if hasattr(storage_response, 'error') and storage_response.error:
+            raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_response.error}")
+        
+        # Get public URL
+        public_url = supabase_admin.storage.from_(bucket_name).get_public_url(file_path)
+        
+        # Update database using admin client
+        is_video = content_type.startswith('video/')
+        image_prompt = "User uploaded video" if is_video else "User uploaded image"
+        media_data = {
+            "post_id": post_id,
+            "image_url": public_url,  # Keep using image_url field for compatibility
+            "image_prompt": image_prompt,
+            "image_style": "user_upload",
+            "image_size": "custom",
+            "image_quality": "custom",
+            "generation_model": "user_upload",
+            "generation_cost": 0,
+            "generation_time": 0,
+            "is_approved": True
+        }
+        
+        # Check if image already exists
+        existing_images = supabase_admin.table("content_images").select("id").eq("post_id", post_id).order("created_at", desc=True).limit(1).execute()
+        
+        if existing_images.data and len(existing_images.data) > 0:
+            # Update existing image
+            supabase_admin.table("content_images").update({
+                "image_url": public_url,
+                "is_approved": True
+            }).eq("id", existing_images.data[0]["id"]).execute()
+        else:
+            # Create new image record
+            supabase_admin.table("content_images").insert(media_data).execute()
+        
+        # Update content_posts with primary image (user uploads are auto-approved)
+        supabase_admin.table("content_posts").update({
+            "primary_image_url": public_url,
+            "primary_image_prompt": image_prompt,
+            "primary_image_approved": True
+        }).eq("id", post_id).execute()
+        logger.info(f"Updated content_posts.primary_image_url for post {post_id} (uploaded image)")
+        
+        return {
+            "success": True,
+            "image_url": public_url,
+            "message": "Video uploaded successfully" if is_video else "Image uploaded successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error uploading image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading image: {str(e)}")
+
+        
+        # Determine content type based on file type
+        if file.content_type and file.content_type.startswith('video/'):
+            content_type = file.content_type
+        elif file_ext.lower() in ['mp4', 'avi', 'mov', 'wmv', 'webm']:
+            content_type = f"video/{file_ext}"
+        else:
+            content_type = f"image/{file_ext}"
+        
+        logger.info(f"Determined content type: {content_type}")
+        
+        # Use user-uploads bucket for all uploads (now public, supports both images and videos)
+        bucket_name = "user-uploads"
+        logger.info(f"Using bucket: {bucket_name} for uploads")
+        
+        # Upload using admin client (bypasses RLS)
+        storage_response = supabase_admin.storage.from_(bucket_name).upload(
+            file_path,
+            file_content,
+            file_options={"content-type": content_type}
+        )
+        
+        if hasattr(storage_response, 'error') and storage_response.error:
+            raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_response.error}")
+        
+        # Get public URL
+        public_url = supabase_admin.storage.from_(bucket_name).get_public_url(file_path)
+        
+        # Update database using admin client
+        is_video = content_type.startswith('video/')
+        image_prompt = "User uploaded video" if is_video else "User uploaded image"
+        media_data = {
+            "post_id": post_id,
+            "image_url": public_url,  # Keep using image_url field for compatibility
+            "image_prompt": image_prompt,
+            "image_style": "user_upload",
+            "image_size": "custom",
+            "image_quality": "custom",
+            "generation_model": "user_upload",
+            "generation_cost": 0,
+            "generation_time": 0,
+            "is_approved": True
+        }
+        
+        # Check if image already exists
+        existing_images = supabase_admin.table("content_images").select("id").eq("post_id", post_id).order("created_at", desc=True).limit(1).execute()
+        
+        if existing_images.data and len(existing_images.data) > 0:
+            # Update existing image
+            supabase_admin.table("content_images").update({
+                "image_url": public_url,
+                "is_approved": True
+            }).eq("id", existing_images.data[0]["id"]).execute()
+        else:
+            # Create new image record
+            supabase_admin.table("content_images").insert(media_data).execute()
+        
+        # Update content_posts with primary image (user uploads are auto-approved)
+        supabase_admin.table("content_posts").update({
+            "primary_image_url": public_url,
+            "primary_image_prompt": image_prompt,
+            "primary_image_approved": True
+        }).eq("id", post_id).execute()
+        logger.info(f"Updated content_posts.primary_image_url for post {post_id} (uploaded image)")
+        
+        return {
+            "success": True,
+            "image_url": public_url,
+            "message": "Video uploaded successfully" if is_video else "Image uploaded successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error uploading image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading image: {str(e)}")
+
+        
+        # Determine content type based on file type
+        if file.content_type and file.content_type.startswith('video/'):
+            content_type = file.content_type
+        elif file_ext.lower() in ['mp4', 'avi', 'mov', 'wmv', 'webm']:
+            content_type = f"video/{file_ext}"
+        else:
+            content_type = f"image/{file_ext}"
+        
+        logger.info(f"Determined content type: {content_type}")
+        
+        # Use user-uploads bucket for all uploads (now public, supports both images and videos)
+        bucket_name = "user-uploads"
+        logger.info(f"Using bucket: {bucket_name} for uploads")
+        
+        # Upload using admin client (bypasses RLS)
+        storage_response = supabase_admin.storage.from_(bucket_name).upload(
+            file_path,
+            file_content,
+            file_options={"content-type": content_type}
+        )
+        
+        if hasattr(storage_response, 'error') and storage_response.error:
+            raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_response.error}")
+        
+        # Get public URL
+        public_url = supabase_admin.storage.from_(bucket_name).get_public_url(file_path)
+        
+        # Update database using admin client
+        is_video = content_type.startswith('video/')
+        image_prompt = "User uploaded video" if is_video else "User uploaded image"
+        media_data = {
+            "post_id": post_id,
+            "image_url": public_url,  # Keep using image_url field for compatibility
+            "image_prompt": image_prompt,
+            "image_style": "user_upload",
+            "image_size": "custom",
+            "image_quality": "custom",
+            "generation_model": "user_upload",
+            "generation_cost": 0,
+            "generation_time": 0,
+            "is_approved": True
+        }
+        
+        # Check if image already exists
+        existing_images = supabase_admin.table("content_images").select("id").eq("post_id", post_id).order("created_at", desc=True).limit(1).execute()
+        
+        if existing_images.data and len(existing_images.data) > 0:
+            # Update existing image
+            supabase_admin.table("content_images").update({
+                "image_url": public_url,
+                "is_approved": True
+            }).eq("id", existing_images.data[0]["id"]).execute()
+        else:
+            # Create new image record
+            supabase_admin.table("content_images").insert(media_data).execute()
+        
+        # Update content_posts with primary image (user uploads are auto-approved)
+        supabase_admin.table("content_posts").update({
+            "primary_image_url": public_url,
+            "primary_image_prompt": image_prompt,
+            "primary_image_approved": True
+        }).eq("id", post_id).execute()
+        logger.info(f"Updated content_posts.primary_image_url for post {post_id} (uploaded image)")
+        
+        return {
+            "success": True,
+            "image_url": public_url,
+            "message": "Video uploaded successfully" if is_video else "Image uploaded successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error uploading image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading image: {str(e)}")
+
+        
+        # Determine content type based on file type
+        if file.content_type and file.content_type.startswith('video/'):
+            content_type = file.content_type
+        elif file_ext.lower() in ['mp4', 'avi', 'mov', 'wmv', 'webm']:
+            content_type = f"video/{file_ext}"
+        else:
+            content_type = f"image/{file_ext}"
+        
+        logger.info(f"Determined content type: {content_type}")
+        
+        # Use user-uploads bucket for all uploads (now public, supports both images and videos)
+        bucket_name = "user-uploads"
+        logger.info(f"Using bucket: {bucket_name} for uploads")
+        
+        # Upload using admin client (bypasses RLS)
+        storage_response = supabase_admin.storage.from_(bucket_name).upload(
+            file_path,
+            file_content,
+            file_options={"content-type": content_type}
+        )
+        
+        if hasattr(storage_response, 'error') and storage_response.error:
+            raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_response.error}")
+        
+        # Get public URL
+        public_url = supabase_admin.storage.from_(bucket_name).get_public_url(file_path)
+        
+        # Update database using admin client
+        is_video = content_type.startswith('video/')
+        image_prompt = "User uploaded video" if is_video else "User uploaded image"
+        media_data = {
+            "post_id": post_id,
+            "image_url": public_url,  # Keep using image_url field for compatibility
+            "image_prompt": image_prompt,
+            "image_style": "user_upload",
+            "image_size": "custom",
+            "image_quality": "custom",
+            "generation_model": "user_upload",
+            "generation_cost": 0,
+            "generation_time": 0,
+            "is_approved": True
+        }
+        
+        # Check if image already exists
+        existing_images = supabase_admin.table("content_images").select("id").eq("post_id", post_id).order("created_at", desc=True).limit(1).execute()
+        
+        if existing_images.data and len(existing_images.data) > 0:
+            # Update existing image
+            supabase_admin.table("content_images").update({
+                "image_url": public_url,
+                "is_approved": True
+            }).eq("id", existing_images.data[0]["id"]).execute()
+        else:
+            # Create new image record
+            supabase_admin.table("content_images").insert(media_data).execute()
+        
+        # Update content_posts with primary image (user uploads are auto-approved)
+        supabase_admin.table("content_posts").update({
+            "primary_image_url": public_url,
+            "primary_image_prompt": image_prompt,
+            "primary_image_approved": True
+        }).eq("id", post_id).execute()
+        logger.info(f"Updated content_posts.primary_image_url for post {post_id} (uploaded image)")
+        
+        return {
+            "success": True,
+            "image_url": public_url,
+            "message": "Video uploaded successfully" if is_video else "Image uploaded successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error uploading image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading image: {str(e)}")
+
         
         # Determine content type based on file type
         if file.content_type and file.content_type.startswith('video/'):
