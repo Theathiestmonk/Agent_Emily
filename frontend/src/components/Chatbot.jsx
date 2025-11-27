@@ -931,10 +931,62 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
 
   const shouldShowReadMore = (content) => {
     if (!content) return false
-    // Check if content has more than 9 lines or is longer than ~500 characters (rough estimate)
-    const lineCount = content.split('\n').length
-    const charCount = content.length
-    return lineCount > 9 || charCount > 500
+    
+    // Strip ALL markdown and formatting to get pure text content
+    // This ensures we measure actual visible content, not markdown syntax
+    const plainText = content
+      .replace(/```[\s\S]*?```/g, '') // Remove code blocks (including content)
+      .replace(/`[^`]+`/g, '') // Remove inline code
+      .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold markers, keep text
+      .replace(/\*([^*]+)\*/g, '$1') // Remove italic markers, keep text
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1') // Remove link syntax, keep text
+      .replace(/^#{1,6}\s+/gm, '') // Remove header markers
+      .replace(/^[\s]*[-*+]\s+/gm, '') // Remove bullet list markers
+      .replace(/^[\s]*\d+\.\s+/gm, '') // Remove numbered list markers
+      .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '') // Remove images
+      .replace(/^>+\s+/gm, '') // Remove blockquote markers
+      .replace(/\n{3,}/g, '\n\n') // Normalize multiple newlines
+      .replace(/[ \t]+/g, ' ') // Normalize spaces and tabs
+      .trim()
+    
+    // Count actual visible text characters (pure text, no markdown)
+    const textCharCount = plainText.length
+    
+    // Count line breaks in original content (before markdown stripping)
+    const originalLineBreaks = (content.match(/\n/g) || []).length
+    
+    // Count line breaks in plain text (after stripping)
+    const plainTextLineBreaks = (plainText.match(/\n/g) || []).length
+    
+    // BALANCED: Show "Read more" on longer responses that exceed 9 lines
+    // Use reasonable thresholds to catch long messages but avoid short ones
+    
+    // Method 1: If plain text has 900+ characters, likely exceeds 9 lines
+    // (9 lines × ~70-80 chars = 630-720, so 900+ is reasonable for longer content)
+    if (textCharCount >= 900) {
+      return true
+    }
+    
+    // Method 2: If there are 12+ line breaks AND substantial text (>700 chars)
+    // This catches longer structured content with many paragraphs/sections
+    if (originalLineBreaks >= 12 && textCharCount > 700) {
+      return true
+    }
+    
+    // Method 3: If there are 10+ line breaks in plain text (after stripping)
+    // This catches well-structured longer content
+    if (plainTextLineBreaks >= 10 && textCharCount > 600) {
+      return true
+    }
+    
+    // Lower threshold for testing - if content is clearly longer than 9 lines
+    // 9 lines × 70 chars = 630, so anything over 800 should definitely show
+    if (textCharCount >= 800) {
+      return true
+    }
+    
+    // Otherwise, content is not long enough to need truncation
+    return false
   }
 
   const handleCopyMessage = async (content) => {
@@ -1110,6 +1162,8 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   React.useImperativeHandle(ref, () => ({
     loadConversations: (messages) => {
       setMessages(messages)
+      // Don't auto-expand - let users use "Read more" button to expand messages
+      // This ensures consistent behavior and the button is always available
       // Scroll to bottom after loading
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -1155,7 +1209,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
             key={message.id}
             className={`flex flex-col ${message.type === 'user' ? 'items-end' : 'items-start'} w-full px-4 ${message.isNew ? 'animate-slide-in' : ''}`}
           >
-            <div className={`flex items-start gap-2 max-w-[50%] ${message.type === 'user' ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+            <div className={`flex items-start gap-2 max-w-[85%] sm:max-w-[75%] md:max-w-[60%] lg:max-w-[50%] ${message.type === 'user' ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
               {/* Icon */}
               <div className={`flex-shrink-0 ${message.type === 'user' ? 'order-2' : ''}`}>
                 {message.type === 'user' ? (
@@ -1266,86 +1320,97 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         )}
                 {message.content ? (
                   <div className="text-sm leading-relaxed prose prose-sm max-w-none">
-                    <div className={expandedMessages.has(message.id) ? '' : 'message-content-truncated'}>
-                    <ReactMarkdown 
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        p: ({ children }) => <p className={`mb-2 last:mb-0 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</p>,
-                        h1: ({ children }) => <h1 className={`text-lg font-bold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h1>,
-                        h2: ({ children }) => <h2 className={`text-base font-semibold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h2>,
-                        h3: ({ children }) => <h3 className={`text-sm font-semibold mb-1 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h3>,
-                        ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                        ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                        li: ({ children }) => <li className={message.type === 'user' ? 'text-white' : 'text-black'}>{children}</li>,
-                        code: ({ children, className }) => {
-                          const isInline = !className?.includes('language-')
-                          return isInline ? (
-                            <code className={`px-1 py-0.5 rounded text-xs font-mono ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
-                          ) : (
-                            <code className={`block p-2 rounded text-xs font-mono overflow-x-auto ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
-                          )
-                        },
-                        pre: ({ children }) => <pre className={`p-2 rounded text-xs font-mono overflow-x-auto mb-2 ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</pre>,
-                        blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
-                        strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
-                        em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
-                        a: ({ children, href }) => {
-                          // Handle lead links - navigate to leads dashboard
-                          if (href && href.startsWith('leads/')) {
-                            const leadId = href.replace('leads/', '')
+                    <div className={shouldShowReadMore(message.content) && !expandedMessages.has(message.id) ? 'message-content-truncated' : ''}>
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          p: ({ children }) => <p className={`mb-2 last:mb-0 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</p>,
+                          h1: ({ children }) => <h1 className={`text-lg font-bold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h1>,
+                          h2: ({ children }) => <h2 className={`text-base font-semibold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h2>,
+                          h3: ({ children }) => <h3 className={`text-sm font-semibold mb-1 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h3>,
+                          ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                          li: ({ children }) => <li className={message.type === 'user' ? 'text-white' : 'text-black'}>{children}</li>,
+                          code: ({ children, className }) => {
+                            const isInline = !className?.includes('language-')
+                            return isInline ? (
+                              <code className={`px-1 py-0.5 rounded text-xs font-mono ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
+                            ) : (
+                              <code className={`block p-2 rounded text-xs font-mono overflow-x-auto ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
+                            )
+                          },
+                          pre: ({ children }) => <pre className={`p-2 rounded text-xs font-mono overflow-x-auto mb-2 ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</pre>,
+                          blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
+                          strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
+                          em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
+                          a: ({ children, href }) => {
+                            // Handle lead links - navigate to leads dashboard
+                            if (href && href.startsWith('leads/')) {
+                              const leadId = href.replace('leads/', '')
+                              return (
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    navigate(`/leads?leadId=${leadId}`)
+                                  }}
+                                  className={`underline cursor-pointer ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`}
+                                >
+                                  {children}
+                                </button>
+                              )
+                            }
+                            // Regular links
                             return (
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  navigate(`/leads?leadId=${leadId}`)
-                                }}
-                                className={`underline cursor-pointer ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`}
+                              <a 
+                                href={href} 
+                                className={`underline ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
                               >
                                 {children}
-                              </button>
+                              </a>
                             )
-                          }
-                          // Regular links
-                          return (
-                            <a 
-                              href={href} 
-                              className={`underline ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                            >
-                              {children}
-                            </a>
-                          )
-                        },
-                        table: ({ children }) => <div className="overflow-x-auto mb-2"><table className={`min-w-full border rounded ${message.type === 'user' ? 'border-white/30' : 'border-purple-300'}`}>{children}</table></div>,
-                        th: ({ children }) => <th className={`border px-2 py-1 text-left text-xs font-semibold ${message.type === 'user' ? 'border-white/30 bg-white/10 text-white' : 'border-purple-300 bg-purple-100 text-black'}`}>{children}</th>,
-                        td: ({ children }) => <td className={`border px-2 py-1 text-xs ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-300 text-black/90'}`}>{children}</td>,
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
+                          },
+                          table: ({ children }) => <div className="overflow-x-auto mb-2"><table className={`min-w-full border rounded ${message.type === 'user' ? 'border-white/30' : 'border-purple-300'}`}>{children}</table></div>,
+                          th: ({ children }) => <th className={`border px-2 py-1 text-left text-xs font-semibold ${message.type === 'user' ? 'border-white/30 bg-white/10 text-white' : 'border-purple-300 bg-purple-100 text-black'}`}>{children}</th>,
+                          td: ({ children }) => <td className={`border px-2 py-1 text-xs ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-300 text-black/90'}`}>{children}</td>,
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
                     </div>
-                    {shouldShowReadMore(message.content) ? (
-                      <div className="flex items-center justify-between mt-2 gap-2">
-                        <button
+                    {shouldShowReadMore(message.content) && !expandedMessages.has(message.id) && (
+                      <span 
+                        onClick={() => toggleMessageExpansion(message.id)}
+                        className={`inline ml-1 cursor-pointer font-medium ${message.type === 'user' ? 'text-pink-300 hover:text-pink-200' : 'text-purple-600 hover:text-purple-700'}`}
+                        style={{ textDecoration: 'none' }}
+                      >
+                        Read more
+                      </span>
+                    )}
+                    {shouldShowReadMore(message.content) && expandedMessages.has(message.id) && (
+                      <div className="mt-2">
+                        <span 
                           onClick={() => toggleMessageExpansion(message.id)}
-                          className={`text-xs ${message.type === 'user' ? 'text-blue-300 hover:text-blue-200' : 'text-purple-700 hover:text-purple-800'}`}
+                          className={`inline-block cursor-pointer font-medium ${message.type === 'user' ? 'text-pink-300 hover:text-pink-200' : 'text-purple-600 hover:text-purple-700'}`}
+                          style={{ textDecoration: 'none' }}
                         >
-                          {expandedMessages.has(message.id) ? 'Read less' : 'Read more'}
-                        </button>
+                          Read less
+                        </span>
                         {message.timestamp && (
-                          <div className={`text-xs ${message.type === 'user' ? 'text-white/70' : 'text-gray-500'}`}>
+                          <span className={`ml-3 text-xs ${message.type === 'user' ? 'text-white/70' : 'text-gray-500'}`}>
                             {formatTime(message.timestamp)}
-                          </div>
+                          </span>
                         )}
                       </div>
-                    ) : message.timestamp ? (
+                    )}
+                    {!shouldShowReadMore(message.content) && message.timestamp && (
                       <div className="mt-2">
                         <div className={`text-xs ${message.type === 'user' ? 'text-white/70' : 'text-gray-500'}`}>
                           {formatTime(message.timestamp)}
                         </div>
                       </div>
-                    ) : null}
+                    )}
                     
                     {/* Email Content Box for Chase Messages */}
                     {message.isChase && message.chaseMetadata && message.chaseMetadata.emailContent && (
@@ -1397,86 +1462,97 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                   </div>
                 ) : (
                   <div className="text-sm leading-relaxed prose prose-sm max-w-none">
-                    <div className={expandedMessages.has(message.id) ? '' : 'message-content-truncated'}>
-                    <ReactMarkdown 
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        p: ({ children }) => <p className={`mb-2 last:mb-0 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</p>,
-                        h1: ({ children }) => <h1 className={`text-lg font-bold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h1>,
-                        h2: ({ children }) => <h2 className={`text-base font-semibold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h2>,
-                        h3: ({ children }) => <h3 className={`text-sm font-semibold mb-1 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h3>,
-                        ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                        ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                        li: ({ children }) => <li className={message.type === 'user' ? 'text-white' : 'text-black'}>{children}</li>,
-                        code: ({ children, className }) => {
-                          const isInline = !className?.includes('language-')
-                          return isInline ? (
-                            <code className={`px-1 py-0.5 rounded text-xs font-mono ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
-                          ) : (
-                            <code className={`block p-2 rounded text-xs font-mono overflow-x-auto ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
-                          )
-                        },
-                        pre: ({ children }) => <pre className={`p-2 rounded text-xs font-mono overflow-x-auto mb-2 ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</pre>,
-                        blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
-                        strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
-                        em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
-                        a: ({ children, href }) => {
-                          // Handle lead links - navigate to leads dashboard
-                          if (href && href.startsWith('leads/')) {
-                            const leadId = href.replace('leads/', '')
+                    <div className={shouldShowReadMore(message.content) && !expandedMessages.has(message.id) ? 'message-content-truncated' : ''}>
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          p: ({ children }) => <p className={`mb-2 last:mb-0 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</p>,
+                          h1: ({ children }) => <h1 className={`text-lg font-bold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h1>,
+                          h2: ({ children }) => <h2 className={`text-base font-semibold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h2>,
+                          h3: ({ children }) => <h3 className={`text-sm font-semibold mb-1 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h3>,
+                          ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                          li: ({ children }) => <li className={message.type === 'user' ? 'text-white' : 'text-black'}>{children}</li>,
+                          code: ({ children, className }) => {
+                            const isInline = !className?.includes('language-')
+                            return isInline ? (
+                              <code className={`px-1 py-0.5 rounded text-xs font-mono ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
+                            ) : (
+                              <code className={`block p-2 rounded text-xs font-mono overflow-x-auto ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
+                            )
+                          },
+                          pre: ({ children }) => <pre className={`p-2 rounded text-xs font-mono overflow-x-auto mb-2 ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</pre>,
+                          blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
+                          strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
+                          em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
+                          a: ({ children, href }) => {
+                            // Handle lead links - navigate to leads dashboard
+                            if (href && href.startsWith('leads/')) {
+                              const leadId = href.replace('leads/', '')
+                              return (
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    navigate(`/leads?leadId=${leadId}`)
+                                  }}
+                                  className={`underline cursor-pointer ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`}
+                                >
+                                  {children}
+                                </button>
+                              )
+                            }
+                            // Regular links
                             return (
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  navigate(`/leads?leadId=${leadId}`)
-                                }}
-                                className={`underline cursor-pointer ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`}
+                              <a 
+                                href={href} 
+                                className={`underline ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
                               >
                                 {children}
-                              </button>
+                              </a>
                             )
-                          }
-                          // Regular links
-                          return (
-                            <a 
-                              href={href} 
-                              className={`underline ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                            >
-                              {children}
-                            </a>
-                          )
-                        },
-                        table: ({ children }) => <div className="overflow-x-auto mb-2"><table className={`min-w-full border rounded ${message.type === 'user' ? 'border-white/30' : 'border-purple-300'}`}>{children}</table></div>,
-                        th: ({ children }) => <th className={`border px-2 py-1 text-left text-xs font-semibold ${message.type === 'user' ? 'border-white/30 bg-white/10 text-white' : 'border-purple-300 bg-purple-100 text-black'}`}>{children}</th>,
-                        td: ({ children }) => <td className={`border px-2 py-1 text-xs ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-300 text-black/90'}`}>{children}</td>,
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
+                          },
+                          table: ({ children }) => <div className="overflow-x-auto mb-2"><table className={`min-w-full border rounded ${message.type === 'user' ? 'border-white/30' : 'border-purple-300'}`}>{children}</table></div>,
+                          th: ({ children }) => <th className={`border px-2 py-1 text-left text-xs font-semibold ${message.type === 'user' ? 'border-white/30 bg-white/10 text-white' : 'border-purple-300 bg-purple-100 text-black'}`}>{children}</th>,
+                          td: ({ children }) => <td className={`border px-2 py-1 text-xs ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-300 text-black/90'}`}>{children}</td>,
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
                     </div>
-                    {shouldShowReadMore(message.content) ? (
-                      <div className="flex items-center justify-between mt-2 gap-2">
-                        <button
+                    {shouldShowReadMore(message.content) && !expandedMessages.has(message.id) && (
+                      <span 
+                        onClick={() => toggleMessageExpansion(message.id)}
+                        className={`inline ml-1 cursor-pointer font-medium ${message.type === 'user' ? 'text-pink-300 hover:text-pink-200' : 'text-purple-600 hover:text-purple-700'}`}
+                        style={{ textDecoration: 'none' }}
+                      >
+                        Read more
+                      </span>
+                    )}
+                    {shouldShowReadMore(message.content) && expandedMessages.has(message.id) && (
+                      <div className="mt-2">
+                        <span 
                           onClick={() => toggleMessageExpansion(message.id)}
-                          className={`text-xs ${message.type === 'user' ? 'text-blue-300 hover:text-blue-200' : 'text-purple-700 hover:text-purple-800'}`}
+                          className={`inline-block cursor-pointer font-medium ${message.type === 'user' ? 'text-pink-300 hover:text-pink-200' : 'text-purple-600 hover:text-purple-700'}`}
+                          style={{ textDecoration: 'none' }}
                         >
-                          {expandedMessages.has(message.id) ? 'Read less' : 'Read more'}
-                        </button>
+                          Read less
+                        </span>
                         {message.timestamp && (
-                          <div className={`text-xs ${message.type === 'user' ? 'text-white/70' : 'text-gray-500'}`}>
+                          <span className={`ml-3 text-xs ${message.type === 'user' ? 'text-white/70' : 'text-gray-500'}`}>
                             {formatTime(message.timestamp)}
-                          </div>
+                          </span>
                         )}
                       </div>
-                    ) : message.timestamp ? (
+                    )}
+                    {!shouldShowReadMore(message.content) && message.timestamp && (
                       <div className="mt-2">
                         <div className={`text-xs ${message.type === 'user' ? 'text-white/70' : 'text-gray-500'}`}>
                           {formatTime(message.timestamp)}
                         </div>
                       </div>
-                    ) : null}
+                    )}
                     
                     {/* Email Content Box for Chase Messages */}
                     {message.isChase && message.chaseMetadata && message.chaseMetadata.emailContent && (
@@ -1668,14 +1744,6 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
           animation: slide-in 0.4s ease-out;
         }
         
-        .message-content-truncated {
-          display: -webkit-box;
-          -webkit-line-clamp: 9;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        
         .messages-container {
           scrollbar-width: none; /* Firefox */
           -ms-overflow-style: none; /* IE and Edge */
@@ -1692,6 +1760,13 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         .line-clamp-3 {
           display: -webkit-box;
           -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        
+        .message-content-truncated {
+          display: -webkit-box;
+          -webkit-line-clamp: 9;
           -webkit-box-orient: vertical;
           overflow: hidden;
         }

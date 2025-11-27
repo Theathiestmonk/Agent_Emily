@@ -682,12 +682,36 @@ async def upload_image(
         logger.info(f"Generated file path: {file_path}")
         
         # Determine content type based on file type
+        # Map file extensions to correct MIME types (Supabase requires image/jpeg, not image/jpg)
+        content_type_map = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+            'mp4': 'video/mp4',
+            'avi': 'video/x-msvideo',
+            'mov': 'video/quicktime',
+            'wmv': 'video/x-ms-wmv',
+            'webm': 'video/webm'
+        }
+        
         if file.content_type and file.content_type.startswith('video/'):
             content_type = file.content_type
-        elif file_ext.lower() in ['mp4', 'avi', 'mov', 'wmv', 'webm']:
-            content_type = f"video/{file_ext}"
+        elif file.content_type and file.content_type.startswith('image/'):
+            # Use provided content type if it's valid, but normalize jpg to jpeg
+            if file.content_type == 'image/jpg':
+                content_type = 'image/jpeg'
+            else:
+                content_type = file.content_type
+        elif file_ext.lower() in content_type_map:
+            content_type = content_type_map[file_ext.lower()]
         else:
-            content_type = f"image/{file_ext}"
+            # Fallback: try to determine from extension
+            if file_ext.lower() in ['mp4', 'avi', 'mov', 'wmv', 'webm']:
+                content_type = content_type_map.get(file_ext.lower(), f"video/{file_ext}")
+            else:
+                content_type = content_type_map.get(file_ext.lower(), 'image/jpeg')  # Default to jpeg
         
         logger.info(f"Determined content type: {content_type}")
         
