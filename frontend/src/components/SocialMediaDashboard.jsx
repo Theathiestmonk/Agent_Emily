@@ -60,11 +60,37 @@ const SocialMediaDashboard = () => {
   const [selectedPostForInsights, setSelectedPostForInsights] = useState(null)
   const [expandedPlatform, setExpandedPlatform] = useState(null)
   const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 768)
+  const [profile, setProfile] = useState(null)
+  const [expandedCaptions, setExpandedCaptions] = useState(new Set())
 
   useEffect(() => {
     setDataLoaded(false)
     fetchData()
+    fetchProfile()
   }, [])
+
+  const fetchProfile = async () => {
+    try {
+      if (!user?.id) return
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('logo_url, business_name')
+        .eq('id', user.id)
+        .single()
+      
+      if (error) {
+        console.error('Error fetching profile:', error)
+        return
+      }
+      
+      if (data) {
+        setProfile(data)
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error)
+    }
+  }
 
   // Track window size for responsive behavior
   useEffect(() => {
@@ -555,133 +581,183 @@ const SocialMediaDashboard = () => {
                   // Find connection info for this platform (if available)
                   const connection = connectedPlatforms.find(conn => conn.platform === platform)
                   
+                  const accountName = connection?.page_name || connection?.account_name || platform
+                  const accountUsername = connection?.username || connection?.page_name || platform.toLowerCase()
+                  
                   return (
-                    <div key={platform} className={`${theme.bg} ${theme.border} border rounded-xl shadow-sm hover:shadow-lg transition-all duration-300`}>
-                      {/* Platform Header */}
-                      <div className="p-3 border-b border-gray-200">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <div className={`w-8 h-8 ${theme.iconBg} rounded-lg flex items-center justify-center`}>
-                              <div className="text-white">
-                                {getPlatformIcon(platform)}
+                    <div key={platform} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden">
+                      {latestPost ? (
+                        <>
+                          {/* Profile Header - Like Instagram/Facebook */}
+                          <div className="px-4 py-3 flex items-center justify-between border-b border-gray-200">
+                            <div className="flex items-center space-x-3">
+                              {/* Profile Picture */}
+                              {profile?.logo_url ? (
+                                <img 
+                                  src={profile.logo_url} 
+                                  alt={accountName}
+                                  className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                                />
+                              ) : (
+                                <div className={`w-10 h-10 ${theme.iconBg} rounded-full flex items-center justify-center flex-shrink-0`}>
+                                  <div className="text-white text-sm font-semibold">
+                                    {accountName.charAt(0).toUpperCase()}
+                                  </div>
+                                </div>
+                              )}
+                              {/* Username */}
+                              <div>
+                                <h3 className="font-semibold text-sm text-gray-900">
+                                  {accountName}
+                                </h3>
+                                {accountUsername !== accountName && (
+                                  <p className="text-xs text-gray-500">@{accountUsername}</p>
+                                )}
                               </div>
                             </div>
-                            <div>
-                              <h3 className={`font-semibold capitalize text-sm ${theme.text}`}>
-                                {platform}
-                              </h3>
-                              <p className="text-xs text-gray-500">
-                                {connection?.page_name || connection?.account_name || platform}
-                              </p>
-                            </div>
+                            {/* More options (three dots) */}
+                            <button className="text-gray-600 hover:text-gray-900">
+                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="1.5"/>
+                                <circle cx="6" cy="12" r="1.5"/>
+                                <circle cx="18" cy="12" r="1.5"/>
+                              </svg>
+                            </button>
                           </div>
-                          <div className="flex items-center space-x-1">
-                            <CheckCircle className="w-3 h-3 text-green-500" />
-                            <span className="text-xs text-green-600 font-medium">Connected</span>
-                          </div>
-                        </div>
-                      </div>
 
-                      {/* Post Content */}
-                      <div className="p-3">
-                        {latestPost ? (
-                          <div className="space-y-2">
-                            {/* Post Text */}
-                            <div>
-                              <p className="text-gray-800 text-xs leading-relaxed line-clamp-2">
-                                {latestPost.message || latestPost.text || 'No text content'}
-                              </p>
+                          {/* Post Media - Full Width */}
+                          {latestPost.media_url && (
+                            <div className="w-full bg-black">
+                              {(() => {
+                                const isVideo = latestPost.media_type === 'VIDEO' || 
+                                               latestPost.media_type === 'REELS' ||
+                                               (latestPost.thumbnail_url && latestPost.thumbnail_url !== latestPost.media_url) ||
+                                               latestPost.media_url.match(/\.(mp4|mov|avi|webm|m4v)$/i)
+                                
+                                return isVideo ? (
+                                  <video 
+                                    src={latestPost.media_url} 
+                                    controls
+                                    className="w-full h-auto max-h-96 object-contain"
+                                    poster={latestPost.thumbnail_url}
+                                  >
+                                    Your browser does not support the video tag.
+                                  </video>
+                                ) : (
+                                  <img 
+                                    src={latestPost.media_url} 
+                                    alt="Post media"
+                                    className="w-full h-auto max-h-96 object-contain"
+                                  />
+                                )
+                              })()}
+                            </div>
+                          )}
+
+                          {/* Action Buttons - Like Instagram/Facebook */}
+                          <div className="px-4 py-2">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center space-x-4">
+                                <button className="text-gray-900 hover:opacity-70 transition-opacity">
+                                  <Heart className="w-6 h-6" fill="none" strokeWidth={2} />
+                                </button>
+                                <button className="text-gray-900 hover:opacity-70 transition-opacity">
+                                  <MessageCircle className="w-6 h-6" fill="none" strokeWidth={2} />
+                                </button>
+                                <button className="text-gray-900 hover:opacity-70 transition-opacity">
+                                  <Share2 className="w-6 h-6" fill="none" strokeWidth={2} />
+                                </button>
+                              </div>
+                              <button className="text-gray-900 hover:opacity-70 transition-opacity">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                                </svg>
+                              </button>
                             </div>
 
-                            {/* Post Media */}
-                            {latestPost.media_url && (
-                              <div className="rounded-lg overflow-hidden max-h-32">
-                                {(() => {
-                                  // Check if it's a video/reel based on media_type or thumbnail_url presence
-                                  const isVideo = latestPost.media_type === 'VIDEO' || 
-                                                 latestPost.media_type === 'REELS' ||
-                                                 (latestPost.thumbnail_url && latestPost.thumbnail_url !== latestPost.media_url) ||
-                                                 latestPost.media_url.match(/\.(mp4|mov|avi|webm|m4v)$/i)
-                                  
-                                  return isVideo ? (
-                                    <video 
-                                      src={latestPost.media_url} 
-                                      controls
-                                      className="w-full h-auto object-contain max-h-32"
-                                      poster={latestPost.thumbnail_url}
-                                    >
-                                      Your browser does not support the video tag.
-                                    </video>
-                                  ) : (
-                                    <img 
-                                      src={latestPost.media_url} 
-                                      alt="Post media"
-                                      className="w-full h-auto object-contain max-h-32"
-                                    />
-                                  )
-                                })()}
+                            {/* Likes Count */}
+                            {latestPost.likes_count !== undefined && latestPost.likes_count > 0 && (
+                              <div className="mb-1">
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {formatEngagement(latestPost.likes_count)} {latestPost.likes_count === 1 ? 'like' : 'likes'}
+                                </p>
                               </div>
                             )}
 
-                            {/* Post Stats */}
-                            <div className="flex items-center justify-between text-xs text-gray-500">
-                              <div className="flex items-center space-x-3">
-                                {latestPost.likes_count !== undefined && (
-                                  <div className="flex items-center space-x-1">
-                                    <Heart className="w-3 h-3" />
-                                    <span>{formatEngagement(latestPost.likes_count)}</span>
-                                  </div>
+                            {/* Caption */}
+                            <div className="mb-2">
+                              <p className="text-sm text-gray-900">
+                                <span className="font-semibold">{accountName}</span>{' '}
+                                <span className={`text-gray-800 ${!expandedCaptions.has(`${platform}-${latestPost.id}`) ? 'line-clamp-2' : ''}`}>
+                                  {latestPost.message || latestPost.text || ''}
+                                </span>
+                                {(latestPost.message || latestPost.text) && 
+                                 (latestPost.message?.length > 100 || latestPost.text?.length > 100) && (
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      const key = `${platform}-${latestPost.id}`
+                                      setExpandedCaptions(prev => {
+                                        const newSet = new Set(prev)
+                                        if (newSet.has(key)) {
+                                          newSet.delete(key)
+                                        } else {
+                                          newSet.add(key)
+                                        }
+                                        return newSet
+                                      })
+                                    }}
+                                    className="text-gray-500 hover:text-gray-700 text-sm ml-1"
+                                  >
+                                    {expandedCaptions.has(`${platform}-${latestPost.id}`) ? 'less' : 'more'}
+                                  </button>
                                 )}
-                                {latestPost.comments_count !== undefined && (
-                                  <div className="flex items-center space-x-1">
-                                    <MessageCircle className="w-3 h-3" />
-                                    <span>{formatEngagement(latestPost.comments_count)}</span>
-                                  </div>
-                                )}
-                                {latestPost.shares_count !== undefined && (
-                                  <div className="flex items-center space-x-1">
-                                    <Share2 className="w-3 h-3" />
-                                    <span>{formatEngagement(latestPost.shares_count)}</span>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex items-center space-x-1">
-                                <Calendar className="w-3 h-3" />
-                                <span>{formatDate(latestPost.created_time || latestPost.created_at)}</span>
-                              </div>
+                              </p>
                             </div>
 
-                            {/* Post Links */}
-                            <div className="pt-1 border-t border-gray-200 flex items-center justify-between gap-2">
-                              {latestPost.permalink_url && (
-                                <a
-                                  href={latestPost.permalink_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
-                                >
-                                  <ExternalLink className="w-3 h-3" />
-                                  <span>View on {platform}</span>
-                                </a>
-                              )}
-                              <button
-                                onClick={() => handleViewInsights(latestPost, platform)}
-                                className="flex items-center space-x-1 text-xs text-purple-600 hover:text-purple-800 transition-colors"
-                              >
-                                <Sparkles className="w-3 h-3" />
-                                <span>View Insights</span>
+                            {/* Comments Count */}
+                            {latestPost.comments_count !== undefined && latestPost.comments_count > 0 && (
+                              <button className="text-sm text-gray-500 hover:text-gray-700 mb-2">
+                                View all {formatEngagement(latestPost.comments_count)} {latestPost.comments_count === 1 ? 'comment' : 'comments'}
                               </button>
+                            )}
+
+                            {/* Timestamp */}
+                            <div className="text-xs text-gray-500 uppercase tracking-wide">
+                              {formatDate(latestPost.created_time || latestPost.created_at)}
                             </div>
                           </div>
-                        ) : (
-                          <div className="text-center py-4">
-                            <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                              <Eye className="w-5 h-5 text-gray-400" />
-                            </div>
-                            <p className="text-gray-500 text-xs">No recent posts found</p>
+
+                          {/* Bottom Actions */}
+                          <div className="px-4 py-2 border-t border-gray-200 flex items-center justify-between">
+                            {latestPost.permalink_url && (
+                              <a
+                                href={latestPost.permalink_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                <span>View on {platform}</span>
+                              </a>
+                            )}
+                            <button
+                              onClick={() => handleViewInsights(latestPost, platform)}
+                              className="flex items-center space-x-1 text-xs text-purple-600 hover:text-purple-800 transition-colors"
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              <span>Insights</span>
+                            </button>
                           </div>
-                        )}
-                      </div>
+                        </>
+                      ) : (
+                        <div className="text-center py-8">
+                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Eye className="w-8 h-8 text-gray-400" />
+                          </div>
+                          <p className="text-gray-500 text-sm">No recent posts found</p>
+                        </div>
+                      )}
                     </div>
                   )
                 })}

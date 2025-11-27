@@ -13,7 +13,9 @@ import {
   XCircle,
   Wand2,
   ChevronDown,
-  MoreVertical
+  MoreVertical,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 
 const ContentModal = ({
@@ -57,6 +59,7 @@ const ContentModal = ({
   const [imageMenuOpen, setImageMenuOpen] = React.useState(false)
   const [carouselMenuOpen, setCarouselMenuOpen] = React.useState({})
   const [headerMenuOpen, setHeaderMenuOpen] = React.useState(false)
+  const [carouselIndex, setCarouselIndex] = React.useState(0)
   const menuRef = React.useRef(null)
   const headerMenuRef = React.useRef(null)
   
@@ -76,6 +79,11 @@ const ContentModal = ({
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [])
+  
+  // Reset carousel index when content changes
+  React.useEffect(() => {
+    setCarouselIndex(0)
+  }, [content?.id])
   
   if (!content) return null
 
@@ -258,128 +266,184 @@ const ContentModal = ({
                   // Get image directly from content.media_url (which comes from primary_image_url)
                   const finalImageUrl = content.media_url || content.image_url
                   
-                  // If carousel, show all images; otherwise show single image
+                  // If carousel, show slider; otherwise show single image
                   if (isCarousel && carouselImages.length > 0) {
+                    const goToPrevious = (e) => {
+                      e.stopPropagation()
+                      if (carouselIndex > 0) {
+                        setCarouselIndex(carouselIndex - 1)
+                      }
+                    }
+                    
+                    const goToNext = (e) => {
+                      e.stopPropagation()
+                      if (carouselIndex < carouselImages.length - 1) {
+                        setCarouselIndex(carouselIndex + 1)
+                      }
+                    }
+                    
+                    const currentImageUrl = typeof carouselImages[carouselIndex] === 'string' 
+                      ? carouselImages[carouselIndex] 
+                      : (carouselImages[carouselIndex]?.url || carouselImages[carouselIndex])
+                    
                     return (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                            <Layers className="w-5 h-5" />
-                            Carousel Images ({carouselImages.length})
-                          </h4>
-                        </div>
-                        <div className="space-y-4">
-                          {carouselImages.map((imgUrl, index) => {
-                            const imageUrl = typeof imgUrl === 'string' ? imgUrl : (imgUrl.url || imgUrl)
-                            return (
-                              <div key={index} className="relative group w-full flex justify-center">
-                                {/* Menu Icon - Top Right */}
-                                {content.status?.toLowerCase() !== 'published' && (
-                                  <div className="absolute top-2 right-2 z-10">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setCarouselMenuOpen(prev => ({
-                                          ...prev,
-                                          [index]: !prev[index]
-                                        }))
-                                      }}
-                                      className="w-8 h-8 bg-white/90 hover:bg-white rounded-lg flex items-center justify-center shadow-md transition-all duration-200 hover:scale-110 opacity-0 group-hover:opacity-100"
-                                      title="Options"
-                                    >
-                                      <MoreVertical className="w-4 h-4 text-gray-700" />
-                                    </button>
-                                    
-                                    {/* Dropdown Menu */}
-                                    {carouselMenuOpen[index] && (
-                                      <div className="absolute right-0 top-10 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            onSetImageEditorData({
-                                              postContent: content.content,
-                                              inputImageUrl: imageUrl
-                                            })
-                                            onShowImageEditor(true)
-                                            setCarouselMenuOpen(prev => ({ ...prev, [index]: false }))
-                                            onClose()
-                                          }}
-                                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                        >
-                                          <Edit className="w-4 h-4" />
-                                          <span>Edit Image</span>
-                                        </button>
-                                        
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            onReplaceCarouselImage(content.id, index)
-                                            setCarouselMenuOpen(prev => ({ ...prev, [index]: false }))
-                                          }}
-                                          disabled={generatingMedia.has(content.id)}
-                                          className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${
-                                            generatingMedia.has(content.id)
-                                              ? 'text-gray-400 cursor-not-allowed'
-                                              : 'text-gray-700 hover:bg-gray-100'
-                                          }`}
-                                        >
-                                          {generatingMedia.has(content.id) ? (
-                                            <>
-                                              <RefreshCw className="w-4 h-4 animate-spin" />
-                                              <span>Regenerating...</span>
-                                            </>
-                                          ) : (
-                                            <>
-                                              <Wand2 className="w-4 h-4" />
-                                              <span>Regenerate Image</span>
-                                            </>
-                                          )}
-                                        </button>
-                                        
-                                        <label className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 cursor-pointer">
-                                          <Upload className="w-4 h-4" />
-                                          <span>Upload Image</span>
-                                          <input
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={(e) => {
-                                              const file = e.target.files[0]
-                                              if (file) {
-                                                if (onUploadCarouselImage) {
-                                                  onUploadCarouselImage(content.id, index, file)
-                                                } else if (onFileSelect) {
-                                                  onFileSelect(e)
-                                                  setTimeout(() => {
-                                                    onReplaceCarouselImage(content.id, index)
-                                                  }, 100)
-                                                }
-                                                setCarouselMenuOpen(prev => ({ ...prev, [index]: false }))
-                                              }
-                                            }}
-                                            className="hidden"
-                                            disabled={uploadingImage.has(content.id)}
-                                          />
-                                        </label>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                <img
-                                  src={getFullSizeImageUrl(imageUrl) || imageUrl}
-                                  alt={`Carousel image ${index + 1}`}
-                                  className="w-full max-h-[60vh] object-contain rounded-lg shadow-md cursor-pointer hover:opacity-90 transition-opacity"
-                                  onClick={() => onImageClick(getFullSizeImageUrl(imageUrl) || imageUrl, `${content.title} - Image ${index + 1}`)}
-                                  onError={(e) => {
-                                    console.error('❌ Carousel image failed to load:', imageUrl)
-                                    e.target.style.display = 'none'
+                      <div className="relative w-full flex justify-center" ref={menuRef}>
+                        {/* Menu Icon - Top Right */}
+                        {content.status?.toLowerCase() !== 'published' && (
+                          <div className="absolute top-2 right-2 z-10">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setImageMenuOpen(!imageMenuOpen)
+                              }}
+                              className="w-8 h-8 bg-white/90 hover:bg-white rounded-lg flex items-center justify-center shadow-md transition-all duration-200 hover:scale-110"
+                              title="Options"
+                            >
+                              <MoreVertical className="w-4 h-4 text-gray-700" />
+                            </button>
+                            
+                            {/* Dropdown Menu */}
+                            {imageMenuOpen && (
+                              <div className="absolute right-0 top-10 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onSetImageEditorData({
+                                      postContent: content.content,
+                                      inputImageUrl: currentImageUrl
+                                    })
+                                    onShowImageEditor(true)
+                                    setImageMenuOpen(false)
+                                    onClose()
                                   }}
-                                />
-                                <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs font-medium">
-                                  {index + 1}/{carouselImages.length}
-                                </div>
+                                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                  <span>Edit Image</span>
+                                </button>
+                                
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onReplaceCarouselImage(content.id, carouselIndex)
+                                    setImageMenuOpen(false)
+                                  }}
+                                  disabled={generatingMedia.has(content.id)}
+                                  className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${
+                                    generatingMedia.has(content.id)
+                                      ? 'text-gray-400 cursor-not-allowed'
+                                      : 'text-gray-700 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  {generatingMedia.has(content.id) ? (
+                                    <>
+                                      <RefreshCw className="w-4 h-4 animate-spin" />
+                                      <span>Regenerating...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Wand2 className="w-4 h-4" />
+                                      <span>Regenerate Image</span>
+                                    </>
+                                  )}
+                                </button>
+                                
+                                <label className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 cursor-pointer">
+                                  <Upload className="w-4 h-4" />
+                                  <span>Upload Image</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                      const file = e.target.files[0]
+                                      if (file) {
+                                        if (onUploadCarouselImage) {
+                                          onUploadCarouselImage(content.id, carouselIndex, file)
+                                        } else if (onFileSelect) {
+                                          onFileSelect(e)
+                                          setTimeout(() => {
+                                            onReplaceCarouselImage(content.id, carouselIndex)
+                                          }, 100)
+                                        }
+                                        setImageMenuOpen(false)
+                                      }
+                                    }}
+                                    className="hidden"
+                                    disabled={uploadingImage.has(content.id)}
+                                  />
+                                </label>
                               </div>
-                            )
-                          })}
+                            )}
+                          </div>
+                        )}
+                        
+                        <div className="relative w-full h-[70vh] overflow-hidden group">
+                          {/* Carousel Slider */}
+                          <div 
+                            className="flex transition-transform duration-300 ease-in-out h-full"
+                            style={{ transform: `translateX(-${carouselIndex * 100}%)` }}
+                          >
+                            {carouselImages.map((imgUrl, index) => {
+                              const imageUrl = typeof imgUrl === 'string' ? imgUrl : (imgUrl.url || imgUrl)
+                              return (
+                                <div key={index} className="w-full h-full flex-shrink-0 relative flex justify-center">
+                                  <img
+                                    src={getFullSizeImageUrl(imageUrl) || imageUrl}
+                                    alt={`Carousel image ${index + 1}`}
+                                    className="w-full max-h-[70vh] object-contain rounded-lg shadow-lg cursor-pointer"
+                                    onClick={() => onImageClick(getFullSizeImageUrl(imageUrl) || imageUrl, `${content.title} - Image ${index + 1}`)}
+                                    onError={(e) => {
+                                      console.error('❌ Carousel image failed to load:', imageUrl)
+                                      e.target.style.display = 'none'
+                                    }}
+                                  />
+                                </div>
+                              )
+                            })}
+                          </div>
+                          
+                          {/* Left Arrow - Show on hover */}
+                          {carouselImages.length > 1 && carouselIndex > 0 && (
+                            <button
+                              onClick={goToPrevious}
+                              className="absolute left-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20"
+                              aria-label="Previous image"
+                            >
+                              <ChevronLeft className="w-5 h-5 text-white" />
+                            </button>
+                          )}
+                          
+                          {/* Right Arrow - Show on hover */}
+                          {carouselImages.length > 1 && carouselIndex < carouselImages.length - 1 && (
+                            <button
+                              onClick={goToNext}
+                              className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20"
+                              aria-label="Next image"
+                            >
+                              <ChevronRight className="w-5 h-5 text-white" />
+                            </button>
+                          )}
+                          
+                          {/* Navigation Dots */}
+                          {carouselImages.length > 1 && (
+                            <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex items-center gap-1.5 z-10">
+                              {carouselImages.map((_, index) => (
+                                <button
+                                  key={index}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setCarouselIndex(index)
+                                  }}
+                                  className={`transition-all duration-200 rounded-full ${
+                                    index === carouselIndex
+                                      ? 'w-2 h-2 bg-white'
+                                      : 'w-1.5 h-1.5 bg-white/50 hover:bg-white/75'
+                                  }`}
+                                  aria-label={`Go to slide ${index + 1}`}
+                                />
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )

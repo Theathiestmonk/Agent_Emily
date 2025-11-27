@@ -1122,7 +1122,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
             key={message.id}
             className={`flex flex-col ${message.type === 'user' ? 'items-end' : 'items-start'} w-full px-4 ${message.isNew ? 'animate-slide-in' : ''}`}
           >
-            <div className={`flex items-start gap-2 max-w-[85%] sm:max-w-[75%] md:max-w-[60%] lg:max-w-[50%] ${message.type === 'user' ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+            <div className={`flex items-start gap-2 max-w-[60%] ${message.type === 'user' ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
               {/* Icon */}
               <div className={`flex-shrink-0 ${message.type === 'user' ? 'order-2' : ''}`}>
                 {message.type === 'user' ? (
