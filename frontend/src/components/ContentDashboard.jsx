@@ -2012,59 +2012,113 @@ const ContentDashboard = () => {
       // Add to generating set
       setGeneratingMedia(prev => new Set(prev).add(content.id))
       
-      const result = await mediaService.generateMedia(content.id)
+      // Check if this is a carousel post
+      const isCarousel = content.post_type === 'carousel' || 
+                         content.post_type?.toLowerCase() === 'carousel'
+      
+      let result
+      if (isCarousel) {
+        // Generate all carousel images
+        result = await mediaService.generateCarouselImages(content.id)
+      } else {
+        // Generate single image
+        result = await mediaService.generateMedia(content.id)
+      }
       
       if (result.success) {
         console.log('🎨 Generation successful, fetching images for content:', content.id)
         console.log('🎨 Generation result:', result)
         
-        // Update the content in state with the new image URL
-        const imageUrl = result.image_url
-        console.log('🖼️ Image URL from result:', imageUrl)
-        
-        if (imageUrl) {
-          // Update the content item in allContent state with the new media_url
+        // Update the content in state with the new image URL(s)
+        if (isCarousel && result.carousel_images) {
+          // Update metadata with carousel images
+          const updatedMetadata = {
+            ...(content.metadata || {}),
+            carousel_images: result.carousel_images
+          }
+          
+          const firstImageUrl = result.carousel_images[0]
+          
           setAllContent(prevContent => 
             prevContent.map(item => 
               item.id === content.id 
-                ? { ...item, media_url: imageUrl, primary_image_url: imageUrl }
+                ? { 
+                    ...item, 
+                    metadata: updatedMetadata,
+                    media_url: firstImageUrl,
+                    primary_image_url: firstImageUrl
+                  }
                 : item
             )
           )
           
-          // Also update scheduledContent if it exists
           setScheduledContent(prevContent => 
             prevContent.map(item => 
               item.id === content.id 
-                ? { ...item, media_url: imageUrl, primary_image_url: imageUrl }
+                ? { 
+                    ...item, 
+                    metadata: updatedMetadata,
+                    media_url: firstImageUrl,
+                    primary_image_url: firstImageUrl
+                  }
                 : item
             )
           )
           
           setCelebrationData({
-            imageUrl: imageUrl,
+            imageUrl: firstImageUrl,
             generationTime: result.generation_time,
             generationModel: result.generation_model,
             generationService: result.generation_service
           })
           setShowCelebration(true)
-          
-          // Immediately update state and then refresh from database to ensure consistency
-          // This ensures the new image shows right away and persists after refresh
-          setTimeout(() => {
-            fetchAllContent()
-          }, 500)
-          
-          // Also refresh after a longer delay to catch any database replication delays
-          setTimeout(() => {
-            fetchAllContent()
-          }, 2000)
         } else {
-          // Fallback to regular notification if no image URL
-          showSuccess('Media generated successfully!', `Image created in ${result.generation_time}s`)
-          // Refresh content to get updated image URL from backend
-          fetchAllContent()
+          // Single image generation
+          const imageUrl = result.image_url
+          console.log('🖼️ Image URL from result:', imageUrl)
+          
+          if (imageUrl) {
+            // Update the content item in allContent state with the new media_url
+            setAllContent(prevContent => 
+              prevContent.map(item => 
+                item.id === content.id 
+                  ? { ...item, media_url: imageUrl, primary_image_url: imageUrl }
+                  : item
+              )
+            )
+            
+            // Also update scheduledContent if it exists
+            setScheduledContent(prevContent => 
+              prevContent.map(item => 
+                item.id === content.id 
+                  ? { ...item, media_url: imageUrl, primary_image_url: imageUrl }
+                  : item
+              )
+            )
+            
+            setCelebrationData({
+              imageUrl: imageUrl,
+              generationTime: result.generation_time,
+              generationModel: result.generation_model,
+              generationService: result.generation_service
+            })
+            setShowCelebration(true)
+          } else {
+            // Fallback to regular notification if no image URL
+            showSuccess('Media generated successfully!', `Image created in ${result.generation_time || 0}s`)
+          }
         }
+        
+        // Immediately update state and then refresh from database to ensure consistency
+        // This ensures the new image shows right away and persists after refresh
+        setTimeout(() => {
+          fetchAllContent()
+        }, 500)
+        
+        // Also refresh after a longer delay to catch any database replication delays
+        setTimeout(() => {
+          fetchAllContent()
+        }, 2000)
       } else {
         throw new Error(result.error || 'Failed to generate media')
       }
