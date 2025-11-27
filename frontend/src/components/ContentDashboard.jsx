@@ -2018,14 +2018,29 @@ const ContentDashboard = () => {
         console.log('🎨 Generation successful, fetching images for content:', content.id)
         console.log('🎨 Generation result:', result)
         
-        // Fetch the generated image from Supabase
-        await fetchPostImages(content.id)
-        
-        // Use the image URL directly from the result, not from state
+        // Update the content in state with the new image URL
         const imageUrl = result.image_url
         console.log('🖼️ Image URL from result:', imageUrl)
         
         if (imageUrl) {
+          // Update the content item in allContent state with the new media_url
+          setAllContent(prevContent => 
+            prevContent.map(item => 
+              item.id === content.id 
+                ? { ...item, media_url: imageUrl, primary_image_url: imageUrl }
+                : item
+            )
+          )
+          
+          // Also update scheduledContent if it exists
+          setScheduledContent(prevContent => 
+            prevContent.map(item => 
+              item.id === content.id 
+                ? { ...item, media_url: imageUrl, primary_image_url: imageUrl }
+                : item
+            )
+          )
+          
           setCelebrationData({
             imageUrl: imageUrl,
             generationTime: result.generation_time,
@@ -2033,9 +2048,22 @@ const ContentDashboard = () => {
             generationService: result.generation_service
           })
           setShowCelebration(true)
+          
+          // Immediately update state and then refresh from database to ensure consistency
+          // This ensures the new image shows right away and persists after refresh
+          setTimeout(() => {
+            fetchAllContent()
+          }, 500)
+          
+          // Also refresh after a longer delay to catch any database replication delays
+          setTimeout(() => {
+            fetchAllContent()
+          }, 2000)
         } else {
           // Fallback to regular notification if no image URL
           showSuccess('Media generated successfully!', `Image created in ${result.generation_time}s`)
+          // Refresh content to get updated image URL from backend
+          fetchAllContent()
         }
       } else {
         throw new Error(result.error || 'Failed to generate media')
@@ -3400,124 +3428,129 @@ const ContentDashboard = () => {
                         
                         {/* Action Icons */}
                         <div className="flex items-center space-x-2 ml-auto">
-                          <div className="relative">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleEditContent(content)
-                              }}
-                              onMouseEnter={() => setHoveredButton(`${content.id}-edit`)}
-                              onMouseLeave={() => setHoveredButton(null)}
-                              className="w-8 h-8 bg-pink-100 hover:bg-pink-200 rounded-lg transition-all duration-200 flex items-center justify-center"
-                            >
-                              <Edit className="w-4 h-4 text-pink-600" />
-                            </button>
-                            {hoveredButton === `${content.id}-edit` && (
-                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                                Edit Post
-                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                          {/* Only show edit, generate, upload, and share buttons if content is not published */}
+                          {content.status?.toLowerCase() !== 'published' && (
+                            <>
+                              <div className="relative">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleEditContent(content)
+                                  }}
+                                  onMouseEnter={() => setHoveredButton(`${content.id}-edit`)}
+                                  onMouseLeave={() => setHoveredButton(null)}
+                                  className="w-8 h-8 bg-pink-100 hover:bg-pink-200 rounded-lg transition-all duration-200 flex items-center justify-center"
+                                >
+                                  <Edit className="w-4 h-4 text-pink-600" />
+                                </button>
+                                {hoveredButton === `${content.id}-edit` && (
+                                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                    Edit Post
+                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          
-                          <div className="relative">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleGenerateMedia(content)
-                              }}
-                              onMouseEnter={() => setHoveredButton(`${content.id}-generate`)}
-                              onMouseLeave={() => setHoveredButton(null)}
-                              disabled={generatingMedia.has(content.id)}
-                              className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
-                                generatingMedia.has(content.id)
-                                  ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
-                                  : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90'
-                              }`}
-                            >
-                              {generatingMedia.has(content.id) ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Wand2 className="w-4 h-4" />
-                              )}
-                            </button>
-                            {hoveredButton === `${content.id}-generate` && (
-                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                                {generatingMedia.has(content.id) ? 'Generating Image with AI...' : 'Generate Image with AI'}
-                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                              
+                              <div className="relative">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleGenerateMedia(content)
+                                  }}
+                                  onMouseEnter={() => setHoveredButton(`${content.id}-generate`)}
+                                  onMouseLeave={() => setHoveredButton(null)}
+                                  disabled={generatingMedia.has(content.id)}
+                                  className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
+                                    generatingMedia.has(content.id)
+                                      ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                      : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90'
+                                  }`}
+                                >
+                                  {generatingMedia.has(content.id) ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Wand2 className="w-4 h-4" />
+                                  )}
+                                </button>
+                                {hoveredButton === `${content.id}-generate` && (
+                                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                    {generatingMedia.has(content.id) ? 'Generating Image with AI...' : 'Generate Image with AI'}
+                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          
-                          <div className="relative">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleOpenUploadModal(content.id)
-                              }}
-                              onMouseEnter={() => setHoveredButton(`${content.id}-upload`)}
-                              onMouseLeave={() => setHoveredButton(null)}
-                              disabled={uploadingImage.has(content.id)}
-                              className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
-                                uploadingImage.has(content.id)
-                                  ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
-                                  : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:opacity-90'
-                              }`}
-                            >
-                              {uploadingImage.has(content.id) ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Upload className="w-4 h-4" />
-                              )}
-                            </button>
-                            {hoveredButton === `${content.id}-upload` && (
-                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                                {uploadingImage.has(content.id) ? 'Uploading...' : 'Upload Image/Video'}
-                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                              
+                              <div className="relative">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleOpenUploadModal(content.id)
+                                  }}
+                                  onMouseEnter={() => setHoveredButton(`${content.id}-upload`)}
+                                  onMouseLeave={() => setHoveredButton(null)}
+                                  disabled={uploadingImage.has(content.id)}
+                                  className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
+                                    uploadingImage.has(content.id)
+                                      ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                      : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:opacity-90'
+                                  }`}
+                                >
+                                  {uploadingImage.has(content.id) ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Upload className="w-4 h-4" />
+                                  )}
+                                </button>
+                                {hoveredButton === `${content.id}-upload` && (
+                                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                    {uploadingImage.has(content.id) ? 'Uploading...' : 'Upload Image/Video'}
+                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          
-                          <div className="relative">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                e.preventDefault()
-                                
-                                // Prevent duplicate clicks
-                                if (postingContent.has(content.id)) {
-                                  console.log('⚠️ Already posting, ignoring click')
-                                  return
-                                }
-                                
-                                // Check if already published
-                                const status = content.status?.toLowerCase()
-                                if (status === 'published') {
-                                  showError('Post Already Published', 'This post has already been published.')
-                                  return
-                                }
-                                
-                                // Publish post to platform
-                                handlePostContent(content)
-                              }}
-                              onMouseEnter={() => setHoveredButton(`${content.id}-share`)}
-                              onMouseLeave={() => setHoveredButton(null)}
-                              disabled={postingContent.has(content.id) || content.status?.toLowerCase() === 'published'}
-                              className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 rounded-lg transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {postingContent.has(content.id) ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Share2 className="w-4 h-4" />
-                              )}
-                            </button>
-                            {hoveredButton === `${content.id}-share` && (
-                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                                Publish to {content.platform}
-                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                              
+                              <div className="relative">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    e.preventDefault()
+                                    
+                                    // Prevent duplicate clicks
+                                    if (postingContent.has(content.id)) {
+                                      console.log('⚠️ Already posting, ignoring click')
+                                      return
+                                    }
+                                    
+                                    // Check if already published
+                                    const status = content.status?.toLowerCase()
+                                    if (status === 'published') {
+                                      showError('Post Already Published', 'This post has already been published.')
+                                      return
+                                    }
+                                    
+                                    // Publish post to platform
+                                    handlePostContent(content)
+                                  }}
+                                  onMouseEnter={() => setHoveredButton(`${content.id}-share`)}
+                                  onMouseLeave={() => setHoveredButton(null)}
+                                  disabled={postingContent.has(content.id) || content.status?.toLowerCase() === 'published'}
+                                  className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 rounded-lg transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {postingContent.has(content.id) ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Share2 className="w-4 h-4" />
+                                  )}
+                                </button>
+                                {hoveredButton === `${content.id}-share` && (
+                                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                    Publish to {content.platform}
+                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
+                            </>
+                          )}
                           
                           <div className="relative">
                             <button
@@ -3794,54 +3827,56 @@ const ContentDashboard = () => {
                           )}
                           
                           {/* Action buttons overlay */}
-                          <div className="absolute bottom-4 right-4 flex gap-2">
-                            {(() => {
-                              // Use content.media_url (which comes from primary_image_url)
-                              const finalImageUrl = selectedContentForModal.media_url || selectedContentForModal.image_url
-                              
-                              if (!finalImageUrl) return null
-                              
-                              return (
-                                <>
-                                  {!isVideoFile(finalImageUrl) && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setImageEditorData({
-                                          postContent: selectedContentForModal.content,
-                                          inputImageUrl: finalImageUrl
-                                        })
-                                        setShowImageEditor(true)
-                                        handleCloseModal()
-                                      }}
-                                      className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors"
-                                    >
-                                      Edit Image
-                                    </button>
-                                  )}
-                                  <label className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors cursor-pointer inline-flex items-center space-x-1">
-                                    <Upload className="w-4 h-4" />
-                                    <span>Replace Media</span>
-                                    <input
-                                      type="file"
-                                      accept="image/*,video/*"
-                                      onChange={(e) => {
-                                        const file = e.target.files[0]
-                                        if (file) {
-                                          handleFileSelect(e)
-                                          setTimeout(() => {
-                                            handleUploadImage(selectedContentForModal.id)
-                                          }, 100)
-                                        }
-                                      }}
-                                      className="hidden"
-                                      disabled={uploadingImage.has(selectedContentForModal.id)}
-                                    />
-                                  </label>
-                                </>
-                              )
-                            })()}
-                          </div>
+                          {selectedContentForModal.status?.toLowerCase() !== 'published' && (
+                            <div className="absolute bottom-4 right-4 flex gap-2">
+                              {(() => {
+                                // Use content.media_url (which comes from primary_image_url)
+                                const finalImageUrl = selectedContentForModal.media_url || selectedContentForModal.image_url
+                                
+                                if (!finalImageUrl) return null
+                                
+                                return (
+                                  <>
+                                    {!isVideoFile(finalImageUrl) && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setImageEditorData({
+                                            postContent: selectedContentForModal.content,
+                                            inputImageUrl: finalImageUrl
+                                          })
+                                          setShowImageEditor(true)
+                                          handleCloseModal()
+                                        }}
+                                        className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors"
+                                      >
+                                        Edit Image
+                                      </button>
+                                    )}
+                                    <label className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors cursor-pointer inline-flex items-center space-x-1">
+                                      <Upload className="w-4 h-4" />
+                                      <span>Replace Media</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*,video/*"
+                                        onChange={(e) => {
+                                          const file = e.target.files[0]
+                                          if (file) {
+                                            handleFileSelect(e)
+                                            setTimeout(() => {
+                                              handleUploadImage(selectedContentForModal.id)
+                                            }, 100)
+                                          }
+                                        }}
+                                        className="hidden"
+                                        disabled={uploadingImage.has(selectedContentForModal.id)}
+                                      />
+                                    </label>
+                                  </>
+                                )
+                              })()}
+                            </div>
+                          )}
                           
                           {/* Uploading overlay */}
                           {uploadingImage.has(selectedContentForModal.id) && (
@@ -3859,26 +3894,29 @@ const ContentDashboard = () => {
                     {/* Media Header and Upload - Below image */}
                     <div className="flex items-center justify-between">
                       <h4 className="text-lg font-semibold text-gray-900">Media</h4>
-                      <label className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 cursor-pointer text-sm font-medium transition-colors">
-                        <Upload className="w-4 h-4" />
-                        <span>Upload Media</span>
-                        <input
-                          type="file"
-                          accept="image/*,video/*"
-                          onChange={(e) => {
-                            const file = e.target.files[0]
-                            if (file) {
-                              handleFileSelect(e)
-                              // Upload immediately after selection
-                              setTimeout(() => {
-                                handleUploadImage(selectedContentForModal.id)
-                              }, 100)
-                            }
-                          }}
-                          className="hidden"
-                          disabled={uploadingImage.has(selectedContentForModal.id)}
-                        />
-                      </label>
+                      {/* Only show upload button if content is not published */}
+                      {selectedContentForModal.status?.toLowerCase() !== 'published' && (
+                        <label className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 cursor-pointer text-sm font-medium transition-colors">
+                          <Upload className="w-4 h-4" />
+                          <span>Upload Media</span>
+                          <input
+                            type="file"
+                            accept="image/*,video/*"
+                            onChange={(e) => {
+                              const file = e.target.files[0]
+                              if (file) {
+                                handleFileSelect(e)
+                                // Upload immediately after selection
+                                setTimeout(() => {
+                                  handleUploadImage(selectedContentForModal.id)
+                                }, 100)
+                              }
+                            }}
+                            className="hidden"
+                            disabled={uploadingImage.has(selectedContentForModal.id)}
+                          />
+                        </label>
+                      )}
                     </div>
                     
                     {/* Hashtags - Moved below image */}
@@ -3911,28 +3949,31 @@ const ContentDashboard = () => {
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <h4 className="text-lg font-semibold text-gray-900">Title</h4>
-                          <div className="flex items-center space-x-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleManualEdit('title')
-                              }}
-                              className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
-                              title="Edit manually"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleAIEdit('title')
-                              }}
-                              className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
-                              title="Edit with AI"
-                            >
-                              <Sparkles className="w-4 h-4" />
-                            </button>
-                          </div>
+                          {/* Only show edit buttons if content is not published */}
+                          {selectedContentForModal.status?.toLowerCase() !== 'published' && (
+                            <div className="flex items-center space-x-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleManualEdit('title')
+                                }}
+                                className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                                title="Edit manually"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleAIEdit('title')
+                                }}
+                                className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
+                                title="Edit with AI"
+                              >
+                                <Sparkles className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                         {editingTitleInModal ? (
                           <div className="space-y-2">
@@ -3977,28 +4018,31 @@ const ContentDashboard = () => {
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <h4 className="text-lg font-semibold text-gray-900">Content</h4>
-                          <div className="flex items-center space-x-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleManualEdit('content')
-                              }}
-                              className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
-                              title="Edit manually"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleAIEdit('content')
-                              }}
-                              className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
-                              title="Edit with AI"
-                            >
-                              <Sparkles className="w-4 h-4" />
-                            </button>
-                          </div>
+                          {/* Only show edit buttons if content is not published */}
+                          {selectedContentForModal.status?.toLowerCase() !== 'published' && (
+                            <div className="flex items-center space-x-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleManualEdit('content')
+                                }}
+                                className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                                title="Edit manually"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleAIEdit('content')
+                                }}
+                                className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
+                                title="Edit with AI"
+                              >
+                                <Sparkles className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                         {editingContentInModal ? (
                           <div className="space-y-2">
@@ -4076,7 +4120,7 @@ const ContentDashboard = () => {
                         </div>
                       </div>
                       
-                      {/* Approve/Disapprove Buttons on Right */}
+                      {/* Approve/Disapprove/Delete Buttons on Right */}
                       <div className="flex items-center space-x-3">
                         {selectedContentForModal.status === 'draft' && (
                           <button
@@ -4091,7 +4135,20 @@ const ContentDashboard = () => {
                             <span>Approve</span>
                           </button>
                         )}
-                        {(selectedContentForModal.status === 'scheduled' || selectedContentForModal.status === 'published' || selectedContentForModal.status?.toLowerCase() === 'approved') && (
+                        {selectedContentForModal.status?.toLowerCase() === 'published' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteConfirm(selectedContentForModal)
+                              handleCloseModal()
+                            }}
+                            className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                            <span>Delete</span>
+                          </button>
+                        )}
+                        {(selectedContentForModal.status === 'scheduled' || selectedContentForModal.status?.toLowerCase() === 'approved') && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation()

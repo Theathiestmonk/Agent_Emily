@@ -117,79 +117,70 @@ def get_current_user(authorization: str = Header(None)):
         
         
         # Extract token
-
         token = authorization.split(" ")[1]
-
         print(f"Token received: {token[:20]}...")
-
         
-        
-        # Try to get user info from Supabase using the token
-
+        # First, try to decode JWT directly to avoid Supabase API timeout
         try:
-
+            # Decode JWT without verification (JWT is base64 encoded)
+            # Format: header.payload.signature
+            parts = token.split('.')
+            if len(parts) >= 2:
+                # Decode payload (second part)
+                payload = parts[1]
+                # Add padding if needed
+                payload += '=' * (4 - len(payload) % 4)
+                decoded_payload = base64.urlsafe_b64decode(payload)
+                decoded_token = json.loads(decoded_payload)
+                
+                user_id = decoded_token.get("sub")
+                user_email = decoded_token.get("email", "unknown@example.com")
+                user_metadata = decoded_token.get("user_metadata", {})
+                user_name = user_metadata.get("name") or user_metadata.get("full_name") or user_email.split("@")[0]
+                
+                if user_id:
+                    print(f"✅ Decoded user from JWT: {user_id} - {user_email}")
+                    return User(
+                        id=user_id,
+                        email=user_email,
+                        name=user_name,
+                        created_at=datetime.now().isoformat()
+                    )
+        except Exception as jwt_error:
+            print(f"⚠️ JWT decode error (will try Supabase API): {jwt_error}")
+        
+        # Fallback: Try to get user info from Supabase using the token
+        try:
             print(f"Attempting to authenticate with Supabase...")
-
             user_response = supabase.auth.get_user(token)
-
             print(f"Supabase user response: {user_response}")
-
-            
             
             if user_response and hasattr(user_response, 'user') and user_response.user:
-
                 user_data = user_response.user
-
                 print(f"✅ Authenticated user: {user_data.id} - {user_data.email}")
-
                 return User(
-
                     id=user_data.id,
-
                     email=user_data.email or "unknown@example.com",
-
                     name=user_data.user_metadata.get('name', user_data.email or "Unknown User"),
-
                     created_at=user_data.created_at.isoformat() if hasattr(user_data.created_at, 'isoformat') else str(user_data.created_at)
-
                 )
-
             else:
-
-                print("❌ No user found in response, using mock user")
-
-                return User(
-
-                    id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
-
-                    email="test@example.com", 
-
-                    name="Test User",
-
-                    created_at="2025-01-01T00:00:00Z"
-
+                print("❌ No user found in response")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token or user not found"
                 )
                 
-                
-                
+        except HTTPException:
+            raise
         except Exception as e:
-
             print(f"❌ Supabase auth error: {e}")
-
             print(f"Error type: {type(e).__name__}")
-
-            # Fallback to mock for now
-
-            return User(
-
-                id="d523ec90-d5ee-4393-90b7-8f117782fcf5",
-
-                email="test@example.com", 
-
-                name="Test User",
-
-                created_at="2025-01-01T00:00:00Z"
-
+            # If JWT decode already succeeded, we shouldn't reach here
+            # But if both fail, raise proper error instead of using mock user
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Authentication failed: {str(e)}"
             )
             
             
