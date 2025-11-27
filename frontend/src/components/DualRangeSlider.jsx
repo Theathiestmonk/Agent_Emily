@@ -171,8 +171,8 @@ const DualRangeSlider = ({
 
   return (
     <div className={`w-full ${className}`}>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex-1">
+      <div className="flex items-start justify-between mb-4 gap-4">
+        <div className="flex-1 flex flex-col">
           <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
             Minimum Age
           </label>
@@ -184,11 +184,13 @@ const DualRangeSlider = ({
             onChange={(e) => handleInputChange('min', e.target.value)}
             onBlur={() => handleInputBlur('min')}
             placeholder={`Min: ${min}`}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent h-[38px]"
           />
         </div>
-        <div className="mx-4 text-gray-400">-</div>
-        <div className="flex-1">
+        <div className="flex flex-col justify-center" style={{ marginTop: '22px', height: '38px' }}>
+          <div className="flex items-center justify-center text-gray-400 text-xl font-medium">-</div>
+        </div>
+        <div className="flex-1 flex flex-col">
           <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
             Maximum Age
           </label>
@@ -199,7 +201,7 @@ const DualRangeSlider = ({
             onChange={(e) => handleInputChange('max', e.target.value)}
             onBlur={() => handleInputBlur('max')}
             placeholder={`Max: ${max}+`}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent h-[38px]"
           />
         </div>
       </div>
