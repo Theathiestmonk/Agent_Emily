@@ -225,6 +225,35 @@ class BlogService {
     }, false)
   }
 
+  async generateTagsCategories(content, title = null) {
+    return this.makeRequest('/api/blogs/generate-tags-categories', {
+      method: 'POST',
+      body: JSON.stringify({ content, title })
+    })
+  }
+
+  async checkTagsCategoriesRelevance(content, title = null, existingCategories = [], existingTags = []) {
+    return this.makeRequest('/api/blogs/check-tags-categories-relevance', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        content, 
+        title,
+        existing_categories: existingCategories,
+        existing_tags: existingTags
+      })
+    })
+  }
+
+  async generateFromTitle(title, existingContent = null, existingExcerpt = null) {
+    return this.makeRequest('/api/blogs/generate-from-title', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        title,
+        existing_content: existingContent,
+        existing_excerpt: existingExcerpt
+      })
+    })
+  }
 
   // Blog Statistics
   async getBlogStats() {

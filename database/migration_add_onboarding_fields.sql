@@ -47,6 +47,7 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS best_time_to_post TEXT[];
 
 -- Add performance & customer columns
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS successful_campaigns TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS successful_content_url TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS hashtags_that_work_well TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS customer_pain_points TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS typical_customer_journey TEXT;
@@ -86,3 +87,7 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+
+
+

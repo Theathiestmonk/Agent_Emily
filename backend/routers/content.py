@@ -509,7 +509,7 @@ async def regenerate_carousel_image(
         
         # Get user's business context for image generation
         user_id = current_user.id
-        profile_response = supabase_admin.table("user_profiles").select("*").eq("user_id", user_id).execute()
+        profile_response = supabase_admin.table("profiles").select("*").eq("id", user_id).execute()
         business_context = {}
         if profile_response.data and len(profile_response.data) > 0:
             profile = profile_response.data[0]
@@ -517,8 +517,8 @@ async def regenerate_carousel_image(
                 "business_name": profile.get("business_name", ""),
                 "business_type": profile.get("business_type", ""),
                 "target_audience": profile.get("target_audience", ""),
-                "brand_personality": profile.get("brand_personality", ""),
-                "brand_values": profile.get("brand_values", [])
+                "brand_personality": profile.get("brand_voice", ""),  # Using brand_voice instead of brand_personality
+                "brand_values": []  # profiles table doesn't have brand_values, using empty array
             }
         
         # Generate image using media agent
@@ -558,12 +558,17 @@ async def regenerate_carousel_image(
             image_description += f" for {business_context['business_name']}"
         
         # Generate image
-        from agents.media_agent import MediaAgentState
+        from agents.media_agent import MediaAgentState, Style, ImageSize
+        
+        # Determine image style and size (similar to analyze_content_for_image)
+        image_style = Style.REALISTIC  # Default style
+        image_size = ImageSize.SQUARE_1024  # Default size for social media
         
         image_state = MediaAgentState(
             user_id=user_id,
             post_id=post_id,
             post_data={
+                "id": post_id,  # Required for save_image_data
                 "content": image_description,
                 "platform": platform.lower() if platform else "facebook",
                 "user_description": post_content[:200],
@@ -573,25 +578,26 @@ async def regenerate_carousel_image(
                 "carousel_theme": carousel_theme
             },
             image_prompt=None,
-            image_style=None,
-            image_size=None,
+            image_style=image_style,
+            image_size=image_size,
             generated_image_url=None,
             generation_cost=None,
             generation_time=None,
             generation_model=None,
             generation_service=None,
             error_message=None,
-            status="pending"
+            status="prompt_generation"  # Set to prompt_generation since we're skipping analyze_content
         )
         
         # Generate prompt and image
         logger.info(f"Regenerating carousel image {image_index + 1} for post {post_id}")
         
         image_state = await media_agent.generate_image_prompt(image_state)
-        if not image_state:
+        if not image_state or image_state.get("status") == "failed" or not image_state.get("image_prompt"):
+            error_msg = image_state.get("error_message", "Unknown error") if image_state else "No state returned"
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to generate image prompt"
+                detail=f"Failed to generate image prompt: {error_msg}"
             )
         
         result = await media_agent.generate_image(image_state)
@@ -650,6 +656,193 @@ async def regenerate_carousel_image(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to regenerate carousel image: {str(e)}"
+        )
+
+@router.post("/{post_id}/generate-all-carousel-images")
+async def generate_all_carousel_images_for_post(
+    post_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate all 4 carousel images for an existing post"""
+    try:
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Verify the content belongs to the user
+        content_response = supabase_admin.table("content_posts").select(
+            "*, content_campaigns!inner(*)"
+        ).eq("id", post_id).eq("content_campaigns.user_id", current_user.id).execute()
+        
+        if not content_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Content not found or access denied"
+            )
+        
+        content = content_response.data[0]
+        
+        # Verify it's a carousel post
+        if content.get("post_type", "").lower() != "carousel":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This post is not a carousel post"
+            )
+        
+        # Get user's business context for image generation
+        user_id = current_user.id
+        profile_response = supabase_admin.table("profiles").select("*").eq("id", user_id).execute()
+        business_context = {}
+        if profile_response.data and len(profile_response.data) > 0:
+            profile = profile_response.data[0]
+            business_context = {
+                "business_name": profile.get("business_name", ""),
+                "business_type": profile.get("business_type", ""),
+                "target_audience": profile.get("target_audience", ""),
+                "brand_personality": profile.get("brand_voice", ""),  # Using brand_voice instead of brand_personality
+                "brand_values": []  # profiles table doesn't have brand_values, using empty array
+            }
+        
+        # Generate images using media agent
+        from agents.media_agent import create_media_agent
+        
+        supabase_url_env = os.getenv("SUPABASE_URL")
+        supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        
+        if not gemini_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Image generation not available - GEMINI_API_KEY not set"
+            )
+        
+        media_agent = create_media_agent(supabase_url_env, supabase_service_key, gemini_api_key)
+        
+        # Build description for carousel images
+        post_content = content.get("content", "")
+        platform = content.get("platform", "Facebook")
+        metadata = content.get("metadata", {}) or {}
+        carousel_theme = metadata.get("carousel_theme", f"Sequential carousel story about: {post_content[:100]}")
+        
+        # Generate all 4 images sequentially
+        generated_images = []
+        previous_prompts = []
+        total_generation_time = 0
+        
+        for image_index in range(4):
+            try:
+                # Create sequential description based on index
+                image_description = f"{carousel_theme} - Image {image_index + 1} of 4"
+                
+                if image_index == 0:
+                    image_description += ": Opening/Introduction scene"
+                elif image_index == 3:
+                    image_description += ": Conclusion/Call to action scene"
+                else:
+                    image_description += f": Development scene (part {image_index + 1} of 4)"
+                
+                # Add business context
+                if business_context.get("business_name"):
+                    image_description += f" for {business_context['business_name']}"
+                
+                # Generate image
+                from agents.media_agent import MediaAgentState, Style, ImageSize
+                
+                # Determine image style and size (similar to analyze_content_for_image)
+                image_style = Style.REALISTIC  # Default style
+                image_size = ImageSize.SQUARE_1024  # Default size for social media
+                
+                image_state = MediaAgentState(
+                    user_id=user_id,
+                    post_id=post_id,
+                    post_data={
+                        "id": post_id,  # Required for save_image_data
+                        "content": image_description,
+                        "platform": platform.lower() if platform else "facebook",
+                        "user_description": post_content[:200],
+                        "carousel_index": image_index,
+                        "total_carousel_images": 4,
+                        "is_sequential_carousel": True,
+                        "carousel_theme": carousel_theme,
+                        "previous_carousel_prompts": previous_prompts
+                    },
+                    image_prompt=None,
+                    image_style=image_style,
+                    image_size=image_size,
+                    generated_image_url=None,
+                    generation_cost=None,
+                    generation_time=None,
+                    generation_model=None,
+                    generation_service=None,
+                    error_message=None,
+                    status="prompt_generation"  # Set to prompt_generation since we're skipping analyze_content
+                )
+                
+                # Generate prompt and image
+                logger.info(f"Generating carousel image {image_index + 1}/4 for post {post_id}")
+                
+                image_state = await media_agent.generate_image_prompt(image_state)
+                if not image_state or image_state.get("status") == "failed" or not image_state.get("image_prompt"):
+                    error_msg = image_state.get("error_message", "Unknown error") if image_state else "No state returned"
+                    raise Exception(f"Failed to generate image prompt for image {image_index + 1}: {error_msg}")
+                
+                result = await media_agent.generate_image(image_state)
+                if not result or result.get("status") != "completed":
+                    error_msg = result.get("error_message", "Unknown error") if result else "No result returned"
+                    raise Exception(f"Failed to generate image {image_index + 1}: {error_msg}")
+                
+                new_image_url = result.get("generated_image_url")
+                if not new_image_url:
+                    raise Exception(f"No image URL returned for image {image_index + 1}")
+                
+                generated_images.append(new_image_url)
+                previous_prompts.append(result.get("image_prompt", ""))
+                total_generation_time += result.get("generation_time", 0)
+                
+                logger.info(f"Successfully generated carousel image {image_index + 1}/4")
+                
+            except Exception as e:
+                logger.error(f"Failed to generate carousel image {image_index + 1}: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to generate carousel image {image_index + 1}: {str(e)}"
+                )
+        
+        # Update post metadata with carousel images
+        updated_metadata = metadata.copy()
+        updated_metadata["carousel_images"] = generated_images
+        updated_metadata["carousel_theme"] = carousel_theme
+        
+        # Update the post
+        update_response = supabase_admin.table("content_posts").update({
+            "metadata": updated_metadata,
+            "primary_image_url": generated_images[0] if generated_images else None
+        }).eq("id", post_id).execute()
+        
+        if not update_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update post with carousel images"
+            )
+        
+        logger.info(f"Successfully generated all 4 carousel images for post {post_id}")
+        
+        return {
+            "success": True,
+            "message": "All 4 carousel images generated successfully",
+            "carousel_images": generated_images,
+            "image_url": generated_images[0] if generated_images else None,  # Return first image for compatibility
+            "generation_time": total_generation_time,
+            "generation_model": "gemini-2.5-flash-image-preview",
+            "generation_service": "google_gemini"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate all carousel images: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate carousel images: {str(e)}"
         )
 
 @router.post("/register-scheduled")

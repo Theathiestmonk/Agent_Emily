@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { onboardingAPI } from '../services/onboarding'
 import OnboardingComplete from './OnboardingComplete'
-import OnboardingConnections from './OnboardingConnections'
 import { ArrowLeft, ArrowRight, Check, LogOut } from 'lucide-react'
 import LogoUpload from './LogoUpload'
+import MediaUpload from './MediaUpload'
+import MultiMediaUpload from './MultiMediaUpload'
 import InfoTooltip from './InfoTooltip'
+import DualRangeSlider from './DualRangeSlider'
 
 const Onboarding = () => {
   const [currentStep, setCurrentStep] = useState(0)
@@ -23,6 +25,8 @@ const Onboarding = () => {
     unique_value_proposition: '',
     brand_voice: '',
     brand_tone: '',
+    primary_color: '',
+    secondary_color: '',
     website_url: '',
     phone_number: '',
     street_address: '',
@@ -45,6 +49,8 @@ const Onboarding = () => {
     top_performing_content_types: [],
     best_time_to_post: [],
     successful_campaigns: '',
+    successful_content_url: '',
+    successful_content_urls: [],
     hashtags_that_work_well: '',
     customer_pain_points: '',
     typical_customer_journey: '',
@@ -64,6 +70,9 @@ const Onboarding = () => {
     email_marketing_platform: '',
     // New fields for comprehensive onboarding
     target_audience_age_groups: [],
+    target_audience_age_min: 16,
+    target_audience_age_max: 90,
+    target_audience_gender: 'all',
     target_audience_life_stages: [],
     target_audience_professional_types: [],
     target_audience_lifestyle_interests: [],
@@ -80,8 +89,8 @@ const Onboarding = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [logoUrl, setLogoUrl] = useState('')
   const [logoError, setLogoError] = useState('')
+  const [extractedColors, setExtractedColors] = useState([])
   const [showCompletion, setShowCompletion] = useState(false)
-  const [showConnections, setShowConnections] = useState(false)
 
 
   // Logo handling functions
@@ -93,6 +102,81 @@ const Onboarding = () => {
 
   const handleLogoError = (error) => {
     setLogoError(error)
+  }
+
+  const [mediaError, setMediaError] = useState('')
+
+  const handleMediaUpload = (files) => {
+    // files is an array of objects with url property
+    if (Array.isArray(files)) {
+      const urls = files.map(file => file.url || file).filter(Boolean)
+      handleInputChange('successful_content_urls', urls)
+      setMediaError('')
+      // Also update single URL for backward compatibility
+      if (urls.length > 0) {
+        handleInputChange('successful_content_url', urls[0])
+      }
+    } else if (files && files.url) {
+      // Single file object
+      handleInputChange('successful_content_urls', [files.url])
+      handleInputChange('successful_content_url', files.url)
+      setMediaError('')
+    }
+  }
+
+  const handleMediaError = (error) => {
+    setMediaError(error || '')
+  }
+
+  const handleColorsExtracted = (colors) => {
+    console.log('handleColorsExtracted called with:', colors)
+    if (Array.isArray(colors) && colors.length > 0) {
+      // Ensure colors are in hex format
+      const hexColors = colors.map(color => {
+        if (color.startsWith('#')) {
+          return color
+        } else if (color.startsWith('rgb')) {
+          // Convert RGB to hex if needed
+          const rgb = color.match(/\d+/g)
+          if (rgb && rgb.length >= 3) {
+            return '#' + rgb.slice(0, 3).map(x => {
+              const hex = parseInt(x).toString(16)
+              return hex.length === 1 ? '0' + hex : hex
+            }).join('')
+          }
+        }
+        return color
+      })
+      setExtractedColors(hexColors)
+      console.log('Set extractedColors to:', hexColors)
+    } else {
+      console.warn('Invalid colors received:', colors)
+      setExtractedColors([])
+    }
+  }
+
+  // Extract colors from logo if logo already exists
+  useEffect(() => {
+    const extractColorsFromExistingLogo = async () => {
+      if (formData.logo_url && formData.logo_url.trim() && extractedColors.length === 0) {
+        try {
+          console.log('Extracting colors from existing logo:', formData.logo_url)
+          const { mediaAPI } = await import('../services/api')
+          const colorResponse = await mediaAPI.extractColorsFromLogo(formData.logo_url)
+          console.log('Color extraction response:', colorResponse.data)
+          if (colorResponse.data && colorResponse.data.colors) {
+            handleColorsExtracted(colorResponse.data.colors)
+          }
+        } catch (error) {
+          console.warn('Failed to extract colors from existing logo:', error)
+        }
+      }
+    }
+    extractColorsFromExistingLogo()
+  }, [formData.logo_url])
+
+  const handleColorSuggestionClick = (color, type) => {
+    handleInputChange(type === 'primary' ? 'primary_color' : 'secondary_color', color)
   }
   
   // State for "Other" input fields
@@ -106,6 +190,10 @@ const Onboarding = () => {
     contentThemeOther: '',
     postingTimeOther: '',
     targetAudienceOther: '',
+    lifeStagesOther: '',
+    professionalTypesOther: '',
+    lifestyleInterestsOther: '',
+    buyerBehaviorOther: '',
     currentPresenceOther: '',
     topPerformingContentTypeOther: ''
   })
@@ -379,19 +467,19 @@ const Onboarding = () => {
       'Working Adults (30–50)', 'Seniors/Retirees (60+)', 'Kids/Children (0–12)'
     ],
     lifeStages: [
-      'Students', 'Parents/Families', 'Newlyweds/Couples', 'Homeowners/Renters', 'Retired Individuals'
+      'Students', 'Parents/Families', 'Newlyweds/Couples', 'Homeowners/Renters', 'Retired Individuals', 'Other (please specify)'
     ],
     professionalTypes: [
       'Business Owners/Entrepreneurs', 'Corporate Clients/B2B Buyers', 'Freelancers/Creators', 
-      'Government Employees', 'Educators/Trainers', 'Job Seekers/Career Switchers', 'Writers and Journalists'
+      'Government Employees', 'Educators/Trainers', 'Job Seekers/Career Switchers', 'Writers and Journalists', 'Other (please specify)'
     ],
     lifestyleInterests: [
       'Fitness Enthusiasts', 'Outdoor/Adventure Lovers', 'Fashion/Beauty Conscious', 
-      'Health-Conscious/Wellness Seekers', 'Pet Owners', 'Tech Enthusiasts/Gamers', 'Travelers/Digital Nomads'
+      'Health-Conscious/Wellness Seekers', 'Pet Owners', 'Tech Enthusiasts/Gamers', 'Travelers/Digital Nomads', 'Other (please specify)'
     ],
     buyerBehavior: [
       'Premium Buyers/High-Income Consumers', 'Budget-Conscious Shoppers', 'Impulse Buyers', 
-      'Ethical/Sustainable Shoppers', 'Frequent Online Buyers'
+      'Ethical/Sustainable Shoppers', 'Frequent Online Buyers', 'Other (please specify)'
     ],
     other: ['Not Sure', 'Other (please specify)']
   }
@@ -443,11 +531,13 @@ const Onboarding = () => {
       case 0: // Basic Business Info
         return formData.business_name && formData.business_type.length > 0 && formData.industry.length > 0
       case 1: // Business Description
-        return formData.business_description && formData.unique_value_proposition &&
-               formData.target_audience_age_groups.length > 0 && 
-               formData.target_audience_life_stages.length > 0 && 
-               formData.target_audience_professional_types.length > 0 && 
-               formData.target_audience_buyer_behavior.length > 0
+        const ageMin = Number(formData.target_audience_age_min) || 0
+        const ageMax = Number(formData.target_audience_age_max) || 0
+        const hasAgeRange = ageMin >= 16 && ageMax >= ageMin && ageMax <= 90 && ageMin > 0 && ageMax > 0
+        const hasGender = formData.target_audience_gender && ['all', 'men', 'women'].includes(formData.target_audience_gender)
+        const hasBusinessDesc = formData.business_description && String(formData.business_description).trim().length > 0
+        const hasUVP = formData.unique_value_proposition && String(formData.unique_value_proposition).trim().length > 0
+        return hasBusinessDesc && hasUVP && hasAgeRange && hasGender
       case 2: // Brand & Contact
         return formData.brand_voice && formData.brand_tone && formData.phone_number && 
                formData.street_address && formData.city && formData.state && formData.country
@@ -511,11 +601,13 @@ const Onboarding = () => {
       case 0: // Basic Business Info
         return formData.business_name && formData.business_type.length > 0 && formData.industry.length > 0
       case 1: // Business Description
-        return formData.business_description && formData.unique_value_proposition &&
-               formData.target_audience_age_groups.length > 0 && 
-               formData.target_audience_life_stages.length > 0 && 
-               formData.target_audience_professional_types.length > 0 && 
-               formData.target_audience_buyer_behavior.length > 0
+        const ageMin = Number(formData.target_audience_age_min) || 0
+        const ageMax = Number(formData.target_audience_age_max) || 0
+        const hasAgeRange = ageMin >= 16 && ageMax >= ageMin && ageMax <= 90 && ageMin > 0 && ageMax > 0
+        const hasGender = formData.target_audience_gender && ['all', 'men', 'women'].includes(formData.target_audience_gender)
+        const hasBusinessDesc = formData.business_description && String(formData.business_description).trim().length > 0
+        const hasUVP = formData.unique_value_proposition && String(formData.unique_value_proposition).trim().length > 0
+        return hasBusinessDesc && hasUVP && hasAgeRange && hasGender
       case 2: // Brand & Contact
         return formData.brand_voice && formData.brand_tone && formData.phone_number && 
                formData.street_address && formData.city && formData.state && formData.country
@@ -554,6 +646,16 @@ const Onboarding = () => {
     if (isStepAccessible(stepIndex)) return 'accessible'
     return 'locked'
   }
+
+  // Ensure age range values are set on mount
+  useEffect(() => {
+    if (!formData.target_audience_age_min) {
+      handleInputChange('target_audience_age_min', 16)
+    }
+    if (!formData.target_audience_age_max) {
+      handleInputChange('target_audience_age_max', 90)
+    }
+  }, [])
 
   const nextStep = () => {
     console.log('nextStep called, currentStep:', currentStep)
@@ -651,7 +753,13 @@ const Onboarding = () => {
         'automation_level', 'platform_specific_tone', 'current_presence', 'focus_areas',
         'platform_details', 'facebook_page_name', 'instagram_profile_link', 'linkedin_company_link',
         'youtube_channel_link', 'x_twitter_profile', 'google_business_profile', 'google_ads_account',
-        'whatsapp_business', 'email_marketing_platform', 'meta_ads_facebook', 'meta_ads_instagram'
+        'whatsapp_business', 'email_marketing_platform', 'meta_ads_facebook', 'meta_ads_instagram',
+        'target_audience_age_min', 'target_audience_age_max', 'target_audience_gender',
+        'target_audience_life_stages', 'target_audience_professional_types',
+        'target_audience_lifestyle_interests', 'target_audience_buyer_behavior',
+        'successful_content_urls', 'primary_color', 'secondary_color', 'logo_url',
+        'platform_tone_instagram', 'platform_tone_facebook', 'platform_tone_linkedin',
+        'platform_tone_youtube', 'platform_tone_x'
       ]
 
       // Filter formData to only include valid database fields
@@ -665,14 +773,36 @@ const Onboarding = () => {
       // Prepare the data for submission
       const submissionData = {
         ...filteredFormData,
+        // Include new fields explicitly to ensure they are saved
+        target_audience_age_min: formData.target_audience_age_min,
+        target_audience_age_max: formData.target_audience_age_max,
+        target_audience_gender: formData.target_audience_gender,
+        target_audience_life_stages: formData.target_audience_life_stages || [],
+        target_audience_professional_types: formData.target_audience_professional_types || [],
+        target_audience_lifestyle_interests: formData.target_audience_lifestyle_interests || [],
+        target_audience_buyer_behavior: formData.target_audience_buyer_behavior || [],
+        successful_content_urls: formData.successful_content_urls || [],
+        primary_color: formData.primary_color,
+        secondary_color: formData.secondary_color,
+        logo_url: formData.logo_url,
+        // Include platform tone fields explicitly
+        platform_tone_instagram: formData.platform_tone_instagram || [],
+        platform_tone_facebook: formData.platform_tone_facebook || [],
+        platform_tone_linkedin: formData.platform_tone_linkedin || [],
+        platform_tone_youtube: formData.platform_tone_youtube || [],
+        platform_tone_x: formData.platform_tone_x || [],
         // Populate the general target_audience field with all selected target audience details
         target_audience: [
-          ...formData.target_audience_age_groups,
-          ...formData.target_audience_life_stages,
-          ...formData.target_audience_professional_types,
-          ...formData.target_audience_lifestyle_interests,
-          ...formData.target_audience_buyer_behavior,
-          ...(formData.target_audience_other ? [formData.target_audience_other] : [])
+          ...(formData.target_audience_age_min && formData.target_audience_age_max ? [`${formData.target_audience_age_min}-${formData.target_audience_age_max} years`] : []),
+          ...(formData.target_audience_gender ? [formData.target_audience_gender] : []),
+          ...(formData.target_audience_life_stages || []).filter(item => item !== 'Other (please specify)'),
+          ...(formData.target_audience_life_stages && formData.target_audience_life_stages.includes('Other (please specify)') && otherInputs.lifeStagesOther ? [otherInputs.lifeStagesOther] : []),
+          ...(formData.target_audience_professional_types || []).filter(item => item !== 'Other (please specify)'),
+          ...(formData.target_audience_professional_types && formData.target_audience_professional_types.includes('Other (please specify)') && otherInputs.professionalTypesOther ? [otherInputs.professionalTypesOther] : []),
+          ...(formData.target_audience_lifestyle_interests || []).filter(item => item !== 'Other (please specify)'),
+          ...(formData.target_audience_lifestyle_interests && formData.target_audience_lifestyle_interests.includes('Other (please specify)') && otherInputs.lifestyleInterestsOther ? [otherInputs.lifestyleInterestsOther] : []),
+          ...(formData.target_audience_buyer_behavior || []).filter(item => item !== 'Other (please specify)'),
+          ...(formData.target_audience_buyer_behavior && formData.target_audience_buyer_behavior.includes('Other (please specify)') && otherInputs.buyerBehaviorOther ? [otherInputs.buyerBehaviorOther] : [])
         ].filter(Boolean), // Remove any empty values
         
         // Include Meta Ads sub-options
@@ -685,8 +815,8 @@ const Onboarding = () => {
       localStorage.removeItem('onboarding_form_data')
       localStorage.removeItem('onboarding_current_step')
       localStorage.removeItem('onboarding_completed_steps')
-      // Show connection phase instead of completion
-      setShowConnections(true)
+      // Show completion screen
+      setShowCompletion(true)
     } catch (err) {
       setError(err.message || 'Failed to submit onboarding')
     } finally {
@@ -694,22 +824,6 @@ const Onboarding = () => {
     }
   }
 
-  // Connection phase handlers
-  const handleConnectionComplete = () => {
-    setShowConnections(false)
-    setShowCompletion(true)
-  }
-
-  const handleConnectionSkip = () => {
-    setShowConnections(false)
-    setShowCompletion(true)
-  }
-
-  const handleConnectionBack = () => {
-    setShowConnections(false)
-    // Reset to last step of onboarding
-    setCurrentStep(steps.length - 1)
-  }
 
   const renderStep = () => {
     switch (currentStep) {
@@ -817,6 +931,7 @@ const Onboarding = () => {
                 value={formData.logo_url}
                 onUploadSuccess={handleLogoUpload}
                 onError={handleLogoError}
+                onColorsExtracted={handleColorsExtracted}
                 className="max-w-md"
               />
               {logoError && (
@@ -828,45 +943,43 @@ const Onboarding = () => {
              <div>
                <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience *</label>
                <div className="space-y-4">
-                 {/* Age Groups Card */}
-                 <div className="border border-gray-200 rounded-lg">
-                   <button
-                     type="button"
-                     onClick={() => toggleCard('ageGroups')}
-                     className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors relative"
-                   >
-                     <span className="text-sm font-medium text-gray-700">Age Groups <span className="text-black">*</span></span>
-                     <div className="flex items-center space-x-2">
-                       <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
-                         {getSelectedCount('target_audience_age_groups')}
-                       </span>
-                       <svg 
-                         className={`w-4 h-4 text-gray-400 transition-transform ${expandedCards.ageGroups ? 'rotate-180' : ''}`}
-                         fill="none" 
-                         stroke="currentColor" 
-                         viewBox="0 0 24 24"
-                       >
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                       </svg>
-                     </div>
-                   </button>
-                   {expandedCards.ageGroups && (
-                     <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
-                         {targetAudienceCategories.ageGroups.map(group => (
-                           <label key={group} className="flex items-center space-x-2">
-                             <input
-                               type="checkbox"
-                               checked={formData.target_audience_age_groups.includes(group)}
-                               onChange={(e) => handleArrayChange('target_audience_age_groups', group, e.target.checked)}
-                               className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                             />
-                             <span className="text-xs xs:text-sm text-gray-700 break-words">{group}</span>
-                           </label>
-                         ))}
-                       </div>
-                     </div>
-                   )}
+                 {/* Age Range Card */}
+                 <div className="border border-gray-200 rounded-lg p-4">
+                   <label className="block text-sm font-medium text-gray-700 mb-4">
+                     Age Range <span className="text-black">*</span>
+                   </label>
+                   <DualRangeSlider
+                     min={16}
+                     max={90}
+                     minValue={formData.target_audience_age_min || 16}
+                     maxValue={formData.target_audience_age_max || 90}
+                     onChange={({ min, max }) => {
+                       handleInputChange('target_audience_age_min', Number(min))
+                       handleInputChange('target_audience_age_max', Number(max))
+                     }}
+                   />
+                 </div>
+
+                 {/* Gender Selection */}
+                 <div className="border border-gray-200 rounded-lg p-4">
+                   <label className="block text-sm font-medium text-gray-700 mb-4">
+                     Gender <span className="text-black">*</span>
+                   </label>
+                   <div className="flex flex-col space-y-2">
+                     {['all', 'men', 'women'].map((gender) => (
+                       <label key={gender} className="flex items-center space-x-2 cursor-pointer">
+                         <input
+                           type="radio"
+                           name="target_audience_gender"
+                           value={gender}
+                           checked={formData.target_audience_gender === gender}
+                           onChange={(e) => handleInputChange('target_audience_gender', e.target.value)}
+                           className="text-pink-600 focus:ring-pink-500"
+                         />
+                         <span className="text-sm text-gray-700 capitalize">{gender === 'all' ? 'All' : gender === 'men' ? 'Men' : 'Women'}</span>
+                       </label>
+                     ))}
+                   </div>
                  </div>
 
                  {/* Life Stage / Roles Card */}
@@ -876,7 +989,7 @@ const Onboarding = () => {
                      onClick={() => toggleCard('lifeStages')}
                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors relative"
                    >
-                     <span className="text-sm font-medium text-gray-700">Life Stage / Roles <span className="text-black">*</span></span>
+                     <span className="text-sm font-medium text-gray-700">Life Stage / Roles <span className="text-gray-500 text-xs">(Optional)</span></span>
                      <div className="flex items-center space-x-2">
                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
                          {getSelectedCount('target_audience_life_stages')}
@@ -906,6 +1019,17 @@ const Onboarding = () => {
                            </label>
                          ))}
                        </div>
+                       {formData.target_audience_life_stages.includes('Other (please specify)') && (
+                         <div className="mt-3">
+                           <input
+                             type="text"
+                             value={otherInputs.lifeStagesOther}
+                             onChange={(e) => handleOtherInputChange('lifeStagesOther', e.target.value)}
+                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                             placeholder="Please specify life stage/role"
+                           />
+                         </div>
+                       )}
                      </div>
                    )}
                  </div>
@@ -917,7 +1041,7 @@ const Onboarding = () => {
                      onClick={() => toggleCard('professionalTypes')}
                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors relative"
                    >
-                     <span className="text-sm font-medium text-gray-700">Professional / Business Type <span className="text-black">*</span></span>
+                     <span className="text-sm font-medium text-gray-700">Professional / Business Type <span className="text-gray-500 text-xs">(Optional)</span></span>
                      <div className="flex items-center space-x-2">
                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
                          {getSelectedCount('target_audience_professional_types')}
@@ -947,6 +1071,17 @@ const Onboarding = () => {
                            </label>
                          ))}
                        </div>
+                       {formData.target_audience_professional_types.includes('Other (please specify)') && (
+                         <div className="mt-3">
+                           <input
+                             type="text"
+                             value={otherInputs.professionalTypesOther}
+                             onChange={(e) => handleOtherInputChange('professionalTypesOther', e.target.value)}
+                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                             placeholder="Please specify professional/business type"
+                           />
+                         </div>
+                       )}
                      </div>
                    )}
                  </div>
@@ -988,6 +1123,17 @@ const Onboarding = () => {
                            </label>
                          ))}
                        </div>
+                       {formData.target_audience_lifestyle_interests.includes('Other (please specify)') && (
+                         <div className="mt-3">
+                           <input
+                             type="text"
+                             value={otherInputs.lifestyleInterestsOther}
+                             onChange={(e) => handleOtherInputChange('lifestyleInterestsOther', e.target.value)}
+                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                             placeholder="Please specify lifestyle & interest"
+                           />
+                         </div>
+                       )}
                      </div>
                    )}
                  </div>
@@ -999,7 +1145,7 @@ const Onboarding = () => {
                      onClick={() => toggleCard('buyerBehavior')}
                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors relative"
                    >
-                     <span className="text-sm font-medium text-gray-700">Buyer Behavior <span className="text-black">*</span></span>
+                     <span className="text-sm font-medium text-gray-700">Buyer Behavior <span className="text-gray-500 text-xs">(Optional)</span></span>
                      <div className="flex items-center space-x-2">
                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
                          {getSelectedCount('target_audience_buyer_behavior')}
@@ -1029,71 +1175,21 @@ const Onboarding = () => {
                            </label>
                          ))}
                        </div>
-                     </div>
-                   )}
-                 </div>
-
-                 {/* Other Card */}
-                 <div className="border border-gray-200 rounded-lg">
-                   <button
-                     type="button"
-                     onClick={() => toggleCard('other')}
-                     className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors relative"
-                   >
-                     <span className="text-sm font-medium text-gray-700">Other <span className="text-gray-500 text-xs">(Optional)</span></span>
-                     <div className="flex items-center space-x-2">
-                       <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
-                         {formData.target_audience_other ? 1 : 0}
-                       </span>
-                       <svg 
-                         className={`w-4 h-4 text-gray-400 transition-transform ${expandedCards.other ? 'rotate-180' : ''}`}
-                         fill="none" 
-                         stroke="currentColor" 
-                         viewBox="0 0 24 24"
-                       >
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                       </svg>
-                     </div>
-                   </button>
-                   {expandedCards.other && (
-                     <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
-                         {targetAudienceCategories.other.map(option => (
-                           <label key={option} className="flex items-center space-x-2">
-                             <input
-                               type="checkbox"
-                               checked={formData.target_audience_other === option || (option === 'Other (please specify)' && formData.target_audience_other && formData.target_audience_other !== 'Not Sure')}
-                               onChange={(e) => {
-                                 if (option === 'Not Sure') {
-                                   handleInputChange('target_audience_other', e.target.checked ? 'Not Sure' : '')
-                                 } else if (option === 'Other (please specify)') {
-                                   if (e.target.checked) {
-                                     handleInputChange('target_audience_other', 'Other (please specify)')
-                                   } else {
-                                     handleInputChange('target_audience_other', '')
-                                   }
-                                 }
-                               }}
-                               className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                             />
-                             <span className="text-xs xs:text-sm text-gray-700 break-words">{option}</span>
-                           </label>
-                         ))}
-                       </div>
-                       {formData.target_audience_other === 'Other (please specify)' && (
+                       {formData.target_audience_buyer_behavior.includes('Other (please specify)') && (
                          <div className="mt-3">
                            <input
                              type="text"
-                             value={otherInputs.targetAudienceOther}
-                             onChange={(e) => handleOtherInputChange('targetAudienceOther', e.target.value)}
+                             value={otherInputs.buyerBehaviorOther}
+                             onChange={(e) => handleOtherInputChange('buyerBehaviorOther', e.target.value)}
                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                             placeholder="Please specify your target audience"
+                             placeholder="Please specify buyer behavior"
                            />
                          </div>
                        )}
                      </div>
                    )}
                  </div>
+
                </div>
              </div>
 
@@ -1145,6 +1241,87 @@ const Onboarding = () => {
                     <option key={tone} value={tone}>{tone}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            {/* Brand Colors Section */}
+            <div className="border-t border-gray-200 pt-6 mt-6">
+              <h4 className="text-sm font-semibold text-gray-800 mb-4">Brand Colors</h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">Primary Color</label>
+                    {extractedColors && extractedColors.length > 0 && (
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-xs text-gray-500">Suggested:</span>
+                        {extractedColors.slice(0, 4).map((color, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => handleColorSuggestionClick(color, 'primary')}
+                            className="w-6 h-6 rounded border-2 border-gray-300 hover:border-pink-500 hover:scale-110 transition-all cursor-pointer shadow-sm"
+                            style={{ backgroundColor: color }}
+                            title={color}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="color"
+                      value={formData.primary_color || '#000000'}
+                      onChange={(e) => handleInputChange('primary_color', e.target.value)}
+                      className="w-16 h-10 border border-gray-300 rounded-md cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={formData.primary_color || ''}
+                      onChange={(e) => handleInputChange('primary_color', e.target.value)}
+                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                      placeholder="#000000"
+                      pattern="^#[0-9A-Fa-f]{6}$"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">Secondary Color</label>
+                    {extractedColors && extractedColors.length > 0 && (
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-xs text-gray-500">Suggested:</span>
+                        {extractedColors.slice(0, 4).map((color, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => handleColorSuggestionClick(color, 'secondary')}
+                            className="w-6 h-6 rounded border-2 border-gray-300 hover:border-pink-500 hover:scale-110 transition-all cursor-pointer shadow-sm"
+                            style={{ backgroundColor: color }}
+                            title={color}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="color"
+                      value={formData.secondary_color || '#000000'}
+                      onChange={(e) => handleInputChange('secondary_color', e.target.value)}
+                      className="w-16 h-10 border border-gray-300 rounded-md cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={formData.secondary_color || ''}
+                      onChange={(e) => handleInputChange('secondary_color', e.target.value)}
+                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                      placeholder="#000000"
+                      pattern="^#[0-9A-Fa-f]{6}$"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1805,6 +1982,26 @@ const Onboarding = () => {
             </div>
 
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Upload Post Media That Worked Well (Optional - Max 4)
+                <InfoTooltip 
+                  content="Upload up to 4 post media files from past campaigns that performed well. This helps Emily understand what visual content resonates with your audience."
+                  className="ml-2"
+                />
+              </label>
+              <MultiMediaUpload
+                value={formData.successful_content_urls || []}
+                onUploadSuccess={handleMediaUpload}
+                onError={handleMediaError}
+                className="max-w-2xl"
+                maxFiles={4}
+              />
+              {mediaError && (
+                <div className="text-red-600 text-sm mt-2">{mediaError}</div>
+              )}
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags That Work Well *</label>
               <input
                 type="text"
@@ -1963,17 +2160,6 @@ const Onboarding = () => {
   }
 
   // Show completion screen after successful submission
-  if (showConnections) {
-    return (
-      <OnboardingConnections
-        selectedPlatforms={formData.social_media_platforms || []}
-        onComplete={handleConnectionComplete}
-        onSkip={handleConnectionSkip}
-        onBack={handleConnectionBack}
-      />
-    )
-  }
-
   if (showCompletion) {
     return <OnboardingComplete />
   }

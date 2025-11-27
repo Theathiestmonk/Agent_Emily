@@ -204,16 +204,16 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
             </div>
           </div>
           {!selectionMode && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onClick && onClick(lead)
-              }}
-              className="p-1 bg-white/20 rounded flex-shrink-0 ml-0.5"
-              title="View details"
-            >
-              <Eye className="w-3 h-3" />
-            </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onClick && onClick(lead)
+            }}
+            className="p-1 bg-white/20 rounded flex-shrink-0 ml-0.5"
+            title="View details"
+          >
+            <Eye className="w-3 h-3" />
+          </button>
           )}
         </div>
       </div>

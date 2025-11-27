@@ -700,29 +700,68 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                 response = self.supabase.table("content_images").insert(image_data).execute()
             
             # Update content_posts with primary image data
-            # Logic: If new image is approved OR no approved image exists, set as primary
+            # Always update primary_image_url with the newly generated image
+            # This ensures the latest generated image is shown, even if not yet approved
             post_id = post_data["id"]
             is_approved = image_data.get("is_approved", False)
+            generated_image_url = state["generated_image_url"]
             
-            # Check if there's already an approved image for this post
-            approved_check = self.supabase.table("content_posts").select("primary_image_approved").eq("id", post_id).execute()
-            has_existing_approved = approved_check.data and approved_check.data[0].get("primary_image_approved", False) if approved_check.data else False
+            logger.info(f"Updating content_posts.primary_image_url for post {post_id} with new image: {generated_image_url}")
             
-            # Set as primary if: new image is approved OR no approved image exists
-            should_set_as_primary = is_approved or not has_existing_approved
+            # Always set the newly generated image as primary
+            # This ensures users see the latest generated image when they refresh
+            update_data = {
+                "primary_image_url": generated_image_url,
+                "primary_image_prompt": state["image_prompt"],
+                "primary_image_approved": is_approved
+            }
             
-            if should_set_as_primary:
-                update_data = {
-                    "primary_image_url": state["generated_image_url"],
-                    "primary_image_prompt": state["image_prompt"],
-                    "primary_image_approved": is_approved
-                }
+            try:
+                # Force update primary_image_url - this should always happen for newly generated images
+                logger.info(f"🔧 Attempting to update content_posts.primary_image_url for post {post_id}")
+                logger.info(f"🔧 Update data: {update_data}")
                 
                 update_response = self.supabase.table("content_posts").update(update_data).eq("id", post_id).execute()
-                if update_response.data:
-                    logger.info(f"Updated content_posts.primary_image_url for post {post_id}")
+                logger.info(f"🔧 Update response: {update_response}")
+                
+                # Always verify the update succeeded with a small delay
+                import time
+                time.sleep(0.1)  # Small delay to ensure database write completes
+                
+                verify_response = self.supabase.table("content_posts").select("primary_image_url, primary_image_approved").eq("id", post_id).execute()
+                if verify_response.data and len(verify_response.data) > 0:
+                    current_url = verify_response.data[0].get("primary_image_url")
+                    current_approved = verify_response.data[0].get("primary_image_approved")
+                    
+                    if current_url == generated_image_url:
+                        logger.info(f"✅ VERIFIED: content_posts.primary_image_url successfully updated for post {post_id}")
+                        logger.info(f"✅ Current URL: {current_url}")
+                        logger.info(f"✅ Approved status: {current_approved}")
+                    else:
+                        logger.error(f"❌ VERIFICATION FAILED for post {post_id}")
+                        logger.error(f"❌ Expected: {generated_image_url}")
+                        logger.error(f"❌ Got: {current_url}")
+                        # Try one more time with explicit update
+                        logger.warning(f"🔄 Retrying update for post {post_id}")
+                        retry_response = self.supabase.table("content_posts").update({
+                            "primary_image_url": generated_image_url
+                        }).eq("id", post_id).execute()
+                        logger.info(f"🔄 Retry response: {retry_response}")
                 else:
-                    logger.warning(f"Failed to update content_posts for post {post_id}")
+                    logger.error(f"❌ Could not verify update - no data returned for post {post_id}")
+                    
+                if update_response.data and len(update_response.data) > 0:
+                    logger.info(f"✅ Successfully updated content_posts.primary_image_url for post {post_id}")
+                    logger.info(f"Updated post data: {update_response.data[0]}")
+                else:
+                    logger.warning(f"⚠️ Update response has no data for post {post_id}")
+            except Exception as update_error:
+                logger.error(f"❌ Error updating content_posts for post {post_id}: {str(update_error)}")
+                logger.error(f"❌ Error type: {type(update_error)}")
+                import traceback
+                logger.error(f"❌ Traceback: {traceback.format_exc()}")
+                # Don't raise - allow the image to be saved even if primary update fails
+                # The image is still in content_images table
             
             if response.data:
                 state["status"] = "completed"

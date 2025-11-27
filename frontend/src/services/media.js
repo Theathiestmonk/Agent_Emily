@@ -50,6 +50,34 @@ class MediaService {
   }
 
   /**
+   * Generate all carousel images for a carousel post
+   * @param {string} postId - The ID of the carousel post
+   * @returns {Promise<Object>} Generation result with carousel images
+   */
+  async generateCarouselImages(postId) {
+    try {
+      const token = await this.getAuthToken()
+      
+      const response = await fetch(`${API_BASE_URL}/content/${postId}/generate-all-carousel-images`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Error generating carousel images:', error)
+      throw error
+    }
+  }
+
+  /**
    * Generate media for multiple posts in batch
    * @param {string[]} postIds - Array of post IDs
    * @param {Object} options - Optional parameters for media generation

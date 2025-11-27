@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     
     -- Performance & Customer
     successful_campaigns TEXT,
+    successful_content_url TEXT,
     hashtags_that_work_well TEXT,
     customer_pain_points TEXT,
     typical_customer_journey TEXT,
@@ -122,3 +123,7 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+
+
+

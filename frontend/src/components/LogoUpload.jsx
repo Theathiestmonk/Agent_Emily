@@ -6,6 +6,7 @@ const LogoUpload = ({
   value = '',
   onUploadSuccess, 
   onError,
+  onColorsExtracted,
   className = '',
   disabled = false 
 }) => {
@@ -47,6 +48,24 @@ const LogoUpload = ({
       setUploadedUrl(response.data.url)
       onUploadSuccess?.(response.data.url)
       onError?.(null)
+
+      // Automatically extract colors from logo
+      try {
+        const colorResponse = await mediaAPI.extractColorsFromLogo(response.data.url)
+        console.log('Color extraction response:', colorResponse.data)
+        if (colorResponse.data && colorResponse.data.colors) {
+          const colors = colorResponse.data.colors
+          console.log('Extracted colors:', colors)
+          onColorsExtracted?.(colors)
+        } else if (colorResponse.data && Array.isArray(colorResponse.data)) {
+          // Handle case where colors are returned directly as array
+          console.log('Extracted colors (direct array):', colorResponse.data)
+          onColorsExtracted?.(colorResponse.data)
+        }
+      } catch (colorError) {
+        console.warn('Failed to extract colors from logo:', colorError)
+        // Don't fail the upload if color extraction fails
+      }
     } catch (error) {
       console.error('Upload error:', error)
       onError?.(error.message || 'Upload failed. Please try again.')

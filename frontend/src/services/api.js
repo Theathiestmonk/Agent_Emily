@@ -49,6 +49,26 @@ export const mediaAPI = {
       },
     })
   },
+  uploadMedia: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    return api.post('/media/upload-media', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+  extractColorsFromLogo: (logoUrl) => {
+    const formData = new FormData()
+    formData.append('logo_url', logoUrl)
+    
+    return api.post('/media/extract-colors-from-logo', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
 }
 
 export default api

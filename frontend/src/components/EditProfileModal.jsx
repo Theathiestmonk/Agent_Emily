@@ -94,7 +94,7 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-1.5 sm:p-2 md:p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-1.5 sm:p-2 md:p-4 modal" role="dialog">
       <div className="bg-white rounded-lg sm:rounded-xl shadow-2xl max-w-6xl w-full max-h-[98vh] sm:max-h-[95vh] md:max-h-[90vh] overflow-hidden flex flex-col">
         {/* Modal Header */}
         <div className="flex items-start sm:items-center justify-between p-2.5 sm:p-3 md:p-4 lg:p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white gap-2 sm:gap-3">

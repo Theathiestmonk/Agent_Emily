@@ -78,6 +78,7 @@ CREATE TABLE public.profiles (
   
   -- Step 8: Performance & Customer
   successful_campaigns text NULL,
+  successful_content_url text NULL,
   hashtags_that_work_well text NULL,
   customer_pain_points text NULL,
   typical_customer_journey text NULL,
@@ -132,3 +133,7 @@ COMMENT ON COLUMN profiles.target_audience_lifestyle_interests IS 'Lifestyle and
 COMMENT ON COLUMN profiles.target_audience_buyer_behavior IS 'Buying behavior patterns';
 COMMENT ON COLUMN profiles.platform_details IS 'JSON object storing platform-specific details';
 COMMENT ON COLUMN profiles.platform_specific_tone IS 'JSON object storing tone preferences per platform';
+
+
+
+

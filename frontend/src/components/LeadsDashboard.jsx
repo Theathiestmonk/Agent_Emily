@@ -627,21 +627,21 @@ const LeadsDashboard = () => {
                       <CheckCircle className="w-4 h-4" />
                       <span>Select</span>
                     </button>
-                    <button
-                      onClick={() => setShowAddModal(true)}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
-                    >
-                      <UserPlus className="w-4 h-4" />
-                      <span>Add Lead</span>
-                    </button>
-                    <button
-                      onClick={handleRefresh}
-                      disabled={loading}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition-all duration-200 disabled:opacity-50 shadow-lg hover:shadow-xl"
-                    >
-                      <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                      <span>Refresh</span>
-                    </button>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Add Lead</span>
+                </button>
+                <button
+                  onClick={handleRefresh}
+                  disabled={loading}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition-all duration-200 disabled:opacity-50 shadow-lg hover:shadow-xl"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  <span>Refresh</span>
+                </button>
                   </>
                 )}
               </div>
