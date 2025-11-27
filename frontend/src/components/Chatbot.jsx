@@ -38,12 +38,37 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
+  // Helper function to check if any modal is open
+  const isModalOpen = () => {
+    // Check for common modal indicators
+    const modals = document.querySelectorAll('[role="dialog"], .modal, [class*="modal"], [class*="Modal"]')
+    for (let modal of modals) {
+      const style = window.getComputedStyle(modal)
+      if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+        return true
+      }
+    }
+    // Check for backdrop/overlay elements
+    const backdrops = document.querySelectorAll('[class*="backdrop"], [class*="overlay"], [class*="z-50"]')
+    for (let backdrop of backdrops) {
+      const style = window.getComputedStyle(backdrop)
+      if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+        // Check if it's actually visible (not just in DOM)
+        const rect = backdrop.getBoundingClientRect()
+        if (rect.width > 0 && rect.height > 0) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
   useEffect(() => {
     scrollToBottom()
-    // Don't auto-refocus if user is selecting text
-    if (inputRef.current && !isCallActive && !isLoading && !isSelectingTextRef.current) {
+    // Don't auto-refocus if user is selecting text or if a modal is open
+    if (inputRef.current && !isCallActive && !isLoading && !isSelectingTextRef.current && !isModalOpen()) {
       setTimeout(() => {
-        if (!isSelectingTextRef.current) {
+        if (!isSelectingTextRef.current && !isModalOpen()) {
           inputRef.current?.focus()
         }
       }, 100)
@@ -52,7 +77,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
 
   // Auto-focus input when component mounts and maintain focus
   useEffect(() => {
-    if (inputRef.current && !isCallActive) {
+    if (inputRef.current && !isCallActive && !isModalOpen()) {
       inputRef.current.focus()
     }
   }, [])
@@ -62,14 +87,19 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     if (isCallActive) return // Don't focus during calls
     
     const maintainFocus = () => {
-      // Don't refocus if user is selecting text
-      if (isSelectingTextRef.current) return
+      // Don't refocus if user is selecting text or if a modal is open
+      if (isSelectingTextRef.current || isModalOpen()) return
       
       if (inputRef.current && document.activeElement !== inputRef.current) {
         // Check if user has selected text
         const selection = window.getSelection()
         if (selection && selection.toString().length > 0) {
           return // Don't refocus if text is selected
+        }
+        // Don't refocus if active element is inside a modal
+        const activeElement = document.activeElement
+        if (activeElement && activeElement.closest('[role="dialog"], .modal, [class*="modal"], [class*="Modal"]')) {
+          return
         }
         inputRef.current.focus()
       }
@@ -109,17 +139,22 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       }, 300)
     }
 
-    // Also focus on any click outside the input, but not if selecting text
+    // Also focus on any click outside the input, but not if selecting text or modal is open
     const handleClick = (e) => {
-      if (isSelectingTextRef.current) return
+      if (isSelectingTextRef.current || isModalOpen()) return
       
       const target = e.target
       const messageBubble = target.closest('.message-bubble, [class*="chatbot-bubble"]')
       if (messageBubble) return // Don't refocus if clicking on message
       
+      // Don't refocus if clicking inside a modal
+      if (target.closest('[role="dialog"], .modal, [class*="modal"], [class*="Modal"]')) {
+        return
+      }
+      
       if (target !== inputRef.current && !inputRef.current.contains(target)) {
         setTimeout(() => {
-          if (!isSelectingTextRef.current) {
+          if (!isSelectingTextRef.current && !isModalOpen()) {
             maintainFocus()
           }
         }, 200)
@@ -1546,13 +1581,13 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                   }
                 }}
                 onBlur={(e) => {
-                  // Don't refocus if user is selecting text
-                  if (isSelectingTextRef.current) return
+                  // Don't refocus if user is selecting text or if a modal is open
+                  if (isSelectingTextRef.current || isModalOpen()) return
                   
                   // Immediately refocus if not in call
                   if (!isCallActive && !isLoading && !isStreaming) {
                     setTimeout(() => {
-                      if (!isSelectingTextRef.current) {
+                      if (!isSelectingTextRef.current && !isModalOpen()) {
                         e.target.focus()
                       }
                     }, 200)

@@ -1178,7 +1178,7 @@ const BlogDashboard = () => {
     setSelectedBlog(null)
 
     setShowBlogModal(false)
-    
+
     // Reset edit states
     setEditingTitleInModal(false)
     setEditingContentInModal(false)
@@ -2803,22 +2803,22 @@ const BlogDashboard = () => {
                     />
                   </div>
                 ) : (
-                  <textarea
+                <textarea
 
-                    value={editForm.content}
+                  value={editForm.content}
 
                     onChange={(e) => {
                       setEditForm(prev => ({ ...prev, content: e.target.value }))
                       setContentManuallyEdited(true) // Mark as manually edited
                     }}
 
-                    rows={10}
+                  rows={10}
 
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
 
                     placeholder="Enter your content here. You can use HTML tags for formatting if needed (e.g., &lt;h1&gt;, &lt;p&gt;, &lt;strong&gt;)..."
 
-                  />
+                />
                 )}
 
               </div>
@@ -3799,9 +3799,9 @@ const BlogDashboard = () => {
                   {/* Blog Content */}
                   <div className="p-3 md:p-6">
                     <BlogContentRenderer content={selectedBlog.content || ''} />
-                  </div>
-                </div>
-              </div>
+                                </div>
+                              </div>
+                          </div>
 
               {/* 3. Insights and Categories */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">

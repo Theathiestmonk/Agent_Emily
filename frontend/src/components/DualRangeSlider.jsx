@@ -8,19 +8,33 @@ const DualRangeSlider = ({
   onChange,
   className = ''
 }) => {
-  const [localMin, setLocalMin] = useState(minValue || min)
-  const [localMax, setLocalMax] = useState(maxValue || max)
+  const [localMin, setLocalMin] = useState(minValue !== undefined ? minValue : null)
+  const [localMax, setLocalMax] = useState(maxValue !== undefined ? maxValue : null)
+  const [minInputValue, setMinInputValue] = useState(minValue !== undefined ? String(minValue) : '')
+  const [maxInputValue, setMaxInputValue] = useState(maxValue !== undefined ? String(maxValue) : '')
   const sliderRef = useRef(null)
   const minThumbRef = useRef(null)
   const maxThumbRef = useRef(null)
   const [isDragging, setIsDragging] = useState(null) // 'min' or 'max' or null
 
   useEffect(() => {
-    if (minValue !== undefined) setLocalMin(minValue)
+    if (minValue !== undefined && minValue !== null) {
+      setLocalMin(minValue)
+      setMinInputValue(String(minValue))
+    } else if (minValue === null || minValue === undefined) {
+      setLocalMin(null)
+      setMinInputValue('')
+    }
   }, [minValue])
 
   useEffect(() => {
-    if (maxValue !== undefined) setLocalMax(maxValue)
+    if (maxValue !== undefined && maxValue !== null) {
+      setLocalMax(maxValue)
+      setMaxInputValue(String(maxValue))
+    } else if (maxValue === null || maxValue === undefined) {
+      setLocalMax(null)
+      setMaxInputValue('')
+    }
   }, [maxValue])
 
   const getPercentage = (value) => {
@@ -44,13 +58,18 @@ const DualRangeSlider = ({
       const value = getValueFromPercentage(percentage)
 
       if (isDragging === 'min') {
-        const newMin = Math.min(value, localMax - 1)
+        const maxAllowed = localMax !== null ? localMax - 1 : max - 1
+        const newMin = Math.min(value, maxAllowed)
         setLocalMin(newMin)
-        onChange?.({ min: newMin, max: localMax })
+        setMinInputValue(String(newMin))
+        onChange?.({ min: newMin, max: localMax !== null ? localMax : max })
       } else if (isDragging === 'max') {
-        const newMax = Math.max(value, localMin + 1)
+        const minAllowed = localMin !== null ? localMin + 1 : min + 1
+        // When dragging, cap at max (90) for slider, but allow 90+ via input
+        const newMax = Math.min(max, Math.max(value, minAllowed))
         setLocalMax(newMax)
-        onChange?.({ min: localMin, max: newMax })
+        setMaxInputValue(String(newMax))
+        onChange?.({ min: localMin !== null ? localMin : min, max: newMax })
       }
     }
 
@@ -70,20 +89,85 @@ const DualRangeSlider = ({
   }, [isDragging, localMin, localMax, min, max, onChange])
 
   const handleInputChange = (type, value) => {
-    const numValue = parseInt(value) || min
+    // Allow user to type freely - just update the input value
     if (type === 'min') {
-      const newMin = Math.max(min, Math.min(numValue, localMax - 1))
-      setLocalMin(newMin)
-      onChange?.({ min: newMin, max: localMax })
+      setMinInputValue(value)
     } else {
-      const newMax = Math.min(max, Math.max(numValue, localMin + 1))
-      setLocalMax(newMax)
-      onChange?.({ min: localMin, max: newMax })
+      setMaxInputValue(value)
     }
   }
 
-  const minPercentage = getPercentage(localMin)
-  const maxPercentage = getPercentage(localMax)
+  const handleInputBlur = (type) => {
+    // On blur, validate and apply constraints
+    if (type === 'min') {
+      const numValue = parseInt(minInputValue, 10)
+      
+      if (minInputValue === '' || isNaN(numValue)) {
+        // If empty or invalid, reset to current localMin or empty
+        if (localMin !== null) {
+          setMinInputValue(String(localMin))
+        } else {
+          setMinInputValue('')
+        }
+        return
+      }
+
+      // Apply constraints: must be between min and (localMax - 1) or (max - 1) if localMax is null
+      const maxAllowed = localMax !== null ? localMax - 1 : max - 1
+      const newMin = Math.max(min, Math.min(numValue, maxAllowed))
+      
+      setLocalMin(newMin)
+      setMinInputValue(String(newMin))
+      
+      // Update max if needed to maintain min < max
+      const finalMax = localMax !== null ? localMax : max
+      if (newMin >= finalMax) {
+        const adjustedMax = Math.min(max, newMin + 1)
+        setLocalMax(adjustedMax)
+        setMaxInputValue(String(adjustedMax))
+        onChange?.({ min: newMin, max: adjustedMax })
+      } else {
+        onChange?.({ min: newMin, max: finalMax })
+      }
+    } else {
+      const numValue = parseInt(maxInputValue, 10)
+      
+      if (maxInputValue === '' || isNaN(numValue)) {
+        // If empty or invalid, reset to current localMax or empty
+        if (localMax !== null) {
+          setMaxInputValue(String(localMax))
+        } else {
+          setMaxInputValue('')
+        }
+        return
+      }
+
+      // Allow values >= 90 (90+)
+      const minAllowed = localMin !== null ? localMin + 1 : min + 1
+      // Don't cap at max - allow 90+ values
+      const newMax = Math.max(numValue, minAllowed)
+      
+      setLocalMax(newMax)
+      // Show the actual value in input, but display will show "90+" if >= 90
+      setMaxInputValue(String(newMax))
+      
+      // Update min if needed to maintain min < max
+      const finalMin = localMin !== null ? localMin : min
+      if (newMax <= finalMin) {
+        const adjustedMin = Math.max(min, newMax - 1)
+        setLocalMin(adjustedMin)
+        setMinInputValue(String(adjustedMin))
+        onChange?.({ min: adjustedMin, max: newMax })
+      } else {
+        onChange?.({ min: finalMin, max: newMax })
+      }
+    }
+  }
+
+  // For slider display, cap max at 90 for visual purposes, but allow higher values
+  const displayMax = localMax !== null ? Math.min(localMax, max) : max
+  const minPercentage = localMin !== null ? getPercentage(localMin) : 0
+  const maxPercentage = localMax !== null ? getPercentage(displayMax) : 100
 
   return (
     <div className={`w-full ${className}`}>
@@ -95,9 +179,11 @@ const DualRangeSlider = ({
           <input
             type="number"
             min={min}
-            max={localMax - 1}
-            value={localMin}
+            max={localMax !== null ? localMax - 1 : max}
+            value={minInputValue}
             onChange={(e) => handleInputChange('min', e.target.value)}
+            onBlur={() => handleInputBlur('min')}
+            placeholder={`Min: ${min}`}
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent"
           />
         </div>
@@ -108,10 +194,11 @@ const DualRangeSlider = ({
           </label>
           <input
             type="number"
-            min={localMin + 1}
-            max={max}
-            value={localMax}
+            min={localMin !== null ? localMin + 1 : min + 1}
+            value={maxInputValue}
             onChange={(e) => handleInputChange('max', e.target.value)}
+            onBlur={() => handleInputBlur('max')}
+            placeholder={`Max: ${max}+`}
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent"
           />
         </div>
@@ -140,7 +227,11 @@ const DualRangeSlider = ({
       </div>
       <div className="flex justify-between text-xs text-gray-500 mt-1">
         <span>{min}</span>
-        <span className="font-medium text-gray-700">{localMin} - {localMax}</span>
+        <span className="font-medium text-gray-700 whitespace-nowrap">
+          {localMin !== null && localMax !== null 
+            ? `${localMin} - ${localMax >= max ? `${max}+` : localMax}` 
+            : 'Select range'}
+        </span>
         <span>{max}+</span>
       </div>
     </div>

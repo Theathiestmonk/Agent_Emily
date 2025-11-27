@@ -356,11 +356,39 @@ const SubscriptionSelector = () => {
               return aOrder - bOrder;
             })
             .map((plan) => {
+            const isFreeTrial = plan.name === 'free_trial';
             const price = billingCycle === 'monthly' ? plan.price_monthly : plan.price_yearly;
-            const priceDisplay = billingCycle === 'monthly' 
-              ? `₹${(price / 100).toFixed(0)}`
-              : `₹${(price / 100).toFixed(0)}`;
             const isPro = plan.name === 'pro';
+            
+            // Dynamically update display name based on billing cycle
+            const getDisplayName = () => {
+              if (isFreeTrial) {
+                return plan.display_name; // Free Trial doesn't change
+              }
+              // Replace "Monthly" with "Yearly" or vice versa based on billing cycle
+              if (billingCycle === 'yearly') {
+                return plan.display_name.replace(/Monthly/gi, 'Yearly');
+              } else {
+                return plan.display_name.replace(/Yearly/gi, 'Monthly');
+              }
+            };
+            
+            // Format price display - special handling for Free Trial
+            const getPriceDisplay = () => {
+              if (isFreeTrial) {
+                return {
+                  price: 'for 3 days',
+                  period: null
+                };
+              }
+              return {
+                price: `₹${(price / 100).toFixed(0)}`,
+                period: billingCycle === 'monthly' ? 'month' : 'year'
+              };
+            };
+            
+            const displayName = getDisplayName();
+            const priceInfo = getPriceDisplay();
             
             return (
               <div
@@ -380,12 +408,14 @@ const SubscriptionSelector = () => {
                 )}
                 
                 <div className="text-center mb-4 sm:mb-6">
-                  <h3 className="text-lg sm:text-xl font-bold mb-2 text-gray-900">{plan.display_name}</h3>
+                  <h3 className="text-lg sm:text-xl font-bold mb-2 text-gray-900">{displayName}</h3>
                   <div className="text-2xl sm:text-3xl font-bold mb-1">
                     <span className={`${isPro ? 'text-[#FF4D94]' : 'text-[#9E005C]'}`}>
-                      {priceDisplay}
+                      {priceInfo.price}
                     </span>
-                    <span className="text-gray-500 text-sm sm:text-base">/{billingCycle === 'monthly' ? 'month' : 'year'}</span>
+                    {priceInfo.period && (
+                      <span className="text-gray-500 text-sm sm:text-base">/{priceInfo.period}</span>
+                    )}
                   </div>
                 </div>
                 
@@ -412,12 +442,23 @@ const SubscriptionSelector = () => {
                       featuresArray = [];
                     }
                     
+                    // Helper function to format feature text
+                    const formatFeature = (text) => {
+                      if (typeof text !== 'string') return text;
+                      // Replace underscores with spaces and capitalize each word
+                      return text
+                        .replace(/_/g, ' ')
+                        .split(' ')
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                        .join(' ');
+                    };
+                    
                     return (
                       <>
                         {featuresArray.slice(0, 4).map((feature, index) => (
                           <div key={index} className="flex items-center space-x-2">
                             <Check className={`w-3 h-3 sm:w-4 sm:h-4 ${isPro ? 'text-[#FF4D94]' : 'text-[#9E005C]'}`} />
-                            <span className="text-xs sm:text-sm text-gray-700">{feature}</span>
+                            <span className="text-xs sm:text-sm text-gray-700">{formatFeature(feature)}</span>
                           </div>
                         ))}
                         {featuresArray.length > 4 && (
@@ -451,7 +492,7 @@ const SubscriptionSelector = () => {
                     </>
                   ) : (
                     <>
-                      Choose {plan.display_name}
+                      Choose {displayName}
                       <ArrowRight className="w-4 h-4 ml-2" />
                     </>
                   )}

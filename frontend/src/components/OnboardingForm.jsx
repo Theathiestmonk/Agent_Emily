@@ -150,7 +150,7 @@ const OnboardingForm = forwardRef(({
     if (Array.isArray(files)) {
       const urls = files.map(file => file.url || file).filter(Boolean)
       handleInputChange('successful_content_urls', urls)
-      setMediaError('')
+    setMediaError('')
       // Also update single URL for backward compatibility
       if (urls.length > 0) {
         handleInputChange('successful_content_url', urls[0])
@@ -1010,14 +1010,14 @@ const OnboardingForm = forwardRef(({
                   <DualRangeSlider
                     min={16}
                     max={90}
-                    minValue={formData.target_audience_age_min || 16}
-                    maxValue={formData.target_audience_age_max || 90}
+                    minValue={formData.target_audience_age_min}
+                    maxValue={formData.target_audience_age_max}
                     onChange={({ min, max }) => {
-                      handleInputChange('target_audience_age_min', Number(min))
-                      handleInputChange('target_audience_age_max', Number(max))
+                      handleInputChange('target_audience_age_min', min !== null ? Number(min) : null)
+                      handleInputChange('target_audience_age_max', max !== null ? Number(max) : null)
                     }}
                   />
-                </div>
+                    </div>
 
                 {/* Gender Selection */}
                 <div className="border border-gray-200 rounded-lg p-4">
@@ -1027,18 +1027,18 @@ const OnboardingForm = forwardRef(({
                   <div className="flex flex-col space-y-2">
                     {['all', 'men', 'women'].map((gender) => (
                       <label key={gender} className="flex items-center space-x-2 cursor-pointer">
-                        <input
+                              <input
                           type="radio"
                           name="target_audience_gender"
                           value={gender}
                           checked={formData.target_audience_gender === gender}
                           onChange={(e) => handleInputChange('target_audience_gender', e.target.value)}
                           className="text-pink-600 focus:ring-pink-500"
-                        />
+                              />
                         <span className="text-sm text-gray-700 capitalize">{gender === 'all' ? 'All' : gender === 'men' ? 'Men' : 'Women'}</span>
-                      </label>
-                    ))}
-                  </div>
+                            </label>
+                        ))}
+                      </div>
                 </div>
 
                 {/* Life Stage / Roles Card */}
