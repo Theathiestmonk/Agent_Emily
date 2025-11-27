@@ -888,7 +888,7 @@ async def handle_oauth_callback(
 
         frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
 
-        return f"""
+        return HTMLResponse(content=f"""
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -1096,7 +1096,7 @@ async def handle_oauth_callback(
             </script>
         </body>
         </html>
-        """
+        """)
         
         
         
@@ -1129,7 +1129,7 @@ async def handle_oauth_callback(
 
         
 
-        return f"""
+        return HTMLResponse(content=f"""
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -1321,7 +1321,7 @@ async def handle_oauth_callback(
             </script>
         </body>
         </html>
-        """
+        """)
 
 
 
