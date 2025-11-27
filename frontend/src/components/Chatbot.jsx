@@ -37,30 +37,6 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
-  // Helper function to check if any modal is open
-  const isModalOpen = () => {
-    // Check for common modal indicators
-    const modals = document.querySelectorAll('[role="dialog"], .modal, [class*="modal"], [class*="Modal"]')
-    for (let modal of modals) {
-      const style = window.getComputedStyle(modal)
-      if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
-        return true
-      }
-    }
-    // Check for backdrop/overlay elements
-    const backdrops = document.querySelectorAll('[class*="backdrop"], [class*="overlay"], [class*="z-50"]')
-    for (let backdrop of backdrops) {
-      const style = window.getComputedStyle(backdrop)
-      if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
-        // Check if it's actually visible (not just in DOM)
-        const rect = backdrop.getBoundingClientRect()
-        if (rect.width > 0 && rect.height > 0) {
-          return true
-        }
-      }
-    }
-    return false
-  }
 
   useEffect(() => {
     scrollToBottom()
