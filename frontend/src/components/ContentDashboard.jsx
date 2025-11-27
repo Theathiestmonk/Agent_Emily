@@ -2361,15 +2361,23 @@ const ContentDashboard = () => {
     setSelectedFile(null)
   }
 
-  const handleUploadImage = async (postId) => {
+  const handleUploadImage = async (postId, file = null) => {
+    // Use provided file or fall back to selectedFile state
+    const fileToUpload = file || selectedFile
+    
     console.log('🔍 Upload function called with postId:', postId)
     console.log('🔍 editForm:', editForm)
     console.log('🔍 API_BASE_URL:', API_BASE_URL)
-    console.log('🔍 Selected file:', selectedFile)
+    console.log('🔍 Selected file:', fileToUpload)
     
-    if (!selectedFile) {
+    if (!fileToUpload) {
       showError('No file selected', 'Please select an image or video to upload')
       return
+    }
+    
+    // Set selectedFile state for consistency
+    if (file && file !== selectedFile) {
+      setSelectedFile(file)
     }
 
     if (!postId) {
@@ -2382,7 +2390,7 @@ const ContentDashboard = () => {
       
       // Use backend API for upload (bypasses RLS issues)
       const formData = new FormData()
-      formData.append('file', selectedFile)
+      formData.append('file', fileToUpload)
       formData.append('post_id', postId)
       
       console.log('🔍 Uploading via backend API to:', `${API_BASE_URL}/media/upload-image`)
@@ -2457,7 +2465,7 @@ const ContentDashboard = () => {
       
       // Use the message from backend (which correctly identifies video vs image)
       const successMessage = result.message || 'Media uploaded successfully!'
-      const successDescription = selectedFile?.type.startsWith('video/') 
+      const successDescription = fileToUpload?.type.startsWith('video/') 
         ? 'Your custom video has been added to the post'
         : 'Your custom image has been added to the post'
       
@@ -3535,15 +3543,13 @@ const ContentDashboard = () => {
                               </div>
                               
                               <div className="relative">
-                                <button
+                                <label
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    handleOpenUploadModal(content.id)
                                   }}
                                   onMouseEnter={() => setHoveredButton(`${content.id}-upload`)}
                                   onMouseLeave={() => setHoveredButton(null)}
-                                  disabled={uploadingImage.has(content.id)}
-                                  className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
+                                  className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center cursor-pointer ${
                                     uploadingImage.has(content.id)
                                       ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
                                       : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:opacity-90'
@@ -3554,7 +3560,37 @@ const ContentDashboard = () => {
                                   ) : (
                                     <Upload className="w-4 h-4" />
                                   )}
-                                </button>
+                                  <input
+                                    type="file"
+                                    accept="image/*,video/*"
+                                    onChange={(e) => {
+                                      const file = e.target.files[0]
+                                      if (file) {
+                                        // Validate file first
+                                        if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+                                          showError('Invalid file type', 'Please select an image or video file')
+                                          return
+                                        }
+                                        
+                                        // Validate file size
+                                        const maxSize = file.type.startsWith('video/') ? 100 * 1024 * 1024 : 10 * 1024 * 1024
+                                        if (file.size > maxSize) {
+                                          const maxSizeMB = file.type.startsWith('video/') ? '100MB' : '10MB'
+                                          showError('File too large', `Please select a file smaller than ${maxSizeMB}`)
+                                          return
+                                        }
+                                        
+                                        // Set state and upload immediately with file
+                                        setSelectedFile(file)
+                                        handleUploadImage(content.id, file)
+                                      }
+                                      // Reset input so same file can be selected again
+                                      e.target.value = ''
+                                    }}
+                                    className="hidden"
+                                    disabled={uploadingImage.has(content.id)}
+                                  />
+                                </label>
                                 {hoveredButton === `${content.id}-upload` && (
                                   <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
                                     {uploadingImage.has(content.id) ? 'Uploading...' : 'Upload Image/Video'}
@@ -3916,11 +3952,26 @@ const ContentDashboard = () => {
                                         onChange={(e) => {
                                           const file = e.target.files[0]
                                           if (file) {
-                                            handleFileSelect(e)
-                                            setTimeout(() => {
-                                              handleUploadImage(selectedContentForModal.id)
-                                            }, 100)
+                                            // Validate file first
+                                            if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+                                              showError('Invalid file type', 'Please select an image or video file')
+                                              return
+                                            }
+                                            
+                                            // Validate file size
+                                            const maxSize = file.type.startsWith('video/') ? 100 * 1024 * 1024 : 10 * 1024 * 1024
+                                            if (file.size > maxSize) {
+                                              const maxSizeMB = file.type.startsWith('video/') ? '100MB' : '10MB'
+                                              showError('File too large', `Please select a file smaller than ${maxSizeMB}`)
+                                              return
+                                            }
+                                            
+                                            // Set state and upload immediately with file
+                                            setSelectedFile(file)
+                                            handleUploadImage(selectedContentForModal.id, file)
                                           }
+                                          // Reset input so same file can be selected again
+                                          e.target.value = ''
                                         }}
                                         className="hidden"
                                         disabled={uploadingImage.has(selectedContentForModal.id)}
@@ -3959,12 +4010,26 @@ const ContentDashboard = () => {
                             onChange={(e) => {
                               const file = e.target.files[0]
                               if (file) {
-                                handleFileSelect(e)
-                                // Upload immediately after selection
-                                setTimeout(() => {
-                                  handleUploadImage(selectedContentForModal.id)
-                                }, 100)
+                                // Validate file first
+                                if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+                                  showError('Invalid file type', 'Please select an image or video file')
+                                  return
+                                }
+                                
+                                // Validate file size
+                                const maxSize = file.type.startsWith('video/') ? 100 * 1024 * 1024 : 10 * 1024 * 1024
+                                if (file.size > maxSize) {
+                                  const maxSizeMB = file.type.startsWith('video/') ? '100MB' : '10MB'
+                                  showError('File too large', `Please select a file smaller than ${maxSizeMB}`)
+                                  return
+                                }
+                                
+                                // Set state and upload immediately with file
+                                setSelectedFile(file)
+                                handleUploadImage(selectedContentForModal.id, file)
                               }
+                              // Reset input so same file can be selected again
+                              e.target.value = ''
                             }}
                             className="hidden"
                             disabled={uploadingImage.has(selectedContentForModal.id)}
