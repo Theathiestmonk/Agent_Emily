@@ -6,10 +6,11 @@ import { supabase } from '../lib/supabase'
 import { Send, User, Mic, Sparkles, Bot, Copy, Reply, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import ContentCard from './ContentCard'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 
-const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 'idle', onSpeakingChange, messageFilter = 'all' }, ref) => {
+const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 'idle', onSpeakingChange, messageFilter = 'all', onOpenCustomContent, isModalOpen = false }, ref) => {
   const { user } = useAuth()
   const { showError, showSuccess } = useNotifications()
   const navigate = useNavigate()
@@ -31,8 +32,6 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const inputRecognitionRef = useRef(null)
-  const isSelectingTextRef = useRef(false)
-  const mouseDownTimeRef = useRef(0)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -40,103 +39,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
 
   useEffect(() => {
     scrollToBottom()
-    // Don't auto-refocus if user is selecting text
-    if (inputRef.current && !isCallActive && !isLoading && !isSelectingTextRef.current) {
-      setTimeout(() => {
-        if (!isSelectingTextRef.current) {
-          inputRef.current?.focus()
-        }
-      }, 100)
-    }
-  }, [messages, isLoading, isCallActive])
-
-  // Auto-focus input when component mounts and maintain focus
-  useEffect(() => {
-    if (inputRef.current && !isCallActive) {
-      inputRef.current.focus()
-    }
-  }, [])
-
-  // Keep focus on input field at all times (when not in call), but allow text selection
-  useEffect(() => {
-    if (isCallActive) return // Don't focus during calls
-    
-    const maintainFocus = () => {
-      // Don't refocus if user is selecting text
-      if (isSelectingTextRef.current) return
-      
-      if (inputRef.current && document.activeElement !== inputRef.current) {
-        // Check if user has selected text
-        const selection = window.getSelection()
-        if (selection && selection.toString().length > 0) {
-          return // Don't refocus if text is selected
-        }
-        inputRef.current.focus()
-      }
-    }
-
-    // Set up interval to check and maintain focus (less aggressive)
-    const focusInterval = setInterval(maintainFocus, 500) // Increased from 100ms to 500ms
-
-    // Track mouse down/up for text selection
-    const handleMouseDown = (e) => {
-      mouseDownTimeRef.current = Date.now()
-      // Check if clicking on a message bubble or its content
-      const target = e.target
-      const messageBubble = target.closest('.message-bubble, [class*="chatbot-bubble"]')
-      if (messageBubble) {
-        isSelectingTextRef.current = true
-      }
-    }
-
-    const handleMouseUp = (e) => {
-      const timeDiff = Date.now() - mouseDownTimeRef.current
-      // If mouse was held down for more than 100ms, likely a text selection
-      if (timeDiff > 100) {
-        const selection = window.getSelection()
-        if (selection && selection.toString().length > 0) {
-          isSelectingTextRef.current = true
-          // Clear selection flag after a delay
-          setTimeout(() => {
-            isSelectingTextRef.current = false
-          }, 2000)
-          return
-        }
-      }
-      // Clear selection flag after a short delay
-      setTimeout(() => {
-        isSelectingTextRef.current = false
-      }, 300)
-    }
-
-    // Also focus on any click outside the input, but not if selecting text
-    const handleClick = (e) => {
-      if (isSelectingTextRef.current) return
-      
-      const target = e.target
-      const messageBubble = target.closest('.message-bubble, [class*="chatbot-bubble"]')
-      if (messageBubble) return // Don't refocus if clicking on message
-      
-      if (target !== inputRef.current && !inputRef.current.contains(target)) {
-        setTimeout(() => {
-          if (!isSelectingTextRef.current) {
-            maintainFocus()
-          }
-        }, 200)
-      }
-    }
-
-    document.addEventListener('mousedown', handleMouseDown)
-    document.addEventListener('mouseup', handleMouseUp)
-    document.addEventListener('click', handleClick)
-
-    return () => {
-      clearInterval(focusInterval)
-      document.removeEventListener('mousedown', handleMouseDown)
-      document.removeEventListener('mouseup', handleMouseUp)
-      document.removeEventListener('click', handleClick)
-    }
-  }, [isCallActive])
+  }, [messages, isLoading, isCallActive, isModalOpen])
 
   // Text-to-speech for bot responses using OpenAI TTS
   const speakText = async (text) => {
@@ -318,6 +221,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
           const newMessage = payload.new
           const metadata = newMessage.metadata || {}
           const isChase = metadata.sender === 'chase'
+          const isLeo = metadata.sender === 'leo'
           
           // Only add if it's a new message (not already in messages)
           setMessages(prev => {
@@ -339,6 +243,12 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
               isNew: true,
               scheduledMessageId: metadata.scheduled_message_id || null,
               isChase: isChase,
+              isLeo: isLeo,
+              leoMetadata: isLeo ? {
+                postData: metadata.post_data,
+                scheduledDate: metadata.scheduled_date,
+                scheduledTime: metadata.scheduled_time
+              } : null,
               chaseMetadata: isChase ? {
                 leadId: metadata.lead_id,
                 leadName: metadata.lead_name,
@@ -428,16 +338,21 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
             const isLeo = metadata.sender === 'leo'
             const isEmily = conv.message_type === 'bot' && !isChase && !isLeo
             return {
-              id: `conv-${conv.id}`,
-              conversationId: conv.id, // Store Supabase ID for deletion
-              type: conv.message_type === 'user' ? 'user' : 'bot',
-              content: conv.content,
-              timestamp: conv.created_at,
-              isNew: false,
+            id: `conv-${conv.id}`,
+            conversationId: conv.id, // Store Supabase ID for deletion
+            type: conv.message_type === 'user' ? 'user' : 'bot',
+            content: conv.content,
+            timestamp: conv.created_at,
+            isNew: false,
               scheduledMessageId: metadata.scheduled_message_id || null,
               isChase: isChase,
               isLeo: isLeo,
               isEmily: isEmily,
+              leoMetadata: isLeo ? {
+                postData: metadata.post_data,
+                scheduledDate: metadata.scheduled_date,
+                scheduledTime: metadata.scheduled_time
+              } : null,
               chaseMetadata: isChase ? {
                 leadId: metadata.lead_id,
                 leadName: metadata.lead_name,
@@ -508,9 +423,46 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     }
   }
 
+  // Detect if user wants to create social media post
+  const detectSocialMediaPostIntent = (message) => {
+    const messageLower = message.toLowerCase()
+    const keywords = [
+      'create post', 'create a post', 'make a post', 'make post',
+      'generate post', 'generate a post', 'new post', 'create content',
+      'generate content', 'create social media post', 'social media post',
+      'create instagram post', 'create facebook post', 'create linkedin post',
+      'create twitter post', 'post for', 'i want to post', 'help me create',
+      'create a social', 'make a social', 'generate social', 'write a post',
+      'draft a post', 'create post for', 'post about', 'create content for'
+    ]
+    return keywords.some(keyword => messageLower.includes(keyword))
+  }
+
   const sendMessage = async (messageText = null) => {
     const messageToSend = messageText || inputMessage
     if (!messageToSend.trim() || isLoading) return
+
+    // Check if user wants to create social media post
+    if (onOpenCustomContent && detectSocialMediaPostIntent(messageToSend)) {
+      // Open custom content chatbot modal
+      onOpenCustomContent()
+      // Add a quick response message
+      const quickResponse = {
+        id: Date.now(),
+        type: 'bot',
+        content: "Please pick this up '@leo'",
+        timestamp: new Date().toISOString(),
+        isEmily: true
+      }
+      setMessages(prev => [...prev, {
+        id: Date.now() - 1,
+        type: 'user',
+        content: messageToSend,
+        timestamp: new Date().toISOString()
+      }, quickResponse])
+      setInputMessage('')
+      return
+    }
 
     // Build message content with reply context if replying
     let finalMessage = messageToSend
@@ -682,10 +634,6 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     } finally {
       setIsLoading(false)
       setIsStreaming(false)
-      // Refocus input after sending message
-      if (inputRef.current) {
-        inputRef.current.focus()
-      }
     }
   }
 
@@ -792,11 +740,11 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         const isLeo = metadata.sender === 'leo'
         const isEmily = !isChase && !isLeo
         return {
-          id: `scheduled-${scheduledMsg.id}`,
-          type: 'bot',
-          content: scheduledMsg.content,
-          timestamp: scheduledMsg.scheduled_time || new Date().toISOString(),
-          isNew: true,
+        id: `scheduled-${scheduledMsg.id}`,
+        type: 'bot',
+        content: scheduledMsg.content,
+        timestamp: scheduledMsg.scheduled_time || new Date().toISOString(),
+        isNew: true,
           scheduledMessageId: scheduledMsg.id,
           isChase: isChase,
           isLeo: isLeo,
@@ -915,7 +863,6 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   const handleReplyToMessage = (message) => {
     setReplyingToMessage(message)
     setInputMessage('')
-    inputRef.current?.focus()
   }
 
   const handleMicClick = () => {
@@ -1156,23 +1103,6 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                 }`}
                 onMouseEnter={() => setHoveredMessageId(message.id)}
                 onMouseLeave={() => setHoveredMessageId(null)}
-                onMouseDown={() => {
-                  isSelectingTextRef.current = true
-                }}
-                onMouseUp={() => {
-                  // Keep selection flag active if text is selected
-                  setTimeout(() => {
-                    const selection = window.getSelection()
-                    if (selection && selection.toString().length > 0) {
-                      isSelectingTextRef.current = true
-                      setTimeout(() => {
-                        isSelectingTextRef.current = false
-                      }, 2000)
-                    } else {
-                      isSelectingTextRef.current = false
-                    }
-                  }, 100)
-                }}
                 style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
               >
                 {/* Agent Name - Only show for bot messages, inside bubble at top */}
@@ -1353,6 +1283,22 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                         )}
                       </div>
                     )}
+                    
+                    {/* Post Card for Leo Messages */}
+                    {message.isLeo && message.leoMetadata && message.leoMetadata.postData && (
+                      <div className="mt-3">
+                        <ContentCard
+                          content={message.leoMetadata.postData}
+                          platform={message.leoMetadata.postData.platform}
+                          contentType={message.leoMetadata.postData.post_type || message.leoMetadata.postData.content_type || 'post'}
+                        />
+                        {message.leoMetadata.scheduledDate && message.leoMetadata.scheduledTime && (
+                          <div className="mt-2 text-xs text-gray-600">
+                            This post is scheduled at {message.leoMetadata.scheduledDate} and {message.leoMetadata.scheduledTime}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : message.isStreaming ? (
                   <div className="flex items-center space-x-1">
@@ -1467,9 +1413,9 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                             {!expandedEmailBoxes.has(message.id) && (
                               <div className="text-xs text-gray-500 line-clamp-3">
                                 {message.chaseMetadata.emailContent.replace(/<[^>]*>/g, '').substring(0, 150)}...
-                              </div>
-                            )}
-                          </div>
+                  </div>
+                )}
+              </div>
                           <span className="text-xs text-gray-500 ml-2">
                             {expandedEmailBoxes.has(message.id) ? '▼' : '▶'}
                           </span>
@@ -1480,6 +1426,22 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                               className="text-xs text-gray-700 prose prose-sm max-w-none"
                               dangerouslySetInnerHTML={{ __html: message.chaseMetadata.emailContent }}
                             />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Post Card for Leo Messages */}
+                    {message.isLeo && message.leoMetadata && message.leoMetadata.postData && (
+                      <div className="mt-3">
+                        <ContentCard
+                          content={message.leoMetadata.postData}
+                          platform={message.leoMetadata.postData.platform}
+                          contentType={message.leoMetadata.postData.post_type || message.leoMetadata.postData.content_type || 'post'}
+                        />
+                        {message.leoMetadata.scheduledDate && message.leoMetadata.scheduledTime && (
+                          <div className="mt-2 text-xs text-gray-600">
+                            This post is scheduled at {message.leoMetadata.scheduledDate} and {message.leoMetadata.scheduledTime}
                           </div>
                         )}
                       </div>
@@ -1545,25 +1507,11 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                     sendMessage()
                   }
                 }}
-                onBlur={(e) => {
-                  // Don't refocus if user is selecting text
-                  if (isSelectingTextRef.current) return
-                  
-                  // Immediately refocus if not in call
-                  if (!isCallActive && !isLoading && !isStreaming) {
-                    setTimeout(() => {
-                      if (!isSelectingTextRef.current) {
-                        e.target.focus()
-                      }
-                    }, 200)
-                  }
-                }}
                 placeholder={replyingToMessage ? `Replying to: ${replyingToMessage.content.substring(0, 30)}...` : "Ask Emily..."}
                 className={`w-full px-6 py-4 bg-white border border-pink-200 rounded-2xl focus:ring-0 focus:border-transparent outline-none text-sm pr-20 placeholder:text-gray-400 resize-none overflow-y-auto ${replyingToMessage ? 'pt-8' : ''}`}
                 style={{ minHeight: '56px', maxHeight: '96px' }} // 1 row min, 4 rows max (24px * 4 = 96px)
                 disabled={isLoading || isStreaming}
                 rows={1}
-                autoFocus
               />
             </div>
             <div className="absolute right-3 bottom-3 flex items-center space-x-2">
