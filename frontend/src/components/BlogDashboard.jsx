@@ -2036,7 +2036,7 @@ const BlogDashboard = () => {
 
   return (
 
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50 overflow-x-hidden max-w-full">
+    <div className="min-h-screen bg-white overflow-x-hidden max-w-full">
 
       {/* Mobile Navigation */}
       <MobileNavigation 
@@ -2051,7 +2051,7 @@ const BlogDashboard = () => {
 
       {/* Main Content - No left margin on mobile, only on desktop */}
       <div 
-        className="md:ml-48 xl:ml-64 flex flex-col min-h-screen overflow-x-hidden w-full" 
+        className="md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden w-full" 
         style={{
           width: windowWidth >= 1280 ? 'calc(100vw - 256px)' : windowWidth >= 768 ? 'calc(100vw - 192px)' : '100%',
           maxWidth: windowWidth >= 1280 ? 'calc(100vw - 256px)' : windowWidth >= 768 ? 'calc(100vw - 192px)' : '100%',
@@ -2104,8 +2104,8 @@ const BlogDashboard = () => {
         </div>
 
         {/* Main Content Area */}
-        <div className="w-full px-2 md:px-2.5 lg:px-3 xl:px-4 overflow-x-hidden" style={{maxWidth: '100%', boxSizing: 'border-box'}}>
-          <div className="pt-24 md:pt-28 pb-8">
+        <div className="flex-1 w-full px-2 md:px-2.5 lg:px-3 xl:px-4 overflow-y-auto bg-gray-50" style={{maxWidth: '100%', boxSizing: 'border-box', minHeight: 0}}>
+          <div className="pt-24 md:pt-28">
 
           {filteredBlogs.length === 0 && !loading ? (
 
@@ -2576,7 +2576,7 @@ const BlogDashboard = () => {
 
           {/* Emily Message Bubble - Below blogs */}
           {!loading && blogs.length > 0 && (
-            <div className="flex justify-start w-full mt-4 mb-6">
+            <div className="flex justify-start w-full mt-4 mb-4">
               <div className="flex items-start gap-2 max-w-[50%]">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
                   <span className="text-white font-bold text-sm">E</span>
