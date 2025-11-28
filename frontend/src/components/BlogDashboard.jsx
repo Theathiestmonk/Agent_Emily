@@ -2059,7 +2059,7 @@ const BlogDashboard = () => {
         }}
       >
         {/* Header */}
-        <div className="fixed top-[52px] md:top-0 right-0 left-0 md:left-48 xl:left-64 bg-gradient-to-r from-pink-50 to-purple-50 shadow-sm z-30 overflow-x-hidden max-w-full" style={{position: 'fixed', zIndex: 30}}>
+        <div className="fixed top-[52px] md:top-0 right-0 left-0 md:left-48 xl:left-64 bg-white shadow-sm z-30 overflow-x-hidden max-w-full" style={{position: 'fixed', zIndex: 30}}>
           <div className="px-2 md:px-6 lg:px-8 py-1.5 md:py-3 lg:py-4 overflow-x-hidden">
             {/* Single Row for ALL Devices */}
             <div className="flex items-center justify-between md:justify-between gap-0.5 md:gap-4 w-full overflow-x-hidden max-w-full">
@@ -2073,30 +2073,6 @@ const BlogDashboard = () => {
 
               {/* Right Side - Actions */}
               <div className="flex items-center gap-0.5 md:gap-3 flex-shrink-0 min-w-0">
-                {/* Custom Blog Button */}
-                <button
-                  onClick={() => setShowCustomBlogChatbot(true)}
-                  className="flex items-center justify-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-1.5 py-1.5 md:px-4 md:py-2 lg:px-6 lg:py-3 rounded-md md:rounded-lg lg:rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all duration-300 shadow-lg hover:shadow-xl h-8 w-8 md:w-auto md:h-auto flex-shrink-0"
-                  title="Create Custom Blog"
-                >
-                  <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-5" />
-                  <span className="hidden md:inline ml-2 text-sm lg:text-base">Custom Blog</span>
-                </button>
-                
-                {/* Generate Button */}
-                <button
-                  onClick={generateBlogs}
-                  disabled={generating}
-                  className="flex items-center justify-center bg-gradient-to-r from-pink-500 to-purple-600 text-white px-1.5 py-1.5 md:px-4 md:py-2 lg:px-6 lg:py-3 rounded-md md:rounded-lg lg:rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 shadow-lg hover:shadow-xl h-8 w-8 md:w-auto md:h-auto flex-shrink-0"
-                >
-                  {generating ? (
-                    <RefreshCw className="w-3.5 h-3.5 md:w-4 md:h-5 animate-spin" />
-                  ) : (
-                    <Plus className="w-3.5 h-3.5 md:w-4 md:h-5" />
-                  )}
-                  <span className="hidden md:inline ml-2 text-sm lg:text-base">{generating ? 'Generating...' : 'Generate Blogs'}</span>
-                </button>
-
                 {/* Status Filter */}
                 <select
                   value={selectedStatus}
@@ -2119,22 +2095,6 @@ const BlogDashboard = () => {
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full pl-7 md:pl-9 lg:pl-10 pr-2 md:pr-3 lg:pr-4 py-1 md:py-2 text-[9px] md:text-sm border border-pink-200 rounded-md md:rounded-lg lg:rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white/80 backdrop-blur-sm shadow-sm h-8 md:h-auto"
                   />
-                </div>
-
-                {/* View Mode Toggle - Hidden on mobile */}
-                <div className="hidden md:flex border border-pink-200 rounded-md md:rounded-lg lg:rounded-xl overflow-hidden bg-white/80 backdrop-blur-sm shadow-sm flex-shrink-0">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={`p-1 md:p-1.5 lg:p-2 ${viewMode === 'grid' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white' : 'text-gray-600 hover:bg-pink-50'} h-8 md:h-auto`}
-                  >
-                    <BarChart3 className="w-3 h-3 md:w-3.5 md:h-3.5 lg:w-4 lg:h-4" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={`p-1 md:p-1.5 lg:p-2 ${viewMode === 'list' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white' : 'text-gray-600 hover:bg-pink-50'} h-8 md:h-auto`}
-                  >
-                    <BookOpen className="w-3 h-3 md:w-3.5 md:h-3.5 lg:w-4 lg:h-4" />
-                  </button>
                 </div>
               </div>
 

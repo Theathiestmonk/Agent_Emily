@@ -3732,9 +3732,9 @@ const ContentDashboard = () => {
                 {/* White space after second message bubble */}
                 <div style={{ height: '300px' }}></div>
                 </>
-              )}
-            </div>
+            )}
           </div>
+        </div>
 
 
       </div>

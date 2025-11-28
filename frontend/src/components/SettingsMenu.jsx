@@ -23,6 +23,7 @@ const SettingsMenu = ({ isOpen, onClose }) => {
   const [subscriptionStatus, setSubscriptionStatus] = useState(null)
   const [billingHistory, setBillingHistory] = useState([])
   const [billingLoading, setBillingLoading] = useState(false)
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
   const pollingIntervalRef = useRef(null)
 
   const platforms = [
@@ -545,7 +546,17 @@ const SettingsMenu = ({ isOpen, onClose }) => {
                       {profile.business_description && (
                         <div>
                           <div className="text-xs font-medium text-gray-500 mb-1">Business Description</div>
-                          <div className="text-sm text-gray-900">{profile.business_description}</div>
+                          <div className={`text-sm text-gray-900 ${!isDescriptionExpanded ? 'line-clamp-15' : ''}`}>
+                            {profile.business_description}
+                          </div>
+                          {(profile.business_description.length > 750 || profile.business_description.split('\n').length > 15) && (
+                            <button
+                              onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                              className="text-xs text-purple-600 hover:text-purple-700 mt-1 font-medium"
+                            >
+                              {isDescriptionExpanded ? 'See less' : 'See more'}
+                            </button>
+                          )}
                         </div>
                       )}
                       {profile.industry && Array.isArray(profile.industry) && profile.industry.length > 0 && (

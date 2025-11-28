@@ -1112,3 +1112,76 @@ def generate_content_topics(user_id: str, profile: Dict[str, Any], count: int = 
             "Create educational content about your services"
         ][:count]
 
+
+def fetch_today_posts(user_id: str) -> List[Dict[str, Any]]:
+    """Fetch posts scheduled for today from content_posts table"""
+    try:
+        from datetime import date
+        
+        today = date.today()
+        
+        # Get user's campaigns
+        campaigns_response = supabase.table("content_campaigns").select("id").eq("user_id", user_id).execute()
+        campaign_ids = [campaign["id"] for campaign in campaigns_response.data] if campaigns_response.data else []
+        
+        if not campaign_ids:
+            return []
+        
+        # Get posts scheduled for today
+        response = supabase.table("content_posts").select(
+            "*, content_campaigns!inner(*)"
+        ).in_("campaign_id", campaign_ids).eq(
+            "scheduled_date", today.isoformat()
+        ).order("scheduled_time").execute()
+        
+        posts = response.data if response.data else []
+        
+        # Format posts
+        formatted_posts = []
+        for post in posts:
+            formatted_post = {
+                "id": post["id"],
+                "title": post.get("title", "Untitled"),
+                "content": post.get("content", ""),
+                "platform": post.get("platform", "unknown"),
+                "scheduled_at": f"{post.get('scheduled_date')}T{post.get('scheduled_time', '12:00:00')}",
+                "status": post.get("status", "draft"),
+                "created_at": post.get("created_at"),
+                "media_url": post.get("primary_image_url"),
+                "hashtags": post.get("hashtags", []),
+                "post_type": post.get("post_type", "text"),
+                "campaign_id": post.get("campaign_id"),
+                "metadata": post.get("metadata", {}),
+                "carousel_images": post.get("carousel_images", [])
+            }
+            formatted_posts.append(formatted_post)
+        
+        return formatted_posts
+    except Exception as e:
+        logger.error(f"Error fetching today's posts for user {user_id}: {e}")
+        return []
+
+
+def generate_post_reminder_message(user_id: str, timezone: str = "UTC") -> Dict[str, Any]:
+    """Generate post reminder message at 8 AM"""
+    try:
+        logger.info(f"Generating post reminder message for user {user_id}")
+        profile = get_user_profile(user_id)
+        if not profile:
+            logger.error(f"Profile not found for user {user_id}")
+            return {"success": False, "error": "Profile not found"}
+        
+        # Fetch today's posts
+        posts = fetch_today_posts(user_id)
+        
+        return {
+            "success": True,
+            "content": "Reminder for your posts for today:",
+            "posts": posts,
+            "has_posts": len(posts) > 0,
+            "post_count": len(posts)
+        }
+    except Exception as e:
+        logger.error(f"Error generating post reminder message: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
