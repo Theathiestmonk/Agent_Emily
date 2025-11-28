@@ -2149,7 +2149,7 @@ const BlogDashboard = () => {
             <>
               {/* Emily Message Bubble - Above blogs */}
               {(loading || blogs.length > 0) && (
-                <div className="flex justify-start w-full px-4 mb-4">
+                <div className="flex justify-start w-full mb-4">
                   <div className="flex items-start gap-2 max-w-[50%]">
                     <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
                       <span className="text-white font-bold text-sm">E</span>
@@ -2167,7 +2167,7 @@ const BlogDashboard = () => {
 
                 data-testid="blogs-section"
 
-                className={viewMode === 'grid' ? 'p-2 sm:p-3 md:p-3 lg:p-3 xl:p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-2 sm:gap-2 md:gap-2.5 lg:gap-2.5 xl:gap-3 w-full box-border' : 'divide-y'}
+                className={viewMode === 'grid' ? 'pl-10 py-2 sm:py-3 md:py-3 lg:py-3 xl:py-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-2 sm:gap-2 md:gap-2.5 lg:gap-2.5 xl:gap-3 w-full box-border' : 'divide-y'}
                 style={viewMode === 'grid' ? {maxWidth: '100%', width: '100%', boxSizing: 'border-box'} : {}}
 
               >
@@ -2576,7 +2576,7 @@ const BlogDashboard = () => {
 
           {/* Emily Message Bubble - Below blogs */}
           {!loading && blogs.length > 0 && (
-            <div className="flex justify-start w-full px-4 mt-4 mb-6">
+            <div className="flex justify-start w-full mt-4 mb-6">
               <div className="flex items-start gap-2 max-w-[50%]">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
                   <span className="text-white font-bold text-sm">E</span>
