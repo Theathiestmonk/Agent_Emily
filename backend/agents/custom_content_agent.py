@@ -67,6 +67,9 @@ class ConversationStep(str, Enum):
     ASK_PLATFORM = "ask_platform"
     ASK_CONTENT_TYPE = "ask_content_type"
     ASK_DESCRIPTION = "ask_description"
+    ASK_CLARIFICATION_1 = "ask_clarification_1"
+    ASK_CLARIFICATION_2 = "ask_clarification_2"
+    ASK_CLARIFICATION_3 = "ask_clarification_3"
     ASK_MEDIA = "ask_media"
     HANDLE_MEDIA = "handle_media"
     VALIDATE_MEDIA = "validate_media"
@@ -93,6 +96,9 @@ class CustomContentState(TypedDict):
     selected_platform: Optional[str]
     selected_content_type: Optional[str]
     user_description: Optional[str]
+    clarification_1: Optional[str]
+    clarification_2: Optional[str]
+    clarification_3: Optional[str]
     has_media: Optional[bool]
     media_type: Optional[MediaType]
     uploaded_media_url: Optional[str]
@@ -521,11 +527,77 @@ class CustomContentAgent:
             
         return state
     
+    async def ask_clarification_1(self, state: CustomContentState) -> CustomContentState:
+        """Ask first clarifying question about the post goal"""
+        try:
+            state["current_step"] = ConversationStep.ASK_CLARIFICATION_1
+            state["progress_percentage"] = 40
+            
+            message = {
+                "role": "assistant",
+                "content": "What's the main goal or purpose of this post? (e.g., drive engagement, promote a product/service, share educational content, build brand awareness, or something else?)",
+                "timestamp": datetime.now().isoformat()
+            }
+            state["conversation_messages"].append(message)
+            
+            logger.info("Asked first clarification question about post goal")
+            
+        except Exception as e:
+            logger.error(f"Error in ask_clarification_1: {e}")
+            state["error_message"] = f"Failed to ask clarification: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            
+        return state
+    
+    async def ask_clarification_2(self, state: CustomContentState) -> CustomContentState:
+        """Ask second clarifying question about target audience"""
+        try:
+            state["current_step"] = ConversationStep.ASK_CLARIFICATION_2
+            state["progress_percentage"] = 45
+            
+            message = {
+                "role": "assistant",
+                "content": "Who is your target audience for this post? (e.g., existing customers, new prospects, specific age group, professionals, or a particular demographic?)",
+                "timestamp": datetime.now().isoformat()
+            }
+            state["conversation_messages"].append(message)
+            
+            logger.info("Asked second clarification question about target audience")
+            
+        except Exception as e:
+            logger.error(f"Error in ask_clarification_2: {e}")
+            state["error_message"] = f"Failed to ask clarification: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            
+        return state
+    
+    async def ask_clarification_3(self, state: CustomContentState) -> CustomContentState:
+        """Ask third clarifying question about tone and style"""
+        try:
+            state["current_step"] = ConversationStep.ASK_CLARIFICATION_3
+            state["progress_percentage"] = 50
+            
+            message = {
+                "role": "assistant",
+                "content": "What tone or style should this post have? (e.g., professional and formal, casual and friendly, inspirational and motivational, humorous and light-hearted, or something else?)",
+                "timestamp": datetime.now().isoformat()
+            }
+            state["conversation_messages"].append(message)
+            
+            logger.info("Asked third clarification question about tone and style")
+            
+        except Exception as e:
+            logger.error(f"Error in ask_clarification_3: {e}")
+            state["error_message"] = f"Failed to ask clarification: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            
+        return state
+    
     async def ask_media(self, state: CustomContentState) -> CustomContentState:
         """Ask user about media preferences"""
         try:
             state["current_step"] = ConversationStep.ASK_MEDIA
-            state["progress_percentage"] = 45
+            state["progress_percentage"] = 55
             
             platform = state.get("selected_platform")
             content_type = state.get("selected_content_type")
@@ -1015,8 +1087,12 @@ class CustomContentAgent:
             # Create enhanced content generation prompt
             # For carousel, indicate we have multiple images
             has_images_for_analysis = (is_carousel and carousel_images) or (has_media and media_url and media_type == "image")
+            clarification_1 = state.get("clarification_1", "")
+            clarification_2 = state.get("clarification_2", "")
+            clarification_3 = state.get("clarification_3", "")
             prompt = self._create_enhanced_content_prompt(
-                user_description, platform, content_type, business_context, image_analysis, has_images_for_analysis
+                user_description, platform, content_type, business_context, image_analysis, has_images_for_analysis,
+                clarification_1, clarification_2, clarification_3
             )
             
             # Prepare messages for content generation
@@ -1633,6 +1709,7 @@ class CustomContentAgent:
                     state["conversation_messages"].append(message)
                     state["current_step"] = ConversationStep.ASK_ANOTHER_CONTENT
                     state["progress_percentage"] = 100
+                    state["is_complete"] = True  # Mark as complete so frontend can trigger onContentCreated
                 else:
                     raise Exception("Failed to save carousel post to database")
                 
@@ -1812,6 +1889,7 @@ class CustomContentAgent:
                 state["conversation_messages"].append(message)
                 state["current_step"] = ConversationStep.ASK_ANOTHER_CONTENT
                 state["progress_percentage"] = 100
+                state["is_complete"] = True  # Mark as complete so frontend can trigger onContentCreated
             else:
                 raise Exception("Failed to save content to database")
             
@@ -2176,10 +2254,23 @@ class CustomContentAgent:
         return prompt
 
     def _create_enhanced_content_prompt(self, description: str, platform: str, content_type: str, 
-                                      business_context: Dict[str, Any], image_analysis: str, has_media: bool) -> str:
-        """Create an enhanced prompt for content generation with image analysis"""
+                                      business_context: Dict[str, Any], image_analysis: str, has_media: bool,
+                                      clarification_1: str = "", clarification_2: str = "", clarification_3: str = "") -> str:
+        """Create an enhanced prompt for content generation with image analysis and clarification answers"""
+        # Build clarification section if any clarifications were provided
+        clarification_section = ""
+        if clarification_1 or clarification_2 or clarification_3:
+            clarification_section = "\n\nAdditional Context from User:\n"
+            if clarification_1:
+                clarification_section += f"- Post Goal/Purpose: {clarification_1}\n"
+            if clarification_2:
+                clarification_section += f"- Target Audience: {clarification_2}\n"
+            if clarification_3:
+                clarification_section += f"- Tone/Style: {clarification_3}\n"
+        
         base_prompt = f"""
         Create a {content_type} for {platform} based on this description: "{description}"
+        {clarification_section}
         
         Business Context:
         - Business Name: {business_context.get('business_name', 'Not specified')}
@@ -2313,7 +2404,22 @@ class CustomContentAgent:
             elif current_step == ConversationStep.ASK_DESCRIPTION:
                 # Store user description
                 state["user_description"] = user_input
-                # Transition to next step
+                # Transition to first clarification question
+                state["current_step"] = ConversationStep.ASK_CLARIFICATION_1
+            elif current_step == ConversationStep.ASK_CLARIFICATION_1:
+                # Store first clarification answer
+                state["clarification_1"] = user_input
+                # Transition to second clarification question
+                state["current_step"] = ConversationStep.ASK_CLARIFICATION_2
+            elif current_step == ConversationStep.ASK_CLARIFICATION_2:
+                # Store second clarification answer
+                state["clarification_2"] = user_input
+                # Transition to third clarification question
+                state["current_step"] = ConversationStep.ASK_CLARIFICATION_3
+            elif current_step == ConversationStep.ASK_CLARIFICATION_3:
+                # Store third clarification answer
+                state["clarification_3"] = user_input
+                # Transition to media step
                 state["current_step"] = ConversationStep.ASK_MEDIA
                 
             elif current_step == ConversationStep.APPROVE_CAROUSEL_IMAGES:
@@ -2763,6 +2869,12 @@ class CustomContentAgent:
                 result = await self.ask_content_type(state)
             elif current_step == ConversationStep.ASK_DESCRIPTION:
                 result = await self.ask_description(state)
+            elif current_step == ConversationStep.ASK_CLARIFICATION_1:
+                result = await self.ask_clarification_1(state)
+            elif current_step == ConversationStep.ASK_CLARIFICATION_2:
+                result = await self.ask_clarification_2(state)
+            elif current_step == ConversationStep.ASK_CLARIFICATION_3:
+                result = await self.ask_clarification_3(state)
             elif current_step == ConversationStep.ASK_MEDIA:
                 result = await self.ask_media(state)
             elif current_step == ConversationStep.ASK_CAROUSEL_IMAGE_SOURCE:

@@ -4769,6 +4769,20 @@ async def post_to_instagram(
         print(f"📄 Full message to post: {full_message}")
 
         print(f"🖼️ Image URL: {image_url}")
+        
+        # Validate image URL is publicly accessible (for Instagram API)
+        if image_url:
+            # Check if URL is from Supabase storage and might need to be public
+            if 'supabase' in image_url.lower() and 'storage' in image_url.lower():
+                print(f"⚠️  Warning: Image URL is from Supabase storage. Ensure the bucket is public and the URL is accessible.")
+                # Try to verify URL is accessible (quick check)
+                try:
+                    head_response = requests.head(image_url, timeout=5, allow_redirects=True)
+                    if head_response.status_code not in [200, 301, 302]:
+                        print(f"⚠️  Warning: Image URL returned status {head_response.status_code}. Instagram may not be able to access it.")
+                except Exception as e:
+                    print(f"⚠️  Warning: Could not verify image URL accessibility: {e}")
+                    print(f"⚠️  Instagram requires publicly accessible image URLs. If posting fails, ensure the image URL is publicly accessible.")
 
         
         
@@ -5051,15 +5065,19 @@ async def post_to_instagram(
         media_id = media_result.get('id')
 
         
-        
+
         if not media_id:
-
+            # Log the full response for debugging
+            print(f"❌ Instagram media container creation failed - Full response: {media_result}")
+            error_message = media_result.get('error', {}).get('message', 'Unknown error')
+            if 'not accessible' in error_message.lower() or 'invalid url' in error_message.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Instagram cannot access the image URL. Please ensure the image is publicly accessible. Error: {error_message}"
+                )
             raise HTTPException(
-
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-
-                detail="Failed to create Instagram media container"
-
+                detail=f"Failed to create Instagram media container: {error_message}"
             )
         
         
@@ -5148,14 +5166,18 @@ async def post_to_instagram(
 
                 error_data = {"error": {"message": error_text}}
             
+            error_message = error_data.get('error', {}).get('message', 'Unknown error')
             
+            # Provide more helpful error messages
+            if 'Media ID is not available' in error_message or 'media id is not available' in error_message.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Instagram cannot access the media. This usually means the image URL is not publicly accessible. Please ensure the image URL is publicly accessible (not behind authentication). Original error: {error_message}"
+                )
             
             raise HTTPException(
-
                 status_code=status.HTTP_400_BAD_REQUEST,
-
-                detail=f"Instagram publish error: {error_data.get('error', {}).get('message', 'Unknown error')}"
-
+                detail=f"Instagram publish error: {error_message}"
             )
         
         

@@ -12,6 +12,8 @@ import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import Chatbot from './Chatbot'
 import RecentTasks from './RecentTasks'
+import CustomContentChatbot from './CustomContentChatbot'
+import ContentCard from './ContentCard'
 import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar, PanelRight, PanelLeft, X, ChevronRight, Video, Phone, ChevronDown } from 'lucide-react'
 
 // Voice Orb Component with animated border (spring-like animation)
@@ -158,6 +160,7 @@ function Dashboard() {
   const [isCallSpeaking, setIsCallSpeaking] = useState(false)
   const [messageFilter, setMessageFilter] = useState('all') // 'all', 'emily', 'chase', 'leo'
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false)
+  const [showCustomContentChatbot, setShowCustomContentChatbot] = useState(false)
 
   const handleCallClick = async () => {
     if (isCallActive) {
@@ -569,7 +572,16 @@ function Dashboard() {
                 {/* Main Chat Area */}
               <div className={`flex-1 transition-all duration-300 ${isPanelOpen ? 'max-w-4xl' : 'max-w-5xl xl:max-w-6xl'} mx-auto h-full`}>
                 <div className="bg-transparent rounded-lg h-full relative">
-                  <Chatbot profile={profile} ref={chatbotRef} isCallActive={isCallActive} callStatus={callStatus} onSpeakingChange={setIsCallSpeaking} messageFilter={messageFilter} />
+                  <Chatbot 
+                    profile={profile} 
+                    ref={chatbotRef} 
+                    isCallActive={isCallActive} 
+                    callStatus={callStatus} 
+                    onSpeakingChange={setIsCallSpeaking} 
+                    messageFilter={messageFilter}
+                    onOpenCustomContent={() => setShowCustomContentChatbot(true)}
+                    isModalOpen={showCustomContentChatbot}
+                  />
                 </div>
               </div>
 
@@ -698,6 +710,92 @@ function Dashboard() {
         </div>
       </div>
       </div>
+
+      {/* Custom Content Chatbot Modal */}
+      <CustomContentChatbot
+        isOpen={showCustomContentChatbot}
+        onClose={() => setShowCustomContentChatbot(false)}
+        onContentCreated={async (content) => {
+          console.log('onContentCreated called with content:', content)
+          setShowCustomContentChatbot(false)
+          
+          // Create chatbot message with post card
+          if (content && user?.id) {
+            try {
+              console.log('Creating chatbot message for post:', content)
+              
+              // Format scheduled date and time
+              const scheduledDate = content.scheduled_date || content.scheduled_at?.split('T')[0]
+              const scheduledTime = content.scheduled_time || content.scheduled_at?.split('T')[1]?.split('.')[0] || '12:00:00'
+              
+              let formattedDate = 'Not scheduled'
+              let formattedTime = ''
+              
+              if (scheduledDate) {
+                try {
+                  const dateObj = new Date(`${scheduledDate}T${scheduledTime}`)
+                  if (!isNaN(dateObj.getTime())) {
+                    formattedDate = dateObj.toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })
+                    formattedTime = dateObj.toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true
+                    })
+                  }
+                } catch (dateError) {
+                  console.error('Error formatting date:', dateError)
+                }
+              }
+              
+              const businessName = profile?.business_name || user?.user_metadata?.name || 'your business'
+              
+              // Create message content
+              const messageContent = `Generated this post for ${businessName}`
+              
+              // Create chatbot message with post data in metadata
+              const chatbotMessageData = {
+                user_id: user.id,
+                message_type: 'bot',
+                content: messageContent,
+                intent: 'post_generated',
+                metadata: {
+                  sender: 'leo',
+                  post_data: content,
+                  scheduled_date: formattedDate,
+                  scheduled_time: formattedTime,
+                  notification_type: 'post_generated'
+                }
+              }
+              
+              console.log('Inserting chatbot message:', chatbotMessageData)
+              
+              // Insert into Supabase
+              const { data, error } = await supabase
+                .from('chatbot_conversations')
+                .insert(chatbotMessageData)
+                .select()
+                .single()
+              
+              if (error) {
+                console.error('Error creating chatbot message:', error)
+                showError('Failed to create chatbot notification')
+              } else {
+                console.log('Chatbot message created successfully:', data)
+                // The realtime subscription should pick this up automatically
+              }
+            } catch (error) {
+              console.error('Error handling post creation:', error)
+              showError('Failed to create chatbot notification')
+            }
+          } else {
+            console.warn('onContentCreated called but content or user is missing:', { content, userId: user?.id })
+          }
+        }}
+      />
     </div>
   )
 }

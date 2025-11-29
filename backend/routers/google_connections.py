@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi.responses import HTMLResponse
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -351,7 +352,7 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
             import urllib.parse
             encoded_error = urllib.parse.quote(error_details if error_details else error)
             
-            return f"""
+            return HTMLResponse(content=f"""
             <!DOCTYPE html>
             <html>
             <head>
@@ -390,13 +391,13 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
                 </script>
             </body>
             </html>
-            """
+            """)
         
         # Check for missing parameters
         if not code or not state:
             frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
             print(f"Google OAuth callback - Missing parameters: code={code}, state={state}")
-            return f"""
+            return HTMLResponse(content=f"""
             <!DOCTYPE html>
             <html>
             <head>
@@ -412,7 +413,7 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
                 <p>You can close this window and try again.</p>
             </body>
             </html>
-            """
+            """)
         
         # Validate OAuth state
         print(f"🔍 Looking for OAuth state: {state}")
@@ -602,7 +603,7 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
         
         # Return HTML page that redirects to frontend
         frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
-        return f"""
+        return HTMLResponse(content=f"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -616,7 +617,7 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
             <p>Google account connected successfully! Redirecting...</p>
         </body>
         </html>
-        """
+        """)
         
     except Exception as e:
         # Return HTML page that redirects to frontend with error
@@ -643,7 +644,7 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
         elif "redirect_uri_mismatch" in str(e).lower():
             error_message = f"Redirect URI mismatch. The redirect URI ({redirect_uri}) must exactly match what's configured in Google Cloud Console."
         
-        return f"""
+        return HTMLResponse(content=f"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -657,7 +658,7 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
             <p>Google connection failed: {error_message}</p>
         </body>
         </html>
-        """
+        """)
 
 @router.get("/gmail/messages")
 async def get_gmail_messages(limit: int = 10, current_user: User = Depends(get_current_user)):

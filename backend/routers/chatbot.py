@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Header, Query
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from typing import Optional, Generator, List, Dict
-from datetime import datetime, timedelta, timezone, date
+from datetime import datetime, timedelta, timezone, date, time, time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -323,6 +323,93 @@ async def text_to_speech(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating speech: {str(e)}"
+        )
+
+@router.get("/post-reminder")
+async def get_post_reminder(
+    current_user: User = Depends(get_current_user)
+):
+    """Get post reminder for today - always generates and adds to conversation"""
+    try:
+        from agents.scheduled_messages import generate_post_reminder_message, get_user_timezone
+        import pytz
+        from datetime import datetime as dt
+        
+        user_id = current_user.id
+        user_tz = get_user_timezone(user_id)
+        
+        # Check if reminder already exists in conversations for today
+        today = date.today()
+        today_start = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
+        today_end = datetime.combine(today, datetime.max.time()).replace(tzinfo=timezone.utc)
+        
+        # Check if post_reminder message exists in conversations for today
+        existing_response = supabase_client.table("chatbot_conversations").select("id").eq(
+            "user_id", user_id
+        ).eq("intent", "post_reminder").gte(
+            "created_at", today_start.isoformat()
+        ).lte(
+            "created_at", today_end.isoformat()
+        ).execute()
+        
+        if existing_response.data and len(existing_response.data) > 0:
+            # Reminder already exists in conversations, return empty
+            return {
+                "success": True,
+                "shown": True,
+                "message": None,
+                "posts": []
+            }
+        
+        # Generate reminder message
+        reminder_data = generate_post_reminder_message(user_id, user_tz)
+        
+        if not reminder_data.get("success"):
+            return {
+                "success": False,
+                "error": reminder_data.get("error", "Failed to generate reminder")
+            }
+        
+        # Create message content
+        message_content = reminder_data.get("content", "Reminder for your posts for today:")
+        if not reminder_data.get("has_posts", False):
+            message_content += "\n\nNo posts for today. Generate one with Leo"
+        
+        # Add to conversation history (like other scheduled messages)
+        now_utc = datetime.now(timezone.utc)
+        conversation_data = {
+            "user_id": user_id,
+            "message_type": "bot",
+            "content": message_content,
+            "intent": "post_reminder",
+            "created_at": now_utc.isoformat(),
+            "metadata": {
+                "has_posts": reminder_data.get("has_posts", False),
+                "post_count": reminder_data.get("post_count", 0),
+                "posts": reminder_data.get("posts", [])
+            }
+        }
+        
+        try:
+            conversation_response = supabase_client.table("chatbot_conversations").insert(conversation_data).execute()
+            logger.info(f"Post reminder added to conversations for user {user_id}")
+        except Exception as e:
+            logger.error(f"Error saving post reminder to conversations: {e}")
+        
+        return {
+            "success": True,
+            "shown": False,
+            "message": message_content,
+            "posts": reminder_data.get("posts", []),
+            "has_posts": reminder_data.get("has_posts", False),
+            "post_count": reminder_data.get("post_count", 0)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting post reminder: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting post reminder: {str(e)}"
         )
 
 @router.get("/health")

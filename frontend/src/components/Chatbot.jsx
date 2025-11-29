@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
-import { Send, User, Mic, Sparkles, Bot, Copy, Reply, Trash2 } from 'lucide-react'
+import { Send, User, Mic, Sparkles, Bot, Copy, Reply, Trash2, Plus, X, File, Image as ImageIcon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import ContentCard from './ContentCard'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 
-const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 'idle', onSpeakingChange, messageFilter = 'all' }, ref) => {
+const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 'idle', onSpeakingChange, messageFilter = 'all', onOpenCustomContent, isModalOpen = false }, ref) => {
   const { user } = useAuth()
   const { showError, showSuccess } = useNotifications()
   const navigate = useNavigate()
@@ -31,147 +32,17 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const inputRecognitionRef = useRef(null)
-  const isSelectingTextRef = useRef(false)
-  const mouseDownTimeRef = useRef(0)
+  const [attachments, setAttachments] = useState([])
+  const fileInputRef = useRef(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
-  // Helper function to check if any modal is open
-  const isModalOpen = () => {
-    // Check for common modal indicators
-    const modals = document.querySelectorAll('[role="dialog"], .modal, [class*="modal"], [class*="Modal"]')
-    for (let modal of modals) {
-      const style = window.getComputedStyle(modal)
-      if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
-        return true
-      }
-    }
-    // Check for backdrop/overlay elements
-    const backdrops = document.querySelectorAll('[class*="backdrop"], [class*="overlay"], [class*="z-50"]')
-    for (let backdrop of backdrops) {
-      const style = window.getComputedStyle(backdrop)
-      if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
-        // Check if it's actually visible (not just in DOM)
-        const rect = backdrop.getBoundingClientRect()
-        if (rect.width > 0 && rect.height > 0) {
-          return true
-        }
-      }
-    }
-    return false
-  }
 
   useEffect(() => {
     scrollToBottom()
-    // Don't auto-refocus if user is selecting text or if a modal is open
-    if (inputRef.current && !isCallActive && !isLoading && !isSelectingTextRef.current && !isModalOpen()) {
-      setTimeout(() => {
-        if (!isSelectingTextRef.current && !isModalOpen()) {
-          inputRef.current?.focus()
-        }
-      }, 100)
-    }
-  }, [messages, isLoading, isCallActive])
-
-  // Auto-focus input when component mounts and maintain focus
-  useEffect(() => {
-    if (inputRef.current && !isCallActive && !isModalOpen()) {
-      inputRef.current.focus()
-    }
-  }, [])
-
-  // Keep focus on input field at all times (when not in call), but allow text selection
-  useEffect(() => {
-    if (isCallActive) return // Don't focus during calls
-    
-    const maintainFocus = () => {
-      // Don't refocus if user is selecting text or if a modal is open
-      if (isSelectingTextRef.current || isModalOpen()) return
-      
-      if (inputRef.current && document.activeElement !== inputRef.current) {
-        // Check if user has selected text
-        const selection = window.getSelection()
-        if (selection && selection.toString().length > 0) {
-          return // Don't refocus if text is selected
-        }
-        // Don't refocus if active element is inside a modal
-        const activeElement = document.activeElement
-        if (activeElement && activeElement.closest('[role="dialog"], .modal, [class*="modal"], [class*="Modal"]')) {
-          return
-        }
-        inputRef.current.focus()
-      }
-    }
-
-    // Set up interval to check and maintain focus (less aggressive)
-    const focusInterval = setInterval(maintainFocus, 500) // Increased from 100ms to 500ms
-
-    // Track mouse down/up for text selection
-    const handleMouseDown = (e) => {
-      mouseDownTimeRef.current = Date.now()
-      // Check if clicking on a message bubble or its content
-      const target = e.target
-      const messageBubble = target.closest('.message-bubble, [class*="chatbot-bubble"]')
-      if (messageBubble) {
-        isSelectingTextRef.current = true
-      }
-    }
-
-    const handleMouseUp = (e) => {
-      const timeDiff = Date.now() - mouseDownTimeRef.current
-      // If mouse was held down for more than 100ms, likely a text selection
-      if (timeDiff > 100) {
-        const selection = window.getSelection()
-        if (selection && selection.toString().length > 0) {
-          isSelectingTextRef.current = true
-          // Clear selection flag after a delay
-          setTimeout(() => {
-            isSelectingTextRef.current = false
-          }, 2000)
-          return
-        }
-      }
-      // Clear selection flag after a short delay
-      setTimeout(() => {
-        isSelectingTextRef.current = false
-      }, 300)
-    }
-
-    // Also focus on any click outside the input, but not if selecting text or modal is open
-    const handleClick = (e) => {
-      if (isSelectingTextRef.current || isModalOpen()) return
-      
-      const target = e.target
-      const messageBubble = target.closest('.message-bubble, [class*="chatbot-bubble"]')
-      if (messageBubble) return // Don't refocus if clicking on message
-      
-      // Don't refocus if clicking inside a modal
-      if (target.closest('[role="dialog"], .modal, [class*="modal"], [class*="Modal"]')) {
-        return
-      }
-      
-      if (target !== inputRef.current && !inputRef.current.contains(target)) {
-        setTimeout(() => {
-          if (!isSelectingTextRef.current && !isModalOpen()) {
-            maintainFocus()
-          }
-        }, 200)
-      }
-    }
-
-    document.addEventListener('mousedown', handleMouseDown)
-    document.addEventListener('mouseup', handleMouseUp)
-    document.addEventListener('click', handleClick)
-
-    return () => {
-      clearInterval(focusInterval)
-      document.removeEventListener('mousedown', handleMouseDown)
-      document.removeEventListener('mouseup', handleMouseUp)
-      document.removeEventListener('click', handleClick)
-    }
-  }, [isCallActive])
+  }, [messages, isLoading, isCallActive, isModalOpen])
 
   // Text-to-speech for bot responses using OpenAI TTS
   const speakText = async (text) => {
@@ -351,8 +222,20 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         },
         (payload) => {
           const newMessage = payload.new
-          const metadata = newMessage.metadata || {}
+          
+          // Handle metadata - it might be None, dict, or string
+          let metadata = newMessage.metadata
+          if (typeof metadata === 'string') {
+            try {
+              metadata = JSON.parse(metadata)
+            } catch {
+              metadata = {}
+            }
+          }
+          if (!metadata) metadata = {}
+          
           const isChase = metadata.sender === 'chase'
+          const isLeo = metadata.sender === 'leo'
           
           // Only add if it's a new message (not already in messages)
           setMessages(prev => {
@@ -364,6 +247,20 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
             
             if (exists) return prev
             
+            // Check if it's a post reminder
+            const isPostReminder = metadata.intent === 'post_reminder' || newMessage.intent === 'post_reminder'
+            
+            // Debug post reminder
+            if (isPostReminder) {
+              console.log('Post reminder from realtime:', {
+                hasPosts: metadata.has_posts,
+                postCount: metadata.post_count,
+                posts: metadata.posts,
+                postsLength: metadata.posts ? metadata.posts.length : 0,
+                metadata: metadata
+              })
+            }
+            
             // Add new message
             const messageObj = {
               id: `conv-${newMessage.id}`,
@@ -374,6 +271,15 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
               isNew: true,
               scheduledMessageId: metadata.scheduled_message_id || null,
               isChase: isChase,
+              isLeo: isLeo,
+              isPostReminder: isPostReminder,
+              posts: isPostReminder ? (metadata.posts || []) : null,
+              hasPosts: isPostReminder ? (metadata.has_posts || false) : false,
+              leoMetadata: isLeo ? {
+                postData: metadata.post_data,
+                scheduledDate: metadata.scheduled_date,
+                scheduledTime: metadata.scheduled_time
+              } : null,
               chaseMetadata: isChase ? {
                 leadId: metadata.lead_id,
                 leadName: metadata.lead_name,
@@ -415,6 +321,53 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       }
     }
   }, [])
+
+  // Check for post reminder when user opens account - force generate if not exists
+  useEffect(() => {
+    const checkPostReminder = async () => {
+      if (!user?.id) return
+      
+      try {
+        const authToken = await getAuthToken()
+        if (!authToken) return
+
+        // Always call the endpoint - it will check if reminder exists and generate if needed
+        const response = await fetch(`${API_BASE_URL}/chatbot/post-reminder`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          
+          // If reminder was already shown (exists in conversations), it will be loaded from conversations
+          if (data.shown) return
+          
+          // If reminder was just generated, it's already in conversations via realtime subscription
+          // But we can also add it manually if needed for immediate display
+          if (data.success && data.message && !data.shown) {
+            // The message should already be in conversations, but we can trigger a reload
+            // The realtime subscription will pick it up automatically
+            setTimeout(() => {
+              loadTodayConversations()
+            }, 500)
+          }
+        }
+      } catch (error) {
+        console.error('Error checking post reminder:', error)
+      }
+    }
+
+    // Check reminder after conversations are loaded
+    const timer = setTimeout(() => {
+      checkPostReminder()
+    }, 2000)
+
+    return () => clearTimeout(timer)
+  }, [user?.id])
 
   const loadTodayConversations = async () => {
     // Prevent concurrent loads
@@ -458,21 +411,54 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         if (data.conversations.length > 0) {
           // Convert conversations to message format
           const conversationMessages = data.conversations.map(conv => {
-            const metadata = conv.metadata || {}
+            // Handle metadata - it might be None, dict, or string
+            let metadata = conv.metadata
+            if (typeof metadata === 'string') {
+              try {
+                metadata = JSON.parse(metadata)
+              } catch {
+                metadata = {}
+              }
+            }
+            if (!metadata) metadata = {}
+            
             const isChase = metadata.sender === 'chase'
             const isLeo = metadata.sender === 'leo'
             const isEmily = conv.message_type === 'bot' && !isChase && !isLeo
-            return {
-              id: `conv-${conv.id}`,
-              conversationId: conv.id, // Store Supabase ID for deletion
-              type: conv.message_type === 'user' ? 'user' : 'bot',
-              content: conv.content,
-              timestamp: conv.created_at,
-              isNew: false,
+            const isPostReminder = metadata.intent === 'post_reminder' || conv.intent === 'post_reminder'
+            
+            // Debug post reminder data
+            if (isPostReminder) {
+              console.log('Post reminder found:', {
+                hasPosts: metadata.has_posts,
+                postCount: metadata.post_count,
+                posts: metadata.posts,
+                postsLength: metadata.posts ? metadata.posts.length : 0,
+                metadataType: typeof metadata.posts,
+                metadataIsArray: Array.isArray(metadata.posts),
+                fullMetadata: metadata
+              })
+            }
+            
+            const messageObj = {
+            id: `conv-${conv.id}`,
+            conversationId: conv.id, // Store Supabase ID for deletion
+            type: conv.message_type === 'user' ? 'user' : 'bot',
+            content: conv.content,
+            timestamp: conv.created_at,
+            isNew: false,
               scheduledMessageId: metadata.scheduled_message_id || null,
               isChase: isChase,
               isLeo: isLeo,
               isEmily: isEmily,
+              isPostReminder: isPostReminder,
+              posts: isPostReminder ? (metadata.posts || []) : null,
+              hasPosts: isPostReminder ? (metadata.has_posts || false) : false,
+              leoMetadata: isLeo ? {
+                postData: metadata.post_data,
+                scheduledDate: metadata.scheduled_date,
+                scheduledTime: metadata.scheduled_time
+              } : null,
               chaseMetadata: isChase ? {
                 leadId: metadata.lead_id,
                 leadName: metadata.lead_name,
@@ -480,6 +466,18 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                 emailSubject: metadata.email_subject
               } : null
             }
+            
+            // Debug the created message object for post reminders
+            if (isPostReminder) {
+              console.log('Post reminder message object created:', {
+                isPostReminder: messageObj.isPostReminder,
+                hasPosts: messageObj.hasPosts,
+                posts: messageObj.posts,
+                postsLength: messageObj.posts ? messageObj.posts.length : 0
+              })
+            }
+            
+            return messageObj
           })
           
           // Remove duplicates based on scheduled_message_id
@@ -543,9 +541,83 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     }
   }
 
+  // Detect if user wants to create social media post
+  const detectSocialMediaPostIntent = (message) => {
+    const messageLower = message.toLowerCase()
+    const keywords = [
+      'create post', 'create a post', 'make a post', 'make post',
+      'generate post', 'generate a post', 'new post', 'create content',
+      'generate content', 'create social media post', 'social media post',
+      'create instagram post', 'create facebook post', 'create linkedin post',
+      'create twitter post', 'post for', 'i want to post', 'help me create',
+      'create a social', 'make a social', 'generate social', 'write a post',
+      'draft a post', 'create post for', 'post about', 'create content for'
+    ]
+    return keywords.some(keyword => messageLower.includes(keyword))
+  }
+
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    files.forEach(file => {
+      // Check file size (max 20MB)
+      const maxSize = 20 * 1024 * 1024 // 20MB
+      if (file.size > maxSize) {
+        showError('File too large', `${file.name} exceeds 20MB limit`)
+        return
+      }
+
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const fileData = {
+          id: Date.now() + Math.random(),
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          data: event.target.result, // base64 data URL
+          file: file
+        }
+        setAttachments(prev => [...prev, fileData])
+      }
+      reader.readAsDataURL(file)
+    })
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const removeAttachment = (id) => {
+    setAttachments(prev => prev.filter(att => att.id !== id))
+  }
+
   const sendMessage = async (messageText = null) => {
     const messageToSend = messageText || inputMessage
-    if (!messageToSend.trim() || isLoading) return
+    if ((!messageToSend.trim() && attachments.length === 0) || isLoading) return
+
+    // Check if user wants to create social media post
+    if (onOpenCustomContent && detectSocialMediaPostIntent(messageToSend)) {
+      // Open custom content chatbot modal
+      onOpenCustomContent()
+      // Add a quick response message
+      const quickResponse = {
+        id: Date.now(),
+        type: 'bot',
+        content: "Please pick this up '@leo'",
+        timestamp: new Date().toISOString(),
+        isEmily: true
+      }
+      setMessages(prev => [...prev, {
+        id: Date.now() - 1,
+        type: 'user',
+        content: messageToSend,
+        timestamp: new Date().toISOString()
+      }, quickResponse])
+      setInputMessage('')
+      return
+    }
 
     // Build message content with reply context if replying
     let finalMessage = messageToSend
@@ -558,11 +630,17 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       type: 'user',
       content: messageToSend,
       timestamp: new Date().toISOString(),
-      replyingTo: replyingToMessage
+      replyingTo: replyingToMessage,
+      attachments: attachments.map(att => ({
+        name: att.name,
+        type: att.type,
+        data: att.data
+      }))
     }
 
     setMessages(prev => [...prev, userMessage])
     setInputMessage('')
+    setAttachments([])
     setReplyingToMessage(null) // Clear reply context after sending
     setIsLoading(true)
     setIsStreaming(true)
@@ -596,6 +674,11 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         body: JSON.stringify({
           message: finalMessage,
           user_id: user?.id,
+          attachments: attachments.map(att => ({
+            name: att.name,
+            type: att.type,
+            data: att.data // base64 data URL
+          })),
           conversation_history: messages
             .filter(msg => (msg.type === 'user' || msg.type === 'bot') && msg.content && msg.content.trim()) // Include all user and bot messages with content (including greeting)
             .map(msg => ({
@@ -717,10 +800,6 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     } finally {
       setIsLoading(false)
       setIsStreaming(false)
-      // Refocus input after sending message
-      if (inputRef.current) {
-        inputRef.current.focus()
-      }
     }
   }
 
@@ -827,11 +906,11 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         const isLeo = metadata.sender === 'leo'
         const isEmily = !isChase && !isLeo
         return {
-          id: `scheduled-${scheduledMsg.id}`,
-          type: 'bot',
-          content: scheduledMsg.content,
-          timestamp: scheduledMsg.scheduled_time || new Date().toISOString(),
-          isNew: true,
+        id: `scheduled-${scheduledMsg.id}`,
+        type: 'bot',
+        content: scheduledMsg.content,
+        timestamp: scheduledMsg.scheduled_time || new Date().toISOString(),
+        isNew: true,
           scheduledMessageId: scheduledMsg.id,
           isChase: isChase,
           isLeo: isLeo,
@@ -1002,7 +1081,6 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   const handleReplyToMessage = (message) => {
     setReplyingToMessage(message)
     setInputMessage('')
-    inputRef.current?.focus()
   }
 
   const handleMicClick = () => {
@@ -1204,12 +1282,28 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
             if (messageFilter === 'leo') return message.isLeo
             return true
           })
-          .map((message) => (
+          .map((message) => {
+            // Debug post reminder messages
+            if (message.isPostReminder) {
+              console.log('Rendering post reminder message:', {
+                id: message.id,
+                isPostReminder: message.isPostReminder,
+                hasPosts: message.hasPosts,
+                posts: message.posts,
+                postsType: typeof message.posts,
+                postsIsArray: Array.isArray(message.posts),
+                postsLength: message.posts ? message.posts.length : 0,
+                content: message.content,
+                fullMessage: message
+              })
+            }
+            
+            return (
           <div
             key={message.id}
             className={`flex flex-col ${message.type === 'user' ? 'items-end' : 'items-start'} w-full px-4 ${message.isNew ? 'animate-slide-in' : ''}`}
           >
-            <div className={`flex items-start gap-2 max-w-[85%] sm:max-w-[75%] md:max-w-[60%] lg:max-w-[50%] ${message.type === 'user' ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+            <div className={`flex items-start gap-2 max-w-[60%] ${message.type === 'user' ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
               {/* Icon */}
               <div className={`flex-shrink-0 ${message.type === 'user' ? 'order-2' : ''}`}>
                 {message.type === 'user' ? (
@@ -1245,23 +1339,6 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                 }`}
                 onMouseEnter={() => setHoveredMessageId(message.id)}
                 onMouseLeave={() => setHoveredMessageId(null)}
-                onMouseDown={() => {
-                  isSelectingTextRef.current = true
-                }}
-                onMouseUp={() => {
-                  // Keep selection flag active if text is selected
-                  setTimeout(() => {
-                    const selection = window.getSelection()
-                    if (selection && selection.toString().length > 0) {
-                      isSelectingTextRef.current = true
-                      setTimeout(() => {
-                        isSelectingTextRef.current = false
-                      }, 2000)
-                    } else {
-                      isSelectingTextRef.current = false
-                    }
-                  }, 100)
-                }}
                 style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
               >
                 {/* Agent Name - Only show for bot messages, inside bubble at top */}
@@ -1318,66 +1395,112 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
             </div>
           </div>
         )}
+                {/* Attachments Display */}
+                {message.attachments && message.attachments.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {message.attachments.map((att, idx) => (
+                      <div key={idx} className="flex items-center gap-2 bg-white/20 rounded-lg px-2 py-1 text-xs">
+                        {att.type.startsWith('image/') ? (
+                          <>
+                            <ImageIcon className="w-3 h-3 text-white" />
+                            <img src={att.data} alt={att.name} className="max-w-[100px] max-h-[100px] rounded object-cover" />
+                          </>
+                        ) : (
+                          <>
+                            <File className="w-3 h-3 text-white" />
+                            <span className="text-white truncate max-w-[100px]">{att.name}</span>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {message.content ? (
                   <div className="text-sm leading-relaxed prose prose-sm max-w-none">
                     <div className={shouldShowReadMore(message.content) && !expandedMessages.has(message.id) ? 'message-content-truncated' : ''}>
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          p: ({ children }) => <p className={`mb-2 last:mb-0 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</p>,
-                          h1: ({ children }) => <h1 className={`text-lg font-bold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h1>,
-                          h2: ({ children }) => <h2 className={`text-base font-semibold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h2>,
-                          h3: ({ children }) => <h3 className={`text-sm font-semibold mb-1 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h3>,
-                          ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                          li: ({ children }) => <li className={message.type === 'user' ? 'text-white' : 'text-black'}>{children}</li>,
-                          code: ({ children, className }) => {
-                            const isInline = !className?.includes('language-')
-                            return isInline ? (
-                              <code className={`px-1 py-0.5 rounded text-xs font-mono ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
-                            ) : (
-                              <code className={`block p-2 rounded text-xs font-mono overflow-x-auto ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
-                            )
-                          },
-                          pre: ({ children }) => <pre className={`p-2 rounded text-xs font-mono overflow-x-auto mb-2 ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</pre>,
-                          blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
-                          strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
-                          em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
-                          a: ({ children, href }) => {
-                            // Handle lead links - navigate to leads dashboard
-                            if (href && href.startsWith('leads/')) {
-                              const leadId = href.replace('leads/', '')
-                              return (
+                      {/* For post reminders, parse and render Leo link as button */}
+                      {message.isPostReminder && message.content.includes("Leo") ? (
+                        <div>
+                          {message.content.split("Leo").map((part, idx, arr) => {
+                            if (idx === arr.length - 1) {
+                              return <span key={idx}>{part}</span>
+                            }
+                            return (
+                              <span key={idx}>
+                                {part}
                                 <button
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    navigate(`/leads?leadId=${leadId}`)
+                                  onClick={() => {
+                                    if (onOpenCustomContent) {
+                                      onOpenCustomContent()
+                                    }
                                   }}
-                                  className={`underline cursor-pointer ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`}
+                                  className="text-purple-600 hover:text-purple-700 font-medium cursor-pointer bg-transparent border-0 p-0"
+                                >
+                                  Leo
+                                </button>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            p: ({ children }) => <p className={`mb-2 last:mb-0 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</p>,
+                            h1: ({ children }) => <h1 className={`text-lg font-bold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h1>,
+                            h2: ({ children }) => <h2 className={`text-base font-semibold mb-2 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h2>,
+                            h3: ({ children }) => <h3 className={`text-sm font-semibold mb-1 ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</h3>,
+                            ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                            li: ({ children }) => <li className={message.type === 'user' ? 'text-white' : 'text-black'}>{children}</li>,
+                            code: ({ children, className }) => {
+                              const isInline = !className?.includes('language-')
+                              return isInline ? (
+                                <code className={`px-1 py-0.5 rounded text-xs font-mono ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
+                              ) : (
+                                <code className={`block p-2 rounded text-xs font-mono overflow-x-auto ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</code>
+                              )
+                            },
+                            pre: ({ children }) => <pre className={`p-2 rounded text-xs font-mono overflow-x-auto mb-2 ${message.type === 'user' ? 'bg-white/20 text-white' : 'bg-purple-300 text-black'}`}>{children}</pre>,
+                            blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
+                            strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
+                            em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
+                            a: ({ children, href }) => {
+                              // Handle lead links - navigate to leads dashboard
+                              if (href && href.startsWith('leads/')) {
+                                const leadId = href.replace('leads/', '')
+                                return (
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      navigate(`/leads?leadId=${leadId}`)
+                                    }}
+                                    className={`underline cursor-pointer ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`}
+                                  >
+                                    {children}
+                                  </button>
+                                )
+                              }
+                              // Regular links
+                              return (
+                                <a 
+                                  href={href} 
+                                  className={`underline ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
                                 >
                                   {children}
-                                </button>
+                                </a>
                               )
-                            }
-                            // Regular links
-                            return (
-                              <a 
-                                href={href} 
-                                className={`underline ${message.type === 'user' ? 'text-white hover:text-white/80' : 'text-purple-700 hover:text-purple-800'}`} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                              >
-                                {children}
-                              </a>
-                            )
-                          },
-                          table: ({ children }) => <div className="overflow-x-auto mb-2"><table className={`min-w-full border rounded ${message.type === 'user' ? 'border-white/30' : 'border-purple-300'}`}>{children}</table></div>,
-                          th: ({ children }) => <th className={`border px-2 py-1 text-left text-xs font-semibold ${message.type === 'user' ? 'border-white/30 bg-white/10 text-white' : 'border-purple-300 bg-purple-100 text-black'}`}>{children}</th>,
-                          td: ({ children }) => <td className={`border px-2 py-1 text-xs ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-300 text-black/90'}`}>{children}</td>,
-                        }}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
+                            },
+                            table: ({ children }) => <div className="overflow-x-auto mb-2"><table className={`min-w-full border rounded ${message.type === 'user' ? 'border-white/30' : 'border-purple-300'}`}>{children}</table></div>,
+                            th: ({ children }) => <th className={`border px-2 py-1 text-left text-xs font-semibold ${message.type === 'user' ? 'border-white/30 bg-white/10 text-white' : 'border-purple-300 bg-purple-100 text-black'}`}>{children}</th>,
+                            td: ({ children }) => <td className={`border px-2 py-1 text-xs ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-300 text-black/90'}`}>{children}</td>,
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      )}
                     </div>
                     {shouldShowReadMore(message.content) && !expandedMessages.has(message.id) && (
                       <span 
@@ -1449,6 +1572,22 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                               className="text-xs text-gray-700 prose prose-sm max-w-none"
                               dangerouslySetInnerHTML={{ __html: message.chaseMetadata.emailContent }}
                             />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Post Card for Leo Messages */}
+                    {message.isLeo && message.leoMetadata && message.leoMetadata.postData && (
+                      <div className="mt-3">
+                        <ContentCard
+                          content={message.leoMetadata.postData}
+                          platform={message.leoMetadata.postData.platform}
+                          contentType={message.leoMetadata.postData.post_type || message.leoMetadata.postData.content_type || 'post'}
+                        />
+                        {message.leoMetadata.scheduledDate && message.leoMetadata.scheduledTime && (
+                          <div className="mt-2 text-xs text-gray-600">
+                            This post is scheduled at {message.leoMetadata.scheduledDate} and {message.leoMetadata.scheduledTime}
                           </div>
                         )}
                       </div>
@@ -1578,9 +1717,9 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                             {!expandedEmailBoxes.has(message.id) && (
                               <div className="text-xs text-gray-500 line-clamp-3">
                                 {message.chaseMetadata.emailContent.replace(/<[^>]*>/g, '').substring(0, 150)}...
-                              </div>
-                            )}
-                          </div>
+                  </div>
+                )}
+              </div>
                           <span className="text-xs text-gray-500 ml-2">
                             {expandedEmailBoxes.has(message.id) ? '▼' : '▶'}
                           </span>
@@ -1595,12 +1734,111 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                         )}
                       </div>
                     )}
+                    
+                    {/* Post Reminder - Display posts or generate link */}
+                    {message.isPostReminder && (
+                      <div className="mt-3">
+                        {(() => {
+                          // Check if we have actual posts data - prioritize posts array
+                          const postsArray = message.posts
+                          const hasPosts = postsArray && Array.isArray(postsArray) && postsArray.length > 0
+                          
+                          console.log('Post reminder render check:', {
+                            isPostReminder: message.isPostReminder,
+                            messageContent: message.content,
+                            hasPostsFlag: message.hasPosts,
+                            posts: postsArray,
+                            postsType: typeof postsArray,
+                            postsIsArray: Array.isArray(postsArray),
+                            postsLength: postsArray ? postsArray.length : 0,
+                            hasPosts,
+                            fullMessage: message
+                          })
+                          
+                          if (!hasPosts) {
+                            // Check if message content already includes "No posts" text
+                            const messageHasNoPosts = message.content && message.content.includes("No posts for today")
+                            
+                            return (
+                              <div className="text-sm text-gray-700">
+                                {messageHasNoPosts ? (
+                                  <>
+                                    No posts for today. Generate one with{' '}
+                                    <button
+                                      onClick={() => {
+                                        if (onOpenCustomContent) {
+                                          onOpenCustomContent()
+                                        }
+                                      }}
+                                      className="text-purple-600 hover:text-purple-700 font-medium cursor-pointer"
+                                    >
+                                      Leo
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    No posts for today. Generate one with{' '}
+                                    <button
+                                      onClick={() => {
+                                        if (onOpenCustomContent) {
+                                          onOpenCustomContent()
+                                        }
+                                      }}
+                                      className="text-purple-600 hover:text-purple-700 font-medium cursor-pointer"
+                                    >
+                                      Leo
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )
+                          }
+                          
+                          return (
+                            <div className="space-y-3">
+                              {postsArray.map((post, idx) => {
+                                console.log('Rendering post:', post, 'idx:', idx, 'post keys:', Object.keys(post || {}))
+                                if (!post) {
+                                  console.warn('Post is null/undefined at index:', idx)
+                                  return null
+                                }
+                                return (
+                                  <ContentCard
+                                    key={post.id || `post-${idx}`}
+                                    content={post}
+                                    platform={post.platform || 'instagram'}
+                                    contentType={post.post_type || post.content_type || 'post'}
+                                  />
+                                )
+                              })}
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )}
+                    
+                    {/* Post Card for Leo Messages */}
+                    {message.isLeo && message.leoMetadata && message.leoMetadata.postData && (
+                      <div className="mt-3">
+                        <ContentCard
+                          content={message.leoMetadata.postData}
+                          platform={message.leoMetadata.postData.platform}
+                          contentType={message.leoMetadata.postData.post_type || message.leoMetadata.postData.content_type || 'post'}
+                        />
+                        {message.leoMetadata.scheduledDate && message.leoMetadata.scheduledTime && (
+                          <div className="mt-2 text-xs text-gray-600">
+                            This post is scheduled at {message.leoMetadata.scheduledDate} and {message.leoMetadata.scheduledTime}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
           </div>
-        ))}
+          )
+          })}
 
         {isLoading && !isStreaming && (
           <div className="flex justify-start w-full px-4">
@@ -1618,92 +1856,120 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       </div>
 
       {/* Input - Fixed at bottom */}
-      <div className="bg-white px-4 border-t border-gray-200 z-10" style={{ 
+      <div className="bg-transparent px-4 border-t border-gray-200 z-10" style={{ 
         flexShrink: 0,
         flexGrow: 0,
         paddingTop: '12px',
         paddingBottom: '12px'
       }}>
         <div className="w-full">
-          <div className="relative">
-            <div className="relative w-full">
-              {replyingToMessage && (
-                <div className="absolute left-4 top-2 text-xs text-purple-600 bg-purple-50 px-2 py-1 rounded flex items-center gap-2 z-10">
-                  <span>Replying to: {replyingToMessage.content.substring(0, 40)}...</span>
+          {/* Attachments Display */}
+          {attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {attachments.map(att => (
+                <div key={att.id} className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2 text-sm">
+                  {att.type.startsWith('image/') ? (
+                    <ImageIcon className="w-4 h-4 text-purple-500" />
+                  ) : (
+                    <File className="w-4 h-4 text-purple-500" />
+                  )}
+                  <span className="text-gray-700 truncate max-w-[150px]">{att.name}</span>
                   <button
-                    onClick={() => setReplyingToMessage(null)}
-                    className="text-purple-400 hover:text-purple-600 font-bold"
+                    onClick={() => removeAttachment(att.id)}
+                    className="text-gray-500 hover:text-red-500 transition-colors"
                   >
-                    ×
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
-              )}
-              <textarea
-                ref={inputRef}
-                value={inputMessage}
-                onChange={(e) => {
-                  setInputMessage(e.target.value)
-                  // Auto-resize textarea
-                  e.target.style.height = 'auto'
-                  const lineHeight = 24 // Approximate line height in pixels
-                  const maxHeight = lineHeight * 4 // 4 rows max
-                  const newHeight = Math.min(e.target.scrollHeight, maxHeight)
-                  e.target.style.height = `${newHeight}px`
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    sendMessage()
-                  }
-                }}
-                onBlur={(e) => {
-                  // Don't refocus if user is selecting text or if a modal is open
-                  if (isSelectingTextRef.current || isModalOpen()) return
-                  
-                  // Immediately refocus if not in call
-                  if (!isCallActive && !isLoading && !isStreaming) {
-                    setTimeout(() => {
-                      if (!isSelectingTextRef.current && !isModalOpen()) {
-                        e.target.focus()
-                      }
-                    }, 200)
-                  }
-                }}
-                placeholder={replyingToMessage ? `Replying to: ${replyingToMessage.content.substring(0, 30)}...` : "Ask Emily..."}
-                className={`w-full px-6 py-4 bg-white border border-pink-200 rounded-2xl focus:ring-0 focus:border-transparent outline-none text-sm pr-20 placeholder:text-gray-400 resize-none overflow-y-auto ${replyingToMessage ? 'pt-8' : ''}`}
-                style={{ minHeight: '56px', maxHeight: '96px' }} // 1 row min, 4 rows max (24px * 4 = 96px)
-                disabled={isLoading || isStreaming}
-                rows={1}
-                autoFocus
-              />
+              ))}
             </div>
-            <div className="absolute right-3 bottom-3 flex items-center space-x-2">
-              <button 
-                onClick={handleMicClick}
-                disabled={isLoading || isStreaming}
-                className={`p-2 transition-colors ${
-                  isListening 
-                    ? 'text-red-500 hover:text-red-700 animate-pulse' 
-                    : 'text-purple-500 hover:text-purple-700'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-                title={isListening ? 'Stop listening' : 'Start voice input'}
-              >
-                <Mic className="w-5 h-5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  if (inputMessage.trim() && !isLoading && !isStreaming) {
-                    sendMessage()
-                  }
-                }}
-                disabled={!inputMessage.trim() || isLoading || isStreaming}
-                className="p-2 text-purple-500 hover:text-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                type="button"
-              >
-                <Send className="w-5 h-5" />
-              </button>
+          )}
+          
+          <div className="relative">
+            <div className="relative w-full">
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+                accept="image/*,.txt,.doc,.docx"
+              />
+              
+              <div className="relative">
+                {replyingToMessage && (
+                  <div className="absolute left-4 top-2 text-xs text-purple-600 bg-purple-50 px-2 py-1 rounded flex items-center gap-2 z-10">
+                    <span>Replying to: {replyingToMessage.content.substring(0, 40)}...</span>
+                    <button
+                      onClick={() => setReplyingToMessage(null)}
+                      className="text-purple-400 hover:text-purple-600 font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+                <textarea
+                  ref={inputRef}
+                  value={inputMessage}
+                  onChange={(e) => {
+                    setInputMessage(e.target.value)
+                    // Auto-resize textarea
+                    e.target.style.height = 'auto'
+                    const lineHeight = 24 // Approximate line height in pixels
+                    const maxHeight = lineHeight * 4 // 4 rows max
+                    const newHeight = Math.min(e.target.scrollHeight, maxHeight)
+                    e.target.style.height = `${newHeight}px`
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      sendMessage()
+                    }
+                  }}
+                  placeholder={replyingToMessage ? `Replying to: ${replyingToMessage.content.substring(0, 30)}...` : "Add your thoughts..."}
+                  className={`w-full px-4 py-4 bg-transparent border-0 rounded-2xl focus:ring-0 focus:border-0 outline-none text-sm pr-24 placeholder:text-gray-400 resize-none overflow-y-auto ${replyingToMessage ? 'pt-8' : ''}`}
+                  style={{ minHeight: '56px', maxHeight: '96px' }} // 1 row min, 4 rows max (24px * 4 = 96px)
+                  disabled={isLoading || isStreaming}
+                  rows={1}
+                />
+                <div className="absolute right-3 bottom-3 flex items-center space-x-2">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 text-purple-500 hover:text-purple-700 transition-colors"
+                    title="Add attachment"
+                    type="button"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                  <button 
+                    onClick={handleMicClick}
+                    disabled={isLoading || isStreaming}
+                    className={`p-2 transition-colors ${
+                      isListening 
+                        ? 'text-red-500 hover:text-red-700 animate-pulse' 
+                        : 'text-purple-500 hover:text-purple-700'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    title={isListening ? 'Stop listening' : 'Start voice input'}
+                  >
+                    <Mic className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if ((inputMessage.trim() || attachments.length > 0) && !isLoading && !isStreaming) {
+                        sendMessage()
+                      }
+                    }}
+                    disabled={(!inputMessage.trim() && attachments.length === 0) || isLoading || isStreaming}
+                    className="p-2 text-purple-500 hover:text-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    type="button"
+                  >
+                    <Send className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
