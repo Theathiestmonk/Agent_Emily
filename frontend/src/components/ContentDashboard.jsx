@@ -15,7 +15,6 @@ import MobileNavigation from './MobileNavigation'
 import CustomContentChatbot from './CustomContentChatbot'
 import ChatbotImageEditor from './ChatbotImageEditor'
 import MediaGenerationCelebration from './MediaGenerationCelebration'
-import ContentModal from './ContentModal'
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -47,7 +46,6 @@ import {
   Download,
   Filter,
   ChevronDown,
-  ChevronUp,
   ChevronRight,
   ChevronLeft,
   Sparkles,
@@ -155,8 +153,6 @@ const ContentDashboard = () => {
   const [updatingStatus, setUpdatingStatus] = useState(new Set()) // Track which content is updating status
   const [showCelebration, setShowCelebration] = useState(false) // Show celebration popup
   const [celebrationData, setCelebrationData] = useState(null) // Celebration data (imageUrl, generationTime)
-  const [itemsToShow, setItemsToShow] = useState(4) // Number of content items to show initially (one row = 4 columns)
-  const [carouselIndices, setCarouselIndices] = useState({}) // Track current slide index for each carousel post
 
 
   useEffect(() => {
@@ -195,7 +191,7 @@ const ContentDashboard = () => {
         
         const { data, error } = await supabase
           .from('profiles')
-          .select('social_media_platforms, logo_url, business_name')
+          .select('social_media_platforms')
           .eq('id', user.id)
           .single()
         
@@ -287,7 +283,6 @@ const ContentDashboard = () => {
       // Reset load more state when channel changes
       setHasMoreContent(false)
       setLoadingAllContent(false)
-      setItemsToShow(4) // Reset to show only one row (4 columns)
       fetchAllContent()
     }
   }, [generating, fetchingFreshData, selectedChannel])
@@ -1137,16 +1132,6 @@ const ContentDashboard = () => {
       failed: 'bg-red-100 text-red-800'
     }
     return colors[status] || 'bg-gray-100 text-gray-800'
-  }
-
-  const getStatusTextColor = (status) => {
-    const colors = {
-      draft: 'text-gray-800',
-      scheduled: 'text-blue-800',
-      published: 'text-green-800',
-      failed: 'text-red-800'
-    }
-    return colors[status] || 'text-gray-800'
   }
 
   const formatDate = (dateString) => {
@@ -2089,10 +2074,10 @@ const ContentDashboard = () => {
           setShowCelebration(true)
         } else {
           // Single image generation
-          const imageUrl = result.image_url
-          console.log('🖼️ Image URL from result:', imageUrl)
-          
-          if (imageUrl) {
+        const imageUrl = result.image_url
+        console.log('🖼️ Image URL from result:', imageUrl)
+        
+        if (imageUrl) {
             // Update the content item in allContent state with the new media_url
             setAllContent(prevContent => 
               prevContent.map(item => 
@@ -2111,17 +2096,17 @@ const ContentDashboard = () => {
               )
             )
             
-            setCelebrationData({
-              imageUrl: imageUrl,
-              generationTime: result.generation_time,
-              generationModel: result.generation_model,
-              generationService: result.generation_service
-            })
-            setShowCelebration(true)
-          } else {
-            // Fallback to regular notification if no image URL
+          setCelebrationData({
+            imageUrl: imageUrl,
+            generationTime: result.generation_time,
+            generationModel: result.generation_model,
+            generationService: result.generation_service
+          })
+          setShowCelebration(true)
+        } else {
+          // Fallback to regular notification if no image URL
             showSuccess('Media generated successfully!', `Image created in ${result.generation_time || 0}s`)
-          }
+        }
         }
         
         // Immediately update state and then refresh from database to ensure consistency
@@ -2376,15 +2361,23 @@ const ContentDashboard = () => {
     setSelectedFile(null)
   }
 
-  const handleUploadImage = async (postId) => {
+  const handleUploadImage = async (postId, file = null) => {
+    // Use provided file or fall back to selectedFile state
+    const fileToUpload = file || selectedFile
+    
     console.log('🔍 Upload function called with postId:', postId)
     console.log('🔍 editForm:', editForm)
     console.log('🔍 API_BASE_URL:', API_BASE_URL)
-    console.log('🔍 Selected file:', selectedFile)
+    console.log('🔍 Selected file:', fileToUpload)
     
-    if (!selectedFile) {
+    if (!fileToUpload) {
       showError('No file selected', 'Please select an image or video to upload')
       return
+    }
+    
+    // Set selectedFile state for consistency
+    if (file && file !== selectedFile) {
+      setSelectedFile(file)
     }
 
     if (!postId) {
@@ -2397,7 +2390,7 @@ const ContentDashboard = () => {
       
       // Use backend API for upload (bypasses RLS issues)
       const formData = new FormData()
-      formData.append('file', selectedFile)
+      formData.append('file', fileToUpload)
       formData.append('post_id', postId)
       
       console.log('🔍 Uploading via backend API to:', `${API_BASE_URL}/media/upload-image`)
@@ -2472,7 +2465,7 @@ const ContentDashboard = () => {
       
       // Use the message from backend (which correctly identifies video vs image)
       const successMessage = result.message || 'Media uploaded successfully!'
-      const successDescription = selectedFile?.type.startsWith('video/') 
+      const successDescription = fileToUpload?.type.startsWith('video/') 
         ? 'Your custom video has been added to the post'
         : 'Your custom image has been added to the post'
       
@@ -3010,6 +3003,31 @@ const ContentDashboard = () => {
       
       {/* Main Content */}
       <div className="md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden">
+        {/* Header */}
+        <div className="bg-white shadow-sm border-b">
+          <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4">
+            {/* Layout */}
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 md:gap-0">
+              <div className="flex-1">
+                <h1 className="text-sm md:text-base lg:text-lg font-semibold text-gray-900">
+                  Inspirations for your social media posts
+                </h1>
+              </div>
+              
+              <div className="flex items-center space-x-4 md:ml-4 flex-shrink-0">
+                <button
+                  onClick={() => navigate('/calendar')}
+                  className="flex items-center space-x-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-500 transition-all duration-300 text-sm sm:text-base"
+                >
+                  <Calendar className="w-4 h-4" />
+                  <span className="hidden sm:inline">View Calendar</span>
+                  <span className="sm:hidden">Calendar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Scrollable Content */}
         <div className="flex-1 p-4 lg:p-6 flex flex-col overflow-y-auto">
           {/* Status Message - Only show error messages */}
@@ -3120,9 +3138,9 @@ const ContentDashboard = () => {
 
                 <div className="relative">
                   <div 
-                    className="grid grid-cols-4 gap-6 pl-10"
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pl-10"
                   >
-                {filteredContent.slice(0, itemsToShow).map((content) => {
+                {filteredContent.map((content) => {
                   const theme = getPlatformCardTheme(content.platform)
                   console.log('Content platform:', content.platform, 'Theme:', theme)
                   
@@ -3195,53 +3213,18 @@ const ContentDashboard = () => {
                     <div 
                       key={content.id} 
                       onClick={() => handleViewContent(content)}
-                      className={`${theme.bg} rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg w-full flex flex-col shadow-md border cursor-pointer ${
+                      className={`${theme.bg} rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] cursor-pointer w-full overflow-hidden flex flex-col shadow-[0_0_8px_rgba(0,0,0,0.12),0_2px_4px_rgba(0,0,0,0.08)] hover:shadow-[0_0_16px_rgba(0,0,0,0.18),0_4px_8px_rgba(0,0,0,0.12)] ${
                         isApproved 
-                          ? 'border-green-500' 
-                          : 'border-gray-200'
+                          ? 'border border-green-500' 
+                          : 'border border-transparent'
                       }`}
                     >
-                      {/* Top: Logo + Business Name + Date/Time */}
-                      <div className="px-4 pt-4 pb-3 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {/* Business Logo */}
-                          <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center">
-                            {profile?.logo_url ? (
-                              <img 
-                                src={profile.logo_url} 
-                                alt="Business logo" 
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.target.style.display = 'none'
-                                  e.target.nextSibling.style.display = 'flex'
-                                }}
-                              />
-                            ) : null}
-                            <div className="w-full h-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center" style={{ display: profile?.logo_url ? 'none' : 'flex' }}>
-                              <Building2 className="w-5 h-5 text-white" />
-                            </div>
-                          </div>
-                          {/* Business Name */}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-gray-900 text-sm truncate">
-                              {profile?.business_name || 'Business'}
-                            </h4>
-                            {/* Date and Time - No emojis */}
-                            {content.scheduled_at && (
-                              <div className="text-xs text-gray-500 mt-0.5">
-                                {formatDate(content.scheduled_at)}
-                                {content.scheduled_at.includes('T') && (
-                                  <span className="ml-1">{formatTime(content.scheduled_at.split('T')[1])}</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Full-width Post Image */}
-                      {hasImage && (
-                        <div className="relative w-full bg-gray-200" style={{ aspectRatio: '1/1', maxHeight: '500px' }}>
+                      {/* Main Content: Image on Left, Content on Right */}
+                      <div className="flex gap-4 mb-3 flex-1">
+                        {/* Left Side: Image */}
+                        <div className="flex-shrink-0 w-24 h-24 sm:w-28 sm:h-28">
+                          {hasImage ? (
+                            <div className="relative w-full h-full bg-gray-200 rounded-lg overflow-hidden">
                               {/* Show placeholder while loading */}
                               {imageLoading.has(content.id) && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
@@ -3255,12 +3238,13 @@ const ContentDashboard = () => {
                                 const mediaThumbnail = isSelectedChannel ? (thumbnailUrl || mediaUrl) : null
                                 
                                 // Check if it's a video - only load for selected channel
+                                // Use the isVideo flag we calculated earlier
                                 if (mediaUrl && isVideo && isSelectedChannel) {
                                   return (
                                     <div className="relative w-full h-full group">
                                     <video 
                                       src={mediaUrl}
-                                    className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                      className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                                       controls={false}
                                       preload="metadata"
                                       muted
@@ -3294,105 +3278,71 @@ const ContentDashboard = () => {
                                   )
                                 }
                                 
-                            // Show carousel images if this is a carousel post - with slider and dots
+                                // Show carousel images if this is a carousel post
                                 if (isCarousel && carouselImages.length > 0 && isSelectedChannel) {
-                              const currentIndex = carouselIndices[content.id] || 0
-                              
-                              const goToPrevious = (e) => {
-                                e.stopPropagation()
-                                if (currentIndex > 0) {
-                                  setCarouselIndices(prev => ({
-                                    ...prev,
-                                    [content.id]: currentIndex - 1
-                                  }))
-                                }
-                              }
-                              
-                              const goToNext = (e) => {
-                                e.stopPropagation()
-                                if (currentIndex < carouselImages.length - 1) {
-                                  setCarouselIndices(prev => ({
-                                    ...prev,
-                                    [content.id]: currentIndex + 1
-                                  }))
-                                }
-                              }
+                                  // For small card view, show grid of first 4 images or first image with count
+                                  const displayImages = carouselImages.slice(0, 4)
+                                  const remainingCount = carouselImages.length > 4 ? carouselImages.length - 4 : 0
                                   
                                   return (
-                                <div className="relative w-full h-full overflow-hidden group">
-                                  {/* Carousel Slider */}
-                                  <div 
-                                    className="flex transition-transform duration-300 ease-in-out h-full"
-                                    style={{ transform: `translateX(-${currentIndex * 100}%)` }}
-                                  >
-                                    {carouselImages.map((imgUrl, index) => {
-                                      const imageUrl = typeof imgUrl === 'string' ? imgUrl : (imgUrl.url || imgUrl)
+                                    <div className="relative w-full h-full">
+                                      {displayImages.length === 1 ? (
+                                        // Single image with count badge
+                                        <div className="relative w-full h-full">
+                                          <img
+                                            src={getCardThumbnailUrl(displayImages[0]) || displayImages[0]}
+                                            alt="Carousel image 1"
+                                            className="w-full h-full object-cover rounded-lg"
+                                            onError={(e) => {
+                                              e.target.style.display = 'none'
+                                            }}
+                                          />
+                                          {carouselImages.length > 1 && (
+                                            <div className="absolute top-1 right-1 bg-black/70 text-white px-1.5 py-0.5 rounded text-xs flex items-center gap-1">
+                                              <Layers className="w-3 h-3" />
+                                              <span>{carouselImages.length}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        // Grid of images (2x2 for up to 4 images)
+                                        <div className="grid grid-cols-2 gap-0.5 w-full h-full">
+                                          {displayImages.map((img, idx) => {
+                                            const imgUrl = typeof img === 'string' ? img : (img.url || img)
                                             return (
-                                        <div key={index} className="w-full h-full flex-shrink-0 relative">
+                                              <div key={idx} className="relative">
                                                 <img
-                                            src={getCardThumbnailUrl(imageUrl) || imageUrl}
-                                            alt={`Carousel image ${index + 1}`}
+                                                  src={getCardThumbnailUrl(imgUrl) || imgUrl}
+                                                  alt={`Carousel image ${idx + 1}`}
                                                   className="w-full h-full object-cover"
                                                   onError={(e) => {
                                                     e.target.style.display = 'none'
                                                   }}
                                                 />
+                                                {idx === 3 && remainingCount > 0 && (
+                                                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-xs font-bold">
+                                                    +{remainingCount}
+                                                  </div>
+                                                )}
                                               </div>
                                             )
                                           })}
                                         </div>
-                                  
-                                  {/* Left Arrow - Show on hover */}
-                                  {carouselImages.length > 1 && currentIndex > 0 && (
-                                    <button
-                                      onClick={goToPrevious}
-                                      className="absolute left-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20"
-                                      aria-label="Previous image"
-                                    >
-                                      <ChevronLeft className="w-5 h-5 text-white" />
-                                    </button>
-                                  )}
-                                  
-                                  {/* Right Arrow - Show on hover */}
-                                  {carouselImages.length > 1 && currentIndex < carouselImages.length - 1 && (
-                                    <button
-                                      onClick={goToNext}
-                                      className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20"
-                                      aria-label="Next image"
-                                    >
-                                      <ChevronRight className="w-5 h-5 text-white" />
-                                    </button>
-                                  )}
-                                  
-                                  {/* Navigation Dots */}
-                                  {carouselImages.length > 1 && (
-                                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex items-center gap-1.5 z-10">
-                                      {carouselImages.map((_, index) => (
-                                        <button
-                                          key={index}
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            setCarouselIndices(prev => ({
-                                              ...prev,
-                                              [content.id]: index
-                                            }))
-                                          }}
-                                          className={`transition-all duration-200 rounded-full ${
-                                            index === currentIndex
-                                              ? 'w-2 h-2 bg-white'
-                                              : 'w-1.5 h-1.5 bg-white/50 hover:bg-white/75'
-                                          }`}
-                                          aria-label={`Go to slide ${index + 1}`}
-                                        />
-                                      ))}
+                                      )}
+                                      {/* Carousel indicator badge */}
+                                      <div className="absolute bottom-1 left-1 bg-black/70 text-white px-1.5 py-0.5 rounded text-xs flex items-center gap-1">
+                                        <Layers className="w-3 h-3" />
+                                        <span>{carouselImages.length}</span>
                                       </div>
-                                  )}
                                     </div>
                                   )
                                 }
                                 
                                 // Show image - using optimized thumbnail for fast loading
+                                // Only load images for the selected channel
                                 if (mediaThumbnail && isSelectedChannel) {
+                                  // Use eager loading only for first 4 images (what's actually visible in viewport)
+                                  // All others use lazy loading to prevent loading all images at once
                                   const imageIndex = filteredContent.findIndex(c => c.id === content.id)
                                   const shouldLoadEager = imageIndex < 4
                                   
@@ -3400,7 +3350,7 @@ const ContentDashboard = () => {
                                     <img 
                                       src={mediaThumbnail} 
                                       alt="Content image" 
-                                  className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                      className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                                       loading={shouldLoadEager ? "eager" : "lazy"}
                                       decoding="async"
                                       onClick={(e) => {
@@ -3408,10 +3358,15 @@ const ContentDashboard = () => {
                                         handleImageClick(mediaUrl || mediaThumbnail, content.title)
                                       }}
                                       onLoad={() => {
+                                        console.log('✅ Image loaded successfully:', content.id, mediaThumbnail)
                                         handleImageLoad(content.id)
                                       }}
                                       onError={(e) => {
+                                        console.error('❌ Image failed to load:', content.id, mediaThumbnail, e)
+                                        // Try fallback to original URL if thumbnail fails
                                         if (mediaThumbnail !== mediaUrl) {
+                                          console.log('🔄 Attempting fallback to original URL:', mediaUrl)
+                                          // Force reload with original URL
                                           const img = e.target
                                           img.src = mediaUrl
                                         } else {
@@ -3419,6 +3374,7 @@ const ContentDashboard = () => {
                                         }
                                       }}
                                       onLoadStart={() => {
+                                        console.log('🔄 Image loading started:', content.id, mediaThumbnail)
                                         startImageLoading(content.id)
                                       }}
                                       style={{
@@ -3433,106 +3389,256 @@ const ContentDashboard = () => {
                                 return null
                               })()}
                             </div>
-                      )}
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-purple-100 to-pink-100 rounded-lg"></div>
+                          )}
+                        </div>
+                        
+                        {/* Right Side: Content */}
+                        <div className="flex-1 min-w-0">
+                          {/* Header with Platform and Status */}
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="min-w-0">
+                              <h4 className={`font-semibold capitalize ${theme.text} text-sm truncate`}>{content.platform}</h4>
+                            </div>
+                            {/* Status Dropdown */}
+                            <div className="relative status-dropdown flex-shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setStatusDropdownOpen(statusDropdownOpen === content.id ? null : content.id)
+                                }}
+                                disabled={updatingStatus.has(content.id)}
+                                className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(content.status)} hover:opacity-80 transition-opacity disabled:opacity-50`}
+                              >
+                                <span className="capitalize text-xs">{content.status}</span>
+                                {updatingStatus.has(content.id) ? (
+                                  <RefreshCw className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <ChevronDown className="w-3 h-3" />
+                                )}
+                              </button>
+                              
+                              {/* Dropdown Menu */}
+                              {statusDropdownOpen === content.id && (
+                                <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-xl border border-gray-200 z-50 animate-in slide-in-from-top-2 duration-200">
+                                  <div className="py-1">
+                                    {statusOptions.map((option) => (
+                                      <button
+                                        key={option.value}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleStatusChange(content.id, option.value)
+                                        }}
+                                        disabled={updatingStatus.has(content.id) || content.status === option.value}
+                                        className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 transition-colors flex items-center space-x-2 ${
+                                          content.status === option.value ? 'bg-gray-100 text-gray-600' : 'text-gray-700'
+                                        } ${updatingStatus.has(content.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                      >
+                                        <div className={`w-2 h-2 rounded-full ${option.color.split(' ')[0]}`}></div>
+                                        <span className="capitalize">{option.label}</span>
+                                        {updatingStatus.has(content.id) && content.status === option.value && (
+                                          <RefreshCw className="w-3 h-3 animate-spin ml-auto" />
+                                        )}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Title */}
+                          {content.title && (
+                            <h5 className="font-medium text-gray-900 mb-1.5 text-sm line-clamp-1">{content.title}</h5>
+                          )}
+                          
+                          {/* Content Text */}
+                          <p className="text-gray-700 text-xs mb-1.5 line-clamp-2 break-words overflow-hidden">{cleanContentText(content.content)}</p>
+                          
+                          {/* Read more link */}
+                          {cleanContentText(content.content).length > 150 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleViewContent(content)
+                              }}
+                              className="text-xs text-purple-600 hover:text-purple-800 font-medium"
+                            >
+                              Read more
+                            </button>
+                          )}
+                        </div>
+                      </div>
                       
-                      {/* Action Icons Below Image (Left side) */}
-                      <div className="px-4 py-3 flex items-center gap-2 border-b border-gray-200">
-                        {/* Only show edit, generate, and delete buttons */}
+                      {/* Bottom: Action Icons */}
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                        {/* Date Display */}
+                        {content.scheduled_at && (
+                          <div className="flex items-center space-x-2">
+                            <div className="w-8 h-8 bg-pink-100 rounded-lg flex items-center justify-center">
+                              <Calendar className="w-4 h-4 text-pink-600" />
+                            </div>
+                            <div className="text-xs text-gray-700">
+                              <div className="font-medium">{formatDate(content.scheduled_at).split(',')[0]}</div>
+                              {content.scheduled_at.includes('T') && (
+                                <div className="text-gray-500">{formatTime(content.scheduled_at.split('T')[1])}</div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Action Icons */}
+                        <div className="flex items-center space-x-2 ml-auto">
+                          {/* Only show edit, generate, upload, and share buttons if content is not published */}
                           {content.status?.toLowerCase() !== 'published' && (
                             <>
-                              <div className="relative">
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleEditContent(content)
-                                  }}
-                                  onMouseEnter={() => setHoveredButton(`${content.id}-edit`)}
-                                  onMouseLeave={() => setHoveredButton(null)}
-                                className="w-8 h-8 transition-all duration-200 flex items-center justify-center hover:opacity-70"
-                                >
-                                <Edit className="w-4 h-4 text-gray-600" />
-                                </button>
-                                {hoveredButton === `${content.id}-edit` && (
-                                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                                    Edit Post
-                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                                  </div>
-                                )}
+                          <div className="relative">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEditContent(content)
+                              }}
+                              onMouseEnter={() => setHoveredButton(`${content.id}-edit`)}
+                              onMouseLeave={() => setHoveredButton(null)}
+                              className="w-8 h-8 bg-pink-100 hover:bg-pink-200 rounded-lg transition-all duration-200 flex items-center justify-center"
+                            >
+                              <Edit className="w-4 h-4 text-pink-600" />
+                            </button>
+                            {hoveredButton === `${content.id}-edit` && (
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                Edit Post
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                               </div>
-                              
-                              <div className="relative">
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleGenerateMedia(content)
-                                  }}
-                                  onMouseEnter={() => setHoveredButton(`${content.id}-generate`)}
-                                  onMouseLeave={() => setHoveredButton(null)}
-                                  disabled={generatingMedia.has(content.id)}
-                                className={`w-8 h-8 transition-all duration-200 flex items-center justify-center ${
-                                    generatingMedia.has(content.id)
-                                    ? 'cursor-not-allowed opacity-50'
-                                    : 'hover:opacity-70'
-                                  }`}
-                                >
-                                  {generatingMedia.has(content.id) ? (
-                                  <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
-                                  ) : (
-                                  <Wand2 className="w-4 h-4 text-gray-600" />
-                                  )}
-                                </button>
-                                {hoveredButton === `${content.id}-generate` && (
-                                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                                    {generatingMedia.has(content.id) ? 'Generating Image with AI...' : 'Generate Image with AI'}
-                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                                  </div>
-                                )}
+                            )}
+                          </div>
+                          
+                          <div className="relative">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleGenerateMedia(content)
+                              }}
+                              onMouseEnter={() => setHoveredButton(`${content.id}-generate`)}
+                              onMouseLeave={() => setHoveredButton(null)}
+                              disabled={generatingMedia.has(content.id)}
+                              className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
+                                generatingMedia.has(content.id)
+                                  ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                  : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90'
+                              }`}
+                            >
+                              {generatingMedia.has(content.id) ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Wand2 className="w-4 h-4" />
+                              )}
+                            </button>
+                            {hoveredButton === `${content.id}-generate` && (
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                {generatingMedia.has(content.id) ? 'Generating Image with AI...' : 'Generate Image with AI'}
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                               </div>
-                              
-                              <div className="relative">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    e.preventDefault()
-                                    
-                                    // Prevent duplicate clicks
-                                    if (postingContent.has(content.id)) {
-                                      console.log('⚠️ Already posting, ignoring click')
-                                      return
-                                    }
-                                    
-                                    // Check if already published
-                                    const status = content.status?.toLowerCase()
-                                    if (status === 'published') {
-                                      showError('Post Already Published', 'This post has already been published.')
-                                      return
-                                    }
-                                    
-                                    // Publish post to platform
-                                    handlePostContent(content)
-                                  }}
-                                onMouseEnter={() => setHoveredButton(`${content.id}-post`)}
-                                  onMouseLeave={() => setHoveredButton(null)}
-                                  disabled={postingContent.has(content.id) || content.status?.toLowerCase() === 'published'}
-                                className={`w-8 h-8 transition-all duration-200 flex items-center justify-center ${
-                                  postingContent.has(content.id)
-                                    ? 'cursor-not-allowed opacity-50'
-                                    : 'hover:opacity-70'
-                                }`}
-                                >
-                                  {postingContent.has(content.id) ? (
-                                  <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
-                                  ) : (
-                                  <Send className="w-4 h-4 text-gray-600" />
-                                  )}
-                                </button>
-                              {hoveredButton === `${content.id}-post` && (
-                                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                                  {postingContent.has(content.id) ? 'Publishing...' : `Post to ${content.platform}`}
-                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                                  </div>
-                                )}
+                            )}
+                          </div>
+                          
+                          <div className="relative">
+                                <label
+                              onClick={(e) => {
+                                e.stopPropagation()
+                              }}
+                              onMouseEnter={() => setHoveredButton(`${content.id}-upload`)}
+                              onMouseLeave={() => setHoveredButton(null)}
+                                  className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center cursor-pointer ${
+                                uploadingImage.has(content.id)
+                                  ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                  : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:opacity-90'
+                              }`}
+                            >
+                              {uploadingImage.has(content.id) ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Upload className="w-4 h-4" />
+                              )}
+                                  <input
+                                    type="file"
+                                    accept="image/*,video/*"
+                                    onChange={(e) => {
+                                      const file = e.target.files[0]
+                                      if (file) {
+                                        // Validate file first
+                                        if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+                                          showError('Invalid file type', 'Please select an image or video file')
+                                          return
+                                        }
+                                        
+                                        // Validate file size
+                                        const maxSize = file.type.startsWith('video/') ? 100 * 1024 * 1024 : 10 * 1024 * 1024
+                                        if (file.size > maxSize) {
+                                          const maxSizeMB = file.type.startsWith('video/') ? '100MB' : '10MB'
+                                          showError('File too large', `Please select a file smaller than ${maxSizeMB}`)
+                                          return
+                                        }
+                                        
+                                        // Set state and upload immediately with file
+                                        setSelectedFile(file)
+                                        handleUploadImage(content.id, file)
+                                      }
+                                      // Reset input so same file can be selected again
+                                      e.target.value = ''
+                                    }}
+                                    className="hidden"
+                                    disabled={uploadingImage.has(content.id)}
+                                  />
+                                </label>
+                            {hoveredButton === `${content.id}-upload` && (
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                {uploadingImage.has(content.id) ? 'Uploading...' : 'Upload Image/Video'}
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                               </div>
+                            )}
+                          </div>
+                          
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                e.preventDefault()
+                                
+                                // Prevent duplicate clicks
+                                if (postingContent.has(content.id)) {
+                                  console.log('⚠️ Already posting, ignoring click')
+                                  return
+                                }
+                                
+                                // Check if already published
+                                const status = content.status?.toLowerCase()
+                                if (status === 'published') {
+                                  showError('Post Already Published', 'This post has already been published.')
+                                  return
+                                }
+                                
+                                // Publish post to platform
+                                handlePostContent(content)
+                              }}
+                              onMouseEnter={() => setHoveredButton(`${content.id}-share`)}
+                              onMouseLeave={() => setHoveredButton(null)}
+                              disabled={postingContent.has(content.id) || content.status?.toLowerCase() === 'published'}
+                              className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 rounded-lg transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {postingContent.has(content.id) ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Share2 className="w-4 h-4" />
+                              )}
+                            </button>
+                            {hoveredButton === `${content.id}-share` && (
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
+                                Publish to {content.platform}
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                              </div>
+                            )}
+                          </div>
                             </>
                           )}
                           
@@ -3545,16 +3651,16 @@ const ContentDashboard = () => {
                               onMouseEnter={() => setHoveredButton(`${content.id}-delete`)}
                               onMouseLeave={() => setHoveredButton(null)}
                               disabled={deletingContent.has(content.id)}
-                            className={`w-8 h-8 transition-all duration-200 flex items-center justify-center ${
+                              className={`w-8 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
                                 deletingContent.has(content.id)
-                                ? 'cursor-not-allowed opacity-50'
-                                : 'hover:opacity-70'
+                                  ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
+                                  : 'bg-red-500 text-white hover:bg-red-600'
                               }`}
                             >
                               {deletingContent.has(content.id) ? (
-                              <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
+                                <Loader2 className="w-4 h-4 animate-spin" />
                               ) : (
-                              <Trash2 className="w-4 h-4 text-gray-600" />
+                                <Trash2 className="w-4 h-4" />
                               )}
                             </button>
                             {hoveredButton === `${content.id}-delete` && (
@@ -3564,115 +3670,12 @@ const ContentDashboard = () => {
                               </div>
                             )}
                           </div>
-                        
-                        {/* Status Dropdown - Inline with icons */}
-                        <div className="relative status-dropdown flex-shrink-0 ml-auto">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setStatusDropdownOpen(statusDropdownOpen === content.id ? null : content.id)
-                            }}
-                            disabled={updatingStatus.has(content.id)}
-                            className={`px-2 py-1 text-xs font-medium flex items-center space-x-1 ${getStatusTextColor(content.status)} hover:opacity-80 transition-opacity disabled:opacity-50`}
-                          >
-                            <span className="capitalize text-xs">{content.status}</span>
-                            {updatingStatus.has(content.id) ? (
-                              <RefreshCw className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <ChevronDown className="w-3 h-3" />
-                            )}
-                          </button>
-                          
-                          {/* Dropdown Menu */}
-                          {statusDropdownOpen === content.id && (
-                            <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-xl border border-gray-200 z-50 animate-in slide-in-from-top-2 duration-200">
-                              <div className="py-1">
-                                {statusOptions.map((option) => (
-                                  <button
-                                    key={option.value}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleStatusChange(content.id, option.value)
-                                    }}
-                                    disabled={updatingStatus.has(content.id) || content.status === option.value}
-                                    className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 transition-colors flex items-center space-x-2 ${
-                                      content.status === option.value ? 'bg-gray-100 text-gray-600' : 'text-gray-700'
-                                    } ${updatingStatus.has(content.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                  >
-                                    <div className={`w-2 h-2 rounded-full ${option.color.split(' ')[0]}`}></div>
-                                    <span className="capitalize">{option.label}</span>
-                                    {updatingStatus.has(content.id) && content.status === option.value && (
-                                      <RefreshCw className="w-3 h-3 animate-spin ml-auto" />
-                                    )}
-                                  </button>
-                                ))}
                         </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Post Content Below Icons */}
-                      <div className="px-4 py-3">
-                        {/* Title - One line only */}
-                        {content.title && (
-                          <h5 className="font-semibold text-gray-900 mb-2 text-base line-clamp-1 truncate">{content.title}</h5>
-                        )}
-                        
-                        {/* Content Text - One row only with inline ...more */}
-                        {content.content && cleanContentText(content.content).trim().length > 0 && (
-                          <div className="flex items-center gap-1 text-sm text-gray-700">
-                            <p className="line-clamp-1 truncate flex-1">
-                              {cleanContentText(content.content)}
-                            </p>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleViewContent(content)
-                              }}
-                              className="text-purple-600 hover:text-purple-800 font-medium flex-shrink-0"
-                            >
-                              ...more
-                            </button>
-                          </div>
-                        )}
                       </div>
                     </div>
                   )
                 })}
                 </div>
-                
-                {/* Show Less Indicator - Line and Arrow (when expanded) */}
-                {itemsToShow > 4 && (
-                  <div className="flex flex-col items-center justify-center mt-8 pl-10">
-                    <button
-                      onClick={() => {
-                        // Collapse back to one row (4 items)
-                        setItemsToShow(4)
-                      }}
-                      className="flex flex-col items-center gap-2 group cursor-pointer hover:opacity-80 transition-opacity"
-                    >
-                      <ChevronUp className="w-5 h-5 text-gray-400 group-hover:text-purple-600 transition-colors" />
-                      <div className="h-px bg-gray-300 w-16 group-hover:bg-purple-500 transition-colors"></div>
-                    </button>
-                  </div>
-                )}
-                
-                {/* Show More Indicator - Line and Arrow */}
-                {filteredContent.length > itemsToShow && (
-                  <div className="flex flex-col items-center justify-center mt-8 pl-10">
-                    <button
-                      onClick={() => {
-                        // Show next 4 items (one more row)
-                        setItemsToShow(prev => Math.min(prev + 4, filteredContent.length))
-                      }}
-                      className="flex flex-col items-center gap-2 group cursor-pointer hover:opacity-80 transition-opacity"
-                    >
-                      <div className="h-px bg-gray-300 w-16 group-hover:bg-purple-500 transition-colors"></div>
-                      <ChevronDown className="w-5 h-5 text-gray-400 group-hover:text-purple-600 transition-colors" />
-                    </button>
-                  </div>
-                )}
                 </div>
                 
                 {/* Load More Button */}
@@ -3695,92 +3698,595 @@ const ContentDashboard = () => {
             )}
 
             {/* Emily Message Bubble - After Content Cards - Always show when channel is selected */}
-            {!fetchingContent && selectedChannel && (
-              <>
-              <div className="flex justify-start w-full mt-6">
-                <div className="flex items-start gap-2 max-w-[50%]">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
-                    <span className="text-white font-bold text-sm">E</span>
-                  </div>
-                  <div className="bg-white rounded-lg px-4 py-3 shadow-md" style={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.15)' }}>
-                    <p className="text-sm text-black mb-3">
-                      Want to create more inspiring content ?
-                    </p>
-                    <div className="flex flex-col gap-2">
-                      <div className="text-sm text-black">
-                        Leo can help you craft personalised post for you{' '}
-                        <span
-                          onClick={() => setShowCustomContentChatbot(true)}
-                          className="text-blue-600 hover:text-blue-700 cursor-pointer hover:underline"
-                        >
-                          Talk to Leo
-                        </span>
+                {!fetchingContent && selectedChannel && (
+                  <div className="flex justify-start w-full mt-6">
+                    <div className="flex items-start gap-2 max-w-[50%]">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">E</span>
                       </div>
-                      <div className="text-sm text-black">
-                        I can generate fresh ideas beyond what you've already approved :{' '}
-                        <span
-                          onClick={handleGenerateContent}
-                          className={`text-purple-600 hover:text-purple-700 cursor-pointer hover:underline ${generating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          Let's do that
-                        </span>
+                      <div className="bg-white rounded-lg px-4 py-3 shadow-md" style={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.15)' }}>
+                            <p className="text-sm text-black mb-3">
+                              Want to create more inspiring content ?
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              <div className="text-sm text-black">
+                                Leo can help you craft personalised post for you{' '}
+                                <span
+                                  onClick={() => setShowCustomContentChatbot(true)}
+                                  className="text-blue-600 hover:text-blue-700 cursor-pointer hover:underline"
+                                >
+                                  Talk to Leo
+                                </span>
+                              </div>
+                              <div className="text-sm text-black">
+                                I can generate fresh ideas beyond what you've already approved :{' '}
+                                <span
+                                  onClick={handleGenerateContent}
+                                  className={`text-purple-600 hover:text-purple-700 cursor-pointer hover:underline ${generating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                  Let's do that
+                                </span>
+                              </div>
+                            </div>
+                              </div>
+                              </div>
+                            </div>
+                        )}
                       </div>
                     </div>
-                  </div>
-                </div>
-              </div>
-                {/* White space after second message bubble */}
-                <div style={{ height: '300px' }}></div>
-                </>
-            )}
-          </div>
-        </div>
 
 
       </div>
 
       {/* Content View Modal */}
       {selectedContentForModal && (
-        <ContentModal
-          content={selectedContentForModal}
-          profile={profile}
-          onClose={handleCloseModal}
-          onImageClick={handleImageClick}
-          onReplaceCarouselImage={handleReplaceCarouselImage}
-          onFileSelect={handleFileSelect}
-          onUploadImage={handleUploadImage}
-          onUploadCarouselImage={undefined}
-          onSetImageEditorData={setImageEditorData}
-          onShowImageEditor={setShowImageEditor}
-          onGenerateMedia={handleGenerateMedia}
-          generatingMedia={generatingMedia}
-          editingTitleInModal={editingTitleInModal}
-          editingContentInModal={editingContentInModal}
-          editTitleValue={editTitleValue}
-          editContentValue={editContentValue}
-          onEditTitleValueChange={setEditTitleValue}
-          onEditContentValueChange={setEditContentValue}
-          onManualEdit={handleManualEdit}
-          onAIEdit={handleAIEdit}
-          onSaveManualEdit={handleSaveManualEdit}
-          onCancelManualEdit={handleCancelManualEdit}
-          savingModalEdit={savingModalEdit}
-          onStatusChange={(contentId, newStatus) => {
-            handleStatusChange(contentId, newStatus)
-            // Update modal content immediately
-            setSelectedContentForModal(prev => prev ? { ...prev, status: newStatus } : null)
-          }}
-          onApprovePost={handleApprovePost}
-          onDisapprovePost={handleDisapprovePost}
-          onDeleteConfirm={setDeleteConfirm}
-          uploadingImage={uploadingImage}
-          updatingStatus={updatingStatus}
-          isVideoFile={isVideoFile}
-          getFullSizeImageUrl={getFullSizeImageUrl}
-          cleanContentText={cleanContentText}
-          getStatusColor={getStatusColor}
-          statusOptions={statusOptions}
-        />
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 z-30"
+          onClick={handleCloseModal}
+        >
+          <div 
+            className="fixed inset-0 flex items-center justify-center p-4 pb-20"
+            style={{ left: '12rem', right: '0' }}
+          >
+            <div 
+              className="relative max-w-4xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
+                <div className="flex items-center space-x-3">
+                  {(() => {
+                    const theme = getPlatformCardTheme(selectedContentForModal.platform)
+                    return (
+                      <div className={`w-10 h-10 ${theme.iconBg} rounded-xl flex items-center justify-center shadow-sm`}>
+                        <div className="text-white">
+                          {getPlatformIcon(selectedContentForModal.platform)}
+                        </div>
+                      </div>
+                    )
+                  })()}
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 capitalize">
+                      {selectedContentForModal.platform || 'Post'}
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      {selectedContentForModal.scheduled_at ? (
+                        new Date(selectedContentForModal.scheduled_at).toLocaleDateString('en-US', { 
+                          weekday: 'long', 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })
+                      ) : 'No date set'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCloseModal}
+                  className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full flex items-center justify-center transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              {/* Content */}
+              <div className="p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Image Section */}
+                  <div className="space-y-4">
+                    {(() => {
+                      // Detect carousel posts
+                      const isCarousel = selectedContentForModal.post_type === 'carousel' || 
+                                         (selectedContentForModal.metadata && selectedContentForModal.metadata.carousel_images && selectedContentForModal.metadata.carousel_images.length > 0) ||
+                                         (selectedContentForModal.carousel_images && Array.isArray(selectedContentForModal.carousel_images) && selectedContentForModal.carousel_images.length > 0)
+                      
+                      // Get carousel images
+                      let carouselImages = []
+                      if (isCarousel) {
+                        if (selectedContentForModal.carousel_images && Array.isArray(selectedContentForModal.carousel_images) && selectedContentForModal.carousel_images.length > 0) {
+                          carouselImages = selectedContentForModal.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img))
+                        } else if (selectedContentForModal.metadata?.carousel_images && Array.isArray(selectedContentForModal.metadata.carousel_images) && selectedContentForModal.metadata.carousel_images.length > 0) {
+                          carouselImages = selectedContentForModal.metadata.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img))
+                        }
+                      }
+                      
+                      // Get image directly from content.media_url (which comes from primary_image_url)
+                      const finalImageUrl = selectedContentForModal.media_url || selectedContentForModal.image_url
+                      
+                      // If carousel, show all images; otherwise show single image
+                      if (isCarousel && carouselImages.length > 0) {
+                        return (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                <Layers className="w-5 h-5" />
+                                Carousel Images ({carouselImages.length})
+                              </h4>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              {carouselImages.map((imgUrl, index) => {
+                                const imageUrl = typeof imgUrl === 'string' ? imgUrl : (imgUrl.url || imgUrl)
+                                return (
+                                  <div key={index} className="relative group">
+                                    <img
+                                      src={getFullSizeImageUrl(imageUrl) || imageUrl}
+                                      alt={`Carousel image ${index + 1}`}
+                                      className="w-full h-48 object-cover rounded-lg shadow-md cursor-pointer hover:opacity-90 transition-opacity"
+                                      onClick={() => handleImageClick(getFullSizeImageUrl(imageUrl) || imageUrl, `${selectedContentForModal.title} - Image ${index + 1}`)}
+                                      onError={(e) => {
+                                        console.error('❌ Carousel image failed to load:', imageUrl)
+                                        e.target.style.display = 'none'
+                                      }}
+                                    />
+                                    <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs font-medium">
+                                      {index + 1}/{carouselImages.length}
+                                    </div>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleReplaceCarouselImage(selectedContentForModal.id, index)
+                                      }}
+                                      className="absolute bottom-2 right-2 bg-white/90 hover:bg-white text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium shadow-md transition-colors opacity-0 group-hover:opacity-100"
+                                    >
+                                      Replace
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      }
+                      
+                      if (!finalImageUrl) {
+                        return (
+                          <div className="w-full h-80 bg-gradient-to-br from-purple-100 to-pink-100 rounded-lg flex items-center justify-center">
+                            <div className="text-center">
+                              <Image className="w-16 h-16 text-gray-400 mx-auto mb-2" strokeWidth={1.5} />
+                              <p className="text-gray-500 text-sm">No image available</p>
+                            </div>
+                          </div>
+                        )
+                      }
+                      
+                      return (
+                        <div className="relative">
+                          {isVideoFile(finalImageUrl) ? (
+                            <video 
+                              key={`video-${selectedContentForModal.id}-${Date.now()}`}
+                              src={finalImageUrl}
+                              className="w-full h-80 object-cover rounded-lg shadow-lg"
+                              controls
+                              preload="auto"
+                              onError={(e) => {
+                                console.error('❌ Video failed to load in modal:', finalImageUrl)
+                              }}
+                            >
+                              Your browser does not support the video tag.
+                            </video>
+                          ) : (
+                            <img
+                              key={`img-${selectedContentForModal.id}-${Date.now()}`}
+                              src={getFullSizeImageUrl(finalImageUrl) || finalImageUrl}
+                              alt={selectedContentForModal.title || 'Post image'}
+                              className="w-full h-80 object-cover rounded-lg shadow-lg cursor-pointer"
+                              onClick={() => handleImageClick(getFullSizeImageUrl(finalImageUrl) || finalImageUrl, selectedContentForModal.title)}
+                              loading="eager"
+                              onError={(e) => {
+                                console.error('❌ Image failed to load in modal:', finalImageUrl)
+                                // Try to reload with a cache-busting parameter
+                                const img = e.target
+                                try {
+                                  if (finalImageUrl.includes('http://') || finalImageUrl.includes('https://')) {
+                                    const url = new URL(finalImageUrl)
+                                    url.searchParams.set('t', Date.now().toString())
+                                    img.src = url.toString()
+                                  } else {
+                                    // For relative URLs, append timestamp as query param
+                                    const separator = finalImageUrl.includes('?') ? '&' : '?'
+                                    img.src = `${finalImageUrl}${separator}t=${Date.now()}`
+                                  }
+                                } catch (urlError) {
+                                  console.error('Failed to add cache-busting parameter:', urlError)
+                                }
+                              }}
+                              onLoad={() => {
+                                console.log('✅ Image loaded successfully in modal:', finalImageUrl)
+                              }}
+                            />
+                          )}
+                          
+                          {/* Action buttons overlay */}
+                          {selectedContentForModal.status?.toLowerCase() !== 'published' && (
+                          <div className="absolute bottom-4 right-4 flex gap-2">
+                            {(() => {
+                              // Use content.media_url (which comes from primary_image_url)
+                              const finalImageUrl = selectedContentForModal.media_url || selectedContentForModal.image_url
+                              
+                              if (!finalImageUrl) return null
+                              
+                              return (
+                                <>
+                                  {!isVideoFile(finalImageUrl) && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setImageEditorData({
+                                          postContent: selectedContentForModal.content,
+                                          inputImageUrl: finalImageUrl
+                                        })
+                                        setShowImageEditor(true)
+                                        handleCloseModal()
+                                      }}
+                                      className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors"
+                                    >
+                                      Edit Image
+                                    </button>
+                                  )}
+                                  <label className="bg-white/90 hover:bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-md transition-colors cursor-pointer inline-flex items-center space-x-1">
+                                    <Upload className="w-4 h-4" />
+                                    <span>Replace Media</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*,video/*"
+                                      onChange={(e) => {
+                                        const file = e.target.files[0]
+                                        if (file) {
+                                            // Validate file first
+                                            if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+                                              showError('Invalid file type', 'Please select an image or video file')
+                                              return
+                                            }
+                                            
+                                            // Validate file size
+                                            const maxSize = file.type.startsWith('video/') ? 100 * 1024 * 1024 : 10 * 1024 * 1024
+                                            if (file.size > maxSize) {
+                                              const maxSizeMB = file.type.startsWith('video/') ? '100MB' : '10MB'
+                                              showError('File too large', `Please select a file smaller than ${maxSizeMB}`)
+                                              return
+                                            }
+                                            
+                                            // Set state and upload immediately with file
+                                            setSelectedFile(file)
+                                            handleUploadImage(selectedContentForModal.id, file)
+                                        }
+                                          // Reset input so same file can be selected again
+                                          e.target.value = ''
+                                      }}
+                                      className="hidden"
+                                      disabled={uploadingImage.has(selectedContentForModal.id)}
+                                    />
+                                  </label>
+                                </>
+                              )
+                            })()}
+                          </div>
+                          )}
+                          
+                          {/* Uploading overlay */}
+                          {uploadingImage.has(selectedContentForModal.id) && (
+                            <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
+                              <div className="bg-white rounded-lg p-4 flex items-center space-x-3">
+                                <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
+                                <span className="text-gray-900 font-medium">Uploading...</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
+                    
+                    {/* Media Header and Upload - Below image */}
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-lg font-semibold text-gray-900">Media</h4>
+                      {/* Only show upload button if content is not published */}
+                      {selectedContentForModal.status?.toLowerCase() !== 'published' && (
+                      <label className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 cursor-pointer text-sm font-medium transition-colors">
+                        <Upload className="w-4 h-4" />
+                        <span>Upload Media</span>
+                        <input
+                          type="file"
+                          accept="image/*,video/*"
+                          onChange={(e) => {
+                            const file = e.target.files[0]
+                            if (file) {
+                                // Validate file first
+                                if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+                                  showError('Invalid file type', 'Please select an image or video file')
+                                  return
+                                }
+                                
+                                // Validate file size
+                                const maxSize = file.type.startsWith('video/') ? 100 * 1024 * 1024 : 10 * 1024 * 1024
+                                if (file.size > maxSize) {
+                                  const maxSizeMB = file.type.startsWith('video/') ? '100MB' : '10MB'
+                                  showError('File too large', `Please select a file smaller than ${maxSizeMB}`)
+                                  return
+                                }
+                                
+                                // Set state and upload immediately with file
+                                setSelectedFile(file)
+                                handleUploadImage(selectedContentForModal.id, file)
+                            }
+                              // Reset input so same file can be selected again
+                              e.target.value = ''
+                          }}
+                          className="hidden"
+                          disabled={uploadingImage.has(selectedContentForModal.id)}
+                        />
+                      </label>
+                      )}
+                    </div>
+                    
+                    {/* Hashtags - Moved below image */}
+                    {selectedContentForModal.hashtags && selectedContentForModal.hashtags.length > 0 && (
+                      <div>
+                        <h4 className="text-lg font-semibold text-gray-900 mb-2">Hashtags</h4>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          {selectedContentForModal.hashtags.slice(0, 3).map((hashtag, index) => (
+                            <span
+                              key={index}
+                              className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1 rounded-full text-sm font-medium"
+                            >
+                              #{hashtag}
+                            </span>
+                          ))}
+                          {selectedContentForModal.hashtags.length > 3 && (
+                            <span className="text-gray-500 text-sm font-medium px-2">
+                              +{selectedContentForModal.hashtags.length - 3} more...
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Text Content Section */}
+                  <div className="space-y-6">
+                    {/* Title */}
+                    {selectedContentForModal.title && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-lg font-semibold text-gray-900">Title</h4>
+                          {/* Only show edit buttons if content is not published */}
+                          {selectedContentForModal.status?.toLowerCase() !== 'published' && (
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleManualEdit('title')
+                              }}
+                              className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                              title="Edit manually"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleAIEdit('title')
+                              }}
+                              className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
+                              title="Edit with AI"
+                            >
+                              <Sparkles className="w-4 h-4" />
+                            </button>
+                          </div>
+                          )}
+                        </div>
+                        {editingTitleInModal ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={editTitleValue}
+                              onChange={(e) => setEditTitleValue(e.target.value)}
+                              className="w-full px-3 py-2 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all duration-200"
+                              placeholder="Enter title"
+                            />
+                            <div className="flex items-center space-x-1">
+                              <button
+                                onClick={() => handleSaveManualEdit('title')}
+                                disabled={savingModalEdit}
+                                className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors duration-200 disabled:opacity-50"
+                                title="Save"
+                              >
+                                {savingModalEdit ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="w-4 h-4" />
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleCancelManualEdit('title')}
+                                disabled={savingModalEdit}
+                                className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200 disabled:opacity-50"
+                                title="Cancel"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{selectedContentForModal.title}</p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Content */}
+                    {selectedContentForModal.content && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-lg font-semibold text-gray-900">Content</h4>
+                          {/* Only show edit buttons if content is not published */}
+                          {selectedContentForModal.status?.toLowerCase() !== 'published' && (
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleManualEdit('content')
+                              }}
+                              className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                              title="Edit manually"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleAIEdit('content')
+                              }}
+                              className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
+                              title="Edit with AI"
+                            >
+                              <Sparkles className="w-4 h-4" />
+                            </button>
+                          </div>
+                          )}
+                        </div>
+                        {editingContentInModal ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editContentValue}
+                              onChange={(e) => setEditContentValue(e.target.value)}
+                              className="w-full px-3 py-2 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all duration-200 resize-none"
+                              rows={6}
+                              placeholder="Enter content"
+                            />
+                            <div className="flex items-center space-x-1">
+                              <button
+                                onClick={() => handleSaveManualEdit('content')}
+                                disabled={savingModalEdit}
+                                className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors duration-200 disabled:opacity-50"
+                                title="Save"
+                              >
+                                {savingModalEdit ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="w-4 h-4" />
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleCancelManualEdit('content')}
+                                disabled={savingModalEdit}
+                                className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200 disabled:opacity-50"
+                                title="Cancel"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-gray-700 bg-gray-50 p-4 pb-6 rounded-lg whitespace-pre-wrap leading-relaxed overflow-y-auto" style={{ height: '12rem' }}>
+                            <div className="pb-4">
+                              {cleanContentText(selectedContentForModal.content)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Status and Actions at Bottom */}
+                    <div className="flex items-end justify-between pt-6 border-t border-gray-200 mt-6">
+                      {/* Status on Left */}
+                      <div>
+                        <h4 className="text-lg font-semibold text-gray-900 mb-2">Status & Actions</h4>
+                        <div className="flex items-end space-x-4">
+                          <select
+                            value={selectedContentForModal.status}
+                            onChange={(e) => {
+                              const newStatus = e.target.value
+                              handleStatusChange(selectedContentForModal.id, newStatus)
+                              // Update modal content immediately
+                              setSelectedContentForModal(prev => ({ ...prev, status: newStatus }))
+                            }}
+                            disabled={updatingStatus.has(selectedContentForModal.id)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium border-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                              getStatusColor(selectedContentForModal.status)
+                            } ${updatingStatus.has(selectedContentForModal.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            {statusOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          {updatingStatus.has(selectedContentForModal.id) && (
+                            <div className="flex items-center space-x-2 text-sm text-gray-500 pb-2">
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Updating...</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Approve/Disapprove/Delete Buttons on Right */}
+                      <div className="flex items-center space-x-3">
+                        {selectedContentForModal.status === 'draft' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleApprovePost(selectedContentForModal.id)
+                              handleCloseModal()
+                            }}
+                            className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+                          >
+                            <CheckCircle className="w-5 h-5" />
+                            <span>Approve</span>
+                          </button>
+                        )}
+                        {selectedContentForModal.status?.toLowerCase() === 'published' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteConfirm(selectedContentForModal)
+                              handleCloseModal()
+                            }}
+                            className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                            <span>Delete</span>
+                          </button>
+                        )}
+                        {(selectedContentForModal.status === 'scheduled' || selectedContentForModal.status?.toLowerCase() === 'approved') && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDisapprovePost(selectedContentForModal.id)
+                            }}
+                            className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+                          >
+                            <XCircle className="w-5 h-5" />
+                            <span>Disapprove</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* AI Edit Modal */}
@@ -4376,42 +4882,6 @@ const ContentDashboard = () => {
           setShowCustomContentChatbot(false);
         }}
       />
-
-      {/* Chatbot Image Editor Modal */}
-      {showImageEditor && imageEditorData && (
-        <ChatbotImageEditor
-          isOpen={showImageEditor}
-          onClose={() => {
-            setShowImageEditor(false)
-            setImageEditorData(null)
-            
-            // Refresh the content dashboard after modal closes (with a small delay)
-            setTimeout(async () => {
-              try {
-                await fetchAllContent()
-              } catch (error) {
-                console.error('Error refreshing content after modal close:', error)
-              }
-            }, 100) // Small delay to ensure modal is fully closed
-          }}
-          postContent={imageEditorData.postContent}
-          inputImageUrl={imageEditorData.inputImageUrl}
-          onImageSaved={async (newImageUrl) => {
-            // The image URL stays the same, but the content is replaced
-            // We need to refresh the content data to show the updated image
-            try {
-              // Refresh the content data to get the updated image
-              await fetchAllContent()
-              
-              // Show success message
-              showSuccess('Image saved successfully! The edited image has replaced the original.')
-            } catch (error) {
-              console.error('Error refreshing content after image save:', error)
-              showError('Image saved, but failed to refresh content', 'Please refresh the page to see the updated image')
-            }
-          }}
-        />
-      )}
 
       {/* Delete Confirmation Dialog */}
       {deleteConfirm && (
