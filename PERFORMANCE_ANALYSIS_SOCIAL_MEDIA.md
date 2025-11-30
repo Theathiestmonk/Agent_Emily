@@ -412,4 +412,3 @@ fetchPosts(forceRefresh).then(postsResult => {
 - **Target**: Cache hit rate > 80%
 
 
-

@@ -256,6 +256,7 @@ const ContentModal = ({
                   </button>
                 </div>
               )}
+              </div>
             </div>
           </div>
           
@@ -772,7 +773,6 @@ const ContentModal = ({
           </div>
         </div>
       </div>
-    </div>
     </div>
   )
 }
