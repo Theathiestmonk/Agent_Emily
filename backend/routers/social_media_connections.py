@@ -11,6 +11,7 @@ import jwt
 from cryptography.fernet import Fernet
 from supabase import create_client, Client
 import openai
+import asyncio
 
 router = APIRouter(prefix="/api/social-media", tags=["social-media-connections"])
 
@@ -755,45 +756,73 @@ async def get_latest_posts(current_user: User = Depends(get_current_user)):
         
         print(f"Total connections to process: {len(all_connections)}")
         
-        posts_by_platform = {}
-        
-        for connection in all_connections:
+        # Helper function to fetch posts for a single connection
+        async def fetch_posts_for_connection(connection: dict) -> tuple:
+            """Fetch posts for a single connection. Returns (platform, posts, connection_type) or (platform, None, connection_type) on error."""
             platform = connection.get('platform', '').lower()
             connection_type = connection.get('connection_type', 'oauth')
-            print(f"Processing {platform} connection ({connection_type}): {connection.get('id')}")
+            connection_id = connection.get('id', 'unknown')
+            
+            print(f"Processing {platform} connection ({connection_type}): {connection_id}")
             
             try:
+                posts = None
+                
                 if platform == 'instagram':
                     if connection_type == 'oauth':
-                        posts = await fetch_instagram_posts_oauth(connection, 5)
+                        posts = await fetch_instagram_posts_oauth(connection, 1)
                     else:
-                        posts = await fetch_instagram_posts_new(connection, 5)
+                        posts = await fetch_instagram_posts_new(connection, 1)
                 elif platform == 'facebook':
                     if connection_type == 'oauth':
-                        posts = await fetch_facebook_posts_oauth(connection, 5)
+                        posts = await fetch_facebook_posts_oauth(connection, 1)
                     else:
-                        posts = await fetch_facebook_posts_new(connection, 5)
+                        posts = await fetch_facebook_posts_new(connection, 1)
                 elif platform == 'twitter':
                     posts = await fetch_twitter_posts_new(connection, 5)
                 elif platform == 'linkedin':
                     posts = await fetch_linkedin_posts_new(connection, 5)
                 else:
                     print(f"Unsupported platform: {platform}")
-                    continue
+                    return (platform, None, connection_type)
                 
                 if posts:
-                    # If platform already has posts, extend the list
-                    if platform in posts_by_platform:
-                        posts_by_platform[platform].extend(posts)
-                    else:
-                        posts_by_platform[platform] = posts
-                    print(f"Fetched {len(posts)} posts from {platform} ({connection_type})")
+                    print(f"✅ Fetched {len(posts)} posts from {platform} ({connection_type})")
+                    return (platform, posts, connection_type)
                 else:
-                    print(f"No posts found for {platform} ({connection_type})")
+                    print(f"⚠️ No posts found for {platform} ({connection_type})")
+                    return (platform, None, connection_type)
                     
             except Exception as e:
-                print(f"Error fetching posts from {platform} ({connection_type}): {e}")
+                print(f"❌ Error fetching posts from {platform} ({connection_type}): {e}")
+                return (platform, None, connection_type)
+        
+        # Process all connections in parallel
+        print(f"🚀 Starting parallel fetch for {len(all_connections)} connections...")
+        start_time = datetime.now()
+        
+        tasks = [fetch_posts_for_connection(conn) for conn in all_connections]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        elapsed_time = (datetime.now() - start_time).total_seconds()
+        print(f"✅ Parallel fetch completed in {elapsed_time:.2f} seconds")
+        
+        # Aggregate results
+        posts_by_platform = {}
+        for result in results:
+            # Handle exceptions
+            if isinstance(result, Exception):
+                print(f"❌ Task failed with exception: {result}")
                 continue
+            
+            platform, posts, connection_type = result
+            
+            if posts:
+                # If platform already has posts, extend the list
+                if platform in posts_by_platform:
+                    posts_by_platform[platform].extend(posts)
+                else:
+                    posts_by_platform[platform] = posts
         
         return {
             "posts": posts_by_platform,

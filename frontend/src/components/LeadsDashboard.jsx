@@ -4,8 +4,6 @@ import { useNotifications } from '../contexts/NotificationContext'
 import { leadsAPI } from '../services/leads'
 import SideNavbar from './SideNavbar'
 import MobileNavigation from './MobileNavigation'
-import LoadingBar from './LoadingBar'
-import MainContentLoader from './MainContentLoader'
 import LeadCard from './LeadCard'
 import LeadDetailModal from './LeadDetailModal'
 import AddLeadModal from './AddLeadModal'
@@ -621,27 +619,20 @@ const LeadsDashboard = () => {
                 {!selectionMode && (
                   <>
                     <button
-                      onClick={handleToggleSelectionMode}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-purple-600 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                      onClick={() => setShowAddModal(true)}
+                      className="p-2 bg-white text-black rounded-lg hover:bg-gray-100 transition-all duration-200 shadow-md hover:shadow-lg border border-gray-200"
+                      title="Add Lead"
                     >
-                      <CheckCircle className="w-4 h-4" />
-                      <span>Select</span>
+                      <UserPlus className="w-5 h-5" />
                     </button>
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>Add Lead</span>
-                </button>
-                <button
-                  onClick={handleRefresh}
-                  disabled={loading}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition-all duration-200 disabled:opacity-50 shadow-lg hover:shadow-xl"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                  <span>Refresh</span>
-                </button>
+                    <button
+                      onClick={handleRefresh}
+                      disabled={loading}
+                      className="p-2 bg-white text-black rounded-lg hover:bg-gray-100 transition-all duration-200 disabled:opacity-50 shadow-md hover:shadow-lg border border-gray-200"
+                      title="Refresh"
+                    >
+                      <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
                   </>
                 )}
               </div>
@@ -652,7 +643,9 @@ const LeadsDashboard = () => {
         {/* Leads Board - Column Layout by Status */}
         <div className="flex-1 px-4 lg:px-6 py-6 overflow-x-hidden">
           {loading ? (
-            <MainContentLoader />
+            <div className="flex items-center justify-center py-12">
+              <p className="text-gray-600 text-lg">Loading leads...</p>
+            </div>
           ) : filteredLeads.length === 0 ? (
             <div className="text-center py-12">
               <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -680,7 +673,7 @@ const LeadsDashboard = () => {
                       <div className="mb-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-1.5">
-                            <StatusIcon className={`w-4 h-4 ${statusConfig.textColor}`} />
+                            <StatusIcon className={`w-3 h-3 ${statusConfig.textColor}`} />
                             <h3 className={`font-semibold text-sm ${statusConfig.textColor}`}>{statusFilter.label}</h3>
                           </div>
                           <span className={`text-sm font-medium ${statusConfig.textColor}`}>
@@ -692,7 +685,7 @@ const LeadsDashboard = () => {
                       <div className={`mb-2 border-b ${statusConfig.borderColor}`}></div>
                       
                       {/* Column Cards */}
-                      <div className="space-y-1.5 max-h-[calc(100vh-180px)] overflow-y-auto pb-4">
+                      <div className="space-y-1.5 max-h-[calc(100vh-180px)] overflow-y-auto pb-4 scrollbar-hide">
                         {columnLeads.length === 0 ? (
                           <div className="text-center py-8 text-gray-400 text-sm">
                             No {statusFilter.label.toLowerCase()} leads

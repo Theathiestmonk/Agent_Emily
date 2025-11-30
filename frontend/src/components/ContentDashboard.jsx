@@ -3265,10 +3265,6 @@ const ContentDashboard = () => {
                                       preload="metadata"
                                       muted
                                       playsInline
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleImageClick(mediaUrl, content.title)
-                                      }}
                                       onLoadStart={() => {
                                         startImageLoading(content.id)
                                       }}
@@ -3403,10 +3399,6 @@ const ContentDashboard = () => {
                                   className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
                                       loading={shouldLoadEager ? "eager" : "lazy"}
                                       decoding="async"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleImageClick(mediaUrl || mediaThumbnail, content.title)
-                                      }}
                                       onLoad={() => {
                                         handleImageLoad(content.id)
                                       }}

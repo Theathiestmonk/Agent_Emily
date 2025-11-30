@@ -7,6 +7,8 @@ import SideNavbar from './SideNavbar'
 import MobileNavigation from './MobileNavigation'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { 
   Facebook, 
   Instagram, 
@@ -58,7 +60,6 @@ const SocialMediaDashboard = () => {
   const [insightsData, setInsightsData] = useState(null)
   const [loadingInsights, setLoadingInsights] = useState(false)
   const [selectedPostForInsights, setSelectedPostForInsights] = useState(null)
-  const [expandedPlatform, setExpandedPlatform] = useState(null)
   const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 768)
   const [profile, setProfile] = useState(null)
   const [expandedCaptions, setExpandedCaptions] = useState(new Set())
@@ -105,6 +106,8 @@ const SocialMediaDashboard = () => {
   const fetchData = async (forceRefresh = false) => {
     try {
       setDataLoaded(false)
+      
+      // Fetch posts only (stats fetching disabled)
       const result = await fetchAllData(forceRefresh)
       
       if (result.fromCache) {
@@ -113,7 +116,6 @@ const SocialMediaDashboard = () => {
         console.log('Data fetched from API')
       }
       
-      await fetchPlatformStats()
       setDataLoaded(true)
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -405,99 +407,23 @@ const SocialMediaDashboard = () => {
         {/* Header - Part of Main Content */}
         <div className="bg-white shadow-sm border-b">
           <div className="px-3 sm:px-4 md:px-6 py-3 md:py-4">
-            <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-wrap">
-              {/* Account Insights */}
-              <div className="flex-1 min-w-0 overflow-x-auto">
-                <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-nowrap">
-                  {connectedPlatforms.map((connection) => {
-                    const stats = platformStats[connection.platform] || {}
-                    const theme = getPlatformCardTheme(connection.platform)
-                    // On larger devices (md and up), always show details. On smaller devices, use toggle
-                    const isExpanded = isLargeScreen ? true : expandedPlatform === connection.platform
-                    
-                    return (
-                      <div 
-                        key={connection.platform} 
-                        className="flex-shrink-0"
-                      >
-                        {/* Platform Card */}
-                        <button
-                          onClick={() => {
-                            // Only toggle on smaller devices
-                            if (!isLargeScreen) {
-                              if (isExpanded) {
-                                setExpandedPlatform(null)
-                              } else {
-                                setExpandedPlatform(connection.platform)
-                              }
-                            }
-                          }}
-                          className={`flex items-center bg-gray-50 rounded-lg hover:bg-gray-100 transition-all duration-300 ${
-                            isExpanded 
-                              ? 'space-x-2 sm:space-x-3 px-2 sm:px-3 md:px-4 py-2' 
-                              : 'justify-center p-2 sm:p-3'
-                          }`}
-                        >
-                          <div className={`${isExpanded ? 'w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8' : 'w-10 h-10 sm:w-12 sm:h-12'} ${theme.iconBg} rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-300`}>
-                            <div className="text-white text-xs sm:text-sm">
-                              {getPlatformIcon(connection.platform)}
+            <div className="flex items-center justify-between gap-2 sm:gap-3 md:gap-4 flex-wrap">
+              {/* Heading - Matching main dashboard format */}
+              <div className="flex items-center gap-2">
+                <div className="text-sm lg:text-base text-gray-900">
+                  Happenings
                             </div>
+                <span className="text-gray-400">|</span>
+                <div className="text-sm lg:text-base text-gray-900">
+                  {profile?.business_name || user?.user_metadata?.name || 'you'}
                           </div>
-                          
-                          {/* Expanded Details - Always show on md+ screens, toggle on smaller */}
-                          {isExpanded && (
-                            <>
-                              <div className="min-w-0 flex-shrink-0 ml-2 sm:ml-3">
-                                <p className="font-medium text-xs sm:text-sm text-gray-900 capitalize whitespace-nowrap">{connection.platform}</p>
-                                <p className="text-xs text-gray-500 truncate max-w-[120px] sm:max-w-[150px]">{connection.page_name || connection.account_name}</p>
-                              </div>
-                              <div className="text-right ml-2 sm:ml-3 flex-shrink-0">
-                                {connection.platform === 'instagram' && stats.followers_count && (
-                                  <>
-                                    <p className="text-xs sm:text-sm font-semibold text-gray-900 whitespace-nowrap">{formatEngagement(stats.followers_count)}</p>
-                                    <p className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Followers</p>
-                                  </>
-                                )}
-                                {connection.platform === 'facebook' && stats.fan_count && (
-                                  <>
-                                    <p className="text-xs sm:text-sm font-semibold text-gray-900 whitespace-nowrap">{formatEngagement(stats.fan_count)}</p>
-                                    <p className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Page Likes</p>
-                                  </>
-                                )}
-                                {connection.platform === 'linkedin' && stats.follower_count && (
-                                  <>
-                                    <p className="text-xs sm:text-sm font-semibold text-gray-900 whitespace-nowrap">{formatEngagement(stats.follower_count)}</p>
-                                    <p className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Followers</p>
-                                  </>
-                                )}
-                                {connection.platform === 'twitter' && stats.followers_count && (
-                                  <>
-                                    <p className="text-xs sm:text-sm font-semibold text-gray-900 whitespace-nowrap">{formatEngagement(stats.followers_count)}</p>
-                                    <p className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Followers</p>
-                                  </>
-                                )}
-                                {connection.platform === 'youtube' && stats.subscriber_count && (
-                                  <>
-                                    <p className="text-xs sm:text-sm font-semibold text-gray-900 whitespace-nowrap">{formatEngagement(stats.subscriber_count)}</p>
-                                    <p className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Subscribers</p>
-                                  </>
-                                )}
-                                {!stats.followers_count && !stats.fan_count && !stats.follower_count && !stats.subscriber_count && (
-                                  <p className="text-xs sm:text-sm text-gray-400 whitespace-nowrap">No data</p>
-                                )}
-                              </div>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    )
+                <span className="text-gray-400">|</span>
+                <div className="text-sm lg:text-base text-gray-700">
+                  {new Date().toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
                   })}
-                  
-                  {connectedPlatforms.length === 0 && (
-                    <div className="text-center py-4 px-4 flex-shrink-0">
-                      <p className="text-gray-500 text-sm">No connected accounts</p>
-                    </div>
-                  )}
                 </div>
               </div>
               
@@ -524,9 +450,7 @@ const SocialMediaDashboard = () => {
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 p-3 sm:p-4 md:p-6">
-          {loading || !dataLoaded ? (
-            <>
+        <div className="flex-1 p-3 sm:p-4 md:p-6 overflow-hidden">
               <style dangerouslySetInnerHTML={{__html: `
                 @keyframes loading-dots {
                   0%, 20% { opacity: 0; }
@@ -542,7 +466,26 @@ const SocialMediaDashboard = () => {
                 .loading-dot-3 {
                   animation: loading-dots 1.4s infinite 0.4s;
                 }
+            @keyframes slide-in-right {
+              from {
+                transform: translateX(100%);
+              }
+              to {
+                transform: translateX(0);
+              }
+            }
+            .animate-slide-in-right {
+              animation: slide-in-right 0.3s ease-out;
+            }
+            .chatbot-bubble-shadow {
+              box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+            }
               `}} />
+          
+          <div className="relative h-full">
+            {/* Main Content - Posts */}
+            <div className="h-full overflow-y-auto">
+              {loading || !dataLoaded ? (
               <div className="flex items-center justify-center min-h-[400px]">
                 <p className="text-gray-600 text-lg">
                   Loading social media accounts
@@ -553,7 +496,6 @@ const SocialMediaDashboard = () => {
                   </span>
                 </p>
               </div>
-            </>
           ) : platformsWithPosts.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-24 h-24 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -762,39 +704,24 @@ const SocialMediaDashboard = () => {
                   )
                 })}
               </div>
-
             </div>
           )}
-          
-          {/* Last Updated Timestamp - Bottom Right */}
-          {lastRefresh && (
-            <div className="fixed bottom-4 right-2 sm:right-4 text-xs sm:text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-2 sm:px-3 py-2 rounded-lg shadow-sm border">
-              <span className="hidden sm:inline">Last updated: </span>
-              {lastRefresh.toLocaleTimeString()}
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* Insights Modal */}
+            {/* Insights Right Panel - Overlay on top (Desktop) */}
       {showInsightsModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4"
-          onClick={handleCloseInsightsModal}
-        >
-          <div 
-            className="relative max-w-3xl w-full bg-white rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[95vh] sm:max-h-[90vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
+                className="hidden md:flex fixed inset-y-0 right-0 w-96 bg-white border-l border-gray-200 shadow-2xl flex-col flex-shrink-0 animate-slide-in-right overflow-hidden z-10"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-3 sm:p-4 md:p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
-              <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50 flex-shrink-0">
+                  <div className="flex items-center space-x-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-md bg-gradient-to-br from-pink-400 to-purple-500 flex-shrink-0">
+                      <span className="text-white font-bold text-sm">O</span>
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">AI Post Insights</h3>
-                  <p className="text-xs sm:text-sm text-gray-600 truncate">
+                      <h3 className="text-lg font-extrabold text-gray-900 truncate">Insights by Orion</h3>
+                      <p className="text-xs text-gray-600 truncate">
                     {selectedPostForInsights?.platform && (
                       <span className="capitalize">{selectedPostForInsights.platform}</span>
                     )}
@@ -803,14 +730,14 @@ const SocialMediaDashboard = () => {
               </div>
               <button
                 onClick={handleCloseInsightsModal}
-                className="w-7 h-7 sm:w-8 sm:h-8 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ml-2"
+                    className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ml-2"
               >
-                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
+                {/* Content - Message Bubbles */}
+                <div className="flex-1 overflow-y-auto bg-gray-50 pt-4 pl-2 pr-0" style={{ overflowY: 'auto', overflowX: 'hidden' }}>
               {loadingInsights ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center">
@@ -821,161 +748,393 @@ const SocialMediaDashboard = () => {
               ) : insightsData ? (
                 <div className="space-y-4">
                   {insightsData.error ? (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                      <p className="text-red-800">{insightsData.insights}</p>
+                        <div className="flex flex-col items-start w-full">
+                          <div className="flex items-start gap-2 w-full justify-start">
+                            <div className="flex-shrink-0">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center shadow-md bg-gradient-to-br from-pink-400 to-purple-500">
+                                <span className="text-white font-bold text-sm">O</span>
                     </div>
-                  ) : (
-                    <>
-                      {/* Analysis Summary Card */}
-                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-4 sm:mb-6">
-                        <div className="flex items-center space-x-2 sm:space-x-3">
-                          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs sm:text-sm font-semibold text-blue-900">Analysis Summary</p>
-                            <p className="text-xs text-blue-700">
-                              Analyzed {insightsData.comments_analyzed} comments • Compared with {insightsData.previous_posts_compared} previous posts
-                            </p>
+                            <div className="px-4 py-3 rounded-lg bg-white text-black chatbot-bubble-shadow text-sm">
+                              <div className="text-red-800 text-sm">{insightsData.insights}</div>
                           </div>
                         </div>
                       </div>
-
-                      {/* Parsed Insights Cards */}
-                      {(() => {
+                      ) : (() => {
                         const parsed = parseInsights(insightsData.insights)
                         
                         if (!parsed || parsed.raw) {
                           // Fallback to raw text if parsing failed
                           return (
-                            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-                              <div className="prose max-w-none">
-                                <div className="whitespace-pre-wrap text-gray-700 leading-relaxed">
+                            <div className="flex flex-col items-start w-full">
+                              <div className="flex items-start gap-2 w-full justify-start">
+                                <div className="flex-shrink-0">
+                                  <div className="w-8 h-8 rounded-full flex items-center justify-center shadow-md bg-gradient-to-br from-pink-400 to-purple-500">
+                                    <span className="text-white font-bold text-sm">O</span>
+                                  </div>
+                                </div>
+                                <div className="px-4 py-3 rounded-lg bg-white text-black chatbot-bubble-shadow text-sm">
+                                  <ReactMarkdown
+                                    remarkPlugins={[remarkGfm]}
+                                    components={{
+                                      p: ({ children }) => <p className="mb-2 last:mb-0 text-black text-sm">{children}</p>,
+                                      h1: ({ children }) => <h1 className="text-lg font-bold text-black mb-2">{children}</h1>,
+                                      h2: ({ children }) => <h2 className="text-base font-bold text-black mb-2">{children}</h2>,
+                                      h3: ({ children }) => <h3 className="text-sm font-bold text-black mb-2">{children}</h3>,
+                                      ul: ({ children }) => <ul className="list-disc list-inside mb-2 text-black text-sm">{children}</ul>,
+                                      ol: ({ children }) => <ol className="list-decimal list-inside mb-2 text-black text-sm">{children}</ol>,
+                                      li: ({ children }) => <li className="text-black text-sm">{children}</li>,
+                                      strong: ({ children }) => <strong className="font-bold text-black text-sm">{children}</strong>,
+                                      em: ({ children }) => <em className="italic text-black/80 text-sm">{children}</em>,
+                                    }}
+                                  >
                                   {insightsData.insights}
+                                  </ReactMarkdown>
                                 </div>
                               </div>
                             </div>
                           )
                         }
 
-                        return (
-                          <div className="grid grid-cols-1 gap-3 sm:gap-4">
-                            {/* Performance Analysis Card */}
-                            {parsed.performance && (
-                              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-3">
-                                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                                  </div>
-                                  <h4 className="text-base sm:text-lg font-semibold text-gray-900">Performance Analysis</h4>
-                                </div>
-                                <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                  {parsed.performance}
-                                </div>
-                              </div>
-                            )}
+                        const messages = []
+                        
+                        // Analysis Summary Message
+                        if (insightsData.comments_analyzed || insightsData.previous_posts_compared) {
+                          messages.push({
+                            type: 'summary',
+                            content: `Analyzed ${insightsData.comments_analyzed || 0} comments • Compared with ${insightsData.previous_posts_compared || 0} previous posts`
+                          })
+                        }
 
-                            {/* Content Analysis Card */}
-                            {parsed.content && (
-                              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-3">
-                                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                                  </div>
-                                  <h4 className="text-base sm:text-lg font-semibold text-gray-900">Content Analysis</h4>
-                                </div>
-                                <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                  {parsed.content}
-                                </div>
-                              </div>
-                            )}
+                        // Performance Analysis
+                        if (parsed.performance) {
+                          messages.push({
+                            type: 'performance',
+                            content: parsed.performance
+                          })
+                        }
 
-                            {/* Sentiment Analysis Card with Spectrum */}
-                            {parsed.sentiment && (
-                              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-3">
-                                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                                  </div>
-                                  <h4 className="text-base sm:text-lg font-semibold text-gray-900">Sentiment Analysis</h4>
-                                </div>
-                                {(() => {
+                        // Content Analysis
+                        if (parsed.content) {
+                          messages.push({
+                            type: 'content',
+                            content: parsed.content
+                          })
+                        }
+
+                        // Sentiment Analysis
+                        if (parsed.sentiment) {
                                   const sentimentScore = calculateSentimentScore(parsed.sentiment)
                                   const percentage = Math.round(sentimentScore * 100)
+                          messages.push({
+                            type: 'sentiment',
+                            content: parsed.sentiment,
+                            sentimentScore,
+                            percentage
+                          })
+                        }
+
+                        // Trends & Patterns
+                        if (parsed.trends) {
+                          messages.push({
+                            type: 'trends',
+                            content: parsed.trends
+                          })
+                        }
+
+                        // Recommendations
+                        if (parsed.recommendations) {
+                          messages.push({
+                            type: 'recommendations',
+                            content: parsed.recommendations
+                          })
+                        }
+
                                   return (
+                          <>
+                            {messages.map((message, index) => (
+                              <div key={index} className="flex flex-col items-start w-full px-4">
+                                <div className="flex items-start gap-2 w-full justify-start">
+                                  <div className="flex-shrink-0">
+                                    <div className="w-8 h-8 rounded-full flex items-center justify-center shadow-md bg-gradient-to-br from-pink-400 to-purple-500">
+                                      <span className="text-white font-bold text-sm">O</span>
+                                    </div>
+                                  </div>
+                                  <div className="px-4 py-3 rounded-lg bg-white text-black chatbot-bubble-shadow text-sm">
+                                    {message.type === 'sentiment' && message.sentimentScore !== undefined && (
                                     <div className="mb-4">
-                                      {/* Sentiment Spectrum Indicator */}
                                       <div className="relative w-full h-6 bg-gray-200 rounded-full overflow-hidden mb-2">
                                         <div 
                                           className="absolute inset-0 rounded-full transition-all duration-500"
                                           style={{
                                             background: `linear-gradient(to right, 
-                                              ${sentimentScore < 0.5 
-                                                ? `rgb(239, 68, 68) ${sentimentScore * 100}%, rgb(234, 179, 8) ${(sentimentScore + 0.2) * 100}%, rgb(34, 197, 94) 100%`
-                                                : `rgb(239, 68, 68) 0%, rgb(234, 179, 8) ${(sentimentScore - 0.2) * 100}%, rgb(34, 197, 94) ${sentimentScore * 100}%`
+                                                ${message.sentimentScore < 0.5 
+                                                  ? `rgb(239, 68, 68) ${message.sentimentScore * 100}%, rgb(234, 179, 8) ${(message.sentimentScore + 0.2) * 100}%, rgb(34, 197, 94) 100%`
+                                                  : `rgb(239, 68, 68) 0%, rgb(234, 179, 8) ${(message.sentimentScore - 0.2) * 100}%, rgb(34, 197, 94) ${message.sentimentScore * 100}%`
                                               })`
                                           }}
                                         />
                                         <div 
                                           className="absolute top-0 bottom-0 w-1 bg-white shadow-lg"
-                                          style={{ left: `${sentimentScore * 100}%`, transform: 'translateX(-50%)' }}
+                                            style={{ left: `${message.sentimentScore * 100}%`, transform: 'translateX(-50%)' }}
                                         />
                                       </div>
                                       <div className="flex items-center justify-between text-sm">
                                         <span className="text-red-600 font-medium">Negative</span>
-                                        <span className="text-gray-600 font-semibold">{percentage}% Positive</span>
+                                          <span className="text-gray-600 font-semibold">{message.percentage}% Positive</span>
                                         <span className="text-green-600 font-medium">Positive</span>
                                       </div>
                                     </div>
+                                    )}
+                                    <ReactMarkdown
+                                      remarkPlugins={[remarkGfm]}
+                                      components={{
+                                        p: ({ children }) => <p className="mb-2 last:mb-0 text-black text-sm">{children}</p>,
+                                        h1: ({ children }) => <h1 className="text-lg font-bold text-black mb-2">{children}</h1>,
+                                        h2: ({ children }) => <h2 className="text-base font-bold text-black mb-2">{children}</h2>,
+                                        h3: ({ children }) => <h3 className="text-sm font-bold text-black mb-2">{children}</h3>,
+                                        ul: ({ children }) => <ul className="list-disc list-inside mb-2 text-black text-sm">{children}</ul>,
+                                        ol: ({ children }) => <ol className="list-decimal list-inside mb-2 text-black text-sm">{children}</ol>,
+                                        li: ({ children }) => <li className="text-black text-sm">{children}</li>,
+                                        strong: ({ children }) => <strong className="font-bold text-black text-sm">{children}</strong>,
+                                        em: ({ children }) => <em className="italic text-black/80 text-sm">{children}</em>,
+                                      }}
+                                    >
+                                      {message.content}
+                                    </ReactMarkdown>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </>
                                   )
                                 })()}
-                                <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                  {parsed.sentiment}
                                 </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500">No insights available</p>
                               </div>
                             )}
-
-                            {/* Trends & Patterns Card */}
-                            {parsed.trends && (
-                              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-3">
-                                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Last Updated Timestamp - Bottom Right */}
+          {lastRefresh && (
+            <div className="fixed bottom-4 right-2 sm:right-4 text-xs sm:text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-2 sm:px-3 py-2 rounded-lg shadow-sm border">
+              <span className="hidden sm:inline">Last updated: </span>
+              {lastRefresh.toLocaleTimeString()}
                                   </div>
-                                  <h4 className="text-base sm:text-lg font-semibold text-gray-900">Trends & Patterns</h4>
+          )}
                                 </div>
-                                <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                  {parsed.trends}
                                 </div>
-                              </div>
-                            )}
 
-                            {/* Recommendations Card */}
-                            {parsed.recommendations && (
-                              <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-3 sm:p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-3">
-                                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <Target className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                                  </div>
-                                  <h4 className="text-base sm:text-lg font-semibold text-gray-900">Recommendations</h4>
-                                </div>
-                                <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                  {parsed.recommendations}
-                                </div>
+      {/* Insights Panel for Mobile - Full Screen Overlay */}
+      {showInsightsModal && (
+        <div className="md:hidden fixed inset-0 bg-white z-50 flex flex-col animate-slide-in-right overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50 flex-shrink-0">
+            <div className="flex items-center space-x-3 min-w-0 flex-1">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-md bg-gradient-to-br from-pink-400 to-purple-500 flex-shrink-0">
+                <span className="text-white font-bold text-sm">O</span>
                               </div>
-                            )}
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-gray-900 truncate">Insights by Orion</h3>
+                <p className="text-xs text-gray-600 truncate">
+                  {selectedPostForInsights?.platform && (
+                    <span className="capitalize">{selectedPostForInsights.platform}</span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleCloseInsightsModal}
+              className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ml-2"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Content - Message Bubbles */}
+          <div className="flex-1 overflow-y-auto bg-gray-50 pt-4 pl-2 pr-0" style={{ overflowY: 'auto', overflowX: 'hidden' }}>
+            {loadingInsights ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <RefreshCw className="w-8 h-8 text-purple-500 animate-spin mx-auto mb-4" />
+                  <p className="text-gray-600">Analyzing post and generating insights...</p>
+                                  </div>
+                                </div>
+            ) : insightsData ? (
+              <div className="space-y-4">
+                {insightsData.error ? (
+                  <div className="flex flex-col items-start w-full px-4">
+                    <div className="flex items-start gap-2 w-full justify-start">
+                      <div className="flex-shrink-0">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center shadow-md bg-gradient-to-br from-pink-400 to-purple-500">
+                          <span className="text-white font-bold text-sm">O</span>
+                        </div>
+                      </div>
+                      <div className="px-4 py-3 rounded-lg bg-white text-black chatbot-bubble-shadow">
+                        <div className="text-red-800">{insightsData.insights}</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (() => {
+                  const parsed = parseInsights(insightsData.insights)
+                  
+                  if (!parsed || parsed.raw) {
+                    // Fallback to raw text if parsing failed
+                    return (
+                      <div className="flex flex-col items-start w-full px-4">
+                        <div className="flex items-start gap-2 w-full justify-start">
+                          <div className="flex-shrink-0">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center shadow-md bg-gradient-to-br from-pink-400 to-purple-500">
+                              <span className="text-white font-bold text-sm">O</span>
+                            </div>
                           </div>
+                          <div className="px-4 py-3 rounded-lg bg-white text-black chatbot-bubble-shadow">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                p: ({ children }) => <p className="mb-2 last:mb-0 text-black text-sm">{children}</p>,
+                                h1: ({ children }) => <h1 className="text-lg font-bold text-black mb-2">{children}</h1>,
+                                h2: ({ children }) => <h2 className="text-base font-bold text-black mb-2">{children}</h2>,
+                                h3: ({ children }) => <h3 className="text-sm font-bold text-black mb-2">{children}</h3>,
+                                ul: ({ children }) => <ul className="list-disc list-inside mb-2 text-black text-sm">{children}</ul>,
+                                ol: ({ children }) => <ol className="list-decimal list-inside mb-2 text-black text-sm">{children}</ol>,
+                                li: ({ children }) => <li className="text-black text-sm">{children}</li>,
+                                strong: ({ children }) => <strong className="font-bold text-black text-sm">{children}</strong>,
+                                em: ({ children }) => <em className="italic text-black/80 text-sm">{children}</em>,
+                              }}
+                            >
+                              {insightsData.insights}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  const messages = []
+                  
+                  // Analysis Summary Message
+                  if (insightsData.comments_analyzed || insightsData.previous_posts_compared) {
+                    messages.push({
+                      type: 'summary',
+                      content: `Analyzed ${insightsData.comments_analyzed || 0} comments • Compared with ${insightsData.previous_posts_compared || 0} previous posts`
+                    })
+                  }
+
+                  // Performance Analysis
+                  if (parsed.performance) {
+                    messages.push({
+                      type: 'performance',
+                      content: parsed.performance
+                    })
+                  }
+
+                  // Content Analysis
+                  if (parsed.content) {
+                    messages.push({
+                      type: 'content',
+                      content: parsed.content
+                    })
+                  }
+
+                  // Sentiment Analysis
+                  if (parsed.sentiment) {
+                    const sentimentScore = calculateSentimentScore(parsed.sentiment)
+                    const percentage = Math.round(sentimentScore * 100)
+                    messages.push({
+                      type: 'sentiment',
+                      content: parsed.sentiment,
+                      sentimentScore,
+                      percentage
+                    })
+                  }
+
+                  // Trends & Patterns
+                  if (parsed.trends) {
+                    messages.push({
+                      type: 'trends',
+                      content: parsed.trends
+                    })
+                  }
+
+                  // Recommendations
+                  if (parsed.recommendations) {
+                    messages.push({
+                      type: 'recommendations',
+                      content: parsed.recommendations
+                    })
+                  }
+
+                  return (
+                    <>
+                      {messages.map((message, index) => (
+                        <div key={index} className="flex flex-col items-start w-full px-4">
+                          <div className="flex items-start gap-2 w-full justify-start">
+                            <div className="flex-shrink-0">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center shadow-md bg-gradient-to-br from-pink-400 to-purple-500">
+                                <span className="text-white font-bold text-sm">O</span>
+                              </div>
+                            </div>
+                            <div className="px-4 py-3 rounded-lg bg-white text-black chatbot-bubble-shadow text-sm">
+                              {message.type === 'sentiment' && message.sentimentScore !== undefined && (
+                                <div className="mb-4">
+                                  <div className="relative w-full h-6 bg-gray-200 rounded-full overflow-hidden mb-2">
+                                    <div 
+                                      className="absolute inset-0 rounded-full transition-all duration-500"
+                                      style={{
+                                        background: `linear-gradient(to right, 
+                                          ${message.sentimentScore < 0.5 
+                                            ? `rgb(239, 68, 68) ${message.sentimentScore * 100}%, rgb(234, 179, 8) ${(message.sentimentScore + 0.2) * 100}%, rgb(34, 197, 94) 100%`
+                                            : `rgb(239, 68, 68) 0%, rgb(234, 179, 8) ${(message.sentimentScore - 0.2) * 100}%, rgb(34, 197, 94) ${message.sentimentScore * 100}%`
+                                          })`
+                                      }}
+                                    />
+                                    <div 
+                                      className="absolute top-0 bottom-0 w-1 bg-white shadow-lg"
+                                      style={{ left: `${message.sentimentScore * 100}%`, transform: 'translateX(-50%)' }}
+                                    />
+                                  </div>
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-red-600 font-medium">Negative</span>
+                                    <span className="text-gray-600 font-semibold">{message.percentage}% Positive</span>
+                                    <span className="text-green-600 font-medium">Positive</span>
+                                </div>
+                              </div>
+                            )}
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  p: ({ children }) => <p className="mb-2 last:mb-0 text-black text-sm">{children}</p>,
+                                  h1: ({ children }) => <h1 className="text-lg font-bold text-black mb-2">{children}</h1>,
+                                  h2: ({ children }) => <h2 className="text-base font-bold text-black mb-2">{children}</h2>,
+                                  h3: ({ children }) => <h3 className="text-sm font-bold text-black mb-2">{children}</h3>,
+                                  ul: ({ children }) => <ul className="list-disc list-inside mb-2 text-black text-sm">{children}</ul>,
+                                  ol: ({ children }) => <ol className="list-decimal list-inside mb-2 text-black text-sm">{children}</ol>,
+                                  li: ({ children }) => <li className="text-black text-sm">{children}</li>,
+                                  strong: ({ children }) => <strong className="font-bold text-black text-sm">{children}</strong>,
+                                  em: ({ children }) => <em className="italic text-black/80 text-sm">{children}</em>,
+                                }}
+                              >
+                                {message.content}
+                              </ReactMarkdown>
+                          </div>
+                          </div>
+                        </div>
+                      ))}
+                    </>
                         )
                       })()}
-                    </>
-                  )}
                 </div>
               ) : (
                 <div className="text-center py-12">
                   <p className="text-gray-500">No insights available</p>
                 </div>
               )}
-            </div>
           </div>
         </div>
       )}

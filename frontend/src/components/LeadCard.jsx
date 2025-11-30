@@ -6,16 +6,13 @@ import {
   Facebook, 
   Instagram, 
   MessageCircle, 
-  Eye,
-  Clock,
   CheckCircle,
   XCircle,
   AlertCircle,
   Trash2,
   Globe,
   Users,
-  LogIn,
-  Calendar
+  LogIn
 } from 'lucide-react'
 
 const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null, selectionMode = false }) => {
@@ -174,10 +171,10 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
   return (
     <div
       onClick={handleCardClick}
-      className={`bg-gradient-to-br from-white ${statusConfig.bgColor} rounded-lg shadow-md overflow-hidden ${selectionMode ? 'cursor-default' : 'cursor-pointer'} border ${statusConfig.borderColor} ${isSelected ? 'ring-2 ring-purple-500' : ''}`}
+      className={`bg-white rounded-lg shadow-md overflow-hidden ${selectionMode ? 'cursor-default' : 'cursor-pointer'} border-2 ${statusConfig.borderColor} ${isSelected ? 'ring-2 ring-purple-500' : ''}`}
     >
-      {/* Header with gradient */}
-      <div className={`bg-gradient-to-r ${statusConfig.color} p-2 text-white`}>
+      {/* Header */}
+      <div className="bg-white p-2 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-1.5 flex-1 min-w-0">
             {selectionMode && (
@@ -186,34 +183,34 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
                 checked={isSelected}
                 onChange={handleCheckboxChange}
                 onClick={(e) => e.stopPropagation()}
-                className="w-4 h-4 rounded border-white/30 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-2 cursor-pointer flex-shrink-0"
+                className="w-4 h-4 rounded border-gray-300 bg-white text-purple-600 focus:ring-purple-500 focus:ring-2 cursor-pointer flex-shrink-0"
               />
             )}
-            <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm flex-shrink-0">
+            <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
               {getPlatformIcon(lead.source_platform)}
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-xs truncate">
+              <h3 className="font-semibold text-xs truncate text-gray-900">
                 {lead.name || 'Unknown Lead'}
               </h3>
-              <div className="flex items-center space-x-0.5 text-[10px] opacity-90">
+              <div className="flex items-center space-x-0.5 text-[10px] text-gray-600">
                 <span className="capitalize truncate">{lead.source_platform}</span>
                 <span>•</span>
                 <span className="truncate">{formatTimeAgo(lead.created_at)}</span>
               </div>
             </div>
           </div>
-          {!selectionMode && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onClick && onClick(lead)
-            }}
-            className="p-1 bg-white/20 rounded flex-shrink-0 ml-0.5"
-            title="View details"
-          >
-            <Eye className="w-3 h-3" />
-          </button>
+          {!selectionMode && onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(lead)
+              }}
+              className="p-1 bg-gray-100 rounded flex-shrink-0 ml-0.5 hover:bg-gray-200 transition-colors"
+              title="Delete lead"
+            >
+              <Trash2 className="w-3 h-3 text-gray-700" />
+            </button>
           )}
         </div>
       </div>
@@ -226,36 +223,6 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
           </p>
         </div>
       )}
-
-      {/* Footer */}
-      <div className={`px-1.5 py-1.5 ${statusConfig.bgColor} border-t ${statusConfig.borderColor}`}>
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between text-[10px] text-gray-500">
-            <div className="flex items-center flex-1 min-w-0">
-              <Clock className="w-2.5 h-2.5 flex-shrink-0" />
-              <span className="truncate ml-0.5">Created: {formatTimeAgo(lead.created_at)}</span>
-            </div>
-            {onDelete && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDelete(lead)
-                }}
-                className={`p-0.5 rounded transition-colors flex-shrink-0 ml-1 ${statusConfig.textColor} hover:opacity-80`}
-                title="Delete lead"
-              >
-                <Trash2 className="w-2.5 h-2.5" />
-              </button>
-            )}
-          </div>
-          {lead.follow_up_at && (
-            <div className="flex items-center text-[10px] text-gray-600">
-              <Calendar className="w-2.5 h-2.5 flex-shrink-0 mr-0.5" />
-              <span className="truncate">Follow-up: {formatTimeAgo(lead.follow_up_at)}</span>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useRef, useEffect } from 'react'
 import {
   Image,
   X,
@@ -60,8 +60,14 @@ const ContentModal = ({
   const [carouselMenuOpen, setCarouselMenuOpen] = React.useState({})
   const [headerMenuOpen, setHeaderMenuOpen] = React.useState(false)
   const [carouselIndex, setCarouselIndex] = React.useState(0)
+  const [contentExpanded, setContentExpanded] = React.useState(false)
   const menuRef = React.useRef(null)
   const headerMenuRef = React.useRef(null)
+  
+  // Reset content expanded state when content changes
+  React.useEffect(() => {
+    setContentExpanded(false)
+  }, [content?.id])
   
   // Close menu when clicking outside
   React.useEffect(() => {
@@ -151,17 +157,28 @@ const ContentModal = ({
                 </div>
               </div>
             </div>
-            <div className="relative" ref={headerMenuRef}>
+            <div className="flex items-center gap-2">
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  setHeaderMenuOpen(!headerMenuOpen)
+                  onClose()
                 }}
                 className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-lg flex items-center justify-center transition-colors"
-                title="Options"
+                title="Close"
               >
-                <MoreVertical className="w-5 h-5" />
+                <X className="w-5 h-5" />
               </button>
+              <div className="relative" ref={headerMenuRef}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setHeaderMenuOpen(!headerMenuOpen)
+                  }}
+                  className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-lg flex items-center justify-center transition-colors"
+                  title="Options"
+                >
+                  <MoreVertical className="w-5 h-5" />
+                </button>
               
               {/* Header Dropdown Menu */}
               {headerMenuOpen && (
@@ -671,9 +688,37 @@ const ContentModal = ({
                             {content.title && (
                               <h5 className="font-semibold text-gray-900 mb-2 text-base">{content.title}</h5>
                             )}
-                            {content.content && (
-                              <div className="text-sm">{cleanContentText(content.content)}</div>
-                            )}
+                            {content.content && (() => {
+                              const contentText = cleanContentText(content.content)
+                              const trimmedText = contentText.trim()
+                              // Show expand/collapse if content has substantial length
+                              const shouldShowExpand = trimmedText.length > 200
+                              
+                              return (
+                                <div className="relative">
+                                  <div 
+                                    className="text-sm"
+                                    style={!contentExpanded && shouldShowExpand ? { 
+                                      display: '-webkit-box',
+                                      WebkitLineClamp: 12,
+                                      WebkitBoxOrient: 'vertical',
+                                      overflow: 'hidden',
+                                      whiteSpace: 'normal'
+                                    } : { whiteSpace: 'pre-wrap' }}
+                                  >
+                                    {contentText}
+                                  </div>
+                                  {shouldShowExpand && (
+                                    <button
+                                      onClick={() => setContentExpanded(!contentExpanded)}
+                                      className="mt-2 text-purple-600 hover:text-purple-800 font-medium text-sm"
+                                    >
+                                      {contentExpanded ? 'Show less' : '...more'}
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })()}
                             {/* Hashtags */}
                             {content.hashtags && content.hashtags.length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-1">
@@ -727,6 +772,7 @@ const ContentModal = ({
           </div>
         </div>
       </div>
+    </div>
     </div>
   )
 }

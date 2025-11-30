@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Header
 from typing import List, Optional, Dict, Any
 import os
 import requests
+import httpx
+import asyncio
 from datetime import datetime, timedelta
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -694,7 +696,7 @@ async def post_to_twitter(
 
 @router.get("/platform-stats")
 async def get_platform_stats(authorization: str = Header(None)):
-    """Get platform-specific stats for connected accounts"""
+    """Get platform-specific stats for connected accounts (parallel processing)"""
     try:
         print("🔍 Platform stats endpoint called")
         
@@ -713,18 +715,24 @@ async def get_platform_stats(authorization: str = Header(None)):
         
         # Get all connections for the user
         connections_response = supabase_admin.table("platform_connections").select("*").eq("user_id", user_id).execute()
-        connections = connections_response.data
+        all_connections = connections_response.data
         
-        print(f"🔗 Found {len(connections)} connections")
+        # Filter to only Instagram and Facebook
+        connections = [
+            conn for conn in all_connections 
+            if conn.get("platform", "").lower() in ["instagram", "facebook"]
+        ]
+        
+        print(f"🔗 Found {len(all_connections)} total connections, {len(connections)} Instagram/Facebook connections")
         
         if not connections:
-            print("❌ No connections found")
+            print("❌ No Instagram or Facebook connections found")
             return {}
         
-        platform_stats = {}
-        
-        for connection in connections:
-            platform = connection.get("platform")
+        # Helper function to fetch stats for a single connection
+        async def fetch_stats_for_connection(connection: dict) -> tuple:
+            """Fetch stats for Instagram or Facebook connection. Returns (platform, stats_dict) or (platform, None) on error."""
+            platform = connection.get("platform", "").lower()
             access_token_encrypted = connection.get("access_token_encrypted")
             page_id = connection.get("page_id")
             
@@ -732,7 +740,7 @@ async def get_platform_stats(authorization: str = Header(None)):
             
             if not access_token_encrypted:
                 print(f"❌ No encrypted access token for {platform}")
-                continue
+                return (platform, None)
                 
             # Decrypt the access token
             try:
@@ -740,117 +748,84 @@ async def get_platform_stats(authorization: str = Header(None)):
                 print(f"🔑 Decrypted access token for {platform}: {access_token[:20]}...")
             except Exception as e:
                 print(f"❌ Failed to decrypt access token for {platform}: {e}")
-                continue
-                
+                return (platform, None)
+            
             try:
-                if platform == "instagram":
-                    # Get Instagram account info
-                    instagram_url = f"https://graph.facebook.com/v18.0/{page_id}"
-                    params = {
-                        "fields": "followers_count,media_count",
-                        "access_token": access_token
-                    }
-                    
-                    print(f"📸 Fetching Instagram stats from: {instagram_url}")
-                    response = requests.get(instagram_url, params=params)
-                    print(f"📸 Instagram API response: {response.status_code}")
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        print(f"📸 Instagram data: {data}")
-                        platform_stats[platform] = {
-                            "followers_count": data.get("followers_count", 0),
-                            "media_count": data.get("media_count", 0)
+                async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+                    if platform == "instagram":
+                        # Get Instagram account info
+                        instagram_url = f"https://graph.facebook.com/v18.0/{page_id}"
+                        params = {
+                            "fields": "followers_count,media_count",
+                            "access_token": access_token
                         }
+                        
+                        print(f"📸 Fetching Instagram stats from: {instagram_url}")
+                        response = await client.get(instagram_url, params=params)
+                        print(f"📸 Instagram API response: {response.status_code}")
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            print(f"📸 Instagram data: {data}")
+                            return (platform, {
+                                "followers_count": data.get("followers_count", 0),
+                                "media_count": data.get("media_count", 0)
+                            })
+                        else:
+                            print(f"❌ Instagram API error: {response.text}")
+                            return (platform, None)
+                    
+                    elif platform == "facebook":
+                        # Get Facebook page info
+                        facebook_url = f"https://graph.facebook.com/v18.0/{page_id}"
+                        params = {
+                            "fields": "fan_count,name",
+                            "access_token": access_token
+                        }
+                        
+                        print(f"📘 Fetching Facebook stats from: {facebook_url}")
+                        response = await client.get(facebook_url, params=params)
+                        print(f"📘 Facebook API response: {response.status_code}")
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            print(f"📘 Facebook data: {data}")
+                            return (platform, {
+                                "fan_count": data.get("fan_count", 0),
+                                "page_name": data.get("name", "")
+                            })
+                        else:
+                            print(f"❌ Facebook API error: {response.text}")
+                            return (platform, None)
                     else:
-                        print(f"❌ Instagram API error: {response.text}")
-                
-                elif platform == "facebook":
-                    # Get Facebook page info
-                    facebook_url = f"https://graph.facebook.com/v18.0/{page_id}"
-                    params = {
-                        "fields": "fan_count,name",
-                        "access_token": access_token
-                    }
-                    
-                    print(f"📘 Fetching Facebook stats from: {facebook_url}")
-                    response = requests.get(facebook_url, params=params)
-                    print(f"📘 Facebook API response: {response.status_code}")
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        print(f"📘 Facebook data: {data}")
-                        platform_stats[platform] = {
-                            "fan_count": data.get("fan_count", 0),
-                            "page_name": data.get("name", "")
-                        }
-                    else:
-                        print(f"❌ Facebook API error: {response.text}")
-                
-                elif platform == "linkedin":
-                    # Get LinkedIn organization info
-                    linkedin_url = "https://api.linkedin.com/v2/organizationalEntityAcls"
-                    params = {
-                        "q": "roleAssignee",
-                        "role": "ADMINISTRATOR"
-                    }
-                    headers = {
-                        "Authorization": f"Bearer {access_token}",
-                        "LinkedIn-Version": "202301"
-                    }
-                    
-                    response = requests.get(linkedin_url, params=params, headers=headers)
-                    if response.status_code == 200:
-                        data = response.json()
-                        # For now, we'll return basic info - LinkedIn doesn't provide follower counts easily
-                        platform_stats[platform] = {
-                            "follower_count": 0,  # Would need additional API calls
-                            "organizations": len(data.get("elements", []))
-                        }
-                
-                elif platform == "twitter":
-                    # Get Twitter user info
-                    twitter_url = "https://api.twitter.com/2/users/me"
-                    headers = {
-                        "Authorization": f"Bearer {access_token}"
-                    }
-                    params = {
-                        "user.fields": "public_metrics"
-                    }
-                    
-                    response = requests.get(twitter_url, headers=headers, params=params)
-                    if response.status_code == 200:
-                        data = response.json()
-                        metrics = data.get("data", {}).get("public_metrics", {})
-                        platform_stats[platform] = {
-                            "followers_count": metrics.get("followers_count", 0),
-                            "following_count": metrics.get("following_count", 0),
-                            "tweet_count": metrics.get("tweet_count", 0)
-                        }
-                
-                elif platform == "youtube":
-                    # Get YouTube channel info
-                    youtube_url = "https://www.googleapis.com/youtube/v3/channels"
-                    params = {
-                        "part": "statistics",
-                        "mine": "true",
-                        "access_token": access_token
-                    }
-                    
-                    response = requests.get(youtube_url, params=params)
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data.get("items"):
-                            stats = data["items"][0].get("statistics", {})
-                            platform_stats[platform] = {
-                                "subscriber_count": int(stats.get("subscriberCount", 0)),
-                                "video_count": int(stats.get("videoCount", 0)),
-                                "view_count": int(stats.get("viewCount", 0))
-                            }
+                        print(f"⚠️ Unsupported platform for stats (should not reach here): {platform}")
+                        return (platform, None)
                             
             except Exception as e:
                 print(f"❌ Error fetching stats for {platform}: {e}")
+                return (platform, None)
+        
+        # Process all connections in parallel
+        print(f"🚀 Starting parallel stats fetch for {len(connections)} connections...")
+        start_time = datetime.now()
+        
+        tasks = [fetch_stats_for_connection(conn) for conn in connections]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        elapsed_time = (datetime.now() - start_time).total_seconds()
+        print(f"✅ Parallel stats fetch completed in {elapsed_time:.2f} seconds")
+        
+        # Aggregate results
+        platform_stats = {}
+        for result in results:
+            # Handle exceptions
+            if isinstance(result, Exception):
+                print(f"❌ Stats task failed with exception: {result}")
                 continue
+            
+            platform, stats = result
+            if stats:
+                platform_stats[platform] = stats
         
         print(f"📊 Final platform stats: {platform_stats}")
         return platform_stats
