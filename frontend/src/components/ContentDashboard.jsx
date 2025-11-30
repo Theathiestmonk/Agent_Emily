@@ -3195,7 +3195,7 @@ const ContentDashboard = () => {
                     <div 
                       key={content.id} 
                       onClick={() => handleViewContent(content)}
-                      className={`${theme.bg} rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg w-full flex flex-col shadow-md border cursor-pointer ${
+                      className={`${theme.bg} rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg hover:scale-105 w-full flex flex-col shadow-md border cursor-pointer ${
                         isApproved 
                           ? 'border-green-500' 
                           : 'border-gray-200'
