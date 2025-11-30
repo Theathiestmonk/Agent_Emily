@@ -110,22 +110,22 @@ async def get_public_blogs(
     limit: int = Query(50, description="Number of blogs to return"),
     offset: int = Query(0, description="Number of blogs to skip")
 ):
-    """Get public blogs - no authentication required"""
+    """Get public blogs from main ATSNAI.com website - no authentication required"""
     try:
-        logger.info(f"Fetching public blogs with status: {status}")
+        logger.info(f"Fetching public blogs from main_site_blogs with status: {status}")
         
-        # Get published blogs for public display
+        # Get published blogs from main_site_blogs table for public display
         # Normalize status to lowercase for consistency
         status_filter = (status or "published").lower()
         
-        query = supabase_admin.table("blog_posts").select("*")
+        query = supabase_admin.table("main_site_blogs").select("*")
         query = query.eq("status", status_filter)
         query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
         
         response = query.execute()
         blogs = response.data if response.data else []
         
-        logger.info(f"Found {len(blogs)} public blogs with status '{status_filter}'")
+        logger.info(f"Found {len(blogs)} public blogs from main_site_blogs with status '{status_filter}'")
         logger.info(f"Sample blog statuses: {[b.get('status') for b in blogs[:3]]}")
         return {"blogs": blogs, "total": len(blogs)}
         
@@ -138,17 +138,21 @@ async def get_all_blogs_public(
     limit: int = Query(100, description="Number of blogs to return"),
     offset: int = Query(0, description="Number of blogs to skip")
 ):
-    """Get all blogs (published and draft) - public endpoint for admin page"""
+    """Get all main ATSNAI website blogs (published and draft) - public endpoint for admin page.
+    Returns blogs from main_site_blogs table (main ATSNAI.com website blogs).
+    Emily user blogs are stored in blog_posts table and are excluded."""
     try:
-        logger.info(f"Fetching all blogs (admin view)")
+        logger.info(f"Fetching all main site blogs from main_site_blogs table (admin view)")
         
-        query = supabase_admin.table("blog_posts").select("*")
+        # Query main_site_blogs table (separate table for main ATSNAI.com website blogs)
+        # Emily user blogs are stored in blog_posts table and are not included here
+        query = supabase_admin.table("main_site_blogs").select("*")
         query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
         
         response = query.execute()
         blogs = response.data if response.data else []
         
-        logger.info(f"Found {len(blogs)} total blogs")
+        logger.info(f"Found {len(blogs)} main site blogs from main_site_blogs table")
         return {"blogs": blogs, "total": len(blogs)}
         
     except Exception as e:
@@ -250,9 +254,9 @@ async def get_public_blog_by_slug_query(
         
         logger.info(f"Fetching public blog - received slug: '{slug}', decoded: '{decoded_slug}'")
         
-        # Get all published blogs to find the matching one
-        all_published = supabase_admin.table("blog_posts").select("id, slug, title, status").eq("status", "published").execute()
-        logger.info(f"Total published blogs: {len(all_published.data or [])}")
+        # Get all published blogs from main_site_blogs table to find the matching one
+        all_published = supabase_admin.table("main_site_blogs").select("id, slug, title, status").eq("status", "published").execute()
+        logger.info(f"Total published blogs in main_site_blogs: {len(all_published.data or [])}")
         
         matching_blog = None
         
@@ -294,8 +298,8 @@ async def get_public_blog_by_slug_query(
             logger.warning(f"Available slugs: {[b.get('slug') for b in (all_published.data or [])]}")
             raise HTTPException(status_code=404, detail=f"Blog not found. Searched for: {decoded_slug}")
         
-        # Fetch full blog data
-        response = supabase_admin.table("blog_posts").select("*").eq("id", matching_blog['id']).execute()
+        # Fetch full blog data from main_site_blogs table
+        response = supabase_admin.table("main_site_blogs").select("*").eq("id", matching_blog['id']).execute()
         
         if not response.data or len(response.data) == 0:
             logger.error(f"Failed to fetch full blog data for ID: {matching_blog['id']}")
@@ -368,11 +372,13 @@ async def create_blog(
             slug = blog_data.get('slug')
         
         # Ensure slug is unique by appending timestamp if needed
-        existing_slug_check = supabase_admin.table("blog_posts").select("id").eq("slug", slug).execute()
-        if existing_slug_check.data:
+        # Check in both main_site_blogs and blog_posts to ensure uniqueness across both tables
+        existing_slug_check_main = supabase_admin.table("main_site_blogs").select("id").eq("slug", slug).execute()
+        existing_slug_check_user = supabase_admin.table("blog_posts").select("id").eq("slug", slug).execute()
+        if existing_slug_check_main.data or existing_slug_check_user.data:
             slug = f"{slug}-{int(datetime.now().timestamp())}"
         
-        # Prepare blog data - make author_id optional if no user
+        # Prepare blog data for main_site_blogs table
         # Get metadata and add featured_image to it if column doesn't exist
         metadata = blog_data.get('metadata', {})
         featured_image = blog_data.get('featured_image')
@@ -381,6 +387,7 @@ async def create_blog(
         if featured_image:
             metadata['featured_image'] = featured_image
         
+        # Create blog data for main_site_blogs table (no author_id, wordpress_site_id, or wordpress_post_id)
         new_blog = {
             "id": str(uuid.uuid4()),
             "title": title,
@@ -392,10 +399,8 @@ async def create_blog(
             "format": blog_data.get('format', 'standard'),
             "categories": blog_data.get('categories', []),
             "tags": blog_data.get('tags', []),
-            "wordpress_site_id": blog_data.get('wordpress_site_id'),
             "scheduled_at": blog_data.get('scheduled_at'),
             "published_at": blog_data.get('published_at'),
-            "wordpress_post_id": blog_data.get('wordpress_post_id'),
             "meta_description": blog_data.get('meta_description', ''),
             "meta_keywords": blog_data.get('meta_keywords', []),
             "reading_time": blog_data.get('reading_time', 0),
@@ -406,57 +411,22 @@ async def create_blog(
             "metadata": metadata
         }
         
-        # Only include featured_image if column exists (try-catch will handle if it doesn't)
-        # For now, we'll store it in metadata to avoid schema issues
+        # Add featured_image if provided (column exists in main_site_blogs schema)
+        if featured_image:
+            new_blog["featured_image"] = featured_image
         
-        # Only set author_id if user is authenticated - make it optional for public blogs
-        # This avoids foreign key constraint issues when no user is logged in
-        if user_id:
-            new_blog["author_id"] = user_id
-            logger.info(f"Creating blog for authenticated user: {user_id}")
-        else:
-            # Don't set author_id - let database handle it as NULL if column allows it
-            # If column requires it, we'll handle the error gracefully
-            logger.info("Creating blog without author_id (public blog)")
-            # Try to insert without author_id first
-            try:
-                # Remove author_id from new_blog if it exists
-                if "author_id" in new_blog:
-                    del new_blog["author_id"]
-            except:
-                pass
-        
-        # Insert blog into database
+        # Insert blog into main_site_blogs table (main ATSNAI.com website blogs)
+        logger.info("Creating main site blog in main_site_blogs table")
         try:
-            response = supabase_admin.table("blog_posts").insert(new_blog).execute()
+            response = supabase_admin.table("main_site_blogs").insert(new_blog).execute()
             
             if not response.data:
                 raise HTTPException(status_code=500, detail="Failed to create blog")
             
-            logger.info(f"Blog created: {new_blog['id']}")
+            logger.info(f"Main site blog created: {new_blog['id']}")
             return {"message": "Blog created successfully", "blog": response.data[0]}
         except Exception as insert_error:
-            # If insert fails due to author_id constraint, try with a valid system user
-            error_str = str(insert_error)
-            if "author_id" in error_str.lower() or "foreign key" in error_str.lower():
-                logger.warning(f"Insert failed due to author_id constraint: {insert_error}")
-                logger.info("Attempting to create blog with system user fallback")
-                
-                # Try to get any existing user from the database as fallback
-                try:
-                    # Get first user from profiles or users table
-                    user_fallback = supabase_admin.table("profiles").select("id").limit(1).execute()
-                    if user_fallback.data and len(user_fallback.data) > 0:
-                        new_blog["author_id"] = user_fallback.data[0]["id"]
-                        logger.info(f"Using fallback user: {new_blog['author_id']}")
-                        response = supabase_admin.table("blog_posts").insert(new_blog).execute()
-                        if response.data:
-                            logger.info(f"Blog created with fallback user: {new_blog['id']}")
-                            return {"message": "Blog created successfully", "blog": response.data[0]}
-                except Exception as fallback_error:
-                    logger.error(f"Fallback user approach also failed: {fallback_error}")
-            
-            # Re-raise the original error if we couldn't fix it
+            logger.error(f"Error creating main site blog: {insert_error}")
             raise HTTPException(status_code=500, detail=f"Failed to create blog: {str(insert_error)}")
         
     except HTTPException:
@@ -509,8 +479,8 @@ async def generate_blog_image(blog_id: str):
         
         logger.info(f"Generating image for blog {blog_id}")
         
-        # Get blog data
-        blog_response = supabase_admin.table("blog_posts").select("*").eq("id", blog_id).execute()
+        # Get blog data from main_site_blogs table
+        blog_response = supabase_admin.table("main_site_blogs").select("*").eq("id", blog_id).execute()
         
         if not blog_response.data:
             raise HTTPException(status_code=404, detail="Blog not found")
@@ -631,17 +601,23 @@ Requirements:
         image_url_response = supabase_admin.storage.from_(bucket_name).get_public_url(file_name)
         image_url = image_url_response
         
-        # Update blog with featured image
+        # Update blog with featured image in main_site_blogs table
         metadata = blog.get('metadata', {})
         if not isinstance(metadata, dict):
             metadata = {}
         metadata['featured_image'] = image_url
         metadata['image_generated_at'] = datetime.now().isoformat()
         
-        update_response = supabase_admin.table("blog_posts").update({
+        # Update featured_image column if it exists, otherwise store in metadata
+        update_data = {
             "metadata": metadata,
             "updated_at": datetime.now().isoformat()
-        }).eq("id", blog_id).execute()
+        }
+        # Try to set featured_image column if it exists
+        if 'featured_image' in blog or True:  # Always try to set it
+            update_data["featured_image"] = image_url
+        
+        update_response = supabase_admin.table("main_site_blogs").update(update_data).eq("id", blog_id).execute()
         
         logger.info(f"Image generated and saved for blog {blog_id}: {image_url}")
         
@@ -665,8 +641,8 @@ async def upload_blog_image(
     """Upload a manual image for a blog post - uses same bucket and path format as generated images"""
     logger.info(f"Route hit: /api/blogs/public/{blog_id}/upload-image")
     try:
-        # Get blog data to verify it exists
-        blog_response = supabase_admin.table("blog_posts").select("*").eq("id", blog_id).execute()
+        # Get blog data from main_site_blogs table to verify it exists
+        blog_response = supabase_admin.table("main_site_blogs").select("*").eq("id", blog_id).execute()
         
         if not blog_response.data:
             raise HTTPException(status_code=404, detail="Blog not found")
@@ -749,17 +725,23 @@ async def upload_blog_image(
         
         logger.info(f"Image uploaded successfully: {image_url}")
         
-        # Update blog with featured image (same format as generated images)
+        # Update blog with featured image in main_site_blogs table
         metadata = blog.get('metadata', {})
         if not isinstance(metadata, dict):
             metadata = {}
         metadata['featured_image'] = image_url
         metadata['image_uploaded_at'] = datetime.now().isoformat()
         
-        update_response = supabase_admin.table("blog_posts").update({
+        # Update featured_image column if it exists, otherwise store in metadata
+        update_data = {
             "metadata": metadata,
             "updated_at": datetime.now().isoformat()
-        }).eq("id", blog_id).execute()
+        }
+        # Try to set featured_image column if it exists
+        if 'featured_image' in blog or True:  # Always try to set it
+            update_data["featured_image"] = image_url
+        
+        update_response = supabase_admin.table("main_site_blogs").update(update_data).eq("id", blog_id).execute()
         
         logger.info(f"Image uploaded and saved for blog {blog_id}: {image_url}")
         
@@ -784,8 +766,8 @@ async def update_blog_public(
     try:
         logger.info(f"Updating blog {blog_id} (public endpoint)")
         
-        # Check if blog exists
-        existing_response = supabase_admin.table("blog_posts").select("id").eq("id", blog_id).execute()
+        # Check if blog exists in main_site_blogs table
+        existing_response = supabase_admin.table("main_site_blogs").select("id").eq("id", blog_id).execute()
         
         if not existing_response.data:
             raise HTTPException(status_code=404, detail="Blog not found")
@@ -821,8 +803,14 @@ async def update_blog_public(
         update_data.update(blog_data)
         update_data["updated_at"] = datetime.now().isoformat()
         
-        # Update blog
-        response = supabase_admin.table("blog_posts").update(update_data).eq("id", blog_id).execute()
+        # Remove fields that don't exist in main_site_blogs table
+        fields_to_remove = ['author_id', 'wordpress_site_id', 'wordpress_post_id']
+        for field in fields_to_remove:
+            if field in update_data:
+                del update_data[field]
+        
+        # Update blog in main_site_blogs table
+        response = supabase_admin.table("main_site_blogs").update(update_data).eq("id", blog_id).execute()
         
         if not response.data:
             raise HTTPException(status_code=500, detail="Failed to update blog")
@@ -880,16 +868,16 @@ async def delete_blog_public(
     try:
         logger.info(f"Deleting blog {blog_id} (public endpoint)")
         
-        # Get blog details
-        blog_response = supabase_admin.table("blog_posts").select("*").eq("id", blog_id).execute()
+        # Get blog details from main_site_blogs table
+        blog_response = supabase_admin.table("main_site_blogs").select("*").eq("id", blog_id).execute()
         
         if not blog_response.data:
             raise HTTPException(status_code=404, detail="Blog not found")
         
         blog = blog_response.data[0]
         
-        # Delete from Supabase
-        delete_response = supabase_admin.table("blog_posts").delete().eq("id", blog_id).execute()
+        # Delete from main_site_blogs table
+        delete_response = supabase_admin.table("main_site_blogs").delete().eq("id", blog_id).execute()
         
         logger.info(f"Blog deleted: {blog_id}")
         return {"message": "Blog deleted successfully"}

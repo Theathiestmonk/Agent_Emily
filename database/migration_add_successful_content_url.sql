@@ -43,3 +43,7 @@ COMMENT ON COLUMN profiles.successful_content_url IS 'URL of uploaded video, pho
 
 
 
+
+
+
+
