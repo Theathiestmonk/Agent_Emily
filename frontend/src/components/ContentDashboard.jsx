@@ -16,6 +16,7 @@ import CustomContentChatbot from './CustomContentChatbot'
 import ChatbotImageEditor from './ChatbotImageEditor'
 import MediaGenerationCelebration from './MediaGenerationCelebration'
 import ContentModal from './ContentModal'
+import { fetchAllConnections } from '../services/fetchConnections'
 
 const API_BASE_URL = (() => {
   // Check for environment variable first
@@ -157,12 +158,57 @@ const ContentDashboard = () => {
   const [celebrationData, setCelebrationData] = useState(null) // Celebration data (imageUrl, generationTime)
   const [itemsToShow, setItemsToShow] = useState(4) // Number of content items to show initially (one row = 4 columns)
   const [carouselIndices, setCarouselIndices] = useState({}) // Track current slide index for each carousel post
+  const [socialMediaConnections, setSocialMediaConnections] = useState([]) // Track connected social media accounts
 
 
   useEffect(() => {
     fetchData()
     fetchAllContent()
+    fetchConnections()
   }, [])
+
+  // Fetch social media connections
+  const fetchConnections = async () => {
+    try {
+      const connections = await fetchAllConnections()
+      setSocialMediaConnections(connections || [])
+    } catch (error) {
+      console.error('Error fetching connections:', error)
+      setSocialMediaConnections([])
+    }
+  }
+
+  // Check if a platform has a connected account
+  const isPlatformConnected = (platform) => {
+    if (!platform) return false
+    
+    const normalizedPlatform = platform.toLowerCase().trim()
+    
+    // Check if any connection matches this platform
+    return socialMediaConnections.some(conn => {
+      const connPlatform = conn.platform?.toLowerCase().trim() || ''
+      
+      // Direct match
+      if (connPlatform === normalizedPlatform) {
+        return conn.is_active !== false && (conn.connection_status === 'active' || !conn.connection_status)
+      }
+      
+      // Special cases for platform name variations
+      if (normalizedPlatform === 'twitter' || normalizedPlatform === 'x') {
+        return (connPlatform === 'twitter' || connPlatform === 'x') && 
+               conn.is_active !== false && 
+               (conn.connection_status === 'active' || !conn.connection_status)
+      }
+      
+      if (normalizedPlatform === 'youtube') {
+        return connPlatform === 'youtube' && 
+               conn.is_active !== false && 
+               (conn.connection_status === 'active' || !conn.connection_status)
+      }
+      
+      return false
+    })
+  }
 
   // Close status dropdown when clicking outside
   useEffect(() => {
@@ -3487,6 +3533,12 @@ const ContentDashboard = () => {
                                     e.stopPropagation()
                                     e.preventDefault()
                                     
+                                    // Check if platform is connected
+                                    if (!isPlatformConnected(content.platform)) {
+                                      showError('Account Not Connected', `Please connect your ${content.platform} account in Settings > Connections before publishing.`)
+                                      return
+                                    }
+                                    
                                     // Prevent duplicate clicks
                                     if (postingContent.has(content.id)) {
                                       console.log('⚠️ Already posting, ignoring click')
@@ -3505,9 +3557,9 @@ const ContentDashboard = () => {
                                   }}
                                 onMouseEnter={() => setHoveredButton(`${content.id}-post`)}
                                   onMouseLeave={() => setHoveredButton(null)}
-                                  disabled={postingContent.has(content.id) || content.status?.toLowerCase() === 'published'}
+                                  disabled={postingContent.has(content.id) || content.status?.toLowerCase() === 'published' || !isPlatformConnected(content.platform)}
                                 className={`w-8 h-8 transition-all duration-200 flex items-center justify-center ${
-                                  postingContent.has(content.id)
+                                  postingContent.has(content.id) || !isPlatformConnected(content.platform)
                                     ? 'cursor-not-allowed opacity-50'
                                     : 'hover:opacity-70'
                                 }`}
@@ -3515,12 +3567,16 @@ const ContentDashboard = () => {
                                   {postingContent.has(content.id) ? (
                                   <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
                                   ) : (
-                                  <Send className="w-4 h-4 text-gray-600" />
+                                  <Send className={`w-4 h-4 ${!isPlatformConnected(content.platform) ? 'text-gray-400' : 'text-gray-600'}`} />
                                   )}
                                 </button>
                               {hoveredButton === `${content.id}-post` && (
                                   <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">
-                                  {postingContent.has(content.id) ? 'Publishing...' : `Post to ${content.platform}`}
+                                  {postingContent.has(content.id) 
+                                    ? 'Publishing...' 
+                                    : !isPlatformConnected(content.platform)
+                                    ? `${content.platform} account not connected`
+                                    : `Post to ${content.platform}`}
                                     <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                                   </div>
                                 )}
