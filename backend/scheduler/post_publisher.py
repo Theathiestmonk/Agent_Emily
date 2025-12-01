@@ -14,6 +14,7 @@ import httpx
 import os
 from cryptography.fernet import Fernet
 from collections import defaultdict
+import pytz
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -60,6 +61,77 @@ class PostPublisher:
                 return encrypted_token
             raise
     
+    def get_user_timezone(self, user_id: str) -> str:
+        """Get user's timezone from profile or default to UTC"""
+        try:
+            response = self.supabase.table("profiles").select("timezone").eq("id", user_id).execute()
+            if response.data and response.data[0].get("timezone"):
+                return response.data[0]["timezone"]
+            return "UTC"
+        except Exception as e:
+            logger.warning(f"Error getting timezone for user {user_id}: {e}, defaulting to UTC")
+            return "UTC"
+    
+    def parse_scheduled_time_with_timezone(self, scheduled_at: str, user_timezone: str) -> datetime:
+        """Parse scheduled time string and convert from user timezone to UTC"""
+        try:
+            # Handle case where scheduled_at might have timezone info
+            if '+' in scheduled_at or scheduled_at.endswith('Z'):
+                # Has timezone info, parse it
+                scheduled_datetime = datetime.fromisoformat(scheduled_at.replace('Z', '+00:00'))
+                if scheduled_datetime.tzinfo:
+                    # Already timezone-aware, convert to UTC
+                    return scheduled_datetime.astimezone(pytz.UTC)
+            
+            # Parse as naive datetime (assumed to be in user's timezone)
+            # Remove 'Z' if present
+            scheduled_str = scheduled_at.replace('Z', '')
+            # Remove timezone offset if present (e.g., +05:30)
+            if '+' in scheduled_str:
+                scheduled_str = scheduled_str.split('+')[0]
+            elif '-' in scheduled_str and scheduled_str.count('-') > 2:
+                # Has timezone offset like -05:00
+                parts = scheduled_str.rsplit('-', 1)
+                if len(parts) == 2 and ':' in parts[1]:
+                    scheduled_str = parts[0]
+            
+            # Parse as naive datetime
+            if 'T' in scheduled_str:
+                scheduled_datetime = datetime.fromisoformat(scheduled_str)
+            else:
+                # If only date, assume midnight
+                scheduled_datetime = datetime.fromisoformat(scheduled_str + "T00:00:00")
+            
+            # Get user's timezone
+            try:
+                user_tz = pytz.timezone(user_timezone)
+            except pytz.exceptions.UnknownTimeZoneError:
+                logger.warning(f"Unknown timezone {user_timezone}, defaulting to UTC")
+                user_tz = pytz.UTC
+            
+            # Localize to user's timezone (treat as if it's in user's timezone)
+            if scheduled_datetime.tzinfo is None:
+                scheduled_datetime = user_tz.localize(scheduled_datetime)
+            
+            # Convert to UTC
+            scheduled_datetime_utc = scheduled_datetime.astimezone(pytz.UTC)
+            
+            # Return as timezone-aware UTC datetime
+            return scheduled_datetime_utc
+            
+        except Exception as e:
+            logger.error(f"Error parsing scheduled time {scheduled_at} with timezone {user_timezone}: {e}")
+            # Fallback: parse as UTC
+            try:
+                scheduled_datetime = datetime.fromisoformat(scheduled_at.replace('Z', '+00:00'))
+                if scheduled_datetime.tzinfo:
+                    return scheduled_datetime.astimezone(pytz.UTC)
+                return pytz.UTC.localize(scheduled_datetime)
+            except:
+                # Last resort: return current time + 1 hour
+                logger.error(f"Failed to parse scheduled time, using fallback")
+                return datetime.now(pytz.UTC) + timedelta(hours=1)
+    
     async def start(self):
         """Start the post publisher scheduler"""
         if self.is_running:
@@ -84,7 +156,7 @@ class PostPublisher:
     async def _load_existing_scheduled_posts(self):
         """Load existing scheduled posts from database on startup"""
         try:
-            now = datetime.now()
+            now_utc = datetime.now(pytz.UTC)
             # Get all scheduled posts
             response = self.supabase.table("content_posts").select(
                 "*, content_campaigns(user_id)"
@@ -100,6 +172,20 @@ class PostPublisher:
                     
                     if not scheduled_date:
                         continue
+                    
+                    # Get user_id to fetch timezone
+                    user_id = None
+                    campaign_data = post.get("content_campaigns")
+                    if isinstance(campaign_data, dict):
+                        user_id = campaign_data.get("user_id")
+                    elif isinstance(campaign_data, list) and len(campaign_data) > 0:
+                        user_id = campaign_data[0].get("user_id")
+                    
+                    if not user_id:
+                        logger.warning(f"No user_id found for post {post.get('id')}, using UTC")
+                        user_timezone = "UTC"
+                    else:
+                        user_timezone = self.get_user_timezone(user_id)
                     
                     # Combine date and time
                     if isinstance(scheduled_date, str):
@@ -118,11 +204,22 @@ class PostPublisher:
                     else:
                         scheduled_time_obj = scheduled_time
                     
-                    scheduled_datetime = datetime.combine(scheduled_date_obj, scheduled_time_obj)
+                    # Combine into datetime in user's timezone
+                    scheduled_datetime_naive = datetime.combine(scheduled_date_obj, scheduled_time_obj)
+                    
+                    # Localize to user's timezone and convert to UTC
+                    try:
+                        user_tz = pytz.timezone(user_timezone)
+                    except pytz.exceptions.UnknownTimeZoneError:
+                        logger.warning(f"Unknown timezone {user_timezone}, using UTC")
+                        user_tz = pytz.UTC
+                    
+                    scheduled_datetime_user_tz = user_tz.localize(scheduled_datetime_naive)
+                    scheduled_datetime_utc = scheduled_datetime_user_tz.astimezone(pytz.UTC)
                     
                     # Only schedule future posts
-                    if scheduled_datetime > now:
-                        await self.schedule_post(post, scheduled_datetime)
+                    if scheduled_datetime_utc > now_utc:
+                        await self.schedule_post(post, scheduled_datetime_utc)
                 except Exception as e:
                     logger.error(f"Error loading scheduled post {post.get('id')}: {e}")
         except Exception as e:
@@ -135,13 +232,16 @@ class PostPublisher:
             if post_id in self.scheduled_tasks:
                 self.scheduled_tasks[post_id].cancel()
             
-            # Parse scheduled time
-            scheduled_datetime = datetime.fromisoformat(scheduled_at.replace('Z', '+00:00'))
-            if scheduled_datetime.tzinfo:
-                scheduled_datetime = scheduled_datetime.replace(tzinfo=None)
+            # Get user's timezone
+            user_timezone = self.get_user_timezone(user_id)
             
-            now = datetime.now()
-            if scheduled_datetime <= now:
+            # Parse scheduled time and convert from user timezone to UTC
+            logger.debug(f"Parsing scheduled_at: '{scheduled_at}' for user {user_id} in timezone {user_timezone}")
+            scheduled_datetime_utc = self.parse_scheduled_time_with_timezone(scheduled_at, user_timezone)
+            logger.debug(f"Converted to UTC: {scheduled_datetime_utc}")
+            
+            now_utc = datetime.now(pytz.UTC)
+            if scheduled_datetime_utc <= now_utc:
                 # If already past, publish immediately
                 logger.info(f"Post {post_id} scheduled time has passed, publishing immediately")
                 await self._publish_post_by_id(post_id)
@@ -157,14 +257,21 @@ class PostPublisher:
                 return
             
             post = response.data[0]
-            await self.schedule_post(post, scheduled_datetime)
-            logger.info(f"Registered scheduled post {post_id} for {scheduled_datetime}")
+            await self.schedule_post(post, scheduled_datetime_utc)
+            
+            # Convert back to user's timezone for logging
+            try:
+                user_tz = pytz.timezone(user_timezone)
+                scheduled_datetime_user_tz = scheduled_datetime_utc.astimezone(user_tz)
+                logger.info(f"Registered scheduled post {post_id} for {scheduled_datetime_user_tz.strftime('%Y-%m-%d %H:%M:%S')} {user_timezone} ({scheduled_datetime_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC)")
+            except:
+                logger.info(f"Registered scheduled post {post_id} for {scheduled_datetime_utc} UTC (user timezone: {user_timezone})")
             
         except Exception as e:
             logger.error(f"Error registering scheduled post {post_id}: {e}")
     
     async def schedule_post(self, post: Dict[str, Any], scheduled_datetime: datetime):
-        """Schedule a post to be published at exact time"""
+        """Schedule a post to be published at exact time (datetime should be UTC timezone-aware)"""
         post_id = post.get("id")
         if not post_id:
             return
@@ -189,9 +296,17 @@ class PostPublisher:
         # Store post data
         self.post_data_cache[post_id] = post
         
-        # Calculate delay
-        now = datetime.now()
-        delay = (scheduled_datetime - now).total_seconds()
+        # Ensure scheduled_datetime is timezone-aware UTC
+        if scheduled_datetime.tzinfo is None:
+            # If naive, assume it's already UTC (for backward compatibility)
+            scheduled_datetime = pytz.UTC.localize(scheduled_datetime)
+        else:
+            # Convert to UTC if not already
+            scheduled_datetime = scheduled_datetime.astimezone(pytz.UTC)
+        
+        # Calculate delay using UTC
+        now_utc = datetime.now(pytz.UTC)
+        delay = (scheduled_datetime - now_utc).total_seconds()
         
         if delay <= 0:
             # Publish immediately
@@ -210,7 +325,25 @@ class PostPublisher:
         
         task = asyncio.create_task(publish_at_time())
         self.scheduled_tasks[post_id] = task
-        logger.info(f"Scheduled post {post_id} to publish in {delay:.1f} seconds ({scheduled_datetime})")
+        
+        # Get user_id to show local time in log
+        user_id = None
+        campaign_data = post.get("content_campaigns")
+        if isinstance(campaign_data, dict):
+            user_id = campaign_data.get("user_id")
+        elif isinstance(campaign_data, list) and len(campaign_data) > 0:
+            user_id = campaign_data[0].get("user_id")
+        
+        if user_id:
+            try:
+                user_timezone = self.get_user_timezone(user_id)
+                user_tz = pytz.timezone(user_timezone)
+                scheduled_datetime_user_tz = scheduled_datetime.astimezone(user_tz)
+                logger.info(f"Scheduled post {post_id} to publish in {delay:.1f} seconds ({scheduled_datetime_user_tz.strftime('%Y-%m-%d %H:%M:%S')} {user_timezone} / {scheduled_datetime.strftime('%Y-%m-%d %H:%M:%S')} UTC)")
+            except:
+                logger.info(f"Scheduled post {post_id} to publish in {delay:.1f} seconds ({scheduled_datetime} UTC)")
+        else:
+            logger.info(f"Scheduled post {post_id} to publish in {delay:.1f} seconds ({scheduled_datetime} UTC)")
     
     async def _publish_post_by_id(self, post_id: str):
         """Publish a post by ID"""
@@ -248,7 +381,7 @@ class PostPublisher:
     async def check_and_publish_scheduled_posts(self):
         """Check for scheduled posts that need to be published"""
         try:
-            now = datetime.now()
+            now_utc = datetime.now(pytz.UTC)
             
             # Query for scheduled posts where scheduled_date + scheduled_time <= now
             # We need to combine scheduled_date and scheduled_time into a datetime
@@ -269,6 +402,20 @@ class PostPublisher:
                     if not scheduled_date:
                         continue
                     
+                    # Get user_id to fetch timezone
+                    user_id = None
+                    campaign_data = post.get("content_campaigns")
+                    if isinstance(campaign_data, dict):
+                        user_id = campaign_data.get("user_id")
+                    elif isinstance(campaign_data, list) and len(campaign_data) > 0:
+                        user_id = campaign_data[0].get("user_id")
+                    
+                    if not user_id:
+                        logger.warning(f"No user_id found for post {post.get('id')}, using UTC")
+                        user_timezone = "UTC"
+                    else:
+                        user_timezone = self.get_user_timezone(user_id)
+                    
                     # Combine date and time into datetime
                     if isinstance(scheduled_date, str):
                         scheduled_date_obj = datetime.fromisoformat(scheduled_date).date()
@@ -287,11 +434,21 @@ class PostPublisher:
                     else:
                         scheduled_time_obj = scheduled_time
                     
-                    # Combine into datetime
-                    scheduled_datetime = datetime.combine(scheduled_date_obj, scheduled_time_obj)
+                    # Combine into datetime in user's timezone
+                    scheduled_datetime_naive = datetime.combine(scheduled_date_obj, scheduled_time_obj)
+                    
+                    # Localize to user's timezone and convert to UTC
+                    try:
+                        user_tz = pytz.timezone(user_timezone)
+                    except pytz.exceptions.UnknownTimeZoneError:
+                        logger.warning(f"Unknown timezone {user_timezone}, using UTC")
+                        user_tz = pytz.UTC
+                    
+                    scheduled_datetime_user_tz = user_tz.localize(scheduled_datetime_naive)
+                    scheduled_datetime_utc = scheduled_datetime_user_tz.astimezone(pytz.UTC)
                     
                     # Check if scheduled time has passed
-                    if scheduled_datetime <= now:
+                    if scheduled_datetime_utc <= now_utc:
                         posts_to_publish.append(post)
                         
                 except Exception as e:
