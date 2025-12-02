@@ -973,8 +973,20 @@ const ContentDashboard = () => {
       return false
     })
     .sort((a, b) => {
-      // Sort by scheduled_at in ascending order (earliest dates first)
-      // Content without dates goes to the end
+      // Prioritize scripts (content with video_scripting) and drafts
+      const aIsScript = a.video_scripting && typeof a.video_scripting === 'object'
+      const bIsScript = b.video_scripting && typeof b.video_scripting === 'object'
+      const aIsDraft = a.status?.toLowerCase() === 'draft'
+      const bIsDraft = b.status?.toLowerCase() === 'draft'
+      
+      // Scripts first, then drafts, then others
+      if (aIsScript && !bIsScript) return -1
+      if (!aIsScript && bIsScript) return 1
+      if (aIsDraft && !bIsDraft && !aIsScript && !bIsScript) return -1
+      if (!aIsDraft && bIsDraft && !aIsScript && !bIsScript) return 1
+      
+      // Within same priority, sort by scheduled_at in ascending order (earliest dates first)
+      // Content without dates goes to the end of their priority group
       if (!a.scheduled_at && !b.scheduled_at) return 0
       if (!a.scheduled_at) return 1
       if (!b.scheduled_at) return -1
@@ -3236,6 +3248,8 @@ const ContentDashboard = () => {
                   // Check if post is approved or scheduled (show green border)
                   const status = content.status?.toLowerCase()
                   const isApproved = status === 'approved' || status === 'scheduled'
+                  const isScript = content.video_scripting && typeof content.video_scripting === 'object'
+                  const isDraft = status === 'draft'
                   
                   return (
                     <div 
@@ -3244,6 +3258,8 @@ const ContentDashboard = () => {
                       className={`${theme.bg} rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg hover:scale-105 w-full flex flex-col shadow-md border cursor-pointer ${
                         isApproved 
                           ? 'border-green-500' 
+                          : isScript && isDraft
+                          ? 'border-purple-400 border-2' // Highlight script drafts with purple border
                           : 'border-gray-200'
                       }`}
                     >
@@ -3662,27 +3678,92 @@ const ContentDashboard = () => {
                       
                       {/* Post Content Below Icons */}
                       <div className="px-4 py-3">
-                        {/* Title - One line only */}
-                        {content.title && (
-                          <h5 className="font-semibold text-gray-900 mb-2 text-base line-clamp-1 truncate">{content.title}</h5>
-                        )}
-                        
-                        {/* Content Text - One row only with inline ...more */}
-                        {content.content && cleanContentText(content.content).trim().length > 0 && (
-                          <div className="flex items-center gap-1 text-sm text-gray-700">
-                            <p className="line-clamp-1 truncate flex-1">
-                              {cleanContentText(content.content)}
-                            </p>
+                        {/* Check if this is a script (has video_scripting) */}
+                        {content.video_scripting && typeof content.video_scripting === 'object' ? (
+                          /* Display Script in same format as chatbot */
+                          <div className="space-y-3">
+                            {/* Script Title */}
+                            {content.video_scripting.title && (
+                              <h5 className="font-bold text-purple-800 text-base mb-2">📝 {content.video_scripting.title}</h5>
+                            )}
+                            
+                            {/* Hook */}
+                            {content.video_scripting.hook && (
+                              <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                                <div className="text-xs font-semibold text-purple-700 mb-1">🎣 Hook:</div>
+                                <div className="text-sm text-gray-700 line-clamp-2">{content.video_scripting.hook}</div>
+                              </div>
+                            )}
+                            
+                            {/* Scenes Preview - Show first scene only in card */}
+                            {content.video_scripting.scenes && Array.isArray(content.video_scripting.scenes) && content.video_scripting.scenes.length > 0 && (
+                              <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                                <div className="text-xs font-semibold text-purple-700 mb-1">🎬 Scene 1:</div>
+                                {content.video_scripting.scenes[0].visual && (
+                                  <div className="text-xs text-gray-600 mb-1">
+                                    <span className="font-semibold">Visual: </span>
+                                    <span className="line-clamp-1">{content.video_scripting.scenes[0].visual}</span>
+                                  </div>
+                                )}
+                                {content.video_scripting.scenes[0].audio && (
+                                  <div className="text-xs text-gray-600">
+                                    <span className="font-semibold">Audio: </span>
+                                    <span className="line-clamp-1">{content.video_scripting.scenes[0].audio}</span>
+                                  </div>
+                                )}
+                                {content.video_scripting.scenes.length > 1 && (
+                                  <div className="text-xs text-purple-600 mt-1">
+                                    +{content.video_scripting.scenes.length - 1} more scene{content.video_scripting.scenes.length - 1 > 1 ? 's' : ''}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* CTA Preview */}
+                            {content.video_scripting.call_to_action && (
+                              <div className="text-xs text-gray-600">
+                                <span className="font-semibold">📢 CTA: </span>
+                                <span className="line-clamp-1">{content.video_scripting.call_to_action}</span>
+                              </div>
+                            )}
+                            
+                            {/* View Full Script Button */}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleViewContent(content)
                               }}
-                              className="text-purple-600 hover:text-purple-800 font-medium flex-shrink-0"
+                              className="w-full mt-2 px-3 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 font-medium text-xs flex items-center justify-center gap-2"
                             >
-                              ...more
+                              View Full Script
                             </button>
                           </div>
+                        ) : (
+                          /* Regular Content Display */
+                          <>
+                            {/* Title - One line only */}
+                            {content.title && (
+                              <h5 className="font-semibold text-gray-900 mb-2 text-base line-clamp-1 truncate">{content.title}</h5>
+                            )}
+                            
+                            {/* Content Text - One row only with inline ...more */}
+                            {content.content && cleanContentText(content.content).trim().length > 0 && (
+                              <div className="flex items-center gap-1 text-sm text-gray-700">
+                                <p className="line-clamp-1 truncate flex-1">
+                                  {cleanContentText(content.content)}
+                                </p>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleViewContent(content)
+                                  }}
+                                  className="text-purple-600 hover:text-purple-800 font-medium flex-shrink-0"
+                                >
+                                  ...more
+                                </button>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>

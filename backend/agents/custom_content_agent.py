@@ -79,6 +79,8 @@ class ConversationStep(str, Enum):
     APPROVE_CAROUSEL_IMAGES = "approve_carousel_images"
     HANDLE_CAROUSEL_UPLOAD = "handle_carousel_upload"
     CONFIRM_CAROUSEL_UPLOAD_DONE = "confirm_carousel_upload_done"
+    GENERATE_SCRIPT = "generate_script"
+    CONFIRM_SCRIPT = "confirm_script"
     GENERATE_CONTENT = "generate_content"
     CONFIRM_CONTENT = "confirm_content"
     SELECT_SCHEDULE = "select_schedule"
@@ -105,6 +107,7 @@ class CustomContentState(TypedDict):
     should_generate_media: Optional[bool]
     media_prompt: Optional[str]
     generated_content: Optional[Dict[str, Any]]
+    generated_script: Optional[Dict[str, Any]]
     generated_media_url: Optional[str]
     final_post: Optional[Dict[str, Any]]
     error_message: Optional[str]
@@ -129,8 +132,7 @@ PLATFORM_CONTENT_TYPES = {
         "Carousel", "Story", "Event", "Poll", "Question"
     ],
     "Instagram": [
-        "Feed Post", "Story", "Reel", "IGTV", "Carousel", 
-        "Live", "Guide", "Shopping Post", "Poll", "Question"
+        "Feed Post", "Story", "Reel", "Carousel"
     ],
     "LinkedIn": [
         "Text Post", "Article", "Video", "Image", "Document", 
@@ -298,6 +300,7 @@ class CustomContentAgent:
         graph.add_node("handle_media", self.handle_media)
         graph.add_node("validate_media", self.validate_media)
         graph.add_node("confirm_media", self.confirm_media)
+        graph.add_node("generate_script", self.generate_script)
         graph.add_node("generate_content", self.generate_content)
         graph.add_node("confirm_content", self.confirm_content)
         graph.add_node("select_schedule", self.select_schedule)
@@ -311,8 +314,28 @@ class CustomContentAgent:
         
         # Linear flow for initial steps - each step waits for user input
         graph.add_edge("greet_user", "ask_platform")
-        graph.add_edge("ask_platform", "ask_content_type")
-        graph.add_edge("ask_content_type", "ask_description")
+        
+        # Conditional edge for platform selection - loop back if not selected
+        graph.add_conditional_edges(
+            "ask_platform",
+            self._should_proceed_from_platform,
+            {
+                "continue": "ask_content_type",
+                "retry": "ask_platform"  # Loop back to same node on error
+            }
+        )
+        
+        # Conditional edge for content type selection - loop back if not selected
+        graph.add_conditional_edges(
+            "ask_content_type",
+            self._should_proceed_from_content_type,
+            {
+                "continue": "ask_description",
+                "retry": "ask_content_type"  # Loop back to same node on error
+            }
+        )
+        
+        graph.add_edge("ask_description", "ask_media")
         graph.add_edge("ask_description", "ask_media")
         
         # Conditional edges for media handling
@@ -322,7 +345,19 @@ class CustomContentAgent:
             {
                 "handle": "handle_media",
                 "generate": "generate_content",
+                "generate_script": "generate_script",
                 "skip": "generate_content"
+            }
+        )
+        
+        # Script generation flow - after script is created, conditionally proceed
+        # The execute_conversation_step will check current_step and stop at CONFIRM_SCRIPT
+        graph.add_conditional_edges(
+            "generate_script",
+            self._should_proceed_after_script,
+            {
+                "confirm": "generate_content",  # Will be intercepted by execute_conversation_step if CONFIRM_SCRIPT
+                "proceed": "generate_content"
             }
         )
         
@@ -378,6 +413,8 @@ class CustomContentAgent:
             state["current_step"] = ConversationStep.ASK_PLATFORM
             state["retry_count"] = 0
             state["is_complete"] = False
+            state["retry_platform"] = False
+            state["retry_content_type"] = False
             
             # Load user profile and platforms
             user_profile = await self._load_user_profile(state["user_id"])
@@ -450,15 +487,32 @@ class CustomContentAgent:
                 state["current_step"] = ConversationStep.ERROR
                 return state
             
-            # Create platform selection message
-            platform_options = "\n".join([f"{i+1}. {platform}" for i, platform in enumerate(connected_platforms)])
-            message = {
-                "role": "assistant",
-                "content": f"Great! I can see you have these platforms connected:\n\n{platform_options}\n\nPlease select a platform by typing the number or name:",
-                "timestamp": datetime.now().isoformat(),
-                "platforms": connected_platforms
-            }
-            state["conversation_messages"].append(message)
+            # Check if we already asked (to avoid duplicate messages on retry)
+            last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
+            already_asked = last_message and (
+                "platform" in last_message.get("content", "").lower() or 
+                "select" in last_message.get("content", "").lower()
+            )
+            
+            # Only add message if we haven't already asked (unless it's an error retry)
+            if not already_asked or state.get("retry_platform", False):
+                # Format platform names for display (capitalize first letter) - same as greet_user
+                platform_options = []
+                for platform in connected_platforms:
+                    # Capitalize first letter of each word for display
+                    display_name = ' '.join(word.capitalize() for word in platform.split('_'))
+                    platform_options.append({"value": platform, "label": display_name})
+                
+                # Create platform selection message with options
+                message = {
+                    "role": "assistant",
+                    "content": f"Great! I can see you have these platforms connected. Which platform would you like to create content for?",
+                    "timestamp": datetime.now().isoformat(),
+                    "platforms": connected_platforms,
+                    "options": platform_options
+                }
+                state["conversation_messages"].append(message)
+                state["retry_platform"] = False  # Reset retry flag
             
             logger.info(f"Asked user to select platform from: {connected_platforms}")
             
@@ -484,14 +538,27 @@ class CustomContentAgent:
             # Get content types for the platform
             content_types = PLATFORM_CONTENT_TYPES.get(platform, ["Text Post", "Image", "Video"])
             
-            message = {
-                "role": "assistant",
-                "content": f"Perfect! For {platform}, what type of content would you like to create?",
-                "timestamp": datetime.now().isoformat(),
-                "content_types": content_types,
-                "options": [{"value": str(i+1), "label": content_type} for i, content_type in enumerate(content_types)]
-            }
-            state["conversation_messages"].append(message)
+            # Check if we already asked (to avoid duplicate messages on retry)
+            last_message = state["conversation_messages"][-1] if state["conversation_messages"] else None
+            already_asked = last_message and (
+                "content type" in last_message.get("content", "").lower() or 
+                "type of content" in last_message.get("content", "").lower()
+            )
+            
+            # Only add message if we haven't already asked (unless it's an error retry)
+            if not already_asked or state.get("retry_content_type", False):
+                # Format platform name for display
+                platform_display = ' '.join(word.capitalize() for word in platform.split('_'))
+                
+                message = {
+                    "role": "assistant",
+                    "content": f"Perfect! For {platform_display}, what type of content would you like to create?",
+                    "timestamp": datetime.now().isoformat(),
+                    "content_types": content_types,
+                    "options": [{"value": content_type, "label": content_type} for content_type in content_types]
+                }
+                state["conversation_messages"].append(message)
+                state["retry_content_type"] = False  # Reset retry flag
             
             logger.info(f"Asked user to select content type for {platform}")
             
@@ -639,6 +706,27 @@ class CustomContentAgent:
                 }
                 state["conversation_messages"].append(message)
                 logger.info(f"Asked user about carousel image source for {platform}")
+                return state
+            
+            # Check if this is a Reel - show only 2 options
+            if content_type and content_type.lower() == "reel":
+                message = {
+                    "role": "assistant",
+                    "content": f"Perfect! For your Instagram Reel, how would you like to proceed?",
+                    "timestamp": datetime.now().isoformat(),
+                    "options": [
+                        {
+                            "value": "upload_video",
+                            "label": "🎥 Upload a video"
+                        },
+                        {
+                            "value": "generate_script",
+                            "label": "📝 Let me generate a script for you"
+                        }
+                    ]
+                }
+                state["conversation_messages"].append(message)
+                logger.info(f"Asked user about Reel media options for {platform}")
                 return state
             
             # Get media requirements for the platform
@@ -1001,6 +1089,260 @@ class CustomContentAgent:
             state["current_step"] = ConversationStep.ERROR
             return state
 
+    async def generate_script(self, state: CustomContentState, changes: str = None) -> CustomContentState:
+        """Generate a video script for Reel using content creation agent logic
+        
+        Args:
+            state: Current conversation state
+            changes: Optional string with user's requested changes/modifications for regeneration
+        """
+        try:
+            logger.info("🎬 Starting script generation...")
+            state["current_step"] = ConversationStep.GENERATE_SCRIPT
+            state["progress_percentage"] = 60
+            
+            platform = state.get("selected_platform", "")
+            content_type = state.get("selected_content_type", "")
+            user_description = state.get("user_description", "")
+            clarification_1 = state.get("clarification_1", "")
+            clarification_2 = state.get("clarification_2", "")
+            clarification_3 = state.get("clarification_3", "")
+            
+            # Check if this is a regeneration with changes
+            is_regeneration = changes is not None
+            previous_script = state.get("generated_script")
+            script_history = state.get("script_history", [])
+            
+            logger.info(f"Script generation context - Platform: {platform}, Content Type: {content_type}, Description: {user_description[:50]}..., Regeneration: {is_regeneration}")
+            
+            # Load business context
+            business_context = self._load_business_context(state["user_id"])
+            logger.info(f"Business context loaded: {business_context.get('business_name', 'N/A')}")
+            
+            # Create script generation prompt
+            script_prompt = f"""Create a professional video script for an Instagram Reel based on the following information:
+
+User's Content Idea: "{user_description}"
+
+Business Context:
+- Business Name: {business_context.get('business_name', 'Not specified')}
+- Industry: {business_context.get('industry', 'Not specified')}
+- Target Audience: {business_context.get('target_audience', 'General audience')}
+- Brand Voice: {business_context.get('brand_voice', 'Professional and friendly')}
+- Brand Personality: {business_context.get('brand_personality', 'Approachable and trustworthy')}
+"""
+            
+            if clarification_1:
+                script_prompt += f"\nPost Goal/Purpose: {clarification_1}"
+            if clarification_2:
+                script_prompt += f"\nTarget Audience Details: {clarification_2}"
+            if clarification_3:
+                script_prompt += f"\nTone/Style: {clarification_3}"
+            
+            # If this is a regeneration with changes, include previous script and requested changes
+            if is_regeneration and previous_script:
+                script_prompt += f"""
+
+PREVIOUS SCRIPT (to be modified):
+{json.dumps(previous_script, indent=2)}
+
+USER REQUESTED CHANGES/INCLUSIONS:
+{changes}
+
+IMPORTANT INSTRUCTIONS:
+1. Review the PREVIOUS SCRIPT above carefully
+2. Apply the USER REQUESTED CHANGES/INCLUSIONS while keeping the good parts that weren't mentioned for change
+3. Maintain the same JSON structure and format
+4. Only modify what the user specifically requested - keep everything else intact
+5. Ensure the modified script is coherent and flows naturally
+6. If the user wants to add something, integrate it seamlessly
+7. If the user wants to change tone/style, update the entire script accordingly
+8. Return the complete modified script, not just the changed parts
+"""
+            
+            script_prompt += """
+
+Requirements for the Instagram Reel Script:
+1. Keep it engaging and hook viewers in the first 3 seconds
+2. Structure it for a 15-90 second video (typical Reel length)
+3. Include clear visual cues and scene descriptions
+4. Add on-screen text suggestions where appropriate
+5. Include a strong call-to-action at the end
+6. Match the brand voice and personality
+7. Make it shareable and relatable
+8. Include relevant hashtag suggestions
+
+Format the script as JSON with this structure:
+{
+    "title": "Script title",
+    "hook": "Opening hook (first 3-5 seconds)",
+    "scenes": [
+        {
+            "duration": "X seconds",
+            "visual": "What to show on screen",
+            "audio": "What to say/narrate",
+            "on_screen_text": "Text overlay (if any)"
+        }
+    ],
+    "call_to_action": "Ending CTA",
+    "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
+    "total_duration": "Estimated total duration",
+    "tips": "Additional production tips"
+}
+
+Return ONLY valid JSON, no markdown code blocks."""
+            
+            # Generate script using OpenAI
+            logger.info("📝 Calling OpenAI API to generate script...")
+            # Use asyncio.to_thread to run the synchronous OpenAI call in a thread pool
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.client.chat.completions.create,
+                    model="gpt-4",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert video scriptwriter specializing in Instagram Reels and short-form video content. Create engaging, viral-worthy scripts that drive engagement."
+                        },
+                        {
+                            "role": "user",
+                            "content": script_prompt
+                        }
+                    ],
+                    max_tokens=2000,
+                    temperature=0.7
+                ),
+                timeout=30.0
+            )
+            logger.info("✅ OpenAI API response received")
+            
+            # Parse JSON response
+            raw_response = response.choices[0].message.content.strip()
+            
+            # Try to extract JSON from markdown code blocks
+            if "```json" in raw_response:
+                json_start = raw_response.find("```json") + 7
+                json_end = raw_response.find("```", json_start)
+                if json_end != -1:
+                    raw_response = raw_response[json_start:json_end].strip()
+            elif "```" in raw_response:
+                json_start = raw_response.find("```") + 3
+                json_end = raw_response.find("```", json_start)
+                if json_end != -1:
+                    raw_response = raw_response[json_start:json_end].strip()
+            
+            # Try to find JSON object in the response
+            if raw_response.startswith('{') and raw_response.endswith('}'):
+                json_text = raw_response
+            else:
+                # Look for JSON object within the text
+                start_idx = raw_response.find('{')
+                end_idx = raw_response.rfind('}')
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    json_text = raw_response[start_idx:end_idx + 1]
+                else:
+                    json_text = raw_response
+            
+            try:
+                script_data = json.loads(json_text)
+                
+                # Validate and normalize script structure
+                script_data = self._validate_script_structure(script_data, user_description)
+                
+                logger.info(f"✅ Script JSON parsed and validated successfully: {script_data.get('title', 'N/A')}")
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON parsing failed for script: {e}")
+                logger.warning(f"Raw response was: {raw_response[:200]}...")
+                # Fallback script structure
+                fallback_script = {
+                    "title": f"Reel Script: {user_description[:50] if user_description else 'Untitled'}",
+                    "hook": user_description[:100] if user_description else "",
+                    "scenes": [
+                        {
+                            "duration": "15-30 seconds",
+                            "visual": "Show the main content",
+                            "audio": user_description if user_description else "",
+                            "on_screen_text": "Key message"
+                        }
+                    ],
+                    "call_to_action": "Follow for more!",
+                    "hashtags": [],
+                    "total_duration": "30 seconds",
+                    "tips": "Keep it engaging and authentic"
+                }
+                # Validate fallback script structure
+                script_data = self._validate_script_structure(fallback_script, user_description)
+                logger.info("Using fallback script structure")
+            
+            # Store script in cache memory (script_history array)
+            # Initialize script_history if it doesn't exist
+            if "script_history" not in state:
+                state["script_history"] = []
+            
+            # Add script to history with timestamp and version number
+            script_version = {
+                "script": script_data,
+                "version": len(state["script_history"]) + 1,
+                "timestamp": datetime.now().isoformat(),
+                "is_current": True,
+                "changes": changes if is_regeneration else None
+            }
+            
+            # Mark all previous scripts as not current
+            for prev_script in state["script_history"]:
+                prev_script["is_current"] = False
+            
+            # Add new script to history (keep all previous scripts)
+            state["script_history"].append(script_version)
+            
+            # Also store current script for easy access
+            state["generated_script"] = script_data
+            state["current_script_version"] = script_version["version"]
+            
+            logger.info(f"✅ Script v{script_version['version']} stored in cache memory with {len(script_data.get('scenes', []))} scenes")
+            logger.info(f"📝 Total scripts in cache: {len(state['script_history'])}")
+            
+            # Create message with all scripts (both old and new)
+            message_text = f"Perfect! I've generated a video script for your {content_type}." if not is_regeneration else f"Great! I've updated the script based on your changes. Here are all your script versions:"
+            
+            script_message = {
+                "role": "assistant",
+                "content": f"{message_text} Review them below and choose an option for each.",
+                "timestamp": datetime.now().isoformat(),
+                "script": script_data,  # Current/latest script
+                "script_version": script_version["version"],
+                "all_scripts": [s["script"] for s in state["script_history"]],  # All scripts for display
+                "script_history": state["script_history"]  # Full history with metadata
+            }
+            
+            # Remove old script messages to avoid duplicates (keep only the latest with all scripts)
+            if is_regeneration:
+                state["conversation_messages"] = [
+                    msg for msg in state.get("conversation_messages", [])
+                    if not msg.get("script")  # Remove messages with script
+                ]
+            
+            state["conversation_messages"].append(script_message)
+            state["progress_percentage"] = 70
+            
+            # Stay on CONFIRM_SCRIPT step to allow user to save or regenerate
+            state["current_step"] = ConversationStep.CONFIRM_SCRIPT
+            
+            logger.info(f"Generated script for {content_type} on {platform}")
+            
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout generating script - API call took too long")
+            state["error_message"] = "Script generation timed out. Please try again."
+            state["current_step"] = ConversationStep.ERROR
+        except Exception as e:
+            logger.error(f"Error generating script: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            state["error_message"] = f"Failed to generate script: {str(e)}"
+            state["current_step"] = ConversationStep.ERROR
+            
+        return state
+    
     async def generate_content(self, state: CustomContentState) -> CustomContentState:
         """Generate content using the content creation agent logic with image analysis"""
         try:
@@ -1015,6 +1357,7 @@ class CustomContentAgent:
             generated_media_url = state.get("generated_media_url", "")
             has_media = state.get("has_media", False)
             media_type = state.get("media_type", "")
+            generated_script = state.get("generated_script")  # Get generated script if available
             
             # Check if this is a carousel post
             is_carousel = content_type.lower() == "carousel"
@@ -1092,7 +1435,7 @@ class CustomContentAgent:
             clarification_3 = state.get("clarification_3", "")
             prompt = self._create_enhanced_content_prompt(
                 user_description, platform, content_type, business_context, image_analysis, has_images_for_analysis,
-                clarification_1, clarification_2, clarification_3
+                clarification_1, clarification_2, clarification_3, generated_script
             )
             
             # Prepare messages for content generation
@@ -2255,7 +2598,8 @@ class CustomContentAgent:
 
     def _create_enhanced_content_prompt(self, description: str, platform: str, content_type: str, 
                                       business_context: Dict[str, Any], image_analysis: str, has_media: bool,
-                                      clarification_1: str = "", clarification_2: str = "", clarification_3: str = "") -> str:
+                                      clarification_1: str = "", clarification_2: str = "", clarification_3: str = "",
+                                      generated_script: Optional[Dict[str, Any]] = None) -> str:
         """Create an enhanced prompt for content generation with image analysis and clarification answers"""
         # Build clarification section if any clarifications were provided
         clarification_section = ""
@@ -2268,9 +2612,19 @@ class CustomContentAgent:
             if clarification_3:
                 clarification_section += f"- Tone/Style: {clarification_3}\n"
         
+        # Add script information if available
+        script_section = ""
+        if generated_script:
+            script_section = f"\n\nVIDEO SCRIPT (Use this as the foundation for your content):\n"
+            script_section += f"Title: {generated_script.get('title', 'N/A')}\n"
+            script_section += f"Hook: {generated_script.get('hook', 'N/A')}\n"
+            script_section += f"Scenes: {json.dumps(generated_script.get('scenes', []), indent=2)}\n"
+            script_section += f"Call to Action: {generated_script.get('call_to_action', 'N/A')}\n"
+            script_section += f"Hashtags: {', '.join(generated_script.get('hashtags', []))}\n"
+        
         base_prompt = f"""
         Create a {content_type} for {platform} based on this description: "{description}"
-        {clarification_section}
+        {clarification_section}{script_section}
         
         Business Context:
         - Business Name: {business_context.get('business_name', 'Not specified')}
@@ -2369,6 +2723,54 @@ class CustomContentAgent:
         
         return optimized
     
+    def _validate_script_structure(self, script_data: dict, user_description: str = "") -> dict:
+        """Validate and normalize script structure to ensure all required fields exist"""
+        if not isinstance(script_data, dict):
+            logger.warning("Script data is not a dict, creating default structure")
+            script_data = {}
+        
+        # Ensure required fields exist with defaults
+        validated_script = {
+            "title": str(script_data.get("title", f"Reel Script: {user_description[:50] if user_description else 'Untitled'}")),
+            "hook": str(script_data.get("hook", user_description[:100] if user_description else "")),
+            "scenes": [],
+            "call_to_action": str(script_data.get("call_to_action", "")),
+            "hashtags": [],
+            "total_duration": str(script_data.get("total_duration", "30 seconds")),
+            "tips": str(script_data.get("tips", ""))
+        }
+        
+        # Validate and normalize scenes
+        if isinstance(script_data.get("scenes"), list):
+            for scene in script_data["scenes"]:
+                if isinstance(scene, dict):
+                    validated_scene = {
+                        "duration": str(scene.get("duration", "")),
+                        "visual": str(scene.get("visual", "")),
+                        "audio": str(scene.get("audio", "")),
+                        "on_screen_text": str(scene.get("on_screen_text", ""))
+                    }
+                    validated_script["scenes"].append(validated_scene)
+        
+        # Validate hashtags
+        if isinstance(script_data.get("hashtags"), list):
+            validated_script["hashtags"] = [str(tag) for tag in script_data["hashtags"] if tag]
+        elif isinstance(script_data.get("hashtags"), str):
+            # If hashtags is a string, try to parse it
+            validated_script["hashtags"] = [tag.strip() for tag in script_data["hashtags"].split(",") if tag.strip()]
+        
+        # Preserve any additional fields
+        for key, value in script_data.items():
+            if key not in validated_script:
+                # Only add if it's JSON serializable
+                try:
+                    json.dumps(value)
+                    validated_script[key] = value
+                except (TypeError, ValueError):
+                    validated_script[key] = str(value)
+        
+        return validated_script
+    
     async def process_user_input(self, state: CustomContentState, user_input: str, input_type: str = "text") -> CustomContentState:
         """Process user input and update state accordingly"""
         try:
@@ -2378,28 +2780,110 @@ class CustomContentAgent:
             
             current_step = state.get("current_step")
             
+            # Handle ERROR state recovery
+            if current_step == ConversationStep.ERROR:
+                # Check if user wants to generate script
+                user_input_lower = user_input.lower().strip()
+                if any(phrase in user_input_lower for phrase in ["generate script", "generate scrpt", "create script", "script"]):
+                    # Check if we have required info for script generation
+                    platform = state.get("selected_platform")
+                    content_type = state.get("selected_content_type")
+                    user_desc = state.get("user_description")
+                    
+                    if platform and content_type and user_desc:
+                        # Clear error and proceed to script generation
+                        state["current_step"] = ConversationStep.GENERATE_SCRIPT
+                        state["error_message"] = None
+                        logger.info("Recovering from ERROR state - user wants to generate script")
+                        return state
+                    else:
+                        # Missing required info - ask for it
+                        missing = []
+                        if not platform:
+                            missing.append("platform")
+                        if not content_type:
+                            missing.append("content type")
+                        if not user_desc:
+                            missing.append("description")
+                        
+                        error_message = {
+                            "role": "assistant",
+                            "content": f"I need some information first. Please provide: {', '.join(missing)}. Let's start over - which platform would you like to create content for?",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        state["conversation_messages"].append(error_message)
+                        state["current_step"] = ConversationStep.ASK_PLATFORM
+                        state["error_message"] = None
+                        return state
+                else:
+                    # User wants to restart - clear error and go back to platform selection
+                    state["current_step"] = ConversationStep.ASK_PLATFORM
+                    state["error_message"] = None
+                    logger.info("Recovering from ERROR state - restarting conversation")
+                    return state
+            
             # Process based on current step
             if current_step == ConversationStep.ASK_PLATFORM:
                 # Parse platform selection
                 platform = self._parse_platform_selection(user_input, state)
                 if platform:
                     state["selected_platform"] = platform
+                    state["retry_platform"] = False  # Clear retry flag on success
                     # Transition to next step
                     state["current_step"] = ConversationStep.ASK_CONTENT_TYPE
                 else:
-                    state["error_message"] = "Invalid platform selection"
-                    state["current_step"] = ConversationStep.ERROR
+                    # Invalid input - stay on same step and show error with options
+                    user_profile = state.get("user_profile", {})
+                    connected_platforms = user_profile.get("social_media_platforms", [])
+                    
+                    # Format platform options same as greet_user
+                    platform_options = []
+                    for p in connected_platforms:
+                        display_name = ' '.join(word.capitalize() for word in p.split('_'))
+                        platform_options.append({"value": p, "label": display_name})
+                    
+                    error_message = {
+                        "role": "assistant",
+                        "content": f"I didn't recognize '{user_input}' as a valid platform. Please select one of the available platforms:",
+                        "timestamp": datetime.now().isoformat(),
+                        "platforms": connected_platforms,
+                        "options": platform_options,
+                        "is_error": True
+                    }
+                    state["conversation_messages"].append(error_message)
+                    # Set retry flag so ask_platform knows to show options again
+                    state["retry_platform"] = True
+                    # Stay on the same step to re-prompt (graph will loop back)
+                    state["current_step"] = ConversationStep.ASK_PLATFORM
+                    logger.warning(f"Invalid platform selection: '{user_input}'. Available: {connected_platforms}")
                     
             elif current_step == ConversationStep.ASK_CONTENT_TYPE:
                 # Parse content type selection
                 content_type = self._parse_content_type_selection(user_input, state)
                 if content_type:
                     state["selected_content_type"] = content_type
+                    state["retry_content_type"] = False  # Clear retry flag on success
                     # Transition to next step
                     state["current_step"] = ConversationStep.ASK_DESCRIPTION
                 else:
-                    state["error_message"] = "Invalid content type selection"
-                    state["current_step"] = ConversationStep.ERROR
+                    # Invalid input - stay on same step and show error with options
+                    platform = state.get("selected_platform", "")
+                    content_types = PLATFORM_CONTENT_TYPES.get(platform, [])
+                    
+                    error_message = {
+                        "role": "assistant",
+                        "content": f"I didn't recognize '{user_input}' as a valid content type for {platform}. Please select one of the available content types:",
+                        "timestamp": datetime.now().isoformat(),
+                        "content_types": content_types,
+                        "options": [{"value": ct, "label": ct} for ct in content_types],
+                        "is_error": True
+                    }
+                    state["conversation_messages"].append(error_message)
+                    # Set retry flag so ask_content_type knows to show options again
+                    state["retry_content_type"] = True
+                    # Stay on the same step to re-prompt (graph will loop back)
+                    state["current_step"] = ConversationStep.ASK_CONTENT_TYPE
+                    logger.warning(f"Invalid content type selection: '{user_input}'. Available: {content_types}")
                     
             elif current_step == ConversationStep.ASK_DESCRIPTION:
                 # Store user description
@@ -2548,6 +3032,12 @@ class CustomContentAgent:
                     state["should_generate_media"] = True
                     state["current_step"] = ConversationStep.GENERATE_CONTENT
                     logger.info("Set to GENERATE_CONTENT for generate_video")
+                elif media_choice == "generate_script":
+                    state["has_media"] = True
+                    state["media_type"] = MediaType.VIDEO
+                    state["should_generate_media"] = False
+                    state["current_step"] = ConversationStep.GENERATE_SCRIPT
+                    logger.info("Set to GENERATE_SCRIPT for generate_script")
                 else:  # skip_media
                     state["has_media"] = False
                     state["media_type"] = MediaType.NONE
@@ -2594,56 +3084,122 @@ class CustomContentAgent:
         return state
     
     def _parse_platform_selection(self, user_input: str, state: CustomContentState) -> Optional[str]:
-        """Parse platform selection from user input"""
+        """Parse platform selection from user input with improved matching"""
         user_profile = state.get("user_profile", {})
         connected_platforms = user_profile.get("social_media_platforms", [])
         
+        if not connected_platforms:
+            return None
+        
+        user_input_clean = user_input.strip()
+        user_input_lower = user_input_clean.lower()
+        
         # Try to match by number first (for backward compatibility)
         try:
-            index = int(user_input.strip()) - 1
+            index = int(user_input_clean) - 1
             if 0 <= index < len(connected_platforms):
                 return connected_platforms[index]
         except ValueError:
             pass
         
         # Try to match by exact name (for button clicks)
-        user_input_stripped = user_input.strip()
         for platform in connected_platforms:
-            if platform == user_input_stripped:
+            if platform == user_input_clean:
+                return platform
+        
+        # Try to match by exact lowercase name
+        for platform in connected_platforms:
+            if platform.lower() == user_input_lower:
                 return platform
         
         # Try to match by partial name (for text input)
-        user_input_lower = user_input.lower().strip()
         for platform in connected_platforms:
-            if platform.lower() in user_input_lower or user_input_lower in platform.lower():
+            platform_lower = platform.lower()
+            # Check if platform name is contained in user input or vice versa
+            if platform_lower in user_input_lower or user_input_lower in platform_lower:
                 return platform
+        
+        # Try fuzzy matching with common platform name variations
+        platform_variations = {
+            "facebook": ["fb", "facebook"],
+            "instagram": ["ig", "insta", "instagram"],
+            "linkedin": ["linkedin", "linked in"],
+            "twitter": ["twitter", "x", "twitter/x"],
+            "youtube": ["yt", "youtube", "you tube"],
+            "tiktok": ["tiktok", "tik tok", "tt"],
+            "pinterest": ["pinterest", "pin"],
+            "whatsapp": ["whatsapp", "whats app", "wa", "whatsapp business"]
+        }
+        
+        # Check if user input matches any variation
+        for platform in connected_platforms:
+            platform_lower = platform.lower()
+            variations = platform_variations.get(platform_lower, [platform_lower])
+            for variation in variations:
+                if variation in user_input_lower or user_input_lower in variation:
+                    return platform
         
         return None
     
     def _parse_content_type_selection(self, user_input: str, state: CustomContentState) -> Optional[str]:
-        """Parse content type selection from user input"""
+        """Parse content type selection from user input with improved matching"""
         platform = state.get("selected_platform", "")
         content_types = PLATFORM_CONTENT_TYPES.get(platform, [])
         
+        if not content_types:
+            return None
+        
+        user_input_clean = user_input.strip()
+        user_input_lower = user_input_clean.lower()
+        
         # Try to match by number first (for backward compatibility)
         try:
-            index = int(user_input.strip()) - 1
+            index = int(user_input_clean) - 1
             if 0 <= index < len(content_types):
                 return content_types[index]
         except ValueError:
             pass
         
         # Try to match by exact name (for button clicks)
-        user_input_stripped = user_input.strip()
         for content_type in content_types:
-            if content_type == user_input_stripped:
+            if content_type == user_input_clean:
+                return content_type
+        
+        # Try to match by exact lowercase name
+        for content_type in content_types:
+            if content_type.lower() == user_input_lower:
                 return content_type
         
         # Try to match by partial name (for text input)
-        user_input_lower = user_input.lower().strip()
         for content_type in content_types:
-            if content_type.lower() in user_input_lower or user_input_lower in content_type.lower():
+            content_type_lower = content_type.lower()
+            # Check if content type name is contained in user input or vice versa
+            if content_type_lower in user_input_lower or user_input_lower in content_type_lower:
                 return content_type
+        
+        # Try fuzzy matching with common content type variations
+        content_type_variations = {
+            "text post": ["text", "post", "text post"],
+            "photo": ["photo", "image", "picture", "pic"],
+            "video": ["video", "vid", "movie", "clip"],
+            "carousel": ["carousel", "slideshow", "multiple images"],
+            "story": ["story", "stories"],
+            "reel": ["reel", "reels"],
+            "tweet": ["tweet", "post"],
+            "thread": ["thread", "threads"],
+            "article": ["article", "blog", "blog post"],
+            "live": ["live", "live stream", "live broadcast"],
+            "poll": ["poll", "polling", "survey"],
+            "question": ["question", "q&a", "qa"]
+        }
+        
+        # Check if user input matches any variation
+        for content_type in content_types:
+            content_type_lower = content_type.lower()
+            variations = content_type_variations.get(content_type_lower, [content_type_lower])
+            for variation in variations:
+                if variation in user_input_lower or user_input_lower in variation:
+                    return content_type
         
         return None
     
@@ -2652,7 +3208,7 @@ class CustomContentAgent:
         user_input_lower = user_input.lower().strip()
         
         # Handle direct button values (for backward compatibility)
-        if user_input_lower in ["upload_image", "upload_video", "generate_image", "generate_video", "skip_media"]:
+        if user_input_lower in ["upload_image", "upload_video", "generate_image", "generate_video", "generate_script", "skip_media"]:
             return user_input_lower
         
         # Handle button labels from frontend
@@ -2660,11 +3216,13 @@ class CustomContentAgent:
             return "upload_image"
         elif "upload a video" in user_input_lower or "🎥" in user_input:
             return "upload_video"
-        elif "generate an image" in user_input_lower or "🎨" in user_input:
+        elif "generate an image" in user_input_lower or ("🎨" in user_input and "script" not in user_input_lower):
             return "generate_image"
         elif "generate a video" in user_input_lower or "🎬" in user_input:
             return "generate_video"
-        elif "skip media" in user_input_lower or "text-only" in user_input_lower or "📝" in user_input:
+        elif "generate a script" in user_input_lower or "generate script" in user_input_lower or ("📝" in user_input and "script" in user_input_lower):
+            return "generate_script"
+        elif "skip media" in user_input_lower or "text-only" in user_input_lower or ("📝" in user_input and "script" not in user_input_lower):
             return "skip_media"
         
         # Handle text-based parsing (for manual input)
@@ -2672,10 +3230,12 @@ class CustomContentAgent:
             return "upload_image"
         elif any(word in user_input_lower for word in ["upload", "video", "movie", "clip"]):
             return "upload_video"
-        elif any(word in user_input_lower for word in ["generate", "create", "image", "photo"]):
+        elif any(word in user_input_lower for word in ["generate", "create", "image", "photo"]) and "script" not in user_input_lower:
             return "generate_image"
-        elif any(word in user_input_lower for word in ["generate", "create", "video", "movie"]):
+        elif any(word in user_input_lower for word in ["generate", "create", "video", "movie"]) and "script" not in user_input_lower:
             return "generate_video"
+        elif any(word in user_input_lower for word in ["generate", "create", "script"]):
+            return "generate_script"
         elif any(word in user_input_lower for word in ["skip", "none", "no", "text only"]):
             return "skip_media"
         else:
@@ -2782,14 +3342,52 @@ class CustomContentAgent:
             logger.error(f"Error saving conversation state: {e}")
             return False
     
+    def _should_proceed_from_platform(self, state: CustomContentState) -> str:
+        """Determine if we should proceed from platform selection or retry"""
+        # Check if platform is selected - if yes, proceed
+        if state.get("selected_platform"):
+            return "continue"
+        # If retry flag is set, loop back to ask again
+        if state.get("retry_platform", False):
+            return "retry"
+        # If no platform selected and not a retry, this is first time - proceed to ask
+        # (The ask_platform node will handle showing the options)
+        return "continue"
+    
+    def _should_proceed_from_content_type(self, state: CustomContentState) -> str:
+        """Determine if we should proceed from content type selection or retry"""
+        # Check if content type is selected - if yes, proceed
+        if state.get("selected_content_type"):
+            return "continue"
+        # If retry flag is set, loop back to ask again
+        if state.get("retry_content_type", False):
+            return "retry"
+        # If no content type selected and not a retry, this is first time - proceed to ask
+        # (The ask_content_type node will handle showing the options)
+        return "continue"
+    
     def _should_handle_media(self, state: CustomContentState) -> str:
         """Determine if media should be handled, generated, or skipped"""
+        current_step = state.get("current_step")
+        
+        # If we're generating a script, route to generate_script
+        if current_step == ConversationStep.GENERATE_SCRIPT:
+            return "generate_script"
+        
         if state.get("has_media", False):
             if state.get("should_generate_media", False):
                 return "generate"
             else:
                 return "handle"
         return "skip"
+    
+    def _should_proceed_after_script(self, state: CustomContentState) -> str:
+        """Determine next step after script generation"""
+        # If current_step is CONFIRM_SCRIPT, the execute_conversation_step will handle it
+        # and return state without proceeding to generate_content
+        if state.get("current_step") == ConversationStep.CONFIRM_SCRIPT:
+            return "confirm"  # Stop and show script
+        return "proceed"  # Continue to content generation (shouldn't happen normally)
     
     def _should_proceed_after_media(self, state: CustomContentState) -> str:
         """Determine next step after media confirmation"""
@@ -2853,9 +3451,51 @@ class CustomContentAgent:
                 state = await self.process_user_input(state, user_input, "text")
                 logger.info(f"After processing input, current_step: {state.get('current_step')}")
             
-            # If there's an error, don't continue with the graph
+            # If there's an error, try to recover if user provided meaningful input
             if state.get("current_step") == ConversationStep.ERROR:
-                return state
+                # Check if user wants to generate script or continue
+                if user_input:
+                    user_input_lower = user_input.lower().strip()
+                    # Check if user wants to generate script
+                    if any(phrase in user_input_lower for phrase in ["generate script", "generate scrpt", "create script", "script"]):
+                        # Check if we have required info for script generation
+                        platform = state.get("selected_platform")
+                        content_type = state.get("selected_content_type")
+                        user_description = state.get("user_description")
+                        
+                        if platform and content_type and user_description:
+                            # Clear error and proceed to script generation
+                            state["current_step"] = ConversationStep.GENERATE_SCRIPT
+                            state["error_message"] = None
+                            logger.info("Recovering from ERROR state - proceeding to generate script")
+                        else:
+                            # Missing required info - ask for it
+                            missing = []
+                            if not platform:
+                                missing.append("platform")
+                            if not content_type:
+                                missing.append("content type")
+                            if not user_description:
+                                missing.append("description")
+                            
+                            error_message = {
+                                "role": "assistant",
+                                "content": f"I need some information first. Please provide: {', '.join(missing)}. Let's start over - which platform would you like to create content for?",
+                                "timestamp": datetime.now().isoformat()
+                            }
+                            state["conversation_messages"].append(error_message)
+                            state["current_step"] = ConversationStep.ASK_PLATFORM
+                            state["error_message"] = None
+                            return state
+                    else:
+                        # User wants to restart or continue - clear error and go back to platform selection
+                        state["current_step"] = ConversationStep.ASK_PLATFORM
+                        state["error_message"] = None
+                        logger.info("Recovering from ERROR state - restarting conversation")
+                        return await self.ask_platform(state)
+                else:
+                    # No user input, just show error message
+                    return state
             
             # Execute the current step based on the current_step in state
             current_step = state.get("current_step")
@@ -2877,6 +3517,13 @@ class CustomContentAgent:
                 result = await self.ask_clarification_3(state)
             elif current_step == ConversationStep.ASK_MEDIA:
                 result = await self.ask_media(state)
+            elif current_step == ConversationStep.GENERATE_SCRIPT:
+                result = await self.generate_script(state)
+            elif current_step == ConversationStep.CONFIRM_SCRIPT:
+                # Script is already generated and displayed, just return state
+                # User can save or regenerate from frontend
+                result = state
+                logger.info("Script is displayed, waiting for user to save or regenerate")
             elif current_step == ConversationStep.ASK_CAROUSEL_IMAGE_SOURCE:
                 result = await self.ask_carousel_image_source(state, user_input)
             elif current_step == ConversationStep.GENERATE_CAROUSEL_IMAGE:

@@ -9,9 +9,21 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+def clean_for_json(obj):
+    """Recursively clean object to ensure JSON serializability"""
+    if isinstance(obj, dict):
+        return {k: clean_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_for_json(item) for item in obj]
+    elif isinstance(obj, (str, int, float, bool, type(None))):
+        return obj
+    else:
+        # Convert any other type to string
+        return str(obj)
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from agents.custom_content_agent import CustomContentAgent, CustomContentState, ConversationStep
 from auth import get_current_user
@@ -134,6 +146,105 @@ async def process_user_input(
             "timestamp": datetime.now().isoformat()
         }
         
+        # Check if message already has script (from generation/regeneration)
+        # If not, try to get it from script_id in database
+        if not latest_message.get("script"):
+            # If message has script_id, fetch the full script from content_posts table
+            if latest_message.get("script_id"):
+                try:
+                    script_record = custom_content_agent.supabase.table("content_posts").select("*").eq("id", latest_message["script_id"]).execute()
+                    if script_record.data and script_record.data[0]:
+                        script_data = script_record.data[0].get("video_scripting")  # Fetch from video_scripting column
+                        if script_data:
+                            latest_message["script"] = script_data
+                            logger.info(f"✅ Fetched script from content_posts for script_id: {latest_message['script_id']}")
+                except Exception as e:
+                    logger.error(f"Error fetching script from content_posts: {e}")
+            # Also try to fetch from content_posts table if draft_id/script_post_id is available
+            elif latest_message.get("draft_id") or latest_message.get("script_post_id"):
+                script_id_to_fetch = latest_message.get("script_post_id") or latest_message.get("draft_id")
+                try:
+                    script_record = custom_content_agent.supabase.table("content_posts")\
+                        .select("*")\
+                        .eq("id", script_id_to_fetch)\
+                        .execute()
+                    if script_record.data and script_record.data[0]:
+                        script_data = script_record.data[0].get("video_scripting")  # Use video_scripting column
+                        if script_data:
+                            latest_message["script"] = script_data
+                            logger.info(f"✅ Fetched script from content_posts for script_id: {script_id_to_fetch}")
+                except Exception as e:
+                    logger.error(f"Error fetching script from content_posts: {e}")
+            # If no script_id or draft_id, try to get from state["generated_script"]
+            elif result.get("generated_script"):
+                latest_message["script"] = result.get("generated_script")
+                logger.info(f"✅ Added script from state['generated_script'] to message")
+        else:
+            logger.info(f"✅ Script already present in message: {list(latest_message.get('script', {}).keys())}")
+        
+        # Ensure script is in the message before returning
+        if not latest_message.get("script") and result.get("generated_script"):
+            latest_message["script"] = result.get("generated_script")
+            logger.info(f"✅ Added script from state to message before returning")
+        
+        # Ensure all_scripts and script_history are included if available
+        if result.get("script_history"):
+            # If message doesn't have all_scripts, add them
+            if not latest_message.get("all_scripts"):
+                latest_message["all_scripts"] = [s["script"] for s in result["script_history"]]
+                logger.info(f"✅ Added all_scripts to message: {len(latest_message['all_scripts'])} scripts")
+            
+            # If message doesn't have script_history, add it
+            if not latest_message.get("script_history"):
+                latest_message["script_history"] = result["script_history"]
+                logger.info(f"✅ Added script_history to message")
+        
+        # If we still don't have a script but have script_history, extract from it
+        if not latest_message.get("script") and result.get("script_history"):
+            script_history = result["script_history"]
+            if script_history and len(script_history) > 0:
+                # Get the latest script from history
+                latest_script_version = script_history[-1]
+                if latest_script_version.get("script"):
+                    latest_message["script"] = latest_script_version["script"]
+                    logger.info(f"✅ Added script from script_history to message")
+        
+        # Validate script structure before returning
+        if latest_message.get("script"):
+            script = latest_message["script"]
+            # Ensure required fields exist with defaults
+            if not isinstance(script, dict):
+                logger.warning(f"⚠️ Script is not a dict, converting...")
+                script = {"title": "Script", "hook": "", "scenes": [], "call_to_action": "", "hashtags": []}
+                latest_message["script"] = script
+            
+            # Ensure scenes is an array
+            if "scenes" not in script or not isinstance(script.get("scenes"), list):
+                script["scenes"] = []
+            
+            # Ensure hashtags is an array
+            if "hashtags" not in script or not isinstance(script.get("hashtags"), list):
+                script["hashtags"] = []
+            
+            # Ensure all scene objects have proper structure
+            for scene in script.get("scenes", []):
+                if not isinstance(scene, dict):
+                    continue
+                # Ensure all scene fields are strings
+                for key in ["duration", "visual", "audio", "on_screen_text"]:
+                    if key in scene and not isinstance(scene[key], str):
+                        scene[key] = str(scene[key]) if scene[key] is not None else ""
+            
+            logger.info(f"✅ Script structure validated. Keys: {list(script.keys())}, Scenes: {len(script.get('scenes', []))}")
+        
+        # Log final message structure
+        if latest_message.get("script"):
+            logger.info(f"✅ Returning message with script. Script keys: {list(latest_message['script'].keys()) if isinstance(latest_message['script'], dict) else 'not a dict'}")
+            if latest_message.get("all_scripts"):
+                logger.info(f"✅ Returning message with {len(latest_message['all_scripts'])} scripts in all_scripts")
+        else:
+            logger.warning(f"⚠️ Returning message without script")
+        
         return {
             "conversation_id": conversation_id,
             "message": latest_message,
@@ -146,6 +257,7 @@ async def process_user_input(
                 "media_type": result.get("media_type"),
                 "is_complete": result.get("is_complete", False),
                 "error_message": result.get("error_message"),
+                "script_id": result.get("script_id"),  # Include script_id in state
                 # Carousel-related fields
                 "carousel_images": result.get("carousel_images"),
                 "carousel_image_source": result.get("carousel_image_source"),
@@ -745,8 +857,9 @@ async def continue_conversation(
         
         state = conversation_states[conversation_id]
         
-        # Continue the conversation flow
-        result = await custom_content_graph.ainvoke(state)
+        # Use execute_conversation_step instead of graph directly
+        # This ensures proper handling of CONFIRM_SCRIPT and other steps
+        result = await custom_content_agent.execute_conversation_step(state)
         conversation_states[conversation_id] = result
         
         return {
@@ -835,3 +948,376 @@ async def get_media_requirements(platform: str):
     except Exception as e:
         logger.error(f"Error getting media requirements: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get media requirements: {str(e)}")
+
+class SaveDraftRequest(BaseModel):
+    conversation_id: str
+    script_id: Optional[str] = None
+    script_version: Optional[int] = None  # Which script version to save (from script_history)
+    
+    @field_validator('script_id', mode='before')
+    @classmethod
+    def convert_script_id_to_string(cls, v):
+        """Convert script_id to string if it's a number, or None if it's null/empty"""
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return str(v)
+        if isinstance(v, str):
+            return v if v.strip() else None
+        return str(v) if v else None
+
+@router.post("/save-script-draft")
+async def save_script_draft(
+    request: SaveDraftRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Save script as draft to content_posts table in the video_scripting column."""
+    try:
+        if request.conversation_id not in conversation_states:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        state = conversation_states[request.conversation_id]
+        
+        # Get script data from state
+        # If script_version is specified, get that version from script_history
+        script_data = None
+        script_history = state.get("script_history", [])
+        
+        if request.script_version and script_history:
+            # Find the specific version
+            for script_version in script_history:
+                if script_version.get("version") == request.script_version:
+                    script_data = script_version.get("script")
+                    logger.info(f"✅ Using script version {request.script_version} from cache")
+                    break
+        
+        # If no version specified or version not found, use current script
+        if not script_data:
+            script_data = state.get("generated_script")
+        
+        # If still not found, try to get from latest message
+        if not script_data:
+            messages = state.get("conversation_messages", [])
+            for msg in reversed(messages):
+                if msg.get("script"):
+                    script_data = msg.get("script")
+                    break
+        
+        if not script_data:
+            raise HTTPException(status_code=400, detail="Script data not found")
+        
+        # Get metadata from state
+        platform = state.get("selected_platform", "instagram")
+        content_type = state.get("selected_content_type", "reel")
+        user_description = state.get("user_description")
+        clarification_1 = state.get("clarification_1")
+        clarification_2 = state.get("clarification_2")
+        clarification_3 = state.get("clarification_3")
+        business_context = state.get("business_context", {})
+        
+        # Ensure business_context is a dict (not None or other type)
+        if business_context is None:
+            business_context = {}
+        elif not isinstance(business_context, dict):
+            # If it's not a dict, try to convert it or use empty dict
+            try:
+                if hasattr(business_context, '__dict__'):
+                    business_context = business_context.__dict__
+                else:
+                    business_context = {}
+            except:
+                business_context = {}
+        
+        # Ensure script_data is a dict
+        if not isinstance(script_data, dict):
+            raise HTTPException(status_code=400, detail="Script data must be a valid object")
+        
+        # Clean script_data and business_context to ensure all values are JSON serializable
+        try:
+            cleaned_script_data = clean_for_json(script_data)
+            business_context = clean_for_json(business_context)
+            # Test serialization to catch any issues early
+            json.dumps(cleaned_script_data)
+            json.dumps(business_context)
+            logger.info("✅ Script data and business_context validated for JSON serialization")
+        except (TypeError, ValueError) as e:
+            logger.error(f"JSON serialization error: {e}")
+            raise HTTPException(status_code=400, detail=f"Script data contains non-serializable values: {str(e)}")
+        
+        # Use cleaned script data for all database operations
+        script_data = cleaned_script_data
+        
+        # Save or update script in content_posts table
+        # If script_post_id exists, UPDATE it with the latest script from memory
+        # Otherwise, create a new record
+        from datetime import date, timedelta
+        script_post_id = state.get("script_id")
+        
+        # Create a temporary campaign for this custom content if it doesn't exist
+        campaign_id = state.get("campaign_id")
+        if not campaign_id:
+            today = date.today()
+            campaign_data = {
+                "user_id": state["user_id"],
+                "campaign_name": f"Custom {content_type} - {today.strftime('%Y-%m-%d')}",
+                "week_start_date": today.isoformat(),
+                "week_end_date": (today + timedelta(days=7)).isoformat(),
+                "status": "draft"
+            }
+            campaign_result = custom_content_agent.supabase.table("content_campaigns").insert(campaign_data).execute()
+            campaign_id = campaign_result.data[0]["id"] if campaign_result.data else None
+            state["campaign_id"] = campaign_id
+        
+        # Prepare script data for database
+        # Ensure all values are properly serializable
+        post_data = {
+            "campaign_id": campaign_id,
+            "platform": str(platform) if platform else "instagram",
+            "post_type": str(content_type.lower()) if content_type else "reel",
+            "title": str(script_data.get('title', f"{content_type} Script")),
+            "content": str(user_description or script_data.get('hook', '')),
+            "hashtags": list(script_data.get('hashtags', [])) if script_data.get('hashtags') else [],
+            "scheduled_date": date.today().isoformat(),
+            "scheduled_time": "12:00:00",
+            "status": "draft",
+            "video_scripting": script_data,  # Already cleaned above - JSONB field
+            "metadata": {
+                "user_description": str(user_description) if user_description else "",
+                "clarification_1": str(clarification_1) if clarification_1 else "",
+                "clarification_2": str(clarification_2) if clarification_2 else "",
+                "clarification_3": str(clarification_3) if clarification_3 else "",
+                "business_context": business_context  # Already validated as dict above
+            }
+        }
+        
+        if script_post_id:
+            # Update existing script record with the latest script from memory
+            result = custom_content_agent.supabase.table("content_posts").update(post_data).eq("id", script_post_id).execute()
+            logger.info(f"✅ Updated existing script in content_posts table with ID: {script_post_id}")
+        else:
+            # Create new script record (first time saving)
+            result = custom_content_agent.supabase.table("content_posts").insert(post_data).execute()
+            script_post_id = result.data[0]["id"] if result.data else None
+            state["script_id"] = script_post_id
+            state["script_post_id"] = script_post_id
+            logger.info(f"✅ Script saved to content_posts table with ID: {script_post_id}")
+        
+        # Update state with script_post_id
+        conversation_states[request.conversation_id] = state
+        
+        # Script is already saved in content_posts table above with video_scripting column
+        # Verify the script was saved correctly in content_posts table
+        try:
+            if script_post_id:
+                verify_result = custom_content_agent.supabase.table("content_posts")\
+                    .select("*")\
+                    .eq("id", script_post_id)\
+                    .execute()
+                
+                if verify_result.data and verify_result.data[0]:
+                    saved_script = verify_result.data[0].get("video_scripting")
+                    if saved_script:
+                        logger.info(f"✅ Verified script saved correctly in content_posts. Script keys: {list(saved_script.keys()) if isinstance(saved_script, dict) else 'not a dict'}")
+                    else:
+                        logger.warning(f"⚠️ Script saved but video_scripting column is empty for {script_post_id}")
+                else:
+                    logger.warning(f"⚠️ Could not verify saved script {script_post_id}")
+            else:
+                logger.warning("⚠️ No script_post_id to verify")
+        except Exception as verify_error:
+            logger.warning(f"⚠️ Error verifying saved script: {verify_error}")
+        
+        # Return the script_post_id as draft_id for consistency
+        return {
+            "success": True,
+            "draft_id": str(script_post_id) if script_post_id else None,
+            "script_post_id": str(script_post_id) if script_post_id else None,
+            "message": "Script saved as draft successfully in content_posts table",
+            "script": script_data  # Return the script data that was saved
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving script draft: {e}", exc_info=True)
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Traceback: {error_traceback}")
+        # Ensure error message is a string, not an object
+        error_message = str(e) if e else "Unknown error occurred"
+        raise HTTPException(status_code=500, detail=error_message)
+
+@router.get("/saved-scripts")
+async def get_saved_scripts(
+    current_user: dict = Depends(get_current_user),
+    limit: int = 50,
+    offset: int = 0
+):
+    """Get all saved scripts from content_posts table (video_scripting column) for the current user"""
+    try:
+        user_id = str(current_user["sub"])
+        
+        # Fetch scripts from content_posts table where video_scripting is not null
+        # Join with content_campaigns to filter by user_id
+        result = custom_content_agent.supabase.table("content_posts")\
+            .select("*, content_campaigns!inner(user_id)")\
+            .eq("content_campaigns.user_id", user_id)\
+            .not_.is_("video_scripting", "null")\
+            .order("created_at", desc=True)\
+            .range(offset, offset + limit - 1)\
+            .execute()
+        
+        if not result.data:
+            return {
+                "scripts": [],
+                "count": 0,
+                "limit": limit,
+                "offset": offset
+            }
+        
+        # Format scripts for response
+        scripts = []
+        for script_record in result.data:
+            # Get metadata for additional info
+            metadata = script_record.get("metadata", {})
+            script_data = {
+                "id": script_record.get("id"),
+                "draft_id": script_record.get("id"),  # Alias for consistency
+                "platform": script_record.get("platform"),
+                "content_type": script_record.get("post_type"),
+                "script": script_record.get("video_scripting"),  # The actual script data from video_scripting column
+                "user_description": metadata.get("user_description", ""),
+                "clarification_1": metadata.get("clarification_1", ""),
+                "clarification_2": metadata.get("clarification_2", ""),
+                "clarification_3": metadata.get("clarification_3", ""),
+                "business_context": metadata.get("business_context", {}),
+                "status": script_record.get("status", "draft"),
+                "created_at": script_record.get("created_at"),
+                "updated_at": script_record.get("updated_at")
+            }
+            scripts.append(script_data)
+        
+        logger.info(f"✅ Retrieved {len(scripts)} saved scripts for user {user_id}")
+        
+        return {
+            "scripts": scripts,
+            "count": len(scripts),
+            "limit": limit,
+            "offset": offset
+        }
+        
+    except Exception as e:
+        logger.error(f"Error retrieving saved scripts: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve saved scripts: {str(e)}")
+
+@router.get("/saved-script/{draft_id}")
+async def get_saved_script(
+    draft_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get a specific saved script by draft_id from content_posts table (video_scripting column)"""
+    try:
+        user_id = str(current_user["sub"])
+        
+        # Fetch script from content_posts table
+        # Join with content_campaigns to verify user ownership
+        result = custom_content_agent.supabase.table("content_posts")\
+            .select("*, content_campaigns!inner(user_id)")\
+            .eq("id", draft_id)\
+            .eq("content_campaigns.user_id", user_id)\
+            .execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=404, detail="Script not found")
+        
+        script_record = result.data[0]
+        
+        # Get metadata for additional info
+        metadata = script_record.get("metadata", {})
+        
+        # Format script for response
+        script_data = {
+            "id": script_record.get("id"),
+            "draft_id": script_record.get("id"),
+            "platform": script_record.get("platform"),
+            "content_type": script_record.get("post_type"),
+            "script": script_record.get("video_scripting"),  # The actual script data from video_scripting column
+            "user_description": metadata.get("user_description", ""),
+            "clarification_1": metadata.get("clarification_1", ""),
+            "clarification_2": metadata.get("clarification_2", ""),
+            "clarification_3": metadata.get("clarification_3", ""),
+            "business_context": metadata.get("business_context", {}),
+            "status": script_record.get("status", "draft"),
+            "created_at": script_record.get("created_at"),
+            "updated_at": script_record.get("updated_at")
+        }
+        
+        logger.info(f"✅ Retrieved script {draft_id} for user {user_id}")
+        
+        return {
+            "success": True,
+            "script": script_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving script {draft_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve script: {str(e)}")
+
+class RegenerateScriptRequest(BaseModel):
+    conversation_id: str
+    changes: str  # User's requested changes/modifications
+
+@router.post("/regenerate-script")
+async def regenerate_script(
+    request: RegenerateScriptRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Regenerate the script with user-specified changes"""
+    try:
+        if request.conversation_id not in conversation_states:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        state = conversation_states[request.conversation_id]
+        
+        # Check if we have the necessary data to regenerate
+        if not state.get("selected_platform") or not state.get("selected_content_type"):
+            raise HTTPException(status_code=400, detail="Platform and content type are required to regenerate script")
+        
+        # Check if we have a previous script
+        if not state.get("generated_script"):
+            raise HTTPException(status_code=400, detail="No previous script found to regenerate")
+        
+        # Validate changes input
+        if not request.changes or not request.changes.strip():
+            raise HTTPException(status_code=400, detail="Please provide the changes or modifications you'd like to make")
+        
+        # Call generate_script with changes parameter (this will keep all scripts in cache)
+        result = await custom_content_agent.generate_script(state, changes=request.changes.strip())
+        
+        # Update conversation state
+        conversation_states[request.conversation_id] = result
+        
+        # Get the latest message with all scripts
+        latest_message = result["conversation_messages"][-1] if result["conversation_messages"] else None
+        
+        # Script is already in the message from generate_script with all scripts
+        if latest_message and latest_message.get("script"):
+            logger.info(f"✅ Regenerated script with changes: {request.changes[:50]}...")
+            logger.info(f"📝 Total scripts in cache: {len(result.get('script_history', []))}")
+        
+        return {
+            "success": True,
+            "conversation_id": request.conversation_id,
+            "message": latest_message,
+            "current_step": result["current_step"],
+            "progress_percentage": result.get("progress_percentage", 0),
+            "script_history": result.get("script_history", [])  # Return all scripts
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error regenerating script: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to regenerate script: {str(e)}")

@@ -46,6 +46,12 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
   const [showCarouselUpload, setShowCarouselUpload] = useState(false);
   const [carouselMaxImages, setCarouselMaxImages] = useState(10);
   
+  // Regenerate script state
+  const [showRegenerateInput, setShowRegenerateInput] = useState(false);
+  const [regenerateChanges, setRegenerateChanges] = useState('');
+  const [regeneratingScriptId, setRegeneratingScriptId] = useState(null);
+  const [regeneratingScriptVersion, setRegeneratingScriptVersion] = useState(null);
+  
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const carouselFileInputRef = useRef(null);
@@ -391,6 +397,14 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       // Also skip if we're in approve_carousel_images and a message with carousel images already exists
       // Check both current messages state and the message content to avoid duplicates
       const messageContent = typeof data.message === 'object' ? data.message.content : data.message;
+      
+      // Log script data if present
+      if (data.message && typeof data.message === 'object' && data.message.script) {
+        console.log('🎬 Script data received:', data.message.script);
+        console.log('🎬 Full message object:', data.message);
+        console.log('🎬 Script keys:', Object.keys(data.message.script || {}));
+      }
+      
       const hasExistingCarouselMessage = data.current_step === 'approve_carousel_images' && 
         messages.some(msg => 
           (msg.carousel_images && Array.isArray(msg.carousel_images) && msg.carousel_images.length > 0) ||
@@ -410,23 +424,75 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
         );
       }
       
+      // For content review messages, always clean up old ones and add the new one
+      // This ensures only the most recent content review message exists
+      const messageMetadata = typeof data.message === 'object' ? data.message : { content: messageContent };
+      
+      // Ensure script data is preserved
+      const hasScript = data.message && typeof data.message === 'object' && data.message.script;
+      
       // Also check if this exact message content already exists
-      const messageAlreadyExists = messages.some(msg => 
+      // BUT: Don't filter out script messages - they should always be shown
+      const messageAlreadyExists = !hasScript && messages.some(msg => 
         msg.role === 'assistant' && 
         msg.content === messageContent &&
         msg.carousel_images && Array.isArray(msg.carousel_images) && msg.carousel_images.length > 0
       );
+      if (hasScript) {
+        messageMetadata.script = data.message.script;
+        console.log('✅ Script data added to messageMetadata:', Object.keys(messageMetadata.script || {}));
+      }
       
-      // For content review messages, always clean up old ones and add the new one
-      // This ensures only the most recent content review message exists
-      const messageMetadata = typeof data.message === 'object' ? data.message : { content: messageContent };
       const isContentReviewMessage = messageContent && 
         (messageContent.includes('Please review the content above and let me know') || 
          messageContent.includes('Please review it above and let me know if you\'d like to save this post'));
       
-      // If this is a content review message, always process it (clean up old ones and add new one)
-      // Otherwise, use the existing duplicate prevention logic
-      if (isContentReviewMessage) {
+      // Check if this is a script message - check multiple indicators
+      const isScriptMessage = hasScript || 
+        (messageContent && (
+          messageContent.includes('I\'ve generated a video script') ||
+          messageContent.includes('generated a video script') ||
+          messageContent.includes('script for your') ||
+          messageContent.includes('Review them below') ||
+          messageContent.includes('script versions') ||
+          messageContent.includes('Perfect! I\'ve generated')
+        )) ||
+        (messageMetadata.all_scripts && Array.isArray(messageMetadata.all_scripts) && messageMetadata.all_scripts.length > 0) ||
+        (messageMetadata.script_history && Array.isArray(messageMetadata.script_history) && messageMetadata.script_history.length > 0);
+      
+      // If this is a script message, always add it (don't filter it out)
+      if (isScriptMessage) {
+        console.log('🎬 Processing script message - adding to messages');
+        setMessages(prev => {
+          const newMessage = {
+            id: Date.now() + Math.random(),
+            role: 'assistant',
+            content: messageContent,
+            timestamp: new Date().toISOString(),
+            ...messageMetadata
+          };
+          
+          // Explicitly ensure script is included
+          if (messageMetadata.script) {
+            newMessage.script = messageMetadata.script;
+            console.log('✅ Script explicitly added to newMessage');
+          }
+          
+          // Ensure all_scripts and script_history are included
+          if (messageMetadata.all_scripts && Array.isArray(messageMetadata.all_scripts)) {
+            newMessage.all_scripts = messageMetadata.all_scripts;
+            console.log(`✅ Added ${messageMetadata.all_scripts.length} scripts to all_scripts`);
+          }
+          
+          if (messageMetadata.script_history && Array.isArray(messageMetadata.script_history)) {
+            newMessage.script_history = messageMetadata.script_history;
+            console.log(`✅ Added script_history with ${messageMetadata.script_history.length} versions`);
+          }
+          
+          console.log('📝 Script message added. Has script:', !!newMessage.script, 'Has all_scripts:', !!newMessage.all_scripts);
+          return [...prev, newMessage];
+        });
+      } else if (isContentReviewMessage) {
         setMessages(prev => {
           // Remove all old content review messages
           const cleanedMessages = prev.filter(msg => 
@@ -445,11 +511,17 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
             ...messageMetadata
           };
           
+          // Explicitly ensure script is included
+          if (messageMetadata.script) {
+            newMessage.script = messageMetadata.script;
+          }
+          
           return [...cleanedMessages, newMessage];
         });
-      } else if (data.current_step !== 'generate_carousel_image' && !hasExistingCarouselMessage && !messageAlreadyExists) {
+      } else if ((data.current_step !== 'generate_carousel_image' && !hasExistingCarouselMessage && !messageAlreadyExists) || hasScript) {
         // Add assistant response (now with carousel images attached if applicable)
         const hasCarouselImages = messageMetadata.carousel_images && Array.isArray(messageMetadata.carousel_images) && messageMetadata.carousel_images.length > 0;
+        const hasScript = messageMetadata.script && typeof messageMetadata.script === 'object';
         
         // Use functional update to add message and clean up duplicates from other messages atomically
         setMessages(prev => {
@@ -471,6 +543,14 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
             timestamp: new Date().toISOString(),
             ...messageMetadata
           };
+          
+          // Explicitly ensure script is included
+          if (hasScript) {
+            newMessage.script = messageMetadata.script;
+            console.log('✅ Script added to newMessage:', Object.keys(newMessage.script || {}));
+          }
+          
+          console.log('📝 Adding new message with script:', hasScript, 'Message keys:', Object.keys(newMessage));
           
           return [...cleanedMessages, newMessage];
         });
@@ -1376,6 +1456,17 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       // Send the choice to backend
       setInputValue(label);
       sendMessage(label);
+    } else if (value === 'generate_script') {
+      // Handle script generation - send the value directly
+      setShowMediaUpload(false);
+      setMediaType(null);
+      setUploadedFile(null);
+      setMediaPreview(null);
+      setUploadError(null);
+      
+      // Send the value to trigger script generation
+      setInputValue(label);
+      sendMessage(value); // Send 'generate_script' value instead of label
     } else {
       // For other options (generate, skip), hide media upload UI and send message
       setShowMediaUpload(false);
@@ -1435,6 +1526,190 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
       const label = `📅 Schedule for ${new Date(datetime).toLocaleString()}`;
       setInputValue(label);
       sendMessage(datetime);
+    }
+  };
+
+  const handleRegenerateScript = (scriptId, scriptVersion = null) => {
+    // Show input field for changes
+    setShowRegenerateInput(true);
+    setRegeneratingScriptId(scriptId);
+    setRegeneratingScriptVersion(scriptVersion);
+    setRegenerateChanges('');
+  };
+
+  const handleSubmitRegenerate = async () => {
+    if (!conversationId) {
+      alert('Conversation not found. Please refresh and try again.');
+      return;
+    }
+
+    if (!regenerateChanges.trim()) {
+      alert('Please describe what changes you would like to make to the script.');
+      return;
+    }
+
+    setIsLoading(true);
+    setShowRegenerateInput(false);
+    
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/custom-content/regenerate-script`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          changes: regenerateChanges.trim()
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to regenerate script');
+      }
+
+      const data = await response.json();
+      
+      // Update messages with the new script message
+      if (data.message) {
+        setMessages(prev => {
+          // Remove all previous script messages (keep only non-script messages)
+          const nonScriptMessages = prev.filter(msg => !msg.script);
+          
+          // Add the new regenerated script message
+          return [...nonScriptMessages, {
+            ...data.message,
+            id: Date.now() + Math.random(),
+            timestamp: new Date().toISOString()
+          }];
+        });
+      }
+
+      setCurrentStep(data.current_step);
+      setProgress(data.progress_percentage);
+      setRegenerateChanges('');
+      setRegeneratingScriptId(null);
+      setRegeneratingScriptVersion(null);
+      
+      // Update messages with all scripts from history
+      if (data.message) {
+        setMessages(prev => {
+          // Remove old script messages
+          const nonScriptMessages = prev.filter(msg => !msg.script);
+          // Add new message with all scripts
+          const newMessage = {
+            ...data.message,
+            id: Date.now() + Math.random(),
+            timestamp: new Date().toISOString()
+          };
+          
+          // Ensure script data is included
+          if (data.message.script) {
+            newMessage.script = data.message.script;
+          }
+          if (data.message.all_scripts) {
+            newMessage.all_scripts = data.message.all_scripts;
+          }
+          if (data.message.script_history) {
+            newMessage.script_history = data.message.script_history;
+          }
+          
+          console.log('✅ Regenerated script message added:', {
+            hasScript: !!newMessage.script,
+            allScriptsCount: newMessage.all_scripts?.length || 0,
+            scriptHistoryCount: newMessage.script_history?.length || 0
+          });
+          
+          return [...nonScriptMessages, newMessage];
+        });
+      }
+    } catch (error) {
+      console.error('Error regenerating script:', error);
+      alert(`Failed to regenerate script: ${error.message}`);
+      setShowRegenerateInput(true); // Show input again on error
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCancelRegenerate = () => {
+    setShowRegenerateInput(false);
+    setRegenerateChanges('');
+    setRegeneratingScriptId(null);
+    setRegeneratingScriptVersion(null);
+  };
+
+  const handleSaveAsDraft = async (scriptId, scriptVersion = null) => {
+    if (!conversationId) {
+      alert('Conversation not found. Please refresh and try again.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/custom-content/save-script-draft`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          script_id: scriptId ? String(scriptId) : null,
+          script_version: scriptVersion || null
+        })
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to save draft';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+          // If errorMessage is still an object, stringify it
+          if (typeof errorMessage === 'object') {
+            errorMessage = JSON.stringify(errorMessage);
+          }
+        } catch (parseError) {
+          // If JSON parsing fails, try to get text
+          try {
+            const errorText = await response.text();
+            errorMessage = errorText || errorMessage;
+          } catch (textError) {
+            errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          }
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      
+      // Show success message
+      alert('Script saved as draft successfully! You can find it in the Writings section.');
+      
+      // Optionally add a success message to the chat
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        role: 'assistant',
+        content: '✅ Script saved as draft! You can find it in the Writings section to implement later.',
+        timestamp: new Date().toISOString()
+      }]);
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      // Properly handle error message - ensure it's a string
+      let errorMessage = 'Failed to save draft';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        errorMessage = error.message || error.detail || JSON.stringify(error);
+      }
+      alert(`Failed to save draft: ${errorMessage}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1714,6 +1989,215 @@ const CustomContentChatbot = ({ isOpen, onClose, onContentCreated }) => {
                     >
                       {message.content}
                     </ReactMarkdown>
+                  </div>
+                )}
+                
+                {/* Show script data if available - display all scripts from history */}
+                {(message.script || 
+                  (message.all_scripts && Array.isArray(message.all_scripts) && message.all_scripts.length > 0) ||
+                  (message.script_history && Array.isArray(message.script_history) && message.script_history.length > 0)) && (
+                  <div className="mt-4 space-y-4">
+                    {/* Display all scripts from script_history if available, otherwise just current script */}
+                    {(() => {
+                      // Get all scripts to display
+                      let scriptsToDisplay = [];
+                      
+                      // Priority: all_scripts > script > script_history
+                      if (message.all_scripts && Array.isArray(message.all_scripts) && message.all_scripts.length > 0) {
+                        scriptsToDisplay = message.all_scripts;
+                        console.log('📝 Using all_scripts:', scriptsToDisplay.length, 'scripts');
+                      } else if (message.script && typeof message.script === 'object') {
+                        scriptsToDisplay = [message.script];
+                        console.log('📝 Using single script:', Object.keys(message.script));
+                      } else if (message.script_history && Array.isArray(message.script_history) && message.script_history.length > 0) {
+                        // Fallback: extract scripts from script_history
+                        scriptsToDisplay = message.script_history
+                          .map(s => s.script)
+                          .filter(s => s && typeof s === 'object');
+                        console.log('📝 Using scripts from script_history:', scriptsToDisplay.length, 'scripts');
+                      } else {
+                        console.warn('⚠️ No scripts found in message. Message keys:', Object.keys(message));
+                        return (
+                          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <p className="text-yellow-800 text-sm">⚠️ Script data not found in message</p>
+                          </div>
+                        );
+                      }
+                      
+                      if (scriptsToDisplay.length === 0) {
+                        console.warn('⚠️ scriptsToDisplay is empty after processing');
+                        return (
+                          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <p className="text-yellow-800 text-sm">⚠️ No valid scripts to display</p>
+                          </div>
+                        );
+                      }
+                      
+                      // Filter and map with original indices preserved
+                      const validScriptsWithIndices = scriptsToDisplay
+                        .map((script, originalIndex) => ({ script, originalIndex }))
+                        .filter(({ script }) => script && typeof script === 'object');
+                      
+                      return validScriptsWithIndices.map(({ script, originalIndex }, displayIndex) => {
+                        const scriptVersion = message.script_history && message.script_history[originalIndex] 
+                          ? message.script_history[originalIndex].version 
+                          : (originalIndex + 1);
+                        const isLatest = displayIndex === validScriptsWithIndices.length - 1;
+                        
+                        return (
+                        <div key={`script-${originalIndex}-${displayIndex}`} className="p-5 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border-2 border-purple-300 shadow-lg">
+                          {/* Version Badge */}
+                          <div className="mb-3 flex items-center justify-between">
+                            <span className="px-3 py-1 bg-purple-200 text-purple-800 rounded-full text-xs font-semibold">
+                              Version {scriptVersion} {isLatest && '(Latest)'}
+                            </span>
+                          </div>
+                          
+                          <div className="space-y-4">
+                            {/* Script Title */}
+                            {script.title && (
+                              <div className="text-center">
+                                <h3 className="text-lg font-bold text-purple-800 mb-2">📝 {script.title}</h3>
+                              </div>
+                            )}
+                            
+                            {/* Hook */}
+                            {script.hook && (
+                              <div className="bg-white p-4 rounded-lg border border-purple-200">
+                                <div className="text-sm font-semibold text-purple-700 mb-2">🎣 Hook (First 3-5 seconds):</div>
+                                <div className="text-gray-700">{script.hook}</div>
+                              </div>
+                            )}
+                            
+                            {/* Scenes */}
+                            {script.scenes && Array.isArray(script.scenes) && script.scenes.length > 0 && (
+                              <div className="space-y-3">
+                                <div className="text-sm font-semibold text-purple-700 mb-2">🎬 Script Scenes:</div>
+                                {script.scenes.map((scene, idx) => (
+                            <div key={idx} className="bg-white p-4 rounded-lg border border-purple-200">
+                              <div className="font-semibold text-purple-600 mb-2">
+                                Scene {idx + 1} {scene.duration && `(${scene.duration})`}
+                              </div>
+                              {scene.visual && (
+                                <div className="mb-2">
+                                  <span className="text-xs font-semibold text-gray-600">Visual: </span>
+                                  <span className="text-gray-700">{scene.visual}</span>
+                                </div>
+                              )}
+                              {scene.audio && (
+                                <div className="mb-2">
+                                  <span className="text-xs font-semibold text-gray-600">Audio: </span>
+                                  <span className="text-gray-700">{scene.audio}</span>
+                                </div>
+                              )}
+                              {scene.on_screen_text && (
+                                <div className="mb-2">
+                                  <span className="text-xs font-semibold text-gray-600">On-screen text: </span>
+                                  <span className="text-gray-700 italic">{scene.on_screen_text}</span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                            {/* Call to Action */}
+                            {script.call_to_action && (
+                              <div className="bg-gradient-to-r from-purple-100 to-pink-100 p-4 rounded-lg border border-purple-300">
+                                <div className="text-sm font-semibold text-purple-700 mb-2">📢 Call to Action:</div>
+                                <div className="text-gray-800 font-medium">{script.call_to_action}</div>
+                              </div>
+                            )}
+                            
+                            {/* Hashtags */}
+                            {script.hashtags && Array.isArray(script.hashtags) && script.hashtags.length > 0 && (
+                              <div className="bg-white p-4 rounded-lg border border-purple-200">
+                                <div className="text-sm font-semibold text-purple-700 mb-2">#️⃣ Suggested Hashtags:</div>
+                                <div className="flex flex-wrap gap-2">
+                                  {script.hashtags.map((tag, idx) => (
+                                    <span key={idx} className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                                      #{tag.replace('#', '')}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Total Duration */}
+                            {script.total_duration && (
+                              <div className="text-sm text-gray-600">
+                                <span className="font-semibold">⏱️ Total Duration: </span>
+                                {script.total_duration}
+                              </div>
+                            )}
+                            
+                            {/* Production Tips */}
+                            {script.tips && (
+                              <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                                <div className="text-sm font-semibold text-yellow-800 mb-2">💡 Production Tips:</div>
+                                <div className="text-gray-700 text-sm">{script.tips}</div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Action Buttons for Each Script */}
+                          <div className="mt-4 space-y-3">
+                            {showRegenerateInput && regeneratingScriptId === `${message.id}-${displayIndex}` && regeneratingScriptVersion === scriptVersion ? (
+                        <div className="bg-white p-4 rounded-lg border-2 border-purple-300 shadow-md">
+                          <label className="block text-sm font-semibold text-purple-700 mb-2">
+                            What changes would you like to make to the script?
+                          </label>
+                          <textarea
+                            value={regenerateChanges}
+                            onChange={(e) => setRegenerateChanges(e.target.value)}
+                            placeholder="e.g., Make it more energetic, add a call to action about our new product, change the tone to be more casual..."
+                            className="w-full px-3 py-2 border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 text-sm"
+                            rows={3}
+                            disabled={isLoading}
+                          />
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              onClick={handleSubmitRegenerate}
+                              disabled={isLoading || !regenerateChanges.trim()}
+                              className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium text-sm flex items-center justify-center gap-2"
+                            >
+                              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                              {isLoading ? 'Regenerating...' : 'Regenerate with Changes'}
+                            </button>
+                            <button
+                              onClick={handleCancelRegenerate}
+                              disabled={isLoading}
+                              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium text-sm"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-3">
+                                <button
+                                  onClick={() => handleRegenerateScript(`${message.id}-${displayIndex}`, scriptVersion)}
+                                  disabled={isLoading || showRegenerateInput}
+                                  className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium text-sm flex items-center justify-center gap-2"
+                                >
+                                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                  Regenerate Script
+                                </button>
+                                <button
+                                  onClick={() => handleSaveAsDraft(`${message.id}-${displayIndex}`, scriptVersion)}
+                                  disabled={isLoading || showRegenerateInput}
+                                  className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium text-sm flex items-center justify-center gap-2"
+                                >
+                                  <Upload className="w-4 h-4" />
+                                  Save as Draft
+                                </button>
+                        </div>
+                      )}
+                          </div>
+                        </div>
+                        );
+                      });
+                    })()}
                   </div>
                 )}
                 
