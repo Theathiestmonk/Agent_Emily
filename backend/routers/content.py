@@ -182,7 +182,8 @@ async def get_all_content(
                 "hashtags": item.get("hashtags", []),
                 "post_type": item.get("post_type", "text"),
                 "campaign_id": item.get("campaign_id"),
-                "metadata": item.get("metadata", {})
+                "metadata": item.get("metadata", {}),
+                "video_scripting": item.get("video_scripting")  # Include video_scripting for script display
             }
             formatted_content.append(formatted_item)
         

@@ -262,9 +262,105 @@ const ContentModal = ({
           
           {/* Content */}
           <div className="p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Image Section */}
-              <div className="space-y-4">
+            {/* Check if this is a script - use different layout */}
+            {content.video_scripting && typeof content.video_scripting === 'object' ? (
+              /* Full-width scrollable script layout */
+              <div className="max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+                {/* Scrollable script content */}
+                <div className="p-5 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border-2 border-purple-300 shadow-lg">
+                  <div className="space-y-4">
+                    {/* Script Title */}
+                    {content.video_scripting.title && (
+                      <div className="text-center">
+                        <h3 className="text-lg font-bold text-purple-800 mb-2">📝 {content.video_scripting.title}</h3>
+                      </div>
+                    )}
+                    
+                    {/* Hook */}
+                    {content.video_scripting.hook && (
+                      <div className="bg-white p-4 rounded-lg border border-purple-200">
+                        <div className="text-sm font-semibold text-purple-700 mb-2">🎣 Hook (First 3-5 seconds):</div>
+                        <div className="text-gray-700">{content.video_scripting.hook}</div>
+                      </div>
+                    )}
+                    
+                    {/* Scenes */}
+                    {content.video_scripting.scenes && Array.isArray(content.video_scripting.scenes) && content.video_scripting.scenes.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="text-sm font-semibold text-purple-700 mb-2">🎬 Script Scenes:</div>
+                        {content.video_scripting.scenes.map((scene, idx) => (
+                          <div key={idx} className="bg-white p-4 rounded-lg border border-purple-200">
+                            <div className="font-semibold text-purple-600 mb-2">
+                              Scene {idx + 1} {scene.duration && `(${scene.duration})`}
+                            </div>
+                            {scene.visual && (
+                              <div className="mb-2">
+                                <span className="text-xs font-semibold text-gray-600">Visual: </span>
+                                <span className="text-gray-700">{scene.visual}</span>
+                              </div>
+                            )}
+                            {scene.audio && (
+                              <div className="mb-2">
+                                <span className="text-xs font-semibold text-gray-600">Audio: </span>
+                                <span className="text-gray-700">{scene.audio}</span>
+                              </div>
+                            )}
+                            {scene.on_screen_text && (
+                              <div className="mb-2">
+                                <span className="text-xs font-semibold text-gray-600">On-screen text: </span>
+                                <span className="text-gray-700 italic">{scene.on_screen_text}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Call to Action */}
+                    {content.video_scripting.call_to_action && (
+                      <div className="bg-gradient-to-r from-purple-100 to-pink-100 p-4 rounded-lg border border-purple-300">
+                        <div className="text-sm font-semibold text-purple-700 mb-2">📢 Call to Action:</div>
+                        <div className="text-gray-800 font-medium">{content.video_scripting.call_to_action}</div>
+                      </div>
+                    )}
+                    
+                    {/* Hashtags */}
+                    {content.video_scripting.hashtags && Array.isArray(content.video_scripting.hashtags) && content.video_scripting.hashtags.length > 0 && (
+                      <div className="bg-white p-4 rounded-lg border border-purple-200">
+                        <div className="text-sm font-semibold text-purple-700 mb-2">#️⃣ Suggested Hashtags:</div>
+                        <div className="flex flex-wrap gap-2">
+                          {content.video_scripting.hashtags.map((tag, idx) => (
+                            <span key={idx} className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                              #{tag.replace('#', '')}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Total Duration */}
+                    {content.video_scripting.total_duration && (
+                      <div className="text-sm text-gray-600">
+                        <span className="font-semibold">⏱️ Total Duration: </span>
+                        {content.video_scripting.total_duration}
+                      </div>
+                    )}
+                    
+                    {/* Production Tips */}
+                    {content.video_scripting.tips && (
+                      <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                        <div className="text-sm font-semibold text-yellow-800 mb-2">💡 Production Tips:</div>
+                        <div className="text-gray-700 text-sm">{content.video_scripting.tips}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Regular 2-column layout for non-script content */
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Image Section */}
+                <div className="space-y-4">
                 {(() => {
                   // Detect carousel posts
                   const isCarousel = content.post_type === 'carousel' || 
@@ -625,7 +721,7 @@ const ContentModal = ({
               
               {/* Text Content Section */}
               <div className="space-y-6">
-                {/* Content with Title */}
+                {/* Regular Content Display */}
                 {(content.title || content.content) && (
                   <div className="relative">
                     {editingContentInModal ? (
@@ -740,8 +836,8 @@ const ContentModal = ({
                   </div>
                 )}
                 
-                {/* Edit buttons just above the line */}
-                {content.status?.toLowerCase() !== 'published' && (content.title || content.content) && (
+                {/* Edit buttons just above the line - only for non-script content */}
+                {!content.video_scripting && content.status?.toLowerCase() !== 'published' && (content.title || content.content) && (
                   <div className="flex justify-end pb-4">
                     <div className="flex items-center space-x-1">
                       <button
@@ -769,7 +865,36 @@ const ContentModal = ({
                 )}
                 
               </div>
+              
+              {/* Edit buttons just above the line - only for non-script content */}
+              {!content.video_scripting && content.status?.toLowerCase() !== 'published' && (content.title || content.content) && (
+                <div className="flex justify-end pb-4 mt-4">
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onManualEdit('content')
+                      }}
+                      className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                      title="Edit manually"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onAIEdit('content')
+                      }}
+                      className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
+                      title="Edit with AI"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+            )}
           </div>
         </div>
       </div>
