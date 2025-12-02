@@ -395,16 +395,19 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   // Load today's conversations when component mounts or when profile/user changes
   useEffect(() => {
     if (profile && user && !isLoadingConversationsRef.current) {
-      // First, try to load from cache
+      // Load from cache synchronously (fast, non-blocking)
       const cachedMessages = loadMessagesFromCache()
       if (cachedMessages && cachedMessages.length > 0) {
         console.log('Loading messages from cache:', cachedMessages.length, 'messages')
-        setMessages(cachedMessages)
-        // Still fetch from API in background to get any new messages
-        loadTodayConversations()
+        // Use setTimeout to ensure this doesn't block rendering
+        setTimeout(() => {
+          setMessages(cachedMessages)
+        }, 0)
+        // Fetch from API in background asynchronously
+        Promise.resolve().then(() => loadTodayConversations())
       } else {
-        // No cache, load from API
-        loadTodayConversations()
+        // No cache, load from API asynchronously
+        Promise.resolve().then(() => loadTodayConversations())
       }
     }
   }, [profile?.id, user?.id]) // Reload when profile or user changes
@@ -512,7 +515,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         return
       }
       
-      // Fetch today's conversations
+      // Fetch today's conversations asynchronously (non-blocking)
       const response = await fetch(`${API_BASE_URL}/chatbot/conversations`, {
         method: 'GET',
         headers: {
@@ -521,105 +524,114 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         }
       })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('Failed to fetch conversations:', response.status, errorText)
-        isLoadingConversationsRef.current = false
-        // Still try to fetch scheduled messages
-        fetchScheduledMessages()
-        return
-      }
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('Failed to fetch conversations:', response.status, errorText)
+          isLoadingConversationsRef.current = false
+          // Still try to fetch scheduled messages
+          fetchScheduledMessages()
+          return
+        }
 
-      const data = await response.json()
-      console.log('Conversations response:', data)
-      
-      if (data.success && data.conversations) {
-        if (data.conversations.length > 0) {
-          // Convert conversations to message format
-          const conversationMessages = data.conversations.map(conv => {
-            const metadata = conv.metadata || {}
-            const isChase = metadata.sender === 'chase'
-            const isLeo = metadata.sender === 'leo'
-            const isEmily = conv.message_type === 'bot' && !isChase && !isLeo
-            return {
-              id: `conv-${conv.id}`,
-              conversationId: conv.id, // Store Supabase ID for deletion
-              type: conv.message_type === 'user' ? 'user' : 'bot',
-              content: conv.content,
-              timestamp: conv.created_at,
-              isNew: false,
-              scheduledMessageId: metadata.scheduled_message_id || null,
-              isChase: isChase,
-              isLeo: isLeo,
-              isEmily: isEmily,
-              chaseMetadata: isChase ? {
-                leadId: metadata.lead_id,
-                leadName: metadata.lead_name,
-                emailContent: metadata.email_content,
-                emailSubject: metadata.email_subject
-              } : null
-            }
-          })
-          
-          // Remove duplicates based on scheduled_message_id
-          const seenScheduledIds = new Set()
-          const uniqueMessages = []
-          for (const msg of conversationMessages) {
-            if (msg.scheduledMessageId) {
-              if (seenScheduledIds.has(msg.scheduledMessageId)) {
-                continue // Skip duplicate
-              }
-              seenScheduledIds.add(msg.scheduledMessageId)
-            }
-            uniqueMessages.push(msg)
-          }
-          
-          // Sort by timestamp (oldest first)
-          uniqueMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-          
-          console.log('Setting messages:', uniqueMessages.length, 'messages')
-          setMessages(uniqueMessages)
-          // Update cache with fetched messages
-          saveMessagesToCache(uniqueMessages)
-        } else {
-          console.log('No conversations found for today - will generate scheduled messages up to current time')
-          // If no conversations, start with empty array
-          setMessages([])
-          // Trigger generation of scheduled messages up to current time
-          try {
-            const generateResponse = await fetch(`${API_BASE_URL}/chatbot/scheduled-messages/generate-today`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
+        const data = await response.json()
+        console.log('Conversations response:', data)
+        
+        if (data.success && data.conversations) {
+          if (data.conversations.length > 0) {
+            // Convert conversations to message format
+            const conversationMessages = data.conversations.map(conv => {
+              const metadata = conv.metadata || {}
+              const isChase = metadata.sender === 'chase'
+              const isLeo = metadata.sender === 'leo'
+              const isEmily = conv.message_type === 'bot' && !isChase && !isLeo
+              return {
+                id: `conv-${conv.id}`,
+                conversationId: conv.id, // Store Supabase ID for deletion
+                type: conv.message_type === 'user' ? 'user' : 'bot',
+                content: conv.content,
+                timestamp: conv.created_at,
+                isNew: false,
+                scheduledMessageId: metadata.scheduled_message_id || null,
+                isChase: isChase,
+                isLeo: isLeo,
+                isEmily: isEmily,
+                chaseMetadata: isChase ? {
+                  leadId: metadata.lead_id,
+                  leadName: metadata.lead_name,
+                  emailContent: metadata.email_content,
+                  emailSubject: metadata.email_subject
+                } : null
               }
             })
             
-            if (generateResponse.ok) {
-              const generateData = await generateResponse.json()
-              console.log('Generated messages:', generateData)
-              // After generating, fetch scheduled messages to display them
-              setTimeout(() => fetchScheduledMessages(), 500)
-              isLoadingConversationsRef.current = false
-              return // Exit early, fetchScheduledMessages will be called
+            // Remove duplicates based on scheduled_message_id
+            const seenScheduledIds = new Set()
+            const uniqueMessages = []
+            for (const msg of conversationMessages) {
+              if (msg.scheduledMessageId) {
+                if (seenScheduledIds.has(msg.scheduledMessageId)) {
+                  continue // Skip duplicate
+                }
+                seenScheduledIds.add(msg.scheduledMessageId)
+              }
+              uniqueMessages.push(msg)
             }
-          } catch (error) {
-            console.error('Error generating messages:', error)
+            
+            // Sort by timestamp (oldest first)
+            uniqueMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+            
+            console.log('Setting messages:', uniqueMessages.length, 'messages')
+            // Use setTimeout to batch state updates and avoid blocking
+            setTimeout(() => {
+              setMessages(uniqueMessages)
+              // Update cache with fetched messages
+              saveMessagesToCache(uniqueMessages)
+            }, 0)
+          } else {
+            console.log('No conversations found for today - will generate scheduled messages up to current time')
+            // If no conversations, start with empty array
+            setTimeout(() => setMessages([]), 0)
+            // Trigger generation of scheduled messages up to current time (async)
+            Promise.resolve().then(async () => {
+              try {
+                const generateResponse = await fetch(`${API_BASE_URL}/chatbot/scheduled-messages/generate-today`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                  }
+                })
+                
+                if (generateResponse.ok) {
+                  const generateData = await generateResponse.json()
+                  console.log('Generated messages:', generateData)
+                  // After generating, fetch scheduled messages to display them
+                  setTimeout(() => fetchScheduledMessages(), 500)
+                  isLoadingConversationsRef.current = false
+                  return // Exit early, fetchScheduledMessages will be called
+                }
+              } catch (error) {
+                console.error('Error generating messages:', error)
+              }
+            })
           }
+        } else {
+          console.error('Invalid response format:', data)
+          setTimeout(() => setMessages([]), 0)
         }
-      } else {
-        console.error('Invalid response format:', data)
-        setMessages([])
-      }
-      
-      // Then fetch and display scheduled messages
-      fetchScheduledMessages()
+        
+        // Then fetch and display scheduled messages (async, non-blocking)
+        Promise.resolve().then(() => fetchScheduledMessages())
+        
+        // Reset loading flag after a short delay to allow state updates
+        setTimeout(() => {
+          isLoadingConversationsRef.current = false
+        }, 100)
       
     } catch (error) {
       console.error('Error loading conversations:', error)
-      // Still try to fetch scheduled messages
-      fetchScheduledMessages()
-    } finally {
+      // Still try to fetch scheduled messages (async)
+      Promise.resolve().then(() => fetchScheduledMessages())
       isLoadingConversationsRef.current = false
     }
   }
@@ -1337,10 +1349,10 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
               </div>
               {/* Message Bubble */}
               <div 
-                className={`px-4 py-3 rounded-lg relative group message-bubble ${
+                className={`px-4 py-3 rounded-lg relative group message-bubble backdrop-blur-md ${
                   message.type === 'user'
-                    ? 'bg-pink-500 text-white'
-                    : 'bg-white text-black chatbot-bubble-shadow'
+                    ? 'bg-pink-500/80 text-white border border-pink-400/30'
+                    : 'bg-white/70 text-black chatbot-bubble-shadow border border-white/30'
                 }`}
                 onMouseEnter={() => setHoveredMessageId(message.id)}
                 onMouseLeave={() => setHoveredMessageId(null)}
@@ -1845,7 +1857,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
 
         {isLoading && !isStreaming && (
           <div className="flex justify-start w-full px-4">
-            <div className="bg-white rounded-lg px-4 py-3 chatbot-bubble-shadow">
+            <div className="bg-white/70 backdrop-blur-md rounded-lg px-4 py-3 chatbot-bubble-shadow border border-white/30">
               <div className="flex items-center space-x-1">
                 <span className="text-black text-lg">.</span>
                 <span className="text-black text-lg typing-dot-1">.</span>
@@ -1859,7 +1871,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       </div>
 
       {/* Input - Fixed at bottom */}
-      <div className="bg-white px-4 border-t border-gray-200 z-10" style={{ 
+      <div className="bg-transparent px-4 border-t border-white/20 z-10" style={{ 
         flexShrink: 0,
         flexGrow: 0,
         paddingTop: '12px',
@@ -1911,8 +1923,13 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                   }
                 }}
                 placeholder={replyingToMessage ? `Replying to: ${replyingToMessage.content.substring(0, 30)}...` : "Ask Emily..."}
-                className={`w-full px-6 py-4 bg-white border border-pink-200 rounded-2xl focus:ring-0 focus:border-transparent outline-none text-sm pr-20 placeholder:text-gray-400 resize-none overflow-y-auto ${replyingToMessage ? 'pt-8' : ''}`}
-                style={{ minHeight: '56px', maxHeight: '96px' }} // 1 row min, 4 rows max (24px * 4 = 96px)
+                className={`w-full px-6 py-4 bg-white/70 backdrop-blur-md border border-white/30 rounded-2xl focus:ring-0 focus:border-white/50 outline-none text-sm pr-20 placeholder:text-gray-500 resize-none overflow-y-auto shadow-lg ${replyingToMessage ? 'pt-8' : ''}`}
+                style={{ 
+                  minHeight: '56px', 
+                  maxHeight: '96px',
+                  boxShadow: '0 4px 16px 0 rgba(31, 38, 135, 0.25)'
+                }}
+                // 1 row min, 4 rows max (24px * 4 = 96px)
                 disabled={isLoading || isStreaming}
                 rows={1}
                 autoFocus
@@ -1995,7 +2012,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         }
         
         .chatbot-bubble-shadow {
-          box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+          box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
         }
         
         .line-clamp-3 {

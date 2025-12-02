@@ -162,9 +162,12 @@ const ContentDashboard = () => {
 
 
   useEffect(() => {
-    fetchData()
-    fetchAllContent()
-    fetchConnections()
+    // Load all data asynchronously without blocking
+    Promise.resolve().then(() => {
+      fetchData()
+      fetchAllContent()
+      fetchConnections()
+    })
   }, [])
 
   // Fetch social media connections
@@ -334,7 +337,8 @@ const ContentDashboard = () => {
       setHasMoreContent(false)
       setLoadingAllContent(false)
       setItemsToShow(4) // Reset to show only one row (4 columns)
-      fetchAllContent()
+      // Load content asynchronously
+      Promise.resolve().then(() => fetchAllContent())
     }
   }, [generating, fetchingFreshData, selectedChannel])
 
@@ -542,6 +546,11 @@ const ContentDashboard = () => {
       let batchCount = 0
       
       while (hasMoreData && batchCount < maxBatches) {
+        // Use setTimeout to yield to the event loop between batches (non-blocking)
+        if (batchCount > 0) {
+          await new Promise(resolve => setTimeout(resolve, 0))
+        }
+        
         const result = await contentAPI.getAllContent(batchSize, offset)
         
         if (!result.data || result.data.length === 0) {
@@ -629,18 +638,21 @@ const ContentDashboard = () => {
       console.log('Selected dates (oldest first):', selectedDates)
       console.log('Sample content platforms:', filteredContent.slice(0, 3).map(c => ({ id: c.id, platform: c.platform })))
       
-      if (filteredContent.length > 0) {
-        setAllContent(filteredContent)
-        console.log(`✅ Set allContent with ${filteredContent.length} items for channel "${selectedChannel}"`)
+      // Update state asynchronously to avoid blocking
+      setTimeout(() => {
+        if (filteredContent.length > 0) {
+          setAllContent(filteredContent)
+          console.log(`✅ Set allContent with ${filteredContent.length} items for channel "${selectedChannel}"`)
+          
+          // Images are now loaded directly from content_posts.primary_image_url
+        } else {
+          setAllContent([])
+          console.log(`No content found for channel "${selectedChannel}"`)
+        }
         
-        // Images are now loaded directly from content_posts.primary_image_url
-      } else {
-        setAllContent([])
-        console.log(`No content found for channel "${selectedChannel}"`)
-      }
-      
-      // Set loading state to false after fetch completes
-      setFetchingContent(false)
+        // Set loading state to false after fetch completes
+        setFetchingContent(false)
+      }, 0)
     } catch (error) {
       console.error('Error fetching all content:', error)
       setAllContent([])
@@ -682,6 +694,11 @@ const ContentDashboard = () => {
       let batchCount = 0
       
       while (hasMoreData && batchCount < maxBatches) {
+        // Use setTimeout to yield to the event loop between batches (non-blocking)
+        if (batchCount > 0) {
+          await new Promise(resolve => setTimeout(resolve, 0))
+        }
+        
         const result = await contentAPI.getAllContent(batchSize, offset)
         
         if (!result.data || result.data.length === 0) {
@@ -759,20 +776,23 @@ const ContentDashboard = () => {
       
       console.log(`Loaded ${allFilteredContent.length} items from ${sortedDates.length} dates for channel "${selectedChannel}"`)
       
-      if (allFilteredContent.length > 0) {
-        setAllContent(allFilteredContent)
-        setHasMoreContent(false) // No more content to load
-        setAllDatesCount(sortedDates.length)
-        console.log(`✅ Set allContent with ${allFilteredContent.length} items for channel "${selectedChannel}"`)
+      // Update state asynchronously to avoid blocking
+      setTimeout(() => {
+        if (allFilteredContent.length > 0) {
+          setAllContent(allFilteredContent)
+          setHasMoreContent(false) // No more content to load
+          setAllDatesCount(sortedDates.length)
+          console.log(`✅ Set allContent with ${allFilteredContent.length} items for channel "${selectedChannel}"`)
+          
+          // Images are now loaded directly from content_posts.primary_image_url
+        } else {
+          setAllContent([])
+          console.log(`No content found for channel "${selectedChannel}"`)
+        }
         
-        // Images are now loaded directly from content_posts.primary_image_url
-      } else {
-        setAllContent([])
-        console.log(`No content found for channel "${selectedChannel}"`)
-      }
-      
-      // Set loading state to false after fetch completes
-      setLoadingAllContent(false)
+        // Set loading state to false after fetch completes
+        setLoadingAllContent(false)
+      }, 0)
     } catch (error) {
       console.error('Error loading all content:', error)
       setAllContent([])
