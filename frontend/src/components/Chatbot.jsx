@@ -35,7 +35,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   const mouseDownTimeRef = useRef(0)
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto" })
   }
 
   // Helper function to check if any modal is open
@@ -328,10 +328,84 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     }
   }, [isCallActive, callStatus])
 
+  // Cache key for localStorage
+  const getCacheKey = () => {
+    if (!user?.id) return null
+    const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+    return `chatbot_messages_${user.id}_${today}`
+  }
+
+  // Load messages from cache
+  const loadMessagesFromCache = () => {
+    const cacheKey = getCacheKey()
+    if (!cacheKey) return null
+    
+    try {
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        // Check if cache is from today
+        const cacheDate = parsed.date
+        const today = new Date().toISOString().split('T')[0]
+        if (cacheDate === today && parsed.messages && Array.isArray(parsed.messages)) {
+          return parsed.messages
+        }
+      }
+    } catch (error) {
+      console.error('Error loading messages from cache:', error)
+    }
+    return null
+  }
+
+  // Save messages to cache (only called when new message is added)
+  const saveMessagesToCache = (messagesToSave) => {
+    const cacheKey = getCacheKey()
+    if (!cacheKey) return
+    
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const cacheData = {
+        date: today,
+        messages: messagesToSave,
+        lastUpdated: new Date().toISOString()
+      }
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData))
+    } catch (error) {
+      console.error('Error saving messages to cache:', error)
+      // Handle quota exceeded error
+      if (error.name === 'QuotaExceededError') {
+        console.warn('LocalStorage quota exceeded, clearing old cache entries')
+        // Clear old cache entries (keep only last 7 days)
+        try {
+          const keys = Object.keys(localStorage)
+          const cacheKeys = keys.filter(key => key.startsWith('chatbot_messages_'))
+          if (cacheKeys.length > 7) {
+            // Sort by key (which includes date) and remove oldest
+            cacheKeys.sort().slice(0, cacheKeys.length - 7).forEach(key => {
+              localStorage.removeItem(key)
+            })
+          }
+        } catch (clearError) {
+          console.error('Error clearing old cache:', clearError)
+        }
+      }
+    }
+  }
+
   // Load today's conversations when component mounts or when profile/user changes
   useEffect(() => {
     if (profile && user && !isLoadingConversationsRef.current) {
-      loadTodayConversations()
+      // First, try to load from cache
+      const cachedMessages = loadMessagesFromCache()
+      if (cachedMessages && cachedMessages.length > 0) {
+        console.log('Loading messages from cache:', cachedMessages.length, 'messages')
+        setMessages(cachedMessages)
+        // Still fetch from API in background to get any new messages
+        loadTodayConversations()
+      } else {
+        // No cache, load from API
+        loadTodayConversations()
+      }
     }
   }, [profile?.id, user?.id]) // Reload when profile or user changes
 
@@ -354,45 +428,50 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
           const metadata = newMessage.metadata || {}
           const isChase = metadata.sender === 'chase'
           
-          // Only add if it's a new message (not already in messages)
-          setMessages(prev => {
-            // Check if message already exists
-            const exists = prev.some(msg => 
-              msg.conversationId === newMessage.id || 
-              (msg.id && msg.id === `conv-${newMessage.id}`)
-            )
-            
-            if (exists) return prev
-            
-            // Add new message
-            const messageObj = {
-              id: `conv-${newMessage.id}`,
-              conversationId: newMessage.id,
-              type: newMessage.message_type === 'user' ? 'user' : 'bot',
-              content: newMessage.content,
-              timestamp: newMessage.created_at,
-              isNew: true,
-              scheduledMessageId: metadata.scheduled_message_id || null,
-              isChase: isChase,
-              chaseMetadata: isChase ? {
-                leadId: metadata.lead_id,
-                leadName: metadata.lead_name,
-                emailContent: metadata.email_content,
-                emailSubject: metadata.email_subject
-              } : null
-            }
-            
-            // Remove isNew flag after animation
-            setTimeout(() => {
-              setMessages(current => current.map(msg => 
-                msg.id === messageObj.id && msg.isNew
-                  ? { ...msg, isNew: false }
-                  : msg
-              ))
-            }, 400)
-            
-            return [...prev, messageObj]
-          })
+            // Only add if it's a new message (not already in messages)
+            setMessages(prev => {
+              // Check if message already exists
+              const exists = prev.some(msg => 
+                msg.conversationId === newMessage.id || 
+                (msg.id && msg.id === `conv-${newMessage.id}`)
+              )
+              
+              if (exists) return prev
+              
+              // Add new message
+              const messageObj = {
+                id: `conv-${newMessage.id}`,
+                conversationId: newMessage.id,
+                type: newMessage.message_type === 'user' ? 'user' : 'bot',
+                content: newMessage.content,
+                timestamp: newMessage.created_at,
+                isNew: true,
+                scheduledMessageId: metadata.scheduled_message_id || null,
+                isChase: isChase,
+                chaseMetadata: isChase ? {
+                  leadId: metadata.lead_id,
+                  leadName: metadata.lead_name,
+                  emailContent: metadata.email_content,
+                  emailSubject: metadata.email_subject
+                } : null
+              }
+              
+              const updatedMessages = [...prev, messageObj]
+              
+              // Update cache when new message is added
+              saveMessagesToCache(updatedMessages)
+              
+              // Remove isNew flag after animation
+              setTimeout(() => {
+                setMessages(current => current.map(msg => 
+                  msg.id === messageObj.id && msg.isNew
+                    ? { ...msg, isNew: false }
+                    : msg
+                ))
+              }, 400)
+              
+              return updatedMessages
+            })
         }
       )
       .subscribe()
@@ -500,6 +579,8 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
           
           console.log('Setting messages:', uniqueMessages.length, 'messages')
           setMessages(uniqueMessages)
+          // Update cache with fetched messages
+          saveMessagesToCache(uniqueMessages)
         } else {
           console.log('No conversations found for today - will generate scheduled messages up to current time')
           // If no conversations, start with empty array
@@ -561,7 +642,12 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       replyingTo: replyingToMessage
     }
 
-    setMessages(prev => [...prev, userMessage])
+    setMessages(prev => {
+      const updated = [...prev, userMessage]
+      // Update cache when new message is added
+      saveMessagesToCache(updated)
+      return updated
+    })
     setInputMessage('')
     setReplyingToMessage(null) // Clear reply context after sending
     setIsLoading(true)
@@ -577,7 +663,12 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       isStreaming: true
     }
 
-    setMessages(prev => [...prev, botMessage])
+    setMessages(prev => {
+      const updated = [...prev, botMessage]
+      // Update cache when new message is added
+      saveMessagesToCache(updated)
+      return updated
+    })
 
     try {
       const authToken = await getAuthToken()
@@ -816,6 +907,9 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         !existingScheduledIds.has(msg.id)
       )
       
+      // Only update cache if new messages are being added
+      const hasNewMessages = newScheduledMessages.length > 0
+      
       if (newScheduledMessages.length === 0) {
         return prev // No new messages to add
       }
@@ -879,6 +973,11 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         const timeB = new Date(b.timestamp || 0).getTime()
         return timeA - timeB
       })
+      
+      // Update cache when new scheduled messages are added (after deduplication and sorting)
+      if (hasNewMessages) {
+        saveMessagesToCache(uniqueMessages)
+      }
       
       // Remove animation flags after a delay
       setTimeout(() => {
@@ -1166,7 +1265,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       // This ensures consistent behavior and the button is always available
       // Scroll to bottom after loading
       setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" })
       }, 100)
     },
     startCall: () => {
@@ -1267,7 +1366,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                 {/* Agent Name - Only show for bot messages, inside bubble at top */}
                 {message.type === 'bot' && (
                   <div className="mb-2">
-                    <span className="text-xs font-medium text-purple-600">
+                    <span className="text-base font-semibold text-purple-600">
                       {message.isChase ? 'Chase' : message.isLeo ? 'Leo' : 'Emily'}
                     </span>
                   </div>

@@ -1329,13 +1329,17 @@ async def send_message_to_lead(
         logger.error(f"Error sending message: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# WhatsApp Connection Request Model
+class WhatsAppConnectionRequest(BaseModel):
+    phone_number_id: str
+    access_token: str
+    business_account_id: Optional[str] = None
+    whatsapp_business_account_id: Optional[str] = None
+
 # WhatsApp Connection Endpoints
 @router.post("/whatsapp/connect")
 async def connect_whatsapp(
-    phone_number_id: str,
-    access_token: str,
-    business_account_id: Optional[str] = None,
-    whatsapp_business_account_id: Optional[str] = None,
+    request: WhatsAppConnectionRequest,
     current_user: dict = Depends(get_current_user)
 ):
     """Connect WhatsApp Business API account"""
@@ -1343,10 +1347,10 @@ async def connect_whatsapp(
         whatsapp_service = WhatsAppService()
         result = whatsapp_service.create_or_update_whatsapp_connection(
             user_id=current_user["id"],
-            phone_number_id=phone_number_id,
-            access_token=access_token,
-            business_account_id=business_account_id,
-            whatsapp_business_account_id=whatsapp_business_account_id
+            phone_number_id=request.phone_number_id,
+            access_token=request.access_token,
+            business_account_id=request.business_account_id,
+            whatsapp_business_account_id=request.whatsapp_business_account_id
         )
         
         return {"success": True, "connection": result}

@@ -11,8 +11,7 @@ import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from scheduler.content_scheduler import ContentScheduler
-from scheduler.background_scheduler import start_background_scheduler, stop_background_scheduler
+from scheduler.post_publisher import start_post_publisher, stop_post_publisher
 from scheduler.daily_messages_scheduler import start_daily_messages_scheduler, stop_daily_messages_scheduler
 from routers.connections import router as connections_router
 from routers.content import router as content_router
@@ -33,6 +32,7 @@ from routers.website_analysis import router as website_analysis_router
 from routers.trial import router as trial_router
 from routers.leads import router as leads_router
 from routers.contact import router as contact_router
+from routers.whatsapp import router as whatsapp_router
 
 # Load environment variables
 load_dotenv()
@@ -112,6 +112,7 @@ app.include_router(website_analysis_router)
 app.include_router(trial_router)
 app.include_router(leads_router)
 app.include_router(contact_router)
+app.include_router(whatsapp_router)
 
 # Health check endpoint
 @app.get("/health")
@@ -182,20 +183,19 @@ def get_progress(user_id: str) -> Dict[str, Any]:
     """Get current progress for a user"""
     return progress_store.get(user_id, {"is_generating": False})
 
-# Initialize content scheduler with progress callback
-content_scheduler = ContentScheduler(supabase_url, supabase_key, openai_api_key, update_progress)
+# Content scheduler removed
 
 # Startup and shutdown events
 @app.on_event("startup")
 async def startup_event():
-    """Start background scheduler on startup"""
+    """Start services on startup"""
+    # Start post publisher for auto-publishing scheduled posts
     try:
-        await start_background_scheduler(supabase_url, supabase_key, openai_api_key)
-        logger.info("Background scheduler started successfully")
+        await start_post_publisher(supabase_url, supabase_key)
+        logger.info("Post publisher started successfully")
     except Exception as e:
-        logger.error(f"Failed to start background scheduler: {e}")
-        # Continue without background scheduler for now
-        logger.info("Continuing without background scheduler")
+        logger.error(f"Failed to start post publisher: {e}")
+        logger.info("Continuing without post publisher")
     
     # Start daily messages scheduler
     try:
@@ -207,12 +207,13 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Stop background scheduler on shutdown"""
+    """Stop services on shutdown"""
     import asyncio
     
+    # Stop post publisher
     try:
-        await stop_background_scheduler()
-        logger.info("Background scheduler stopped successfully")
+        await stop_post_publisher()
+        logger.info("Post publisher stopped successfully")
     except asyncio.CancelledError:
         # Normal during shutdown, ignore
         pass
@@ -417,38 +418,9 @@ async def debug_content(user_id: str):
     except Exception as e:
         return {"error": str(e)}
 
-@app.post("/content/trigger-weekly")
-async def trigger_weekly_generation():
-    """Manually trigger weekly content generation (for testing)"""
-    try:
-        result = await content_scheduler.run_weekly_content_generation()
-        return {
-            "success": True,
-            "message": "Weekly content generation triggered successfully",
-            "result": result
-        }
-    except Exception as e:
-        logger.error(f"Error triggering weekly generation: {e}")
-        return {
-            "success": False,
-            "message": f"Error triggering weekly generation: {str(e)}"
-        }
+# Content scheduler endpoint removed
 
-@app.post("/content/cleanup")
-async def cleanup_all_content():
-    """Manually trigger content cleanup for all users (for testing)"""
-    try:
-        await content_scheduler.cleanup_all_existing_content()
-        return {
-            "success": True,
-            "message": "Content cleanup completed successfully"
-        }
-    except Exception as e:
-        logger.error(f"Error cleaning up content: {e}")
-        return {
-            "success": False,
-            "message": f"Error cleaning up content: {str(e)}"
-        }
+# Content cleanup endpoint removed
 
 @app.post("/debug/create-profile")
 async def create_test_profile():
@@ -881,8 +853,12 @@ async def run_content_generation_with_progress(user_id: str, generate_images: bo
         # Update progress
         await update_progress(user_id, "starting", 5, "Initializing content generation...")
         
+        # Use ContentCreationAgent directly
+        from agents.content_creation_agent import ContentCreationAgent
+        content_agent = ContentCreationAgent(supabase_url, supabase_key, openai_api_key, update_progress)
+        
         # Run the actual content generation
-        result = await content_scheduler.run_single_user_generation(user_id)
+        result = await content_agent.run_weekly_generation(user_id)
         
         logger.info(f"Content generation result: {result}")
         
@@ -1143,22 +1119,7 @@ async def update_image_preferences(
         )
 
 # Admin endpoints (for testing and manual triggers)
-@app.post("/admin/content/generate-all")
-async def generate_content_for_all_users(background_tasks: BackgroundTasks):
-    """Generate content for all users (admin endpoint)"""
-    try:
-        # Run content generation for all users in background
-        background_tasks.add_task(
-            content_scheduler.run_weekly_content_generation
-        )
-        
-        return {"message": "Content generation started for all users"}
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start content generation: {str(e)}"
-        )
+# Content scheduler admin endpoint removed
 
 # Ads endpoints
 @app.get("/ads/{platform}")

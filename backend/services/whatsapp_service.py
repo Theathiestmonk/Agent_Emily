@@ -9,7 +9,7 @@ import hmac
 import hashlib
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 from supabase import create_client
 from cryptography.fernet import Fernet
@@ -88,8 +88,7 @@ class WhatsAppService:
                 result = self.supabase.table("whatsapp_connections").update(connection_data).eq("id", existing.data[0]["id"]).execute()
                 logger.info(f"Updated WhatsApp connection for user {user_id}")
             else:
-                # Create new connection
-                connection_data["id"] = None  # Let database generate UUID
+                # Create new connection - don't include id, let database generate UUID
                 result = self.supabase.table("whatsapp_connections").insert(connection_data).execute()
                 logger.info(f"Created WhatsApp connection for user {user_id}")
             
@@ -166,24 +165,71 @@ class WhatsAppService:
             
             # Send message
             response = requests.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
             
+            # Check response for errors
+            if not response.ok:
+                error_data = response.json() if response.content else {}
+                error_message = error_data.get("error", {}).get("message", "Unknown error")
+                error_code = error_data.get("error", {}).get("code", 0)
+                error_subcode = error_data.get("error", {}).get("error_subcode", 0)
+                
+                # Check if it's a 24-hour window issue (error code 131047)
+                if error_code == 131047 or error_subcode == 131047:
+                    raise ValueError(
+                        "Cannot send free-form message. The recipient must have replied to you within the last 24 hours, "
+                        "or you need to use an approved WhatsApp template message for the first contact. "
+                        "Please use a template message or wait for the recipient to message you first."
+                    )
+                elif error_code == 131026:
+                    raise ValueError(
+                        "Recipient phone number is not registered on WhatsApp or is invalid. "
+                        "Please verify the phone number is correct and has WhatsApp installed."
+                    )
+                else:
+                    raise ValueError(f"WhatsApp API error: {error_message} (Code: {error_code})")
+            
+            response.raise_for_status()
             result = response.json()
             message_id = result.get("messages", [{}])[0].get("id", "")
             
+            # Check for warnings or status in response
+            contacts = result.get("contacts", [])
+            contact_status = contacts[0].get("wa_id") if contacts else None
+            
             logger.info(f"Sent WhatsApp message to {phone_number}, message_id: {message_id}")
+            
+            # Log additional info for debugging
+            if not contact_status:
+                logger.warning(f"Message sent but no contact status returned for {phone_number}")
             
             return {
                 "success": True,
                 "message_id": message_id,
                 "status": "sent",
-                "whatsapp_id": message_id
+                "whatsapp_id": message_id,
+                "contact_status": contact_status,
+                "note": "Message sent to WhatsApp API. Delivery status will be updated via webhook. "
+                        "Note: Free-form messages only work if recipient replied within 24 hours. "
+                        "For first messages, use a template message."
             }
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Error sending WhatsApp message: {e}")
             if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response: {e.response.text}")
+                try:
+                    error_data = e.response.json()
+                    error_message = error_data.get("error", {}).get("message", str(e))
+                    error_code = error_data.get("error", {}).get("code", 0)
+                    logger.error(f"WhatsApp API Error: {error_message} (Code: {error_code})")
+                    
+                    # Re-raise with more specific error
+                    if error_code == 131047:
+                        raise ValueError(
+                            "Cannot send free-form message. Use a template message for first contact, "
+                            "or wait for recipient to reply within 24 hours."
+                        )
+                except:
+                    logger.error(f"Response: {e.response.text}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error sending WhatsApp message: {e}")
@@ -292,6 +338,217 @@ class WhatsAppService:
         except Exception as e:
             logger.error(f"Error getting message status: {e}")
             return None
+    
+    async def get_templates(self, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Get list of approved WhatsApp message templates from Meta API
+        
+        Args:
+            user_id: User ID who owns the WhatsApp connection
+            
+        Returns:
+            List of template objects with name, language, status, etc.
+        """
+        try:
+            # Get WhatsApp connection
+            connection = self.get_whatsapp_connection(user_id)
+            if not connection:
+                raise ValueError(f"No active WhatsApp connection found for user {user_id}")
+            
+            # Decrypt access token
+            access_token = self.decrypt_token(connection["access_token_encrypted"])
+            whatsapp_business_account_id = connection.get("whatsapp_business_account_id")
+            business_account_id = connection.get("business_account_id")
+            
+            # Try to get templates using business account ID or WABA ID
+            # WhatsApp templates are associated with the business account, not phone number
+            if whatsapp_business_account_id:
+                url = f"https://graph.facebook.com/{self.api_version}/{whatsapp_business_account_id}/message_templates"
+            elif business_account_id:
+                url = f"https://graph.facebook.com/{self.api_version}/{business_account_id}/message_templates"
+            else:
+                # Fallback: try to get WABA ID from phone number
+                phone_number_id = connection["phone_number_id"]
+                # First, try to get the WABA ID from the phone number
+                try:
+                    phone_info_url = f"https://graph.facebook.com/{self.api_version}/{phone_number_id}"
+                    phone_response = requests.get(phone_info_url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+                    if phone_response.ok:
+                        phone_data = phone_response.json()
+                        waba_id = phone_data.get("whatsapp_business_account_id")
+                        if waba_id:
+                            url = f"https://graph.facebook.com/{self.api_version}/{waba_id}/message_templates"
+                        else:
+                            raise ValueError("Could not find WhatsApp Business Account ID. Please provide it when connecting.")
+                    else:
+                        raise ValueError("Could not access phone number information. Please provide WhatsApp Business Account ID when connecting.")
+                except Exception as e:
+                    logger.error(f"Error getting WABA ID: {e}")
+                    raise ValueError("Could not find WhatsApp Business Account ID. Please provide it when connecting.")
+            
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            # Fetch templates
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            templates = result.get("data", [])
+            
+            # Format templates for easier use
+            formatted_templates = []
+            for template in templates:
+                formatted_templates.append({
+                    "name": template.get("name", ""),
+                    "language": template.get("language", "en"),
+                    "status": template.get("status", ""),
+                    "category": template.get("category", ""),
+                    "components": template.get("components", []),
+                    "id": template.get("id", "")
+                })
+            
+            logger.info(f"Retrieved {len(formatted_templates)} WhatsApp templates for user {user_id}")
+            return formatted_templates
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching WhatsApp templates: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response: {e.response.text}")
+            # Return empty list instead of raising - templates are optional
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error fetching WhatsApp templates: {e}")
+            return []
+    
+    async def send_template_message(
+        self,
+        user_id: str,
+        phone_number: str,
+        template_name: str,
+        language_code: str = "en",
+        template_parameters: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """
+        Send WhatsApp template message
+        
+        Args:
+            user_id: User ID who owns the WhatsApp connection
+            phone_number: Recipient phone number (E.164 format)
+            template_name: Name of the approved template
+            language_code: Language code (default: "en")
+            template_parameters: Optional list of parameter components for the template
+            
+        Returns:
+            Dict with message_id and status
+        """
+        try:
+            # Get WhatsApp connection
+            connection = self.get_whatsapp_connection(user_id)
+            if not connection:
+                raise ValueError(f"No active WhatsApp connection found for user {user_id}")
+            
+            # Decrypt access token
+            access_token = self.decrypt_token(connection["access_token_encrypted"])
+            phone_number_id = connection["phone_number_id"]
+            
+            # Format phone number
+            if not phone_number.startswith("+"):
+                phone_number = "+" + phone_number.lstrip("+")
+            
+            # Prepare API request
+            url = f"https://graph.facebook.com/{self.api_version}/{phone_number_id}/messages"
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            # Build template payload
+            template_payload = {
+                "name": template_name,
+                "language": {"code": language_code}
+            }
+            
+            # Add components if parameters provided
+            if template_parameters:
+                # Format parameters according to WhatsApp API structure
+                components = []
+                
+                # Handle body parameters
+                body_params = []
+                for param in template_parameters:
+                    if isinstance(param, dict):
+                        if param.get("type") == "text":
+                            body_params.append({
+                                "type": "text",
+                                "text": param.get("text", "")
+                            })
+                        elif "text" in param:
+                            body_params.append({
+                                "type": "text",
+                                "text": param["text"]
+                            })
+                    elif isinstance(param, str):
+                        body_params.append({
+                            "type": "text",
+                            "text": param
+                        })
+                
+                if body_params:
+                    components.append({
+                        "type": "body",
+                        "parameters": body_params
+                    })
+                
+                if components:
+                    template_payload["components"] = components
+            
+            payload = {
+                "messaging_product": "whatsapp",
+                "to": phone_number,
+                "type": "template",
+                "template": template_payload
+            }
+            
+            # Send message
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            
+            # Check response for errors
+            if not response.ok:
+                error_data = response.json() if response.content else {}
+                error_message = error_data.get("error", {}).get("message", "Unknown error")
+                error_code = error_data.get("error", {}).get("code", 0)
+                raise ValueError(f"WhatsApp API error: {error_message} (Code: {error_code})")
+            
+            response.raise_for_status()
+            result = response.json()
+            message_id = result.get("messages", [{}])[0].get("id", "")
+            
+            logger.info(f"Sent WhatsApp template message '{template_name}' to {phone_number}, message_id: {message_id}")
+            
+            return {
+                "success": True,
+                "message_id": message_id,
+                "status": "sent",
+                "whatsapp_id": message_id,
+                "template_name": template_name
+            }
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error sending WhatsApp template message: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_data = e.response.json()
+                    error_message = error_data.get("error", {}).get("message", str(e))
+                    logger.error(f"WhatsApp API Error: {error_message}")
+                except:
+                    logger.error(f"Response: {e.response.text}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error sending WhatsApp template message: {e}")
+            raise
 
 
 

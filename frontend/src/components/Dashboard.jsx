@@ -14,7 +14,8 @@ import Chatbot from './Chatbot'
 import RecentTasks from './RecentTasks'
 import CustomContentChatbot from './CustomContentChatbot'
 import ContentCard from './ContentCard'
-import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar, PanelRight, PanelLeft, X, ChevronRight, Video, Phone, ChevronDown } from 'lucide-react'
+import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar, PanelRight, PanelLeft, X, ChevronRight, Video, Phone, ChevronDown, MessageSquare } from 'lucide-react'
+import WhatsAppMessageModal from './WhatsAppMessageModal'
 
 // Voice Orb Component with animated border (spring-like animation)
 const VoiceOrb = ({ isSpeaking }) => {
@@ -161,6 +162,7 @@ function Dashboard() {
   const [messageFilter, setMessageFilter] = useState('all') // 'all', 'emily', 'chase', 'leo'
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false)
   const [showCustomContentChatbot, setShowCustomContentChatbot] = useState(false)
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false)
 
   const handleCallClick = async () => {
     if (isCallActive) {
@@ -530,6 +532,15 @@ function Dashboard() {
               </div>
               
               <div className="flex items-center gap-2">
+                {/* WhatsApp Message Button */}
+                <button
+                  onClick={() => setShowWhatsAppModal(true)}
+                  className="p-2 rounded-md hover:bg-green-50 transition-colors border border-green-200 bg-green-50"
+                  title="Send WhatsApp Message"
+                >
+                  <MessageSquare className="w-5 h-5 text-green-600" />
+                </button>
+                
                 {/* Video and Call Icons */}
                 <button
                   className="p-2 rounded-md hover:bg-gray-100 transition-colors border border-gray-200"
@@ -654,32 +665,37 @@ function Dashboard() {
                             
                             const isUser = lastConversation.message_type === 'user'
                             const preview = lastConversation.content?.substring(0, 50) + (lastConversation.content?.length > 50 ? '...' : '')
-                            const time = new Date(lastConversation.created_at).toLocaleTimeString([], { 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
+                            const messageDate = new Date(lastConversation.created_at)
+                            const formattedDate = messageDate.toLocaleDateString('en-US', { 
+                              month: 'short', 
+                              day: 'numeric',
+                              year: messageDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
                             })
                             
+                            // Check if this date is selected
+                            const isSelected = selectedDate && 
+                              selectedDate.toDateString() === new Date(dateObj).toDateString()
+                            
                             return (
-                              <div key={date} className="space-y-2">
-                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                  {date}
-                                </h3>
+                              <div key={date}>
                                 <div
                                   onClick={() => {
                                     setSelectedDate(new Date(dateObj))
                                     loadConversationsForDate(dateObj)
                                   }}
-                                  className={`p-2 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors ${
-                                    isUser ? 'bg-pink-50 hover:bg-pink-100' : 'bg-purple-50 hover:bg-purple-100'
+                                  className={`p-2 rounded-lg cursor-pointer transition-colors ${
+                                    isSelected 
+                                      ? 'bg-gray-100'
+                                      : 'hover:bg-gray-50'
                                   }`}
                                 >
-                                  <div className="flex items-start gap-2">
-                                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                                  <div className="flex items-center gap-2">
+                                    <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm ${
                                       isUser ? 'bg-pink-400' : 'bg-gradient-to-br from-pink-400 to-purple-500'
                                     }`}>
                                       {isUser ? (
                                         profile?.logo_url ? (
-                                          <img src={profile.logo_url} alt="User" className="w-6 h-6 rounded-full object-cover" />
+                                          <img src={profile.logo_url} alt="User" className="w-10 h-10 rounded-full object-cover" />
                                         ) : (
                                           <span className="text-white">U</span>
                                         )
@@ -692,13 +708,13 @@ function Dashboard() {
                                         <span className={`text-xs font-medium ${isUser ? 'text-pink-700' : 'text-purple-700'}`}>
                                           {isUser ? 'You' : 'Emily'}
                                         </span>
-                                        <span className="text-xs text-gray-400">{time}</span>
+                                        <span className="text-xs text-gray-400">{formattedDate}</span>
                                       </div>
                                       <p className="text-xs text-gray-700 line-clamp-2">{preview}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
                             )
                           })}
                         </div>
@@ -795,6 +811,12 @@ function Dashboard() {
             console.warn('onContentCreated called but content or user is missing:', { content, userId: user?.id })
           }
         }}
+      />
+      
+      {/* WhatsApp Message Modal */}
+      <WhatsAppMessageModal 
+        isOpen={showWhatsAppModal}
+        onClose={() => setShowWhatsAppModal(false)}
       />
     </div>
   )
