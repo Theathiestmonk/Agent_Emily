@@ -1069,30 +1069,30 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
     // Count line breaks in plain text (after stripping)
     const plainTextLineBreaks = (plainText.match(/\n/g) || []).length
     
-    // BALANCED: Show "Read more" on longer responses that exceed 9 lines
+    // BALANCED: Show "Read more" on longer responses that exceed 8 lines
     // Use reasonable thresholds to catch long messages but avoid short ones
     
-    // Method 1: If plain text has 900+ characters, likely exceeds 9 lines
-    // (9 lines × ~70-80 chars = 630-720, so 900+ is reasonable for longer content)
-    if (textCharCount >= 900) {
-      return true
-    }
-    
-    // Method 2: If there are 12+ line breaks AND substantial text (>700 chars)
-    // This catches longer structured content with many paragraphs/sections
-    if (originalLineBreaks >= 12 && textCharCount > 700) {
-      return true
-    }
-    
-    // Method 3: If there are 10+ line breaks in plain text (after stripping)
-    // This catches well-structured longer content
-    if (plainTextLineBreaks >= 10 && textCharCount > 600) {
-      return true
-    }
-    
-    // Lower threshold for testing - if content is clearly longer than 9 lines
-    // 9 lines × 70 chars = 630, so anything over 800 should definitely show
+    // Method 1: If plain text has 800+ characters, likely exceeds 8 lines
+    // (8 lines × ~70-80 chars = 560-640, so 800+ is reasonable for longer content)
     if (textCharCount >= 800) {
+      return true
+    }
+    
+    // Method 2: If there are 10+ line breaks AND substantial text (>600 chars)
+    // This catches longer structured content with many paragraphs/sections
+    if (originalLineBreaks >= 10 && textCharCount > 600) {
+      return true
+    }
+    
+    // Method 3: If there are 9+ line breaks in plain text (after stripping)
+    // This catches well-structured longer content
+    if (plainTextLineBreaks >= 9 && textCharCount > 550) {
+      return true
+    }
+    
+    // Lower threshold for testing - if content is clearly longer than 8 lines
+    // 8 lines × 70 chars = 560, so anything over 700 should definitely show
+    if (textCharCount >= 700) {
       return true
     }
     
@@ -1250,11 +1250,11 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       })
     }
     
-    // If message is from yesterday, show "Yesterday" and time
+    // If message is from yesterday, show "Yest.." and time
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
     if (messageDay.getTime() === yesterday.getTime()) {
-      return `Yesterday ${messageDate.toLocaleTimeString([], { 
+      return `Yest.. ${messageDate.toLocaleTimeString([], { 
         hour: '2-digit', 
         minute: '2-digit'
       })}`
@@ -1304,7 +1304,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   }))
 
   return (
-    <div className="flex flex-col bg-gray-50" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div className="flex flex-col bg-white" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Messages */}
       <div className="flex-1 p-4 space-y-4 messages-container" style={{ overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
         {messages
@@ -1325,13 +1325,15 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
               <div className={`flex-shrink-0 ${message.type === 'user' ? 'order-2' : ''}`}>
                 {message.type === 'user' ? (
                   profile?.logo_url ? (
-                    <img 
-                      src={profile.logo_url} 
-                      alt="User" 
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
+                    <div className="w-8 h-8 rounded-full overflow-hidden backdrop-blur-md bg-pink-500/80 border border-pink-400/30 shadow-lg" style={{ boxShadow: '0 4px 16px 0 rgba(236, 72, 153, 0.3)' }}>
+                      <img 
+                        src={profile.logo_url} 
+                        alt="User" 
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-pink-400 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full backdrop-blur-md bg-pink-500/80 border border-pink-400/30 flex items-center justify-center shadow-lg" style={{ boxShadow: '0 4px 16px 0 rgba(236, 72, 153, 0.3)' }}>
                       <User className="w-5 h-5 text-white" />
                     </div>
                   )
@@ -1351,7 +1353,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
               <div 
                 className={`px-4 py-3 rounded-lg relative group message-bubble backdrop-blur-md ${
                   message.type === 'user'
-                    ? 'bg-pink-500/80 text-white border border-pink-400/30'
+                    ? 'bg-pink-500/80 text-white border border-pink-400/30 user-bubble-shadow'
                     : 'bg-white/70 text-black chatbot-bubble-shadow border border-white/30'
                 }`}
                 onMouseEnter={() => setHoveredMessageId(message.id)}
@@ -2015,6 +2017,10 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
           box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
         }
         
+        .user-bubble-shadow {
+          box-shadow: 0 8px 32px 0 rgba(236, 72, 153, 0.37);
+        }
+        
         .line-clamp-3 {
           display: -webkit-box;
           -webkit-line-clamp: 3;
@@ -2024,7 +2030,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         
         .message-content-truncated {
           display: -webkit-box;
-          -webkit-line-clamp: 9;
+          -webkit-line-clamp: 8;
           -webkit-box-orient: vertical;
           overflow: hidden;
         }

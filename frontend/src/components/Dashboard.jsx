@@ -578,11 +578,11 @@ function Dashboard() {
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex items-start px-4 lg:px-6 bg-gray-50" style={{ minHeight: 0, overflow: 'hidden' }}>
+        <div className="flex-1 flex items-start bg-gray-50" style={{ minHeight: 0, overflow: 'hidden' }}>
             <div className="w-full h-full flex gap-2">
                 {/* Main Chat Area */}
-              <div className={`flex-1 transition-all duration-300 ${isPanelOpen ? 'max-w-4xl' : 'max-w-5xl xl:max-w-6xl'} mx-auto h-full`}>
-                <div className="bg-transparent rounded-lg h-full relative">
+              <div className="flex-1 h-full">
+                <div className="bg-white h-full relative">
                   <Chatbot 
                     profile={profile} 
                     ref={chatbotRef} 

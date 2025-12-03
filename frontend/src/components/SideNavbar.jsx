@@ -262,7 +262,7 @@ const SideNavbar = () => {
               }}
               className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-all duration-200 group ${
                 active
-                  ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
+                  ? 'bg-gray-200/50 backdrop-blur-md text-gray-900 border border-gray-300/30 shadow-sm'
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
               }`}
             >
