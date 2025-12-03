@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Query, Request as FastAPIRequest
 from fastapi.responses import HTMLResponse
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -13,6 +13,7 @@ import os
 import json
 import base64
 import uuid
+import logging
 from datetime import datetime, timedelta
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -20,6 +21,9 @@ from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv()
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 # Get Supabase client
 supabase_url = os.getenv("SUPABASE_URL")
@@ -200,12 +204,21 @@ async def google_auth(current_user: User = Depends(get_current_user)):
         client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
         redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
         
+        # Detect environment (localhost vs production)
+        environment = os.getenv('ENVIRONMENT', 'development').lower()
+        is_localhost = environment == 'development' or 'localhost' in os.getenv('API_BASE_URL', '').lower()
+        
         # If GOOGLE_REDIRECT_URI is not set, construct it from API_BASE_URL
         if not redirect_uri:
             api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
             if not api_base_url:
-                api_base_url = 'https://agent-emily.onrender.com'
-            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
+                # Default based on environment
+                if is_localhost:
+                    api_base_url = 'http://localhost:8000'
+                    print(f"🔧 Development mode detected, using localhost:8000")
+                else:
+                    api_base_url = 'https://agent-emily.onrender.com'
+            redirect_uri = f"{api_base_url}/connections/google/callback"
             print(f"⚠️  GOOGLE_REDIRECT_URI not set, using constructed URI: {redirect_uri}")
         
         # Validate redirect URI format - ensure it's a full URL
@@ -214,7 +227,10 @@ async def google_auth(current_user: User = Depends(get_current_user)):
             # Try to construct full URL if only path is provided
             api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
             if not api_base_url:
-                api_base_url = 'https://agent-emily.onrender.com'
+                if is_localhost:
+                    api_base_url = 'http://localhost:8000'
+                else:
+                    api_base_url = 'https://agent-emily.onrender.com'
             if redirect_uri.startswith('/'):
                 redirect_uri = f"{api_base_url}{redirect_uri}"
                 print(f"✅ Constructed full redirect URI: {redirect_uri}")
@@ -318,8 +334,19 @@ async def google_auth(current_user: User = Depends(get_current_user)):
         )
 
 @router.get("/callback")
-async def google_callback(code: str = None, state: str = None, error: str = None):
+async def google_callback(request: FastAPIRequest):
     """Handle Google OAuth callback"""
+    # Always read from query params directly to ensure we get them
+    query_params = dict(request.query_params)
+    code = query_params.get('code')
+    state = query_params.get('state')
+    error = query_params.get('error')
+    
+    # Log for debugging
+    print(f"🔗 Full request URL: {request.url}")
+    print(f"🔗 Query params: {query_params}")
+    print(f"🔗 Extracted - code: {code[:20] if code else 'None'}..., state: {state[:20] if state else 'None'}..., error: {error}")
+    
     return await handle_google_callback(code, state, error)
 
 
@@ -328,7 +355,13 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
     try:
         # Check for OAuth error
         if error:
-            frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+            # Detect environment for frontend URL
+            environment = os.getenv('ENVIRONMENT', 'development').lower()
+            is_localhost = environment == 'development' or 'localhost' in os.getenv('FRONTEND_URL', '').lower()
+            if is_localhost:
+                frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+            else:
+                frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
             
             # Log detailed error information for debugging
             redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
@@ -395,7 +428,13 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
         
         # Check for missing parameters
         if not code or not state:
-            frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+            # Detect environment for frontend URL
+            environment = os.getenv('ENVIRONMENT', 'development').lower()
+            is_localhost = environment == 'development' or 'localhost' in os.getenv('FRONTEND_URL', '').lower()
+            if is_localhost:
+                frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+            else:
+                frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
             print(f"Google OAuth callback - Missing parameters: code={code}, state={state}")
             return HTMLResponse(content=f"""
             <!DOCTYPE html>
@@ -466,15 +505,29 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
         client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
         redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
         
+        # Detect environment (localhost vs production)
+        environment = os.getenv('ENVIRONMENT', 'development').lower()
+        is_localhost = environment == 'development' or 'localhost' in os.getenv('API_BASE_URL', '').lower()
+        
         # If GOOGLE_REDIRECT_URI is not set, construct it from API_BASE_URL
         if not redirect_uri:
             api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
-            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
+            if not api_base_url:
+                if is_localhost:
+                    api_base_url = 'http://localhost:8000'
+                else:
+                    api_base_url = 'https://agent-emily.onrender.com'
+            redirect_uri = f"{api_base_url}/connections/google/callback"
             logger.info(f"GOOGLE_REDIRECT_URI not set in callback, using constructed URI: {redirect_uri}")
         
         # Validate redirect URI format
         if redirect_uri and not (redirect_uri.startswith('http://') or redirect_uri.startswith('https://')):
             api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+            if not api_base_url:
+                if is_localhost:
+                    api_base_url = 'http://localhost:8000'
+                else:
+                    api_base_url = 'https://agent-emily.onrender.com'
             if api_base_url and redirect_uri.startswith('/'):
                 redirect_uri = f"{api_base_url}{redirect_uri}"
                 logger.info(f"Constructed full redirect URI in callback: {redirect_uri}")
@@ -602,7 +655,13 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
         supabase_admin.table("oauth_states").delete().eq("state", state).execute()
         
         # Return HTML page that redirects to frontend
-        frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+        # Detect environment for frontend URL
+        environment = os.getenv('ENVIRONMENT', 'development').lower()
+        is_localhost = environment == 'development' or 'localhost' in os.getenv('FRONTEND_URL', '').lower()
+        if is_localhost:
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+        else:
+            frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
         return HTMLResponse(content=f"""
         <!DOCTYPE html>
         <html>
@@ -621,7 +680,13 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
         
     except Exception as e:
         # Return HTML page that redirects to frontend with error
-        frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
+        # Detect environment for frontend URL
+        environment = os.getenv('ENVIRONMENT', 'development').lower()
+        is_localhost = environment == 'development' or 'localhost' in os.getenv('FRONTEND_URL', '').lower()
+        if is_localhost:
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+        else:
+            frontend_url = os.getenv('FRONTEND_URL', 'https://emily.atsnai.com')
         error_message = str(e).replace("'", "\\'").replace('"', '\\"')
         
         # Log detailed error for debugging
@@ -1055,18 +1120,32 @@ async def reconnect_google_account(current_user: User = Depends(get_current_user
         client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
         redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
         
+        # Detect environment (localhost vs production)
+        environment = os.getenv('ENVIRONMENT', 'development').lower()
+        is_localhost = environment == 'development' or 'localhost' in os.getenv('API_BASE_URL', '').lower()
+        
         # If GOOGLE_REDIRECT_URI is not set, construct it from API_BASE_URL
         if not redirect_uri:
             api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
-            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
-            logger.info(f"GOOGLE_REDIRECT_URI not set in callback, using constructed URI: {redirect_uri}")
+            if not api_base_url:
+                if is_localhost:
+                    api_base_url = 'http://localhost:8000'
+                else:
+                    api_base_url = 'https://agent-emily.onrender.com'
+            redirect_uri = f"{api_base_url}/connections/google/callback"
+            logger.info(f"GOOGLE_REDIRECT_URI not set in reconnect, using constructed URI: {redirect_uri}")
         
         # Validate redirect URI format
         if redirect_uri and not (redirect_uri.startswith('http://') or redirect_uri.startswith('https://')):
             api_base_url = os.getenv('API_BASE_URL', '').rstrip('/')
+            if not api_base_url:
+                if is_localhost:
+                    api_base_url = 'http://localhost:8000'
+                else:
+                    api_base_url = 'https://agent-emily.onrender.com'
             if api_base_url and redirect_uri.startswith('/'):
                 redirect_uri = f"{api_base_url}{redirect_uri}"
-                logger.info(f"Constructed full redirect URI in callback: {redirect_uri}")
+                logger.info(f"Constructed full redirect URI in reconnect: {redirect_uri}")
         
         if not all([client_id, client_secret, redirect_uri]):
             return {
@@ -1176,8 +1255,7 @@ async def google_router_test():
             "/connections/google/health",
             "/connections/google/debug/config",
             "/connections/google/auth/initiate",
-            "/connections/google/callback",
-            "/connections/google/auth/google/callback"
+            "/connections/google/callback"
         ]
     }
 
@@ -1193,6 +1271,22 @@ async def debug_google_config():
         "supabase_url": "SET" if os.getenv('SUPABASE_URL') else "MISSING",
         "supabase_service_key": "SET" if os.getenv('SUPABASE_SERVICE_ROLE_KEY') else "MISSING",
         "environment": os.getenv('ENVIRONMENT', 'unknown')
+    }
+
+@router.get("/debug/redirect-uri")
+async def debug_redirect_uri():
+    """Debug endpoint to verify redirect URI configuration"""
+    redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
+    api_base_url = os.getenv('API_BASE_URL')
+    environment = os.getenv('ENVIRONMENT')
+    
+    return {
+        "GOOGLE_REDIRECT_URI": redirect_uri,
+        "API_BASE_URL": api_base_url,
+        "ENVIRONMENT": environment,
+        "redirect_uri_length": len(redirect_uri) if redirect_uri else 0,
+        "redirect_uri_repr": repr(redirect_uri) if redirect_uri else None,
+        "constructed_uri": f"{api_base_url}/connections/google/callback" if api_base_url else None
     }
 
 @router.get("/disconnect")

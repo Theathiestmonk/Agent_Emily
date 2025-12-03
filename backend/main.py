@@ -119,6 +119,12 @@ app.include_router(whatsapp_router)
 async def health_check():
     return {"status": "healthy", "environment": environment}
 
+# Favicon endpoint to prevent 404 errors
+@app.get("/favicon.ico")
+async def favicon():
+    from fastapi.responses import Response
+    return Response(status_code=204)  # No content
+
 # Security
 security = HTTPBearer()
 

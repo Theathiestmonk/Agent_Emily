@@ -158,66 +158,31 @@ const GoogleCallback = () => {
       const state = urlParams.get('state')
       const error = urlParams.get('error')
 
+      // If there's an error parameter, show it
       if (error) {
         setStatus('error')
-        if (error.includes('access_denied') || error.includes('testing')) {
+        // Decode the error message (it might be URL encoded)
+        const decodedError = decodeURIComponent(error)
+        if (decodedError.includes('access_denied') || decodedError.includes('testing')) {
           setMessage(`Google OAuth Error: The app is in testing mode. Please add your email as a test user in Google Cloud Console, or contact the administrator.`)
         } else {
-          setMessage(`OAuth error: ${error}`)
+          setMessage(`OAuth error: ${decodedError}`)
         }
         
         // Send error message to parent window if in popup
         if (window.opener) {
           window.opener.postMessage({
             type: 'GOOGLE_OAUTH_ERROR',
-            error: error
+            error: decodedError
           }, window.location.origin)
         }
         return
       }
 
-      if (!code || !state) {
-        setStatus('error')
-        setMessage('Missing required OAuth parameters')
-        
-        // Send error message to parent window if in popup
-        if (window.opener) {
-          window.opener.postMessage({
-            type: 'GOOGLE_OAUTH_ERROR',
-            error: 'Missing required OAuth parameters'
-          }, window.location.origin)
-        }
-        return
-      }
-
-      // Call backend to complete OAuth flow
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
-      // Ensure no double slashes in URL
-      const baseUrl = API_BASE_URL.replace(/\/+$/, '')
-      const callbackUrl = `${baseUrl}/connections/google/callback?code=${code}&state=${state}`
-      
-      console.log('🔗 Calling backend callback URL:', callbackUrl)
-      const response = await fetch(callbackUrl)
-      
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('Google callback error:', response.status, errorText)
-        setStatus('error')
-        setMessage(`Failed to complete Google OAuth: ${response.status}`)
-        
-        // Send error message to parent window if in popup
-        if (window.opener) {
-          window.opener.postMessage({
-            type: 'GOOGLE_OAUTH_ERROR',
-            error: `Failed to complete Google OAuth: ${response.status}`
-          }, window.location.origin)
-        }
-        return
-      }
-
-      const data = await response.json()
-      
-      if (data.success) {
+      // If we have code and state, the backend has already processed the OAuth
+      // The backend redirects here after successful processing
+      if (code && state) {
+        console.log('✅ Google OAuth callback received with code and state')
         setStatus('success')
         setMessage('Google account connected successfully!')
         
@@ -230,31 +195,36 @@ const GoogleCallback = () => {
               type: 'GOOGLE_OAUTH_SUCCESS',
               message: 'Google account connected successfully!'
             }, window.location.origin)
+            // Close popup after sending message
+            window.close()
           }, 500)
-        } else {
-          // If not in popup, ensure profile exists first, then check status
-          console.log('🔄 Ensuring profile exists before checking status...')
-          setTimeout(async () => {
-            console.log('⏰ Ensuring profile exists...')
-            await createProfileManually()
-          }, 1000)
+          return
         }
-      } else {
-        setStatus('error')
-        setMessage(data.message || 'Failed to connect Google account')
         
-        // Send error message to parent window if in popup
-        if (window.opener) {
-          window.opener.postMessage({
-            type: 'GOOGLE_OAUTH_ERROR',
-            error: data.message || 'Failed to connect Google account'
-          }, window.location.origin)
-        }
+        // If not in popup, ensure profile exists first, then check status
+        console.log('🔄 Ensuring profile exists before checking status...')
+        setTimeout(async () => {
+          console.log('⏰ Ensuring profile exists...')
+          await createProfileManually()
+        }, 1000)
+        return
+      }
+
+      // If we don't have code, state, or error, something went wrong
+      setStatus('error')
+      setMessage('Missing required OAuth parameters. Please try connecting again.')
+      
+      // Send error message to parent window if in popup
+      if (window.opener) {
+        window.opener.postMessage({
+          type: 'GOOGLE_OAUTH_ERROR',
+          error: 'Missing required OAuth parameters'
+        }, window.location.origin)
       }
     } catch (error) {
       console.error('Error handling Google callback:', error)
       setStatus('error')
-      setMessage('An unexpected error occurred')
+      setMessage(`An unexpected error occurred: ${error.message || 'Unknown error'}`)
       
       // Send error message to parent window if in popup
       if (window.opener) {
