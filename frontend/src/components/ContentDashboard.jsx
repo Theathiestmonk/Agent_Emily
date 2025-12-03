@@ -16,6 +16,7 @@ import CustomContentChatbot from './CustomContentChatbot'
 import ChatbotImageEditor from './ChatbotImageEditor'
 import MediaGenerationCelebration from './MediaGenerationCelebration'
 import ContentModal from './ContentModal'
+import DriveContentProcessingModal from './DriveContentProcessingModal'
 import { fetchAllConnections } from '../services/fetchConnections'
 
 const API_BASE_URL = (() => {
@@ -149,6 +150,7 @@ const ContentDashboard = () => {
   const [hoveredButton, setHoveredButton] = useState(null) // Track which button is being hovered
   const [imageLoading, setImageLoading] = useState(new Set()) // Track which images are loading
   const [showCustomContentChatbot, setShowCustomContentChatbot] = useState(false) // Custom content chatbot modal
+  const [showDriveContentModal, setShowDriveContentModal] = useState(false) // Drive content processing modal
   const [deleteConfirm, setDeleteConfirm] = useState(null) // Content to delete confirmation
   const [deletingContent, setDeletingContent] = useState(new Set()) // Track which content is being deleted
   const [postNotification, setPostNotification] = useState(null) // Post success notification
@@ -164,8 +166,8 @@ const ContentDashboard = () => {
   useEffect(() => {
     // Load all data asynchronously without blocking
     Promise.resolve().then(() => {
-      fetchData()
-      fetchAllContent()
+    fetchData()
+    fetchAllContent()
       fetchConnections()
     })
   }, [])
@@ -640,18 +642,18 @@ const ContentDashboard = () => {
       
       // Update state asynchronously to avoid blocking
       setTimeout(() => {
-        if (filteredContent.length > 0) {
-          setAllContent(filteredContent)
-          console.log(`✅ Set allContent with ${filteredContent.length} items for channel "${selectedChannel}"`)
-          
-          // Images are now loaded directly from content_posts.primary_image_url
-        } else {
-          setAllContent([])
-          console.log(`No content found for channel "${selectedChannel}"`)
-        }
+      if (filteredContent.length > 0) {
+        setAllContent(filteredContent)
+        console.log(`✅ Set allContent with ${filteredContent.length} items for channel "${selectedChannel}"`)
         
-        // Set loading state to false after fetch completes
-        setFetchingContent(false)
+        // Images are now loaded directly from content_posts.primary_image_url
+      } else {
+        setAllContent([])
+        console.log(`No content found for channel "${selectedChannel}"`)
+      }
+      
+      // Set loading state to false after fetch completes
+      setFetchingContent(false)
       }, 0)
     } catch (error) {
       console.error('Error fetching all content:', error)
@@ -778,20 +780,20 @@ const ContentDashboard = () => {
       
       // Update state asynchronously to avoid blocking
       setTimeout(() => {
-        if (allFilteredContent.length > 0) {
-          setAllContent(allFilteredContent)
-          setHasMoreContent(false) // No more content to load
-          setAllDatesCount(sortedDates.length)
-          console.log(`✅ Set allContent with ${allFilteredContent.length} items for channel "${selectedChannel}"`)
-          
-          // Images are now loaded directly from content_posts.primary_image_url
-        } else {
-          setAllContent([])
-          console.log(`No content found for channel "${selectedChannel}"`)
-        }
+      if (allFilteredContent.length > 0) {
+        setAllContent(allFilteredContent)
+        setHasMoreContent(false) // No more content to load
+        setAllDatesCount(sortedDates.length)
+        console.log(`✅ Set allContent with ${allFilteredContent.length} items for channel "${selectedChannel}"`)
         
-        // Set loading state to false after fetch completes
-        setLoadingAllContent(false)
+        // Images are now loaded directly from content_posts.primary_image_url
+      } else {
+        setAllContent([])
+        console.log(`No content found for channel "${selectedChannel}"`)
+      }
+      
+      // Set loading state to false after fetch completes
+      setLoadingAllContent(false)
       }, 0)
     } catch (error) {
       console.error('Error loading all content:', error)
@@ -3761,27 +3763,27 @@ const ContentDashboard = () => {
                         ) : (
                           /* Regular Content Display */
                           <>
-                            {/* Title - One line only */}
-                            {content.title && (
-                              <h5 className="font-semibold text-gray-900 mb-2 text-base line-clamp-1 truncate">{content.title}</h5>
-                            )}
-                            
-                            {/* Content Text - One row only with inline ...more */}
-                            {content.content && cleanContentText(content.content).trim().length > 0 && (
-                              <div className="flex items-center gap-1 text-sm text-gray-700">
-                                <p className="line-clamp-1 truncate flex-1">
-                                  {cleanContentText(content.content)}
-                                </p>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleViewContent(content)
-                                  }}
-                                  className="text-purple-600 hover:text-purple-800 font-medium flex-shrink-0"
-                                >
-                                  ...more
-                                </button>
-                              </div>
+                        {/* Title - One line only */}
+                        {content.title && (
+                          <h5 className="font-semibold text-gray-900 mb-2 text-base line-clamp-1 truncate">{content.title}</h5>
+                        )}
+                        
+                        {/* Content Text - One row only with inline ...more */}
+                        {content.content && cleanContentText(content.content).trim().length > 0 && (
+                          <div className="flex items-center gap-1 text-sm text-gray-700">
+                            <p className="line-clamp-1 truncate flex-1">
+                              {cleanContentText(content.content)}
+                            </p>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleViewContent(content)
+                              }}
+                              className="text-purple-600 hover:text-purple-800 font-medium flex-shrink-0"
+                            >
+                              ...more
+                            </button>
+                          </div>
                             )}
                           </>
                         )}
@@ -3873,6 +3875,15 @@ const ContentDashboard = () => {
                         >
                           Let's do that
                         </span>
+                      </div>
+                      <div className="text-sm text-black">
+                        I can also create content from drive photos :{' '}
+                        <button
+                          onClick={() => setShowDriveContentModal(true)}
+                          className="text-green-600 hover:text-green-700 cursor-pointer hover:underline font-medium"
+                        >
+                          Let's do that
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -4513,6 +4524,22 @@ const ContentDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Drive Content Processing Modal */}
+      <DriveContentProcessingModal
+        isOpen={showDriveContentModal}
+        onClose={() => {
+          setShowDriveContentModal(false)
+          // Refresh content after closing
+          fetchAllContent()
+        }}
+        onSuccess={(postsCreated) => {
+          // Refresh content when processing succeeds
+          if (postsCreated > 0) {
+            fetchAllContent()
+          }
+        }}
+      />
 
       {/* Custom Content Chatbot Modal */}
       <CustomContentChatbot
