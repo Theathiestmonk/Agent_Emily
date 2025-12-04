@@ -797,12 +797,67 @@ async def submit_onboarding(
                 detail="Failed to update profile"
             )
         
+        # Generate embedding for new onboarding (after profile is saved)
+        # Run in background to not block the response
+        try:
+            # Get the updated profile data for embedding generation
+            updated_profile = response.data[0]
+            # Generate embedding asynchronously (don't wait for it)
+            asyncio.create_task(
+                generate_and_update_embedding(updated_profile, current_user.id, supabase)
+            )
+            logger.info(f"Triggered embedding generation for user {current_user.id} during onboarding")
+        except Exception as e:
+            logger.warning(f"Failed to trigger embedding generation during onboarding: {e}")
+            # Continue without embedding - it can be generated later if needed
+        
         return {"message": "Onboarding completed successfully", "profile": response.data[0]}
         
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to submit onboarding: {str(e)}"
+        )
+
+@app.put("/onboarding/profile")
+async def update_profile(
+    onboarding_data: OnboardingData,
+    current_user: User = Depends(get_current_user)
+):
+    """Update user profile and regenerate embedding"""
+    try:
+        # Convert Pydantic model to dict
+        data_dict = onboarding_data.dict()
+        
+        # Update the profile
+        response = supabase.table("profiles").update(data_dict).eq("id", current_user.id).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update profile"
+            )
+        
+        # Generate embedding for updated profile (after profile is saved)
+        # Run in background to not block the response
+        try:
+            # Get the updated profile data for embedding generation
+            updated_profile = response.data[0]
+            # Generate embedding asynchronously (don't wait for it)
+            asyncio.create_task(
+                generate_and_update_embedding(updated_profile, current_user.id, supabase)
+            )
+            logger.info(f"Triggered embedding regeneration for user {current_user.id} after profile update")
+        except Exception as e:
+            logger.warning(f"Failed to trigger embedding regeneration after profile update: {e}")
+            # Continue without embedding - it can be generated later if needed
+        
+        return {"message": "Profile updated successfully", "profile": response.data[0]}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update profile: {str(e)}"
         )
 
 @app.get("/onboarding/status")

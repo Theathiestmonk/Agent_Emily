@@ -32,3 +32,5 @@ beautifulsoup4
 aiohttp
 textstat
 apscheduler
+sentence-transformers>=2.2.0
+torch>=2.0.0
