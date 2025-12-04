@@ -951,11 +951,11 @@ async def run_content_generation_with_progress(user_id: str, generate_images: bo
                             
                             gemini_api_key = os.getenv("GEMINI_API_KEY")
                             if gemini_api_key:
-                                supabase_url = os.getenv("SUPABASE_URL")
+                                # Use global supabase_url, get service key locally
                                 supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
                                 
                                 media_agent = create_media_agent(
-                                    supabase_url,
+                                    supabase_url,  # Use global variable
                                     supabase_service_key or os.getenv("SUPABASE_ANON_KEY"),
                                     gemini_api_key
                                 )
