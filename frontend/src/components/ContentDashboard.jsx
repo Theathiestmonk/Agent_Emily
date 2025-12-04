@@ -995,13 +995,31 @@ const ContentDashboard = () => {
       return false
     })
     .sort((a, b) => {
-      // Prioritize scripts (content with video_scripting) and drafts
+      // Prioritize scheduled posts first
+      const aIsScheduled = a.status?.toLowerCase() === 'scheduled'
+      const bIsScheduled = b.status?.toLowerCase() === 'scheduled'
+      
+      // Scheduled posts first
+      if (aIsScheduled && !bIsScheduled) return -1
+      if (!aIsScheduled && bIsScheduled) return 1
+      
+      // Within scheduled posts, sort by scheduled_at in ascending order (earliest dates first)
+      if (aIsScheduled && bIsScheduled) {
+        if (!a.scheduled_at && !b.scheduled_at) return 0
+        if (!a.scheduled_at) return 1
+        if (!b.scheduled_at) return -1
+        const dateA = new Date(a.scheduled_at).getTime()
+        const dateB = new Date(b.scheduled_at).getTime()
+        return dateA - dateB
+      }
+      
+      // Then prioritize scripts (content with video_scripting) and drafts
       const aIsScript = a.video_scripting && typeof a.video_scripting === 'object'
       const bIsScript = b.video_scripting && typeof b.video_scripting === 'object'
       const aIsDraft = a.status?.toLowerCase() === 'draft'
       const bIsDraft = b.status?.toLowerCase() === 'draft'
       
-      // Scripts first, then drafts, then others
+      // Scripts next, then drafts, then others
       if (aIsScript && !bIsScript) return -1
       if (!aIsScript && bIsScript) return 1
       if (aIsDraft && !bIsDraft && !aIsScript && !bIsScript) return -1
@@ -1017,6 +1035,13 @@ const ContentDashboard = () => {
       return dateA - dateB
     })
 
+  // Custom Pinterest Icon Component
+  const PinterestIcon = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49-.09-.79-.17-2.01.03-2.87.18-.78 1.16-4.97 1.16-4.97s-.3-.6-.3-1.48c0-1.38.8-2.41 1.8-2.41.85 0 1.26.64 1.26 1.4 0 .85-.54 2.12-.82 3.3-.23.94.48 1.7 1.42 1.7 1.71 0 3.02-1.8 3.02-4.4 0-2.3-1.67-3.91-4.05-3.91-2.76 0-4.38 2.07-4.38 4.2 0 .82.32 1.7.72 2.19.08.1.09.19.07.29l-.28 1.12c-.04.16-.13.2-.3.12-1.12-.52-1.82-2.15-1.82-3.46 0-2.83 2.06-5.43 5.94-5.43 3.12 0 5.54 2.22 5.54 5.19 0 3.1-1.95 5.59-4.73 5.59-.93 0-1.8-.48-2.1-1.18l-.57 2.18c-.21.81-.78 1.83-1.16 2.45 1.19.37 2.45.57 3.78.57 5.52 0 10-4.48 10-10S17.52 2 12 2z"/>
+    </svg>
+  )
+
   const getPlatformIcon = (platform) => {
     // Normalize platform name to lowercase for consistent matching
     const normalizedPlatform = platform?.toLowerCase()?.trim()
@@ -1030,6 +1055,7 @@ const ContentDashboard = () => {
       'x': X,
       tiktok: 'custom', // Special case for TikTok
       youtube: Youtube,
+      pinterest: PinterestIcon,
       'google-business': Building2,
       'google-my-business': Building2,
       'google business profile': Building2,
@@ -1072,8 +1098,12 @@ const ContentDashboard = () => {
           return <div className="w-5 h-5 bg-gray-500 rounded text-white flex items-center justify-center text-xs">?</div>
         }
       }
-      // Handle Lucide React components
-      console.log('Rendering Lucide icon:', Icon, 'for platform:', normalizedPlatform)
+      // Handle Lucide React components and custom components
+      console.log('Rendering icon:', Icon, 'for platform:', normalizedPlatform)
+      // Check if it's a React component (function) or Lucide icon
+      if (typeof Icon === 'function') {
+        return <Icon className="w-5 h-5" />
+      }
       return <Icon className="w-5 h-5" />
     }
     
@@ -3120,72 +3150,48 @@ const ContentDashboard = () => {
                       <>
                         {availableChannels.length > 0 && (
                           <>
-                            {selectedChannel && selectedChannel !== availableChannels[0] ? (
-                              <>
-                                <p className="text-sm text-black mb-2">
-                                  Here are some of my <span className="text-blue-600 font-semibold">{selectedChannel.charAt(0).toUpperCase() + selectedChannel.slice(1)}</span> post suggestions for you
-                                </p>
-                                <p className="text-sm text-black mb-2">
-                                  Check post suggestions for :
-                                </p>
-                                <div className="flex flex-col gap-1">
-                                  {availableChannels.filter(ch => ch !== selectedChannel).map((channel) => {
-                                    const channelCount = channelContentCounts[channel] || 0
-                                    return (
-                                      <div
-                                        key={channel}
-                                        onClick={() => setSelectedChannel(channel)}
-                                        className="text-sm cursor-pointer hover:underline flex items-center gap-2 text-blue-600 hover:text-blue-700"
-                                      >
-                                        <span className="flex-shrink-0 w-6 h-6 rounded border border-gray-200 flex items-center justify-center bg-gray-50">
-                                          {getPlatformIcon(channel)}
-                                        </span>
-                                        <span>
-                                          {channel.charAt(0).toUpperCase() + channel.slice(1)} {channelCount > 0 && `• ${channelCount} ${channelCount === 1 ? 'post' : 'posts'}`}
-                                        </span>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <p className="text-sm text-black mb-2">
-                                  Here are some of my <span className="text-blue-600 font-semibold">{availableChannels[0].charAt(0).toUpperCase() + availableChannels[0].slice(1)}</span> post suggestions for you
-                                </p>
-                                {availableChannels.length > 1 && (
-                                  <>
-                                    <p className="text-sm text-black mb-2">
-                                      Checkout the post suggestions for :
-                                    </p>
-                                    <div className="flex flex-col gap-1">
-                                      {availableChannels.slice(1).map((channel) => {
-                                        const channelCount = channelContentCounts[channel] || 0
-                                        const isSelected = selectedChannel === channel
-                                        return (
-                                          <div
-                                            key={channel}
-                                            onClick={() => setSelectedChannel(channel)}
-                                            className={`text-sm cursor-pointer hover:underline flex items-center gap-2 ${
-                                              isSelected 
-                                                ? 'text-purple-600 font-semibold' 
-                                                : 'text-blue-600 hover:text-blue-700'
-                                            }`}
-                                          >
-                                            <span className="flex-shrink-0 w-6 h-6 rounded border border-gray-200 flex items-center justify-center bg-gray-50">
-                                              {getPlatformIcon(channel)}
-                                            </span>
-                                            <span>
-                                              {channel.charAt(0).toUpperCase() + channel.slice(1)} {channelCount > 0 && `• ${channelCount} ${channelCount === 1 ? 'post' : 'posts'}`}
-                                            </span>
-                                          </div>
-                                        )
-                                      })}
-                                    </div>
-                                  </>
-                                )}
-                              </>
-                            )}
+                            <p className="text-sm text-black mb-2">
+                              Here are a few fresh post ideas for you!
+                            </p>
+                            <p className="text-sm text-gray-700 mb-3">
+                              Take a look at the suggestions and see what fits your vibe. I've tried to keep them simple, engaging, and easy to post.
+                            </p>
+                            {/* Channel Icons as Tabs */}
+                            <div className="flex flex-wrap gap-2">
+                              {availableChannels.map((channel) => {
+                                const channelCount = channelContentCounts[channel] || 0
+                                const isSelected = selectedChannel === channel
+                                return (
+                                  <button
+                                    key={channel}
+                                    onClick={() => setSelectedChannel(channel)}
+                                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+                                      isSelected
+                                        ? 'bg-purple-50 border-purple-300 shadow-sm'
+                                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
+                                    }`}
+                                  >
+                                    <span className={`flex-shrink-0 w-5 h-5 flex items-center justify-center ${
+                                      isSelected ? 'text-purple-600' : 'text-gray-600'
+                                    }`}>
+                                      {getPlatformIcon(channel)}
+                                    </span>
+                                    <span className={`text-xs font-medium ${
+                                      isSelected ? 'text-purple-700' : 'text-gray-700'
+                                    }`}>
+                                      {channel.charAt(0).toUpperCase() + channel.slice(1)}
+                                    </span>
+                                    {channelCount > 0 && (
+                                      <span className={`text-xs ${
+                                        isSelected ? 'text-purple-600' : 'text-gray-500'
+                                      }`}>
+                                        ({channelCount})
+                                      </span>
+                                    )}
+                                  </button>
+                                )
+                              })}
+                            </div>
                           </>
                         )}
                       </>
@@ -3325,7 +3331,7 @@ const ContentDashboard = () => {
                       
                       {/* Full-width Post Image */}
                       {hasImage && (
-                        <div className="relative w-full bg-gray-200" style={{ aspectRatio: '1/1', maxHeight: '500px' }}>
+                        <div className="relative w-full bg-gray-200" style={{ aspectRatio: '1/1' }}>
                               {/* Show placeholder while loading */}
                               {imageLoading.has(content.id) && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
@@ -3341,7 +3347,7 @@ const ContentDashboard = () => {
                                 // Check if it's a video - only load for selected channel
                                 if (mediaUrl && isVideo && isSelectedChannel) {
                                   return (
-                                    <div className="relative w-full h-full group">
+                                    <div className="absolute inset-0 w-full h-full group">
                                     <video 
                                       src={mediaUrl}
                                     className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
@@ -3399,7 +3405,7 @@ const ContentDashboard = () => {
                               }
                                   
                                   return (
-                                <div className="relative w-full h-full overflow-hidden group">
+                                <div className="absolute inset-0 w-full h-full overflow-hidden group">
                                   {/* Carousel Slider */}
                                   <div 
                                     className="flex transition-transform duration-300 ease-in-out h-full"
@@ -3480,7 +3486,7 @@ const ContentDashboard = () => {
                                     <img 
                                       src={mediaThumbnail} 
                                       alt="Content image" 
-                                  className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                  className="absolute inset-0 w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
                                       loading={shouldLoadEager ? "eager" : "lazy"}
                                       decoding="async"
                                       onLoad={() => {
