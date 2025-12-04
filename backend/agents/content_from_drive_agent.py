@@ -56,6 +56,35 @@ PLATFORM_FOLDER_MAPPING = {
     "pinterest": "pinterest"
 }
 
+# Platform name normalization for frontend compatibility
+PLATFORM_NAME_NORMALIZATION = {
+    "instagram": "instagram",
+    "facebook": "facebook",
+    "youtube": "youtube",
+    "twitter": "twitter",
+    "x": "twitter",
+    "x (twitter)": "twitter",
+    "linkedin": "linkedin",
+    "pinterest": "pinterest",
+    "tiktok": "tiktok",
+    "whatsapp": "whatsapp",
+    "whatsapp business": "whatsapp",
+    "google business profile": "google business profile",
+    "google business": "google business profile",
+    "google": "google business profile",
+    "snapchat": "snapchat",
+    "quora": "quora",
+    "reddit": "reddit",
+}
+
+def normalize_platform_name(platform: str) -> str:
+    """Normalize platform name to match frontend expectations"""
+    if not platform:
+        return platform
+    
+    platform_lower = platform.lower().strip()
+    return PLATFORM_NAME_NORMALIZATION.get(platform_lower, platform_lower)
+
 class ProcessingStep(str, Enum):
     INITIALIZE = "initialize"
     CHECK_DRIVE_CONNECTION = "check_drive_connection"
@@ -78,6 +107,7 @@ class ContentFromDriveState(TypedDict):
     platform_folders: Dict[str, str]  # platform -> folder_id
     connected_platforms: List[str]
     files_to_process: List[Dict[str, Any]]  # List of files with parsed info
+    carousel_posts_to_process: List[Dict[str, Any]]  # List of carousel posts to process
     processed_files: List[Dict[str, Any]]  # Files that have been processed
     analyzed_photos: List[Dict[str, Any]]  # Photos with analysis
     generated_posts: List[Dict[str, Any]]  # Generated post data
@@ -252,8 +282,9 @@ class ContentFromDriveAgent:
             credentials = state["google_credentials"]
             
             # Try to build the service - this will fail if credentials are invalid
+            # Build Drive service with cache disabled to ensure fresh downloads
             try:
-                service = build('drive', 'v3', credentials=credentials)
+                service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
             except Exception as build_error:
                 logger.error(f"Failed to build Drive service: {build_error}")
                 error_str = str(build_error)
@@ -310,7 +341,8 @@ class ContentFromDriveAgent:
             emily_folder_id = state["emily_folder_id"]
             connected_platforms = state["connected_platforms"]
             
-            service = build('drive', 'v3', credentials=credentials)
+            # Build Drive service with cache disabled to ensure fresh downloads
+            service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
             
             # Get all folders inside emily folder
             query = f"'{emily_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
@@ -351,8 +383,8 @@ class ContentFromDriveAgent:
             state["current_step"] = ProcessingStep.ERROR
             return state
     
-    async def _is_file_already_processed(self, user_id: str, file_id: str, file_name: str) -> bool:
-        """Check if a file has already been processed by checking content_posts metadata"""
+    async def _is_file_already_processed(self, user_id: str, file_id: str = None, file_name: str = None, folder_name: str = None) -> bool:
+        """Check if a file or carousel folder has already been processed by checking content_posts metadata"""
         try:
             # Get campaign ID for this user's drive content
             campaign_response = self.supabase.table("content_campaigns").select("id").eq("user_id", user_id).eq("campaign_name", "Drive Content").execute()
@@ -369,23 +401,132 @@ class ContentFromDriveAgent:
             for post in posts_response.data:
                 metadata = post.get("metadata", {})
                 if metadata.get("generated_by") == "content_from_drive_agent":
-                    # Check by file_id first (most reliable)
-                    if metadata.get("file_id") == file_id:
-                        logger.info(f"File {file_name} (ID: {file_id}) already processed - skipping")
+                    # Check by file_id first (most reliable) for regular images
+                    if file_id and metadata.get("file_id") == file_id:
+                        logger.info(f"File {file_name or 'unknown'} (ID: {file_id}) already processed - skipping")
                         return True
-                    # Fallback: check by file_name
-                    if metadata.get("file_name") == file_name:
+                    # Check by file_name for regular images
+                    if file_name and metadata.get("file_name") == file_name:
                         logger.info(f"File {file_name} already processed (by name) - skipping")
+                        return True
+                    # Check by folder_name for carousel posts
+                    if folder_name and metadata.get("folder_name") == folder_name:
+                        logger.info(f"Carousel folder {folder_name} already processed - skipping")
                         return True
             
             return False
         except Exception as e:
-            logger.error(f"Error checking if file is processed: {e}")
+            logger.error(f"Error checking if file/folder is processed: {e}")
             # On error, assume not processed to avoid blocking new files
             return False
     
+    async def _process_carousel_folder(self, credentials, platform_folder_id: str, platform: str, user_id: str) -> List[Dict[str, Any]]:
+        """Process carousel folder and collect all carousel subfolders with their images"""
+        carousel_posts = []
+        
+        try:
+            # Build Drive service with cache disabled to ensure fresh downloads
+            service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
+            
+            # Get all folders inside platform folder and filter for those starting with "carousel"
+            all_folders_query = f"'{platform_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            all_folders = service.files().list(q=all_folders_query, fields="files(id, name)").execute()
+            
+            # Filter folders that start with "carousel" (case-insensitive)
+            carousel_folders = []
+            for folder in all_folders.get('files', []):
+                folder_name_lower = folder['name'].lower().strip()
+                if folder_name_lower.startswith('carousel'):
+                    carousel_folders.append(folder)
+            
+            if not carousel_folders:
+                logger.info(f"No carousel folders found in {platform} folder (folders starting with 'carousel')")
+                return carousel_posts
+            
+            logger.info(f"Found {len(carousel_folders)} carousel folder(s) in {platform}")
+            
+            # Process each carousel folder (these should be named like "carousel_description_date")
+            for carousel_folder in carousel_folders:
+                subfolder_id = carousel_folder['id']
+                subfolder_name = carousel_folder['name']
+                
+                logger.info(f"Processing carousel folder: {subfolder_name} (ID: {subfolder_id})")
+                
+                # Parse folder name: "carousel_description_date"
+                # Remove "carousel_" prefix (case-insensitive)
+                folder_name_clean = subfolder_name
+                folder_name_lower = subfolder_name.lower().strip()
+                if folder_name_lower.startswith('carousel_'):
+                    # Remove "carousel_" prefix (preserve original case for description)
+                    folder_name_clean = subfolder_name[len('carousel_'):].strip()
+                elif folder_name_lower.startswith('carousel'):
+                    # Handle case where there's no underscore after "carousel"
+                    folder_name_clean = subfolder_name[len('carousel'):].strip('_ ').strip()
+                
+                # Parse description and date from folder name
+                parsed = self.parse_filename(folder_name_clean)
+                description = parsed.get("description", folder_name_clean)
+                date_obj = parsed.get("date")
+                
+                logger.info(f"Parsed carousel folder '{subfolder_name}': description='{description}', date={date_obj}")
+                
+                # Get all images from this carousel folder
+                image_mime_types = [
+                    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 
+                    'image/webp', 'image/bmp', 'image/svg+xml'
+                ]
+                mime_query = " or ".join([f"mimeType='{mime}'" for mime in image_mime_types])
+                images_query = f"'{subfolder_id}' in parents and ({mime_query}) and trashed=false"
+                
+                images = service.files().list(q=images_query, fields="files(id, name, mimeType, size, modifiedTime, webViewLink, thumbnailLink)").execute()
+                image_files = images.get('files', [])
+                
+                if not image_files:
+                    logger.warning(f"No images found in carousel folder: {subfolder_name}")
+                    continue
+                
+                logger.info(f"Found {len(image_files)} image(s) in carousel folder: {subfolder_name}")
+                
+                # Check if this carousel folder is already processed (check by folder name)
+                if await self._is_file_already_processed(user_id, folder_name=subfolder_name):
+                    logger.info(f"Carousel folder {subfolder_name} already processed - skipping")
+                    continue
+                
+                # Collect all images for this carousel
+                carousel_images = []
+                for img_file in image_files:
+                    carousel_images.append({
+                        "file_id": img_file['id'],
+                        "file_name": img_file['name'],
+                        "mime_type": img_file.get('mimeType', ''),
+                        "size": img_file.get('size', 0),
+                        "modified_time": img_file.get('modifiedTime', ''),
+                        "web_view_link": img_file.get('webViewLink', ''),
+                        "thumbnail_link": img_file.get('thumbnailLink', '')
+                    })
+                
+                # Create carousel post entry
+                carousel_posts.append({
+                    "post_type": "carousel",
+                    "platform": platform,
+                    "folder_name": subfolder_name,
+                    "description": description,
+                    "date": date_obj,
+                    "date_string": parsed.get("date_string"),
+                    "images": carousel_images,  # All images for this carousel
+                    "total_images": len(carousel_images)
+                })
+                
+                logger.info(f"✅ Prepared carousel post: {subfolder_name} with {len(carousel_images)} images")
+            
+            return carousel_posts
+            
+        except Exception as e:
+            logger.error(f"Error processing carousel folder: {e}")
+            return carousel_posts
+    
     async def process_platform_folder(self, state: ContentFromDriveState) -> ContentFromDriveState:
-        """Process each platform folder and collect image files"""
+        """Process each platform folder and collect image files and carousel posts"""
         try:
             state["current_step"] = ProcessingStep.PROCESS_PLATFORM_FOLDER
             state["progress_percentage"] = 40
@@ -394,14 +535,20 @@ class ContentFromDriveAgent:
             platform_folders = state["platform_folders"]
             user_id = state["user_id"]
             
-            service = build('drive', 'v3', credentials=credentials)
+            # Build Drive service with cache disabled to ensure fresh downloads
+            service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
             
             files_to_process = []
+            carousel_posts_to_process = []
             skipped_files = []
             
             # Process each platform folder
             for platform, folder_id in platform_folders.items():
-                # Get image files from this folder
+                # First, check for carousel folder and process carousel posts
+                carousel_posts = await self._process_carousel_folder(credentials, folder_id, platform, user_id)
+                carousel_posts_to_process.extend(carousel_posts)
+                
+                # Then, get regular image files from this folder (excluding carousel folder)
                 # Supported image MIME types
                 image_mime_types = [
                     'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 
@@ -409,13 +556,14 @@ class ContentFromDriveAgent:
                 ]
                 
                 mime_query = " or ".join([f"mimeType='{mime}'" for mime in image_mime_types])
+                # Exclude carousel folder from regular image search
                 query = f"'{folder_id}' in parents and ({mime_query}) and trashed=false"
                 
-                logger.info(f"Searching for images in {platform} folder (ID: {folder_id})...")
+                logger.info(f"Searching for regular images in {platform} folder (ID: {folder_id})...")
                 results = service.files().list(q=query, fields="files(id, name, mimeType, size, modifiedTime, webViewLink, thumbnailLink)").execute()
                 files = results.get('files', [])
                 
-                logger.info(f"Found {len(files)} image file(s) in {platform} folder")
+                logger.info(f"Found {len(files)} regular image file(s) in {platform} folder")
                 
                 for file in files:
                     file_id = file['id']
@@ -434,14 +582,15 @@ class ContentFromDriveAgent:
                         "size": file.get('size', 0),
                         "modified_time": file.get('modifiedTime', ''),
                         "web_view_link": file.get('webViewLink', ''),
-                        "thumbnail_link": file.get('thumbnailLink', '')
+                        "thumbnail_link": file.get('thumbnailLink', ''),
+                        "post_type": "image"  # Regular image post
                     })
                     logger.info(f"  - {file_name} ({file.get('mimeType', 'unknown type')}) - NEW")
             
             if skipped_files:
                 logger.info(f"Skipped {len(skipped_files)} already processed file(s): {', '.join(skipped_files[:5])}{'...' if len(skipped_files) > 5 else ''}")
             
-            if not files_to_process:
+            if not files_to_process and not carousel_posts_to_process:
                 if skipped_files:
                     state["error_message"] = f"All {len(skipped_files)} image files have already been processed. No new files to process."
                 else:
@@ -450,7 +599,8 @@ class ContentFromDriveAgent:
                 return state
             
             state["files_to_process"] = files_to_process
-            logger.info(f"Found {len(files_to_process)} new files to process (skipped {len(skipped_files)} already processed)")
+            state["carousel_posts_to_process"] = carousel_posts_to_process  # Store carousel posts separately
+            logger.info(f"Found {len(files_to_process)} new regular files and {len(carousel_posts_to_process)} carousel posts to process (skipped {len(skipped_files)} already processed)")
             return state
             
         except Exception as e:
@@ -607,18 +757,22 @@ class ContentFromDriveAgent:
             return state
     
     async def analyze_photos(self, state: ContentFromDriveState) -> ContentFromDriveState:
-        """Analyze photos using OpenAI Vision API"""
+        """Analyze photos using OpenAI Vision API (including first image from carousel posts)"""
         try:
             state["current_step"] = ProcessingStep.ANALYZE_PHOTOS
             state["progress_percentage"] = 60
             
             credentials = state["google_credentials"]
             files_to_process = state["files_to_process"]
+            carousel_posts_to_process = state.get("carousel_posts_to_process", [])
             
-            service = build('drive', 'v3', credentials=credentials)
+            # Build Drive service with cache disabled to ensure fresh downloads
+            service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
             analyzed_photos = []
             
-            # Process each file
+            logger.info(f"Starting photo analysis: {len(files_to_process)} regular images, {len(carousel_posts_to_process)} carousel posts")
+            
+            # Process regular image files
             for idx, file_info in enumerate(files_to_process):
                 try:
                     state["progress_percentage"] = 60 + int((idx / len(files_to_process)) * 20)
@@ -703,11 +857,128 @@ class ContentFromDriveAgent:
                     # Continue with other photos even if one fails
                     analyzed_photos.append({
                         **file_info,
-                        "analysis": f"Error analyzing image: {str(e)}"
+                        "analysis": f"Error analyzing image: {str(e)}",
+                        "post_type": "image"
                     })
             
+            # Process carousel posts - analyze first image from each carousel
+            if carousel_posts_to_process:
+                logger.info(f"🔄 Processing {len(carousel_posts_to_process)} carousel post(s)...")
+                total_items = len(files_to_process) + len(carousel_posts_to_process)
+                carousel_start_idx = len(files_to_process)
+                
+                for idx, carousel_post in enumerate(carousel_posts_to_process):
+                    try:
+                        carousel_idx = carousel_start_idx + idx
+                        state["progress_percentage"] = 60 + int((carousel_idx / total_items) * 20) if total_items > 0 else 80
+                        
+                        if not carousel_post.get("images") or len(carousel_post["images"]) == 0:
+                            logger.warning(f"Carousel post {carousel_post.get('folder_name', 'unknown')} has no images - skipping")
+                            continue
+                        
+                        # Get first image for analysis
+                        first_image = carousel_post["images"][0]
+                        file_id = first_image["file_id"]
+                        file_name = first_image["file_name"]
+                        
+                        logger.info(f"📥 Downloading first image from carousel: {file_name} (ID: {file_id})")
+                        
+                        # Download first image for analysis
+                        request = service.files().get_media(fileId=file_id)
+                        file_content = request.execute()
+                        file_size = len(file_content)
+                        max_size = 20 * 1024 * 1024  # 20MB limit
+                        
+                        logger.info(f"✅ Downloaded {len(file_content)} bytes for first carousel image: {file_name}")
+                        
+                        if file_size > max_size:
+                            logger.warning(f"⚠️ First image in carousel {carousel_post.get('folder_name')} is too large, using thumbnail")
+                            if first_image.get("thumbnail_link"):
+                                image_url = first_image.get("thumbnail_link")
+                                image_content = [{
+                                    "type": "image_url",
+                                    "image_url": {"url": image_url}
+                                }]
+                            else:
+                                analyzed_photos.append({
+                                    **carousel_post,
+                                    "analysis": "First image too large for analysis",
+                                    "post_type": "carousel"
+                                })
+                                continue
+                        else:
+                            # Convert to base64 for OpenAI Vision
+                            image_base64 = base64.b64encode(file_content).decode('utf-8')
+                            mime_type = first_image.get("mime_type", "image/jpeg")
+                            image_data_url = f"data:{mime_type};base64,{image_base64}"
+                            image_content = [{
+                                "type": "image_url",
+                                "image_url": {"url": image_data_url}
+                            }]
+                            logger.info(f"🖼️ Converted first carousel image to base64 ({len(image_base64)} chars), ready for ChatGPT analysis")
+                        
+                        # Analyze with OpenAI Vision
+                        response = self.client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=[
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        {
+                                            "type": "text",
+                                            "text": "Analyze this image in detail. This is the first image of a carousel post. Describe what you see, the mood, colors, composition, any text visible, and suggest what kind of social media carousel post this would be good for. Be specific and detailed, considering this is part of a multi-image sequence."
+                                        }
+                                    ] + image_content
+                                }
+                            ],
+                            max_tokens=500
+                        )
+                        
+                        analysis = response.choices[0].message.content
+                        
+                        # Download all carousel images for later upload to Supabase
+                        carousel_image_bytes = []
+                        logger.info(f"📥 Downloading all {len(carousel_post['images'])} images for carousel post...")
+                        for img_idx, img in enumerate(carousel_post["images"]):
+                            try:
+                                img_request = service.files().get_media(fileId=img["file_id"])
+                                img_content = img_request.execute()
+                                if len(img_content) <= max_size:
+                                    carousel_image_bytes.append({
+                                        "file_id": img["file_id"],
+                                        "file_name": img["file_name"],
+                                        "bytes": img_content,
+                                        "mime_type": img.get("mime_type", "image/jpeg")
+                                    })
+                                    logger.info(f"✅ Downloaded carousel image {img_idx + 1}/{len(carousel_post['images'])}: {img['file_name']}")
+                                else:
+                                    logger.warning(f"⚠️ Carousel image {img['file_name']} is too large, skipping upload")
+                            except Exception as e:
+                                logger.error(f"Error downloading image {img['file_name']} for carousel: {e}")
+                        
+                        analyzed_photos.append({
+                            **carousel_post,
+                            "analysis": analysis,
+                            "first_image_file_id": file_id,
+                            "first_image_file_name": file_name,
+                            "carousel_image_bytes": carousel_image_bytes,  # Store all image bytes
+                            "post_type": "carousel"
+                        })
+                        
+                        logger.info(f"✅ Analyzed carousel post {idx + 1}/{len(carousel_posts_to_process)}: {carousel_post.get('folder_name')} (first image: {file_name}, total images: {len(carousel_image_bytes)})")
+                    
+                    except Exception as e:
+                        logger.error(f"Error analyzing carousel post {carousel_post.get('folder_name', 'unknown')}: {e}")
+                        analyzed_photos.append({
+                            **carousel_post,
+                            "analysis": f"Error analyzing carousel: {str(e)}",
+                            "post_type": "carousel"
+                        })
+            else:
+                logger.info("No carousel posts to process")
+            
             state["analyzed_photos"] = analyzed_photos
-            logger.info(f"Analyzed {len(analyzed_photos)} photos")
+            logger.info(f"✅ Photo analysis complete: {len(analyzed_photos)} items total ({len(files_to_process)} regular images + {len(carousel_posts_to_process)} carousel posts)")
             return state
             
         except Exception as e:
@@ -733,10 +1004,24 @@ class ContentFromDriveAgent:
             for idx, photo in enumerate(analyzed_photos):
                 try:
                     platform = photo["platform"]
-                    description = photo.get("description", "")
+                    post_type = photo.get("post_type", "image")
+                    is_carousel = post_type == "carousel"
+                    
+                    # For carousel posts, use folder_name; for regular posts, use file_name
+                    if is_carousel:
+                        folder_name = photo.get("folder_name", "")
+                        # Description and date are already parsed from folder name during processing
+                        description = photo.get("description", "")
+                        scheduled_date = photo.get("date")
+                        # For carousel, don't use individual image file names - use folder name structure
+                        file_name = folder_name  # Use folder name for display
+                    else:
+                        file_name = photo.get("file_name", "")
+                        description = photo.get("description", "")
+                        scheduled_date = photo.get("date")
+                        folder_name = None  # Not applicable for regular posts
+                    
                     analysis = photo.get("analysis", "")
-                    file_name = photo.get("file_name", "")
-                    scheduled_date = photo.get("date")
                     
                     # Build comprehensive prompt similar to custom content agent
                     # Extract business context from profile
@@ -759,7 +1044,75 @@ class ContentFromDriveAgent:
                     unique_value = profile.get('unique_value_proposition', '') if profile else ''
                     
                     # Build comprehensive prompt with emphasis on title generation
-                    prompt = f"""Create a compelling {platform} post with title and caption based on the following information:
+                    if is_carousel:
+                        total_images = photo.get("total_images", 0)
+                        carousel_note = f"For carousel: Create a narrative that works across all images in the sequence. The caption should tell a story that flows through the carousel."
+                        prompt = f"""Create a compelling {platform} CAROUSEL post with title and caption based on the following information:
+
+CAROUSEL INFORMATION:
+- Carousel Folder Name: {folder_name}
+- Description (from structured folder name): {description}
+- Total Images in Carousel: {total_images}
+- First Image Analysis: {analysis}
+- Note: This is a carousel post with {total_images} images. The caption should work for the entire carousel sequence.
+- IMPORTANT: Use the description "{description}" from the folder name as the main context. Do NOT use individual image file names.
+
+BUSINESS CONTEXT:
+- Business Name: {business_name}
+- Industry: {industry}
+- Business Description: {business_description[:300] if business_description else 'Not specified'}
+- Unique Value Proposition: {unique_value[:200] if unique_value else 'Not specified'}
+- Brand Voice: {brand_voice}
+- Brand Tone: {brand_tone}
+- Target Audience: {target_audience}
+
+PLATFORM: {platform}
+
+REQUIREMENTS:
+
+1. TITLE (CRITICAL - DO NOT USE FOLDER NAME OR DESCRIPTION):
+   - Generate a catchy, attention-grabbing title (5-10 words maximum)
+   - Should be engaging and relevant to the carousel and business
+   - MUST NOT simply repeat the folder name "{folder_name}" or description "{description}"
+   - Should capture the essence of what makes this carousel post interesting
+   - Should reflect the business context and image analysis
+   - Examples of good titles: "Transforming Ideas into Reality", "Behind the Scenes: Innovation in Action", "Celebrating Our Latest Achievement", "Where Creativity Meets Technology"
+   - Examples of BAD titles (DO NOT USE): "{file_name}", "{description}", "Image from Drive"
+
+2. CAPTION:
+   - Create a caption that perfectly complements and references the carousel images
+   - Use the image analysis to craft engaging, visual storytelling
+   - {carousel_note}
+   - Optimize for {platform} best practices (consider character limits, engagement patterns, and platform culture)
+   - Match the brand voice ({brand_voice}) and tone ({brand_tone})
+   - Make it authentic to the business context and industry
+   - Create a compelling narrative that connects the images to the business
+   - Use the visual elements from the analysis to enhance the message
+   - Make it engaging and shareable
+   - Keep it authentic and aligned with the business's unique value proposition
+
+3. HASHTAGS:
+   - Include relevant hashtags (5-10 hashtags appropriate for {platform})
+   - Mix of industry-specific, brand-specific, and trending hashtags
+
+4. CALL TO ACTION:
+   - Suggest an appropriate call to action that encourages engagement
+
+CRITICAL INSTRUCTIONS:
+- Return ONLY a valid JSON object
+- Do NOT use markdown code blocks (no ```json or ```)
+- Do NOT include any text before or after the JSON
+- The JSON must be parseable directly
+- Use these exact field names:
+
+{{
+  "title": "A catchy, original title (NOT the folder name or description - be creative and relevant!)",
+  "caption": "The main post caption that references the carousel images and connects them to the business",
+  "hashtags": ["array", "of", "relevant", "hashtags", "for", "{platform}"],
+  "call_to_action": "Suggested call to action"
+}}"""
+                    else:
+                        prompt = f"""Create a compelling {platform} post with title and caption based on the following information:
 
 IMAGE INFORMATION:
 - Image Filename: {file_name}
@@ -842,27 +1195,59 @@ CRITICAL INSTRUCTIONS:
                     
                     content_data = json.loads(raw_response)
                     
-                    generated_posts.append({
-                        "platform": platform,
-                        "file_id": photo["file_id"],
-                        "file_name": photo["file_name"],
-                        "description": description,
-                        "analysis": analysis,
-                        "title": content_data.get("title", ""),  # Include generated title
-                        "caption": content_data.get("caption", ""),
-                        "hashtags": content_data.get("hashtags", []),
-                        "call_to_action": content_data.get("call_to_action", ""),
-                        "scheduled_date": scheduled_date,
-                        "image_url": photo.get("web_view_link", ""),
-                        "thumbnail_url": photo.get("thumbnail_link", ""),
-                        "image_bytes": photo.get("image_bytes"),  # Include image bytes for Supabase upload
-                        "mime_type": photo.get("mime_type", "image/jpeg")  # Include MIME type
-                    })
+                    if is_carousel:
+                        # For carousel posts, include all images and carousel-specific data
+                        generated_posts.append({
+                            "platform": platform,
+                            "post_type": "carousel",
+                            "folder_name": photo.get("folder_name", ""),
+                            "description": description,
+                            "analysis": analysis,
+                            "title": content_data.get("title", ""),
+                            "caption": content_data.get("caption", ""),
+                            "hashtags": content_data.get("hashtags", []),
+                            "call_to_action": content_data.get("call_to_action", ""),
+                            "scheduled_date": scheduled_date,
+                            "images": photo.get("images", []),  # All images in carousel
+                            "total_images": photo.get("total_images", 0),
+                            "carousel_image_bytes": photo.get("carousel_image_bytes", []),  # All image bytes for upload
+                            "first_image_file_id": photo.get("first_image_file_id"),
+                            "first_image_file_name": photo.get("first_image_file_name")
+                        })
+                    else:
+                        # For regular image posts
+                        generated_posts.append({
+                            "platform": platform,
+                            "post_type": "image",
+                            "file_id": photo.get("file_id"),
+                            "file_name": photo.get("file_name", ""),
+                            "description": description,
+                            "analysis": analysis,
+                            "title": content_data.get("title", ""),
+                            "caption": content_data.get("caption", ""),
+                            "hashtags": content_data.get("hashtags", []),
+                            "call_to_action": content_data.get("call_to_action", ""),
+                            "scheduled_date": scheduled_date,
+                            "image_url": photo.get("web_view_link", ""),
+                            "thumbnail_url": photo.get("thumbnail_link", ""),
+                            "image_bytes": photo.get("image_bytes"),  # Include image bytes for Supabase upload
+                            "mime_type": photo.get("mime_type", "image/jpeg")  # Include MIME type
+                        })
                     
-                    logger.info(f"Generated caption for {idx + 1}/{len(analyzed_photos)}: {photo['file_name']}")
+                    # Log with appropriate name based on post type
+                    if is_carousel:
+                        display_name = photo.get("folder_name", "unknown")
+                    else:
+                        display_name = photo.get("file_name", "unknown")
+                    logger.info(f"Generated caption for {idx + 1}/{len(analyzed_photos)}: {display_name}")
                     
                 except Exception as e:
-                    logger.error(f"Error generating caption for {photo['file_name']}: {e}")
+                    # Log with appropriate name based on post type
+                    if is_carousel:
+                        display_name = photo.get("folder_name", "unknown")
+                    else:
+                        display_name = photo.get("file_name", "unknown")
+                    logger.error(f"Error generating caption for {display_name}: {e}")
                     # Continue with other photos
                     continue
             
@@ -894,14 +1279,28 @@ CRITICAL INSTRUCTIONS:
             # Get or create campaign
             campaign_id = await self._get_or_create_drive_content_campaign(user_id)
             
+            if not campaign_id:
+                logger.error(f"Failed to get or create campaign for user {user_id}")
+                state["error_message"] = "Failed to create campaign for posts. Please try again."
+                state["current_step"] = ProcessingStep.ERROR
+                return state
+            
+            logger.info(f"Using campaign_id: {campaign_id} for user {user_id}")
+            
             for idx, post_data in enumerate(generated_posts):
                 try:
-                    platform = post_data["platform"]
+                    # Normalize platform name to match frontend expectations
+                    original_platform = post_data["platform"]
+                    platform = normalize_platform_name(original_platform)
                     scheduled_date = post_data.get("scheduled_date")
+                    post_type = post_data.get("post_type", "image")
+                    is_carousel = post_type == "carousel"
+                    
+                    logger.info(f"Platform normalization: '{original_platform}' -> '{platform}' for {'carousel' if is_carousel else 'image'} post {post_data.get('file_name') or post_data.get('folder_name', 'unknown')}")
                     
                     # Determine scheduled datetime
                     if scheduled_date:
-                        # Use the date from filename, default to 9 AM
+                        # Use the date from filename/folder name, default to 9 AM
                         scheduled_datetime = scheduled_date.replace(hour=9, minute=0, second=0)
                     else:
                         # Default to tomorrow at 9 AM
@@ -915,56 +1314,112 @@ CRITICAL INSTRUCTIONS:
                     else:
                         status = "draft"
                     
-                    # Upload image to Supabase if we have image bytes
-                    image_url = post_data.get("image_url", "")
-                    if post_data.get("image_bytes"):
-                        try:
-                            mime_type = post_data.get("mime_type", "image/jpeg")
-                            image_url = await self._upload_image_to_supabase(
-                                post_data["image_bytes"],
-                                user_id,
-                                platform,
-                                post_data.get("file_name", "image"),
-                                mime_type
-                            )
-                            logger.info(f"Uploaded image to Supabase for post: {image_url}")
-                        except Exception as upload_error:
-                            logger.error(f"Failed to upload image to Supabase, using original URL: {upload_error}")
-                            # Fallback to original image URL if upload fails
-                            image_url = post_data.get("image_url", "") or post_data.get("thumbnail_url", "")
-                    
-                    # Create post data
                     # Use generated title from AI, fallback to a generic title if not available
                     generated_title = post_data.get("title", "")
                     if not generated_title or generated_title.strip() == "":
                         # Fallback: create a simple title based on business name
                         generated_title = f"{business_name} Update" if business_name and business_name != "Not specified" else "New Post"
                     
-                    post_record = {
-                        "campaign_id": campaign_id,
-                        "platform": platform,
-                        "post_type": "image",
-                        "title": generated_title,  # Use AI-generated title, not filename
-                        "content": post_data.get("caption", ""),
-                        "hashtags": post_data.get("hashtags", []),
-                        "scheduled_date": scheduled_datetime.date().isoformat(),
-                        "scheduled_time": scheduled_datetime.time().isoformat(),
-                        "status": status,
-                        "primary_image_url": image_url,  # Use Supabase URL
-                        "metadata": {
-                            "generated_by": "content_from_drive_agent",
-                            "user_id": user_id,
-                            "file_id": post_data.get("file_id"),
-                            "file_name": post_data.get("file_name"),
-                            "description": post_data.get("description"),  # Keep original description in metadata
-                            "analysis": post_data.get("analysis"),
-                            "call_to_action": post_data.get("call_to_action", ""),
-                            "thumbnail_url": post_data.get("thumbnail_url", ""),
-                            "original_drive_url": post_data.get("image_url", "")  # Keep original URL in metadata
+                    if is_carousel:
+                        # Handle carousel post - upload all images
+                        carousel_image_bytes = post_data.get("carousel_image_bytes", [])
+                        carousel_image_urls = []
+                        
+                        logger.info(f"Uploading {len(carousel_image_bytes)} images for carousel post...")
+                        for img_data in carousel_image_bytes:
+                            try:
+                                img_url = await self._upload_image_to_supabase(
+                                    img_data["bytes"],
+                                    user_id,
+                                    platform,
+                                    img_data.get("file_name", "carousel_image"),
+                                    img_data.get("mime_type", "image/jpeg")
+                                )
+                                carousel_image_urls.append(img_url)
+                                logger.info(f"Uploaded carousel image {len(carousel_image_urls)}/{len(carousel_image_bytes)}: {img_url}")
+                            except Exception as upload_error:
+                                logger.error(f"Failed to upload carousel image {img_data.get('file_name', 'unknown')}: {upload_error}")
+                                # Continue with other images
+                        
+                        if not carousel_image_urls:
+                            logger.error(f"No images uploaded for carousel post {post_data.get('folder_name', 'unknown')} - skipping")
+                            continue
+                        
+                        # Use first image as primary for preview
+                        primary_image_url = carousel_image_urls[0]
+                        
+                        post_record = {
+                            "campaign_id": campaign_id,
+                            "platform": platform,
+                            "post_type": "carousel",
+                            "title": generated_title,
+                            "content": post_data.get("caption", ""),
+                            "hashtags": post_data.get("hashtags", []),
+                            "scheduled_date": scheduled_datetime.date().isoformat(),
+                            "scheduled_time": scheduled_datetime.time().isoformat(),
+                            "status": status,
+                            "primary_image_url": primary_image_url,  # First image for preview
+                            "metadata": {
+                                "generated_by": "content_from_drive_agent",
+                                "user_id": user_id,
+                                "folder_name": post_data.get("folder_name", ""),
+                                "description": post_data.get("description"),
+                                "analysis": post_data.get("analysis"),
+                                "call_to_action": post_data.get("call_to_action", ""),
+                                "carousel_images": carousel_image_urls,  # All carousel image URLs
+                                "total_images": len(carousel_image_urls),
+                                "carousel_image_source": "drive"
+                            }
                         }
-                    }
+                    else:
+                        # Handle regular image post
+                        # Upload image to Supabase if we have image bytes
+                        image_url = post_data.get("image_url", "")
+                        if post_data.get("image_bytes"):
+                            try:
+                                mime_type = post_data.get("mime_type", "image/jpeg")
+                                image_url = await self._upload_image_to_supabase(
+                                    post_data["image_bytes"],
+                                    user_id,
+                                    platform,
+                                    post_data.get("file_name", "image"),
+                                    mime_type
+                                )
+                                logger.info(f"Uploaded image to Supabase for post: {image_url}")
+                            except Exception as upload_error:
+                                logger.error(f"Failed to upload image to Supabase, using original URL: {upload_error}")
+                                # Fallback to original image URL if upload fails
+                                image_url = post_data.get("image_url", "") or post_data.get("thumbnail_url", "")
+                        
+                        post_record = {
+                            "campaign_id": campaign_id,
+                            "platform": platform,
+                            "post_type": "image",
+                            "title": generated_title,  # Use AI-generated title, not filename
+                            "content": post_data.get("caption", ""),
+                            "hashtags": post_data.get("hashtags", []),
+                            "scheduled_date": scheduled_datetime.date().isoformat(),
+                            "scheduled_time": scheduled_datetime.time().isoformat(),
+                            "status": status,
+                            "primary_image_url": image_url,  # Use Supabase URL
+                            "metadata": {
+                                "generated_by": "content_from_drive_agent",
+                                "user_id": user_id,
+                                "file_id": post_data.get("file_id"),
+                                "file_name": post_data.get("file_name"),
+                                "description": post_data.get("description"),  # Keep original description in metadata
+                                "analysis": post_data.get("analysis"),
+                                "call_to_action": post_data.get("call_to_action", ""),
+                                "thumbnail_url": post_data.get("thumbnail_url", ""),
+                                "original_drive_url": post_data.get("image_url", "")  # Keep original URL in metadata
+                            }
+                        }
                     
                     # Save to Supabase
+                    if not campaign_id:
+                        logger.error(f"Cannot save post: campaign_id is missing for user {user_id}")
+                        continue
+                    
                     result = self.supabase.table("content_posts").insert(post_record).execute()
                     
                     if result.data:
@@ -1046,14 +1501,16 @@ CRITICAL INSTRUCTIONS:
             logger.error(f"Error uploading image to Supabase: {e}")
             raise e
     
-    async def _get_or_create_drive_content_campaign(self, user_id: str) -> str:
+    async def _get_or_create_drive_content_campaign(self, user_id: str) -> str | None:
         """Get or create a campaign for drive content"""
         try:
             # Check if campaign exists (using campaign_name, not name)
             response = self.supabase.table("content_campaigns").select("id").eq("user_id", user_id).eq("campaign_name", "Drive Content").execute()
             
-            if response.data:
-                return response.data[0]["id"]
+            if response.data and response.data[0]:
+                campaign_id = response.data[0]["id"]
+                logger.info(f"✅ Found existing 'Drive Content' campaign with ID: {campaign_id} for user {user_id}")
+                return campaign_id
             
             # Create new campaign
             from datetime import datetime, timedelta
@@ -1071,14 +1528,19 @@ CRITICAL INSTRUCTIONS:
             
             result = self.supabase.table("content_campaigns").insert(campaign_data).execute()
             
-            if result.data:
-                return result.data[0]["id"]
+            if result.data and result.data[0]:
+                campaign_id = result.data[0]["id"]
+                logger.info(f"✅ Created new 'Drive Content' campaign with ID: {campaign_id} for user {user_id}")
+                return campaign_id
             else:
-                raise Exception("Failed to create campaign")
+                logger.error(f"Failed to create campaign: No data returned from insert")
+                return None
                 
         except Exception as e:
             logger.error(f"Error getting/creating campaign: {e}")
-            raise
+            logger.error(f"Campaign creation failed for user_id: {user_id}, campaign_data: {campaign_data}")
+            # Return None instead of raising to allow error handling upstream
+            return None
     
     async def complete(self, state: ContentFromDriveState) -> ContentFromDriveState:
         """Mark processing as complete"""

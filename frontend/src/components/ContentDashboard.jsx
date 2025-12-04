@@ -3202,7 +3202,7 @@ const ContentDashboard = () => {
                   <div 
                     className="grid grid-cols-4 gap-6 pl-10"
                   >
-                {filteredContent.slice(0, itemsToShow).map((content) => {
+                {filteredContent.slice(0, itemsToShow === Infinity ? filteredContent.length : itemsToShow).map((content) => {
                   const theme = getPlatformCardTheme(content.platform)
                   console.log('Content platform:', content.platform, 'Theme:', theme)
                   
@@ -3809,39 +3809,47 @@ const ContentDashboard = () => {
                   </div>
                 )}
                 
-                {/* Show More Indicator - Line and Arrow */}
-                {filteredContent.length > itemsToShow && (
+                {/* Show More Indicator - Line and Arrow (shows all posts when clicked) */}
+                {(filteredContent.length > itemsToShow || hasMoreContent) && (
                   <div className="flex flex-col items-center justify-center mt-8 pl-10">
                     <button
-                      onClick={() => {
-                        // Show next 4 items (one more row)
-                        setItemsToShow(prev => Math.min(prev + 4, filteredContent.length))
+                      onClick={async () => {
+                        // If there's more content to load (from other dates), fetch it first
+                        if (hasMoreContent && !loadingAllContent) {
+                          setLoadingAllContent(true)
+                          try {
+                            // Fetch all content without date limit
+                            await loadAllContent()
+                            // Reset hasMoreContent since we've loaded everything
+                            setHasMoreContent(false)
+                            // Show all posts - will be updated when filteredContent updates
+                            // Use a small delay to ensure state has updated
+                            setTimeout(() => {
+                              setItemsToShow(Infinity) // Show all by setting to a very large number
+                            }, 50)
+                          } catch (error) {
+                            console.error('Error loading all content:', error)
+                          } finally {
+                            setLoadingAllContent(false)
+                          }
+                        } else {
+                          // Just show all currently loaded posts
+                          setItemsToShow(filteredContent.length)
+                        }
                       }}
                       className="flex flex-col items-center gap-2 group cursor-pointer hover:opacity-80 transition-opacity"
+                      disabled={loadingAllContent}
                     >
                       <div className="h-px bg-gray-300 w-16 group-hover:bg-purple-500 transition-colors"></div>
-                      <ChevronDown className="w-5 h-5 text-gray-400 group-hover:text-purple-600 transition-colors" />
+                      {loadingAllContent ? (
+                        <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-gray-400 group-hover:text-purple-600 transition-colors" />
+                      )}
                     </button>
                   </div>
                 )}
                 </div>
-                
-                {/* Load More Button */}
-                {hasMoreContent && !loadingAllContent && (
-                  <div className="mt-8 text-center">
-                    <button
-                      onClick={loadAllContent}
-                      className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-sm font-medium transition-all duration-200 underline"
-                    >
-                      Load more
-                    </button>
-                  </div>
-                )}
-                {loadingAllContent && (
-                  <div className="mt-8 text-center">
-                    <p className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 text-sm font-medium">Loading all content...</p>
-                  </div>
-                )}
               </>
             )}
 

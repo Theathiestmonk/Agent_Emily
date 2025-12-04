@@ -162,30 +162,90 @@ async def get_all_content(
 ):
     """Get all content for the user"""
     try:
-        # Query Supabase for all content from content_posts table
-        response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("content_campaigns.user_id", current_user.id).order("scheduled_date", desc=True).range(offset, offset + limit - 1).execute()
+        user_id = current_user.id
+        print(f"🔍 Fetching content for user_id: {user_id}, email: {current_user.email}")
+        
+        # First, try the standard query with INNER JOIN (for posts with campaigns)
+        response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("content_campaigns.user_id", user_id).order("scheduled_date", desc=True).range(offset, offset + limit - 1).execute()
         
         content_items = response.data if response.data else []
+        print(f"🔍 Found {len(content_items)} posts with campaigns via INNER JOIN")
+        
+        # Also check for posts without campaigns (using metadata.user_id as fallback)
+        # This handles edge cases where posts were created but campaign creation failed
+        fallback_response = supabase_admin.table("content_posts").select("*").is_("campaign_id", "null").order("scheduled_date", desc=True).range(offset, offset + limit - 1).execute()
+        
+        print(f"🔍 Fallback query found {len(fallback_response.data) if fallback_response.data else 0} posts without campaigns (before filtering)")
+        
+        if fallback_response.data:
+            # Filter by metadata.user_id to ensure we only get posts for this user
+            fallback_posts = []
+            for post in fallback_response.data:
+                metadata = post.get("metadata", {})
+                if isinstance(metadata, dict) and metadata.get("user_id") == user_id:
+                    # Check if this post has a "Drive Content" campaign that might be missing
+                    # Try to find or create the campaign
+                    try:
+                        campaign_check = supabase_admin.table("content_campaigns").select("id").eq("user_id", user_id).eq("campaign_name", "Drive Content").execute()
+                        if campaign_check.data and campaign_check.data[0]:
+                            campaign_id = campaign_check.data[0]["id"]
+                            # Update the post with the campaign_id
+                            supabase_admin.table("content_posts").update({"campaign_id": campaign_id}).eq("id", post["id"]).execute()
+                            print(f"✅ Fixed post {post['id']} by linking to campaign {campaign_id}")
+                            # Add campaign info to the post for response
+                            post["content_campaigns"] = campaign_check.data[0]
+                            fallback_posts.append(post)
+                    except Exception as fix_error:
+                        print(f"⚠️ Could not fix post {post.get('id')}: {fix_error}")
+                        # Still include the post even if we can't fix it
+                        fallback_posts.append(post)
+            
+            if fallback_posts:
+                print(f"🔍 Found {len(fallback_posts)} posts without campaigns (fixed {len([p for p in fallback_posts if p.get('content_campaigns')])} of them)")
+                # Merge with existing content_items, avoiding duplicates
+                existing_ids = {item["id"] for item in content_items}
+                for post in fallback_posts:
+                    if post["id"] not in existing_ids:
+                        content_items.append(post)
+        
+        print(f"🔍 Total posts returned: {len(content_items)}")
         
         # Format response
         formatted_content = []
         for item in content_items:
+            # Handle both posts with campaigns (from INNER JOIN) and posts without (from fallback)
+            campaign_id = item.get("campaign_id")
+            if not campaign_id and isinstance(item.get("content_campaigns"), dict):
+                campaign_id = item.get("content_campaigns", {}).get("id")
+            
+            platform = item.get("platform", "unknown")
+            # Log platform for debugging
+            if len(formatted_content) < 5:  # Log first 5 for debugging
+                print(f"🔍 Post {item.get('id')}: platform='{platform}', title='{item.get('title', '')[:30]}'")
+            
             formatted_item = {
                 "id": item["id"],
                 "title": item.get("title", "Untitled"),
                 "content": item.get("content", ""),
-                "platform": item.get("platform", "unknown"),
+                "platform": platform,
                 "scheduled_at": f"{item.get('scheduled_date')}T{item.get('scheduled_time', '12:00:00')}",
                 "status": item.get("status", "draft"),
                 "created_at": item.get("created_at"),
                 "media_url": item.get("primary_image_url"),  # Use primary_image_url from content_posts
                 "hashtags": item.get("hashtags", []),
                 "post_type": item.get("post_type", "text"),
-                "campaign_id": item.get("campaign_id"),
+                "campaign_id": campaign_id,
                 "metadata": item.get("metadata", {}),
                 "video_scripting": item.get("video_scripting")  # Include video_scripting for script display
             }
             formatted_content.append(formatted_item)
+        
+        # Log summary of platforms
+        platform_counts = {}
+        for item in formatted_content:
+            platform = item.get("platform", "unknown")
+            platform_counts[platform] = platform_counts.get(platform, 0) + 1
+        print(f"🔍 Platform distribution: {platform_counts}")
         
         return {
             "content": formatted_content,
