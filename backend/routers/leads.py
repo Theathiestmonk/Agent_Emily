@@ -111,6 +111,7 @@ class UpdateLeadStatusRequest(BaseModel):
     remarks: Optional[str] = None
 
 class AddRemarkRequest(BaseModel):
+    """Request model for adding remarks to a lead"""
     remarks: str
 
 class SendMessageRequest(BaseModel):
