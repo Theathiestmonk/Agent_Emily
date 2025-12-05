@@ -81,3 +81,6 @@ async def generate_and_update_embedding(
         logger.error(f"Error generating embedding for user {user_id}: {e}")
         return False
 
+
+
+

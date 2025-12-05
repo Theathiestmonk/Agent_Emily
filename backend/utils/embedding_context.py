@@ -142,3 +142,6 @@ def format_embedding_for_prompt(embedding: List[float], max_length: int = 100) -
         preview = embedding[:max_length//2] + ["..."] + embedding[-max_length//2:]
         return f"[{', '.join(map(str, preview))}] (total: {len(embedding)} dimensions)"
 
+
+
+

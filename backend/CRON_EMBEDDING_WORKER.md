@@ -158,3 +158,6 @@ Check logs regularly to ensure embeddings are being processed.
    - Verify all dependencies are installed
    - Check Python path in script
 
+
+
+

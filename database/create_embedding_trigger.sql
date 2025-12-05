@@ -26,3 +26,6 @@ CREATE TRIGGER trigger_set_embedding_needs_update
 -- Add comment to document the trigger
 COMMENT ON FUNCTION public.set_embedding_needs_update() IS 'Automatically sets embedding_needs_update flag when profile is inserted or updated';
 
+
+
+

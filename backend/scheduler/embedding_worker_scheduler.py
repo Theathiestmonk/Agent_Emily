@@ -162,3 +162,6 @@ async def stop_embedding_worker_scheduler():
     else:
         logger.warning("Embedding worker scheduler is not running")
 
+
+
+
