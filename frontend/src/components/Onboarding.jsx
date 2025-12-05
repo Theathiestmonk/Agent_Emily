@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { onboardingAPI } from '../services/onboarding'
 import OnboardingComplete from './OnboardingComplete'
+import OnboardingFormSelector from './OnboardingFormSelector'
+import OnboardingForm from './OnboardingForm'
+import CreatorOnboardingForm from './CreatorOnboardingForm'
 import { ArrowLeft, ArrowRight, Check, LogOut } from 'lucide-react'
 import LogoUpload from './LogoUpload'
 import MediaUpload from './MediaUpload'
@@ -11,6 +14,8 @@ import InfoTooltip from './InfoTooltip'
 import DualRangeSlider from './DualRangeSlider'
 
 const Onboarding = () => {
+  const [selectedFormType, setSelectedFormType] = useState(null)
+  const [checkingFormType, setCheckingFormType] = useState(true) // Loading state
   const [currentStep, setCurrentStep] = useState(0)
   const [completedSteps, setCompletedSteps] = useState(new Set())
   const [userNavigatedToStep0, setUserNavigatedToStep0] = useState(false)
@@ -217,6 +222,92 @@ const Onboarding = () => {
   const { user, loading: authLoading, logout } = useAuth()
   const navigate = useNavigate()
 
+  // Check for selected form type on mount
+  useEffect(() => {
+    const checkFormType = async () => {
+      setCheckingFormType(true)
+      
+      // First, check if onboarding is completed
+      try {
+        const profileResponse = await onboardingAPI.getProfile()
+        console.log('Profile response:', profileResponse.data)
+        
+        // If onboarding is not completed, always show selector
+        if (profileResponse.data && profileResponse.data.onboarding_completed === false) {
+          console.log('Onboarding not completed - showing form selector')
+          setSelectedFormType(null)
+          // Clear any saved form type to force selection
+          localStorage.removeItem('selected_onboarding_type')
+          setCheckingFormType(false)
+          return
+        }
+        
+        // If onboarding is completed, check for form type
+        if (profileResponse.data && profileResponse.data.onboarding_completed === true) {
+          if (profileResponse.data.onboarding_type) {
+            const dbFormType = profileResponse.data.onboarding_type
+            if (dbFormType === 'business' || dbFormType === 'creator') {
+              console.log('Onboarding completed - using saved form type:', dbFormType)
+              localStorage.setItem('selected_onboarding_type', dbFormType)
+              setSelectedFormType(dbFormType)
+              setCheckingFormType(false)
+              return
+            }
+          }
+        }
+      } catch (error) {
+        console.log('Could not fetch profile for form type:', error)
+      }
+      
+      // Check localStorage as fallback (only if onboarding is completed or profile fetch failed)
+      const savedFormType = localStorage.getItem('selected_onboarding_type')
+      console.log('Checking saved form type from localStorage:', savedFormType)
+      
+      if (savedFormType && (savedFormType === 'business' || savedFormType === 'creator')) {
+        console.log('Found valid form type in localStorage:', savedFormType)
+        setSelectedFormType(savedFormType)
+        setCheckingFormType(false)
+        return
+      }
+      
+      // No form type found - show selector
+      console.log('No valid form type found - will show selector')
+      setSelectedFormType(null)
+      setCheckingFormType(false)
+    }
+    
+    if (!authLoading && user) {
+      checkFormType()
+    } else if (!authLoading && !user) {
+      setCheckingFormType(false)
+      setSelectedFormType(null)
+    }
+  }, [user, authLoading])
+
+  // Handle form type selection
+  const handleFormTypeSelect = (formType) => {
+    console.log('Form type selected:', formType)
+    if (formType !== 'business' && formType !== 'creator') {
+      console.error('Invalid form type:', formType)
+      return
+    }
+    // Set the form type - this will trigger re-render and show the correct form
+    setSelectedFormType(formType)
+    localStorage.setItem('selected_onboarding_type', formType)
+    
+    // Clear old form data if switching between forms
+    if (formType === 'creator') {
+      // Clear business form data
+      localStorage.removeItem('onboarding_form_data')
+      localStorage.removeItem('onboarding_current_step')
+      localStorage.removeItem('onboarding_completed_steps')
+    } else if (formType === 'business') {
+      // Clear creator form data
+      localStorage.removeItem('creator_onboarding_form_data')
+      localStorage.removeItem('creator_onboarding_current_step')
+      localStorage.removeItem('creator_onboarding_completed_steps')
+    }
+  }
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -239,13 +330,18 @@ const Onboarding = () => {
     'Review & Submit'
   ]
 
-  // Load saved data from localStorage on component mount
+  // Load saved data from localStorage on component mount - ONLY for business form
   useEffect(() => {
+    // Only load business form data if business form is selected
+    if (selectedFormType !== 'business') {
+      return // Don't load business form data if not selected
+    }
+    
     const savedFormData = localStorage.getItem('onboarding_form_data')
     const savedCurrentStep = localStorage.getItem('onboarding_current_step')
     const savedCompletedSteps = localStorage.getItem('onboarding_completed_steps')
     
-    console.log('Loading from localStorage:', {
+    console.log('Loading business form data from localStorage:', {
       savedFormData: savedFormData ? 'exists' : 'null',
       savedCurrentStep,
       savedCompletedSteps: savedCompletedSteps ? 'exists' : 'null'
@@ -287,10 +383,13 @@ const Onboarding = () => {
         console.error('Error parsing completed steps:', error)
       }
     }
-  }, []) // Empty dependency array - only run on mount
+  }, [selectedFormType]) // Only run when business form is selected
 
-  // Auto-determine current step based on data after form data loads
+  // Auto-determine current step based on data after form data loads - ONLY for business form
   useEffect(() => {
+    // Only run for business form
+    if (selectedFormType !== 'business') return
+    
     // Don't auto-redirect if user manually navigated to step 0
     if (userNavigatedToStep0) return
     
@@ -311,26 +410,33 @@ const Onboarding = () => {
         setCurrentStep(targetStep)
       }
     }
-  }, [formData, currentStep, steps.length, userNavigatedToStep0])
+  }, [formData, currentStep, steps.length, userNavigatedToStep0, selectedFormType])
 
   // Save form data to localStorage whenever it changes
   useEffect(() => {
-    console.log('Saving form data to localStorage:', formData)
-    localStorage.setItem('onboarding_form_data', JSON.stringify(formData))
-  }, [formData])
+    // Only save if business form is selected
+    if (selectedFormType === 'business') {
+      console.log('Saving business form data to localStorage:', formData)
+      localStorage.setItem('onboarding_form_data', JSON.stringify(formData))
+    }
+  }, [formData, selectedFormType])
 
-  // Save current step to localStorage whenever it changes
+  // Save current step to localStorage whenever it changes - ONLY for business form
   useEffect(() => {
-    console.log('Saving current step to localStorage:', currentStep)
-    localStorage.setItem('onboarding_current_step', currentStep.toString())
-  }, [currentStep])
+    if (selectedFormType === 'business') {
+      console.log('Saving current step to localStorage:', currentStep)
+      localStorage.setItem('onboarding_current_step', currentStep.toString())
+    }
+  }, [currentStep, selectedFormType])
 
 
-  // Save completed steps to localStorage whenever it changes
+  // Save completed steps to localStorage whenever it changes - ONLY for business form
   useEffect(() => {
-    console.log('Saving completed steps to localStorage:', [...completedSteps])
-    localStorage.setItem('onboarding_completed_steps', JSON.stringify([...completedSteps]))
-  }, [completedSteps])
+    if (selectedFormType === 'business') {
+      console.log('Saving completed steps to localStorage:', [...completedSteps])
+      localStorage.setItem('onboarding_completed_steps', JSON.stringify([...completedSteps]))
+    }
+  }, [completedSteps, selectedFormType])
 
 
   const businessTypes = [
@@ -2147,8 +2253,8 @@ const Onboarding = () => {
     }
   }
 
-  // Show loading while checking user authentication
-  if (authLoading) {
+  // Show loading while checking user authentication or form type
+  if (authLoading || checkingFormType) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -2164,6 +2270,39 @@ const Onboarding = () => {
     return <OnboardingComplete />
   }
 
+  // REQUIRED: Show form selector if no form type selected - user MUST choose
+  // Simple check: if selectedFormType is null or not a valid value, show selector
+  if (!selectedFormType || (selectedFormType !== 'business' && selectedFormType !== 'creator')) {
+    console.log('Showing form selector. selectedFormType:', selectedFormType)
+    return <OnboardingFormSelector onSelect={handleFormTypeSelect} />
+  }
+
+  // Show creator form if creator type selected
+  if (selectedFormType === 'creator') {
+    return (
+      <div className="min-h-screen bg-[#F6F6F6] flex flex-col">
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl">
+            <CreatorOnboardingForm
+              onSuccess={() => {
+                setShowCompletion(true)
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show business form ONLY if business type is explicitly selected
+  if (selectedFormType === 'business') {
+    // Continue with existing business form logic below
+  } else {
+    // Fallback: if somehow we get here without a valid selection, show selector
+    return <OnboardingFormSelector onSelect={handleFormTypeSelect} />
+  }
+
+  // Show business form (existing Onboarding.jsx logic)
   return (
     <div className="min-h-screen bg-[#F6F6F6] flex flex-col">
         {/* Header */}

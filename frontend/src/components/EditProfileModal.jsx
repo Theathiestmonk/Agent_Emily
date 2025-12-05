@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { onboardingAPI } from '../services/onboarding'
 import OnboardingForm from './OnboardingForm'
+import CreatorOnboardingForm from './CreatorOnboardingForm'
 import { X, ChevronDown, Navigation, Save, RotateCcw, CheckCircle } from 'lucide-react'
 
 const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
@@ -13,7 +14,8 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
   const [completedSteps, setCompletedSteps] = useState(new Set())
   const onboardingFormRef = useRef(null)
 
-  const steps = [
+  // Business form steps
+  const businessSteps = [
     'Basic Business Info',
     'Business Description', 
     'Brand & Contact',
@@ -26,6 +28,22 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
     'Automation & Platform',
     'Review & Submit'
   ]
+
+  // Creator form steps
+  const creatorSteps = [
+    'Creator Basics',
+    'Brand & Contact',
+    'Audience & Brand Story',
+    'Platforms & Current Presence',
+    'Content Strategy & Goals',
+    'Performance Insights & Competition',
+    'Monetization, Workflow & Automation',
+    'Review & Submit'
+  ]
+
+  // Determine which steps to use based on onboarding_type
+  // Default to businessSteps if profileData is not yet loaded
+  const steps = profileData?.onboarding_type === 'creator' ? creatorSteps : businessSteps
 
   useEffect(() => {
     if (isOpen) {
@@ -109,7 +127,11 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
                 </div>
               )}
             </div>
-            <p className="text-xs sm:text-sm md:text-base text-gray-600 mt-1">Update your business information and preferences</p>
+            <p className="text-xs sm:text-sm md:text-base text-gray-600 mt-1">
+              {profileData?.onboarding_type === 'creator' 
+                ? 'Update your creator information and preferences' 
+                : 'Update your business information and preferences'}
+            </p>
           </div>
 
           {/* Right section - Step Navigation and Close button */}
@@ -219,17 +241,31 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess }) => {
               </button>
             </div>
           ) : profileData ? (
-            <OnboardingForm
-              ref={onboardingFormRef}
-              initialData={profileData}
-              isEditMode={true}
-              onClose={onClose}
-              onSuccess={handleSuccess}
-              showHeader={false}
-              showProgress={true}
-              onStepChange={handleStepUpdate}
-              onStepComplete={handleStepComplete}
-            />
+            profileData.onboarding_type === 'creator' ? (
+              <CreatorOnboardingForm
+                ref={onboardingFormRef}
+                initialData={profileData}
+                isEditMode={true}
+                onClose={onClose}
+                onSuccess={handleSuccess}
+                showHeader={false}
+                showProgress={true}
+                onStepChange={handleStepUpdate}
+                onStepComplete={handleStepComplete}
+              />
+            ) : (
+              <OnboardingForm
+                ref={onboardingFormRef}
+                initialData={profileData}
+                isEditMode={true}
+                onClose={onClose}
+                onSuccess={handleSuccess}
+                showHeader={false}
+                showProgress={true}
+                onStepChange={handleStepUpdate}
+                onStepComplete={handleStepComplete}
+              />
+            )
           ) : null}
         </div>
       </div>

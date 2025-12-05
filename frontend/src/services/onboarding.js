@@ -21,13 +21,19 @@ export const onboardingAPI = {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('User not authenticated')
     
+    // Ensure onboarding_type is set
+    const submissionData = {
+      ...data,
+      onboarding_type: data.onboarding_type || 'business', // Default to business if not specified
+      onboarding_completed: true
+    }
+    
     const { data: result, error } = await supabase
       .from('profiles')
       .upsert({
         id: user.id,
         name: user.user_metadata?.name || user.email,
-        ...data,
-        onboarding_completed: true
+        ...submissionData
       })
       .select()
       .single()
@@ -60,13 +66,23 @@ export const onboardingAPI = {
       console.log('Updating profile for user:', user.id)
       console.log('Update data:', data)
       
+      // Preserve onboarding_type if it exists, otherwise keep existing value
+      const updateData = {
+        ...data,
+        updated_at: new Date().toISOString()
+      }
+      
+      // If onboarding_type is provided, include it; otherwise don't overwrite
+      if (data.onboarding_type) {
+        updateData.onboarding_type = data.onboarding_type
+      }
+      
       const { data: result, error } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
           name: user.user_metadata?.name || user.email,
-          ...data,
-          updated_at: new Date().toISOString()
+          ...updateData
         })
         .select()
         .single()
