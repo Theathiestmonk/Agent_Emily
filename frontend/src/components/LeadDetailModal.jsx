@@ -62,6 +62,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const [selectedPreviousEmail, setSelectedPreviousEmail] = useState(null)
   const [generatingEmail, setGeneratingEmail] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [newRemark, setNewRemark] = useState('')
+  const [addingRemark, setAddingRemark] = useState(false)
+  const [showAddRemarkSection, setShowAddRemarkSection] = useState(false)
 
   useEffect(() => {
     fetchConversations()
@@ -316,6 +319,29 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
       showError('Error', 'Failed to clear follow-up date')
     } finally {
       setUpdatingFollowUp(false)
+    }
+  }
+
+  const handleAddRemark = async () => {
+    if (!newRemark.trim()) {
+      showError('Error', 'Please enter a remark')
+      return
+    }
+
+    try {
+      setAddingRemark(true)
+      await leadsAPI.addRemark(lead.id, newRemark.trim())
+      setNewRemark('')
+      setShowAddRemarkSection(false)
+      showSuccess('Remark Added', 'Remark has been added successfully')
+      // Refresh status history to show the new remark
+      await fetchStatusHistory()
+      if (onUpdate) onUpdate()
+    } catch (error) {
+      console.error('Error adding remark:', error)
+      showError('Error', 'Failed to add remark')
+    } finally {
+      setAddingRemark(false)
     }
   }
 
@@ -700,6 +726,17 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                   {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-white flex-shrink-0" />}
                 </div>
               </div>
+
+              {/* Add Remark Button */}
+              <div className="flex items-center">
+                <button
+                  onClick={() => setShowAddRemarkSection(!showAddRemarkSection)}
+                  className="px-4 py-1.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 border border-white/30 rounded-lg text-white font-medium transition-colors flex items-center space-x-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Add Remark</span>
+                </button>
+              </div>
             </div>
             
             {/* Remarks Input */}
@@ -734,6 +771,49 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     Cancel
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Add Remarks Section */}
+            {showAddRemarkSection && (
+              <div className="mt-3 bg-white/10 backdrop-blur-sm rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-white">Add Remark</label>
+                  <button
+                    onClick={() => {
+                      setShowAddRemarkSection(false)
+                      setNewRemark('')
+                    }}
+                    className="p-1 hover:bg-white/20 rounded transition-colors"
+                    title="Close"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+                <textarea
+                  value={newRemark}
+                  onChange={(e) => setNewRemark(e.target.value)}
+                  placeholder="Add a remark about this lead..."
+                  rows={3}
+                  className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 resize-none"
+                />
+                <button
+                  onClick={handleAddRemark}
+                  disabled={addingRemark || !newRemark.trim()}
+                  className="w-full px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 border border-white/30 rounded-lg text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
+                  {addingRemark ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Adding...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4" />
+                      <span>Add Remark</span>
+                    </>
+                  )}
+                </button>
               </div>
             )}
           </div>

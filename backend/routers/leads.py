@@ -110,6 +110,9 @@ class UpdateLeadStatusRequest(BaseModel):
     status: str
     remarks: Optional[str] = None
 
+class AddRemarkRequest(BaseModel):
+    remarks: str
+
 class SendMessageRequest(BaseModel):
     message: str
     message_type: str = "whatsapp"  # whatsapp or email
@@ -1147,6 +1150,43 @@ async def get_status_history(
         raise
     except Exception as e:
         logger.error(f"Error getting status history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{lead_id}/remarks")
+async def add_remark(
+    lead_id: str,
+    request: AddRemarkRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Add a remark to a lead without changing status"""
+    try:
+        # Verify lead belongs to user
+        lead = supabase_admin.table("leads").select("*").eq("id", lead_id).eq("user_id", current_user["id"]).execute()
+        if not lead.data:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        current_status = lead.data[0]["status"]
+        
+        # Create status history entry with same status (no change) but with remark
+        supabase_admin.table("lead_status_history").insert({
+            "lead_id": lead_id,
+            "old_status": current_status,
+            "new_status": current_status,  # Same status, no change
+            "changed_by": "user",
+            "reason": request.remarks  # Store remarks as reason in history
+        }).execute()
+        
+        # Update lead's updated_at timestamp
+        supabase_admin.table("leads").update({
+            "updated_at": datetime.now().isoformat()
+        }).eq("id", lead_id).execute()
+        
+        return {"success": True, "message": "Remark added successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding remark: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 class UpdateFollowUpRequest(BaseModel):

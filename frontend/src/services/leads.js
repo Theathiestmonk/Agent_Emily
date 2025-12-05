@@ -125,6 +125,18 @@ export const leadsAPI = {
   },
 
   /**
+   * Add a remark to a lead without changing status
+   * @param {string} leadId - Lead ID
+   * @param {string} remarks - Remarks to add
+   * @returns {Promise} API response
+   */
+  addRemark: (leadId, remarks) => {
+    return api.post(`/leads/${leadId}/remarks`, {
+      remarks
+    })
+  },
+
+  /**
    * Import leads from CSV file
    * @param {File} file - CSV file to import
    * @returns {Promise} API response with import results
