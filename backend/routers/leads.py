@@ -94,6 +94,7 @@ class LeadResponse(BaseModel):
     created_at: str
     updated_at: str
     follow_up_at: Optional[str] = None
+    last_remark: Optional[str] = None
 
 class ConversationResponse(BaseModel):
     id: str
@@ -991,7 +992,33 @@ async def get_leads(
         query = query.order("created_at", desc=True).limit(limit).offset(offset)
         
         result = query.execute()
-        return result.data if result.data else []
+        leads = result.data if result.data else []
+        
+        # Get last remarks for all leads
+        if leads:
+            lead_ids = [lead["id"] for lead in leads]
+            
+            # Get all status histories for these leads, ordered by created_at desc
+            # We'll filter for the most recent one with a remark per lead
+            status_history_result = supabase_admin.table("lead_status_history").select("lead_id, reason, created_at").in_("lead_id", lead_ids).order("created_at", desc=True).execute()
+            
+            # Create a map of lead_id to last remark
+            last_remarks = {}
+            seen_leads = set()
+            
+            if status_history_result.data:
+                for history in status_history_result.data:
+                    lead_id = history["lead_id"]
+                    # Only take the first (most recent) entry with a remark for each lead
+                    if lead_id not in seen_leads and history.get("reason"):
+                        last_remarks[lead_id] = history["reason"]
+                        seen_leads.add(lead_id)
+            
+            # Add last_remark to each lead
+            for lead in leads:
+                lead["last_remark"] = last_remarks.get(lead["id"])
+        
+        return leads
         
     except Exception as e:
         logger.error(f"Error getting leads: {e}")

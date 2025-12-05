@@ -215,6 +215,16 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
         </div>
       </div>
 
+      {/* Remarks Section */}
+      {lead.last_remark && (
+        <div className="p-1.5 bg-gradient-to-r from-pink-50 via-purple-50 to-pink-50 border-t border-pink-200">
+          <p className="text-[10px] font-medium text-purple-700 mb-0.5">Last Remark:</p>
+          <p className="text-[10px] text-gray-700 line-clamp-2">
+            {lead.last_remark}
+          </p>
+        </div>
+      )}
+
       {/* Content - Only show if form data exists */}
       {lead.form_data && Object.keys(lead.form_data).length > 0 && (
         <div className="p-1.5">
