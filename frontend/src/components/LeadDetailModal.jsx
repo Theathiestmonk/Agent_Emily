@@ -46,6 +46,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const [showRemarksInput, setShowRemarksInput] = useState(false)
   const [pendingStatus, setPendingStatus] = useState(null)
   const [followUpAt, setFollowUpAt] = useState(lead.follow_up_at || '')
+  const [followUpDate, setFollowUpDate] = useState('')
+  const [followUpTime, setFollowUpTime] = useState('')
   const [updatingFollowUp, setUpdatingFollowUp] = useState(false)
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
   const [emailTemplates, setEmailTemplates] = useState([])
@@ -69,7 +71,16 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   useEffect(() => {
     fetchConversations()
     fetchStatusHistory()
-    setFollowUpAt(lead.follow_up_at || '')
+    const followUp = lead.follow_up_at || ''
+    setFollowUpAt(followUp)
+    if (followUp) {
+      const date = new Date(followUp)
+      setFollowUpDate(date.toISOString().split('T')[0])
+      setFollowUpTime(date.toTimeString().slice(0, 5))
+    } else {
+      setFollowUpDate('')
+      setFollowUpTime('')
+    }
     fetchEmailTemplates()
     fetchPreviousEmails()
   }, [lead.id, lead.follow_up_at])
@@ -287,21 +298,43 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
     // The select value will automatically reset to selectedStatus when pendingStatus is null
   }
 
-  const handleFollowUpChange = async (e) => {
-    const newFollowUpAt = e.target.value
-    setFollowUpAt(newFollowUpAt)
-    
+  const handleFollowUpDateChange = (e) => {
+    setFollowUpDate(e.target.value)
+    updateFollowUpDateTime(e.target.value, followUpTime)
+  }
+
+  const handleFollowUpTimeChange = (e) => {
+    setFollowUpTime(e.target.value)
+    updateFollowUpDateTime(followUpDate, e.target.value)
+  }
+
+  const updateFollowUpDateTime = async (date, time) => {
+    if (!date || !time) {
+      // Don't update if either is missing
+      return
+    }
+
     try {
       setUpdatingFollowUp(true)
-      const isoDateTime = newFollowUpAt ? new Date(newFollowUpAt).toISOString() : null
+      const isoDateTime = new Date(`${date}T${time}`).toISOString()
       await leadsAPI.updateFollowUp(lead.id, isoDateTime)
-      showSuccess('Follow-up Updated', 'Follow-up date has been updated')
+      setFollowUpAt(isoDateTime)
+      showSuccess('Follow-up Updated', 'Follow-up date and time have been updated')
       if (onUpdate) onUpdate()
     } catch (error) {
       console.error('Error updating follow-up:', error)
-      showError('Error', 'Failed to update follow-up date')
-      // Revert to previous value on error
-      setFollowUpAt(lead.follow_up_at || '')
+      showError('Error', 'Failed to update follow-up date and time')
+      // Revert to previous values on error
+      const previousFollowUp = lead.follow_up_at || ''
+      setFollowUpAt(previousFollowUp)
+      if (previousFollowUp) {
+        const date = new Date(previousFollowUp)
+        setFollowUpDate(date.toISOString().split('T')[0])
+        setFollowUpTime(date.toTimeString().slice(0, 5))
+      } else {
+        setFollowUpDate('')
+        setFollowUpTime('')
+      }
     } finally {
       setUpdatingFollowUp(false)
     }
@@ -312,11 +345,13 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
       setUpdatingFollowUp(true)
       await leadsAPI.updateFollowUp(lead.id, null)
       setFollowUpAt('')
-      showSuccess('Follow-up Cleared', 'Follow-up date has been cleared')
+      setFollowUpDate('')
+      setFollowUpTime('')
+      showSuccess('Follow-up Cleared', 'Follow-up date and time have been cleared')
       if (onUpdate) onUpdate()
     } catch (error) {
       console.error('Error clearing follow-up:', error)
-      showError('Error', 'Failed to clear follow-up date')
+      showError('Error', 'Failed to clear follow-up date and time')
     } finally {
       setUpdatingFollowUp(false)
     }
@@ -701,17 +736,25 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
               </div>
 
               {/* Follow-up Date & Time */}
-              <div className="flex items-center space-x-3 flex-1 min-w-[280px]">
+              <div className="flex items-center space-x-3 flex-1 min-w-[400px]">
                 <CalendarCheck className="w-4 h-4 text-white flex-shrink-0" />
                 <span className="text-sm font-medium text-white flex-shrink-0">Follow-up:</span>
                 <div className="flex items-center space-x-2 flex-1">
                   <input
-                    type="datetime-local"
-                    value={followUpAt ? new Date(followUpAt).toISOString().slice(0, 16) : ''}
-                    onChange={handleFollowUpChange}
+                    type="date"
+                    value={followUpDate}
+                    onChange={handleFollowUpDateChange}
                     disabled={updatingFollowUp}
-                    className="flex-1 px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
-                    placeholder="Set follow-up date & time"
+                    className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
+                    placeholder="Date"
+                  />
+                  <input
+                    type="time"
+                    value={followUpTime}
+                    onChange={handleFollowUpTimeChange}
+                    disabled={updatingFollowUp}
+                    className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
+                    placeholder="Time"
                   />
                   {followUpAt && (
                     <button
