@@ -1,0 +1,204 @@
+/**
+ * Admin API Service
+ * Handles all admin-related API calls for token usage tracking and budget analysis
+ */
+
+import api from './api';
+
+const adminAPI = {
+  /**
+   * Get token usage data with filters
+   */
+  async getTokenUsage(filters = {}) {
+    const params = new URLSearchParams();
+    
+    if (filters.userId) params.append('user_id', filters.userId);
+    if (filters.featureType) params.append('feature_type', filters.featureType);
+    if (filters.modelName) params.append('model_name', filters.modelName);
+    
+    // Format dates to ISO format with time
+    if (filters.startDate) {
+      // Add start of day (00:00:00) to start_date
+      const startDate = new Date(filters.startDate);
+      startDate.setHours(0, 0, 0, 0);
+      params.append('start_date', startDate.toISOString());
+    }
+    if (filters.endDate) {
+      // Add end of day (23:59:59.999) to end_date
+      const endDate = new Date(filters.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      params.append('end_date', endDate.toISOString());
+    }
+    
+    if (filters.limit) params.append('limit', filters.limit);
+    if (filters.offset) params.append('offset', filters.offset);
+    
+    const response = await api.get(`/admin/token-usage?${params.toString()}`);
+    return response.data;
+  },
+
+  /**
+   * Get aggregated token usage statistics
+   */
+  async getTokenUsageStats(startDate = null, endDate = null, userId = null) {
+    const params = new URLSearchParams();
+    if (userId) params.append('user_id', userId);
+    
+    // Format dates to ISO format with time
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      params.append('start_date', start.toISOString());
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      params.append('end_date', end.toISOString());
+    }
+    
+    const response = await api.get(`/admin/token-usage/stats?${params.toString()}`);
+    return response.data;
+  },
+
+  /**
+   * Get list of users with their total costs
+   */
+  async getUsers(startDate = null, endDate = null) {
+    const params = new URLSearchParams();
+    
+    // Format dates to ISO format with time
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      params.append('start_date', start.toISOString());
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      params.append('end_date', end.toISOString());
+    }
+    
+    const response = await api.get(`/admin/token-usage/users?${params.toString()}`);
+    return response.data;
+  },
+
+  /**
+   * Export token usage data
+   */
+  async exportTokenUsage(format = 'json', filters = {}) {
+    const params = new URLSearchParams();
+    
+    if (filters.userId) params.append('user_id', filters.userId);
+    if (filters.featureType) params.append('feature_type', filters.featureType);
+    if (filters.modelName) params.append('model_name', filters.modelName);
+    
+    // Format dates to ISO format with time
+    if (filters.startDate) {
+      const start = new Date(filters.startDate);
+      start.setHours(0, 0, 0, 0);
+      params.append('start_date', start.toISOString());
+    }
+    if (filters.endDate) {
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      params.append('end_date', end.toISOString());
+    }
+    
+    const response = await api.get(`/admin/token-usage/export?format=${format}&${params.toString()}`, {
+      responseType: format === 'csv' ? 'blob' : 'json'
+    });
+    
+    if (format === 'csv') {
+      // Create download link for CSV
+      const blob = new Blob([response.data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `token_usage_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      return { success: true };
+    }
+    
+    return response.data;
+  },
+
+  /**
+   * Get budget analysis
+   */
+  async getBudgetAnalysis(days = 30) {
+    const response = await api.get(`/admin/token-usage/budget-analysis?days=${days}`);
+    return response.data;
+  },
+
+  /**
+   * Get all model pricing configurations
+   */
+  async getPricing() {
+    const response = await api.get('/admin/pricing');
+    return response.data;
+  },
+
+  /**
+   * Get pricing for a specific model
+   */
+  async getPricingForModel(modelName) {
+    const response = await api.get(`/admin/pricing/${modelName}`);
+    return response.data;
+  },
+
+  /**
+   * Update pricing for a model
+   */
+  async updatePricing(modelName, pricing) {
+    const response = await api.put(`/admin/pricing/${modelName}`, pricing);
+    return response.data;
+  },
+
+  /**
+   * Refresh pricing cache
+   */
+  async refreshPricingCache() {
+    const response = await api.post('/admin/pricing/refresh');
+    return response.data;
+  },
+
+  /**
+   * Check if current user is admin based on subscription plan
+   */
+  async checkAdminStatus() {
+    try {
+      // Check user's subscription plan from profile
+      const { supabase } = await import('../lib/supabase');
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        return { data: { is_admin: false } };
+      }
+      
+      // Get user profile to check subscription plan
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('subscription_plan')
+        .eq('id', user.id)
+        .single();
+      
+      if (error || !profile) {
+        return { data: { is_admin: false } };
+      }
+      
+      // Check if subscription plan is 'admin'
+      const is_admin = profile.subscription_plan === 'admin';
+      
+      return { data: { is_admin } };
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      return { data: { is_admin: false } };
+    }
+  }
+};
+
+export default adminAPI;
+export { adminAPI };

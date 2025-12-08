@@ -580,6 +580,18 @@ Return a JSON object with:
                         max_tokens=600
                     )
                     
+                    # Track token usage
+                    from services.token_usage_service import TokenUsageService
+                    if supabase_url and supabase_service_key:
+                        token_tracker = TokenUsageService(supabase_url, supabase_service_key)
+                        await token_tracker.track_chat_completion_usage(
+                            user_id=current_user["id"],
+                            feature_type="lead_email",
+                            model_name="gpt-4",
+                            response=response,
+                            request_metadata={"lead_id": str(lead_id)}
+                        )
+                    
                     try:
                         email_data = json.loads(response.choices[0].message.content)
                         email_subject = email_data.get("subject", f"Thank you for contacting {business_name}")
@@ -1616,6 +1628,20 @@ Return a JSON object with:
             temperature=0.7,
             max_tokens=800
         )
+        
+        # Track token usage
+        from services.token_usage_service import TokenUsageService
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+        if supabase_url and supabase_service_key:
+            token_tracker = TokenUsageService(supabase_url, supabase_service_key)
+            await token_tracker.track_chat_completion_usage(
+                user_id=current_user["id"],
+                feature_type="lead_email",
+                model_name="gpt-4",
+                response=response,
+                request_metadata={"lead_id": lead_id}
+            )
         
         try:
             email_data = json.loads(response.choices[0].message.content)

@@ -1446,6 +1446,29 @@ Recommendations:
             temperature=0.5  # Lower temperature for more consistent output
         )
         
+        # Track token usage (non-blocking)
+        try:
+            from services.token_usage_service import TokenUsageService
+            supabase_url = os.getenv("SUPABASE_URL")
+            supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+            if supabase_url and supabase_service_key:
+                token_tracker = TokenUsageService(supabase_url, supabase_service_key)
+                # Get user_id from current_post if available
+                user_id = current_post.get("user_id") if current_post else None
+                if user_id:
+                    import asyncio
+                    asyncio.create_task(
+                        token_tracker.track_chat_completion_usage(
+                            user_id=user_id,
+                            feature_type="content_ai_edit",
+                            model_name="gpt-4o-mini",
+                            response=response,
+                            request_metadata={"action": "generate_ai_insights", "platform": platform}
+                        )
+                    )
+        except Exception as e:
+            print(f"Error tracking token usage: {e}")
+        
         return response.choices[0].message.content
         
     except Exception as e:

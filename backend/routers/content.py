@@ -1011,6 +1011,20 @@ Return the edited content:"""
             max_tokens=2000
         )
         
+        # Track token usage
+        from services.token_usage_service import TokenUsageService
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+        if supabase_url and supabase_service_key:
+            token_tracker = TokenUsageService(supabase_url, supabase_service_key)
+            await token_tracker.track_chat_completion_usage(
+                user_id=current_user.id,
+                feature_type="content_ai_edit",
+                model_name="gpt-4",
+                response=response,
+                request_metadata={"content_length": len(request.content)}
+            )
+        
         edited_content = response.choices[0].message.content.strip()
         
         # Remove any markdown formatting if present

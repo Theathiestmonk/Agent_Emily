@@ -446,10 +446,10 @@ async def generate_blogs(
         # Import here to avoid circular imports
         from agents.blog_writing_agent import BlogWritingAgent
         
-        # Initialize blog writing agent
+        # Initialize blog writing agent with service role key to bypass RLS for token tracking
         blog_agent = BlogWritingAgent(
             supabase_url=os.getenv("SUPABASE_URL"),
-            supabase_key=os.getenv("SUPABASE_ANON_KEY"),
+            supabase_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY"),
             openai_api_key=os.getenv("OPENAI_API_KEY")
         )
         
@@ -1531,6 +1531,25 @@ Requirements:
             result_text = response.choices[0].message.content.strip()
             logger.info(f"OpenAI response received, length: {len(result_text)}")
             
+            # Track token usage (non-blocking)
+            try:
+                from services.token_usage_service import TokenUsageService
+                supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+                if supabase_url and supabase_service_key:
+                    token_tracker = TokenUsageService(supabase_url, supabase_service_key)
+                    import asyncio
+                    asyncio.create_task(
+                        token_tracker.track_chat_completion_usage(
+                            user_id=current_user.id,
+                            feature_type="blog_generation",
+                            model_name="gpt-4",
+                            response=response,
+                            request_metadata={"action": "generate_tags_categories"}
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"Error tracking token usage: {str(e)}")
+            
         except Exception as openai_error:
             logger.error(f"OpenAI API error: {str(openai_error)}")
             raise HTTPException(
@@ -1697,6 +1716,25 @@ Requirements:
             
             result_text = response.choices[0].message.content.strip()
             logger.info(f"OpenAI relevance check response received")
+            
+            # Track token usage (non-blocking)
+            try:
+                from services.token_usage_service import TokenUsageService
+                supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+                if supabase_url and supabase_service_key:
+                    token_tracker = TokenUsageService(supabase_url, supabase_service_key)
+                    import asyncio
+                    asyncio.create_task(
+                        token_tracker.track_chat_completion_usage(
+                            user_id=current_user.id,
+                            feature_type="blog_generation",
+                            model_name="gpt-4",
+                            response=response,
+                            request_metadata={"action": "check_tags_categories_relevance"}
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"Error tracking token usage: {str(e)}")
             
         except Exception as openai_error:
             logger.error(f"OpenAI API error: {str(openai_error)}")
@@ -1913,6 +1951,31 @@ Return the edited HTML content:"""
         elif edited_content.startswith("```"):
             edited_content = edited_content.split("```")[1].split("```")[0].strip()
         
+        # Track token usage (non-blocking)
+        try:
+            from services.token_usage_service import TokenUsageService
+            supabase_url = os.getenv("SUPABASE_URL")
+            supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+            if supabase_url and supabase_service_key:
+                token_tracker = TokenUsageService(supabase_url, supabase_service_key)
+                import asyncio
+                # Track usage asynchronously
+                asyncio.create_task(
+                    token_tracker.track_chat_completion_usage(
+                        user_id=current_user.id,
+                        feature_type="content_ai_edit",
+                        model_name="gpt-4o",
+                        response=response,
+                        request_metadata={
+                            "edit_type": request.edit_type,
+                            "has_html": has_html_tags
+                        }
+                    )
+                )
+        except Exception as e:
+            # Log error but don't break the edit functionality
+            logger.error(f"Error tracking blog AI edit token usage: {str(e)}")
+        
         return {
             "success": True,
             "edited_content": edited_content
@@ -2020,6 +2083,25 @@ Requirements:
             
             result_text = response.choices[0].message.content.strip()
             logger.info(f"OpenAI response received for title-based generation")
+            
+            # Track token usage (non-blocking)
+            try:
+                from services.token_usage_service import TokenUsageService
+                supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+                if supabase_url and supabase_service_key:
+                    token_tracker = TokenUsageService(supabase_url, supabase_service_key)
+                    import asyncio
+                    asyncio.create_task(
+                        token_tracker.track_chat_completion_usage(
+                            user_id=current_user.id,
+                            feature_type="blog_generation",
+                            model_name="gpt-4",
+                            response=response,
+                            request_metadata={"action": "generate_from_title", "title": request.title[:100] if request.title else None}
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"Error tracking token usage: {str(e)}")
             
         except Exception as openai_error:
             logger.error(f"OpenAI API error: {str(openai_error)}")

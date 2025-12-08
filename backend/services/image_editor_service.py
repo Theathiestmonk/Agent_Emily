@@ -10,6 +10,7 @@ from datetime import datetime
 import httpx
 from google import genai
 from supabase import create_client, Client
+from services.token_usage_service import TokenUsageService
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class ImageEditorService:
         self.gemini_client = genai.Client(api_key=self.gemini_api_key)
         self.gemini_model = 'gemini-2.0-flash-exp'
         self.gemini_image_model = 'gemini-2.5-flash-image-preview'
+        self.token_tracker = TokenUsageService(self.supabase_url, self.supabase_key)
         
     async def add_logo_to_image(self, user_id: str, input_image_url: str, content: str, position: str = "bottom_right") -> Dict[str, Any]:
         """Add logo to image using Gemini AI"""
@@ -57,7 +59,8 @@ class ImageEditorService:
             edited_image_data = await self._generate_edited_image(
                 input_image_data, 
                 prompt, 
-                logo_data
+                logo_data,
+                user_id=user_id
             )
             
             # Upload edited image to Supabase
@@ -103,9 +106,10 @@ class ImageEditorService:
             
             # Generate edited image with Gemini
             edited_image_data = await self._generate_manual_edit(
-                input_image_data, 
-                content, 
-                instructions
+                input_image_data,
+                content,
+                instructions,
+                user_id=user_id
             )
             
             # Upload edited image to Supabase
@@ -299,7 +303,7 @@ STRICT PLACEMENT INSTRUCTIONS:
 
 MANDATORY: The logo must be placed as a transparent overlay with absolutely no background color or shape."""
     
-    async def _generate_edited_image(self, input_image_data: bytes, prompt: str, reference_data: bytes = None) -> bytes:
+    async def _generate_edited_image(self, input_image_data: bytes, prompt: str, reference_data: bytes = None, user_id: str = None) -> bytes:
         """Generate edited image using Gemini with two-step approach"""
         try:
             
@@ -374,13 +378,35 @@ MANDATORY: The logo must be placed as a transparent overlay with absolutely no b
                 image_bytes = base64.b64decode(image_data)
             
             logger.info("Successfully generated edited image with Gemini")
+            
+            # Track token usage for Gemini image editing
+            if user_id:
+                # Create a mock response object for tracking (Gemini doesn't provide usage)
+                class MockGeminiResponse:
+                    def __init__(self):
+                        self.id = getattr(response, 'model_name', self.gemini_image_model)
+                        self.data = [{"url": "gemini_generated"}]
+                        self.usage = None
+                
+                mock_response = MockGeminiResponse()
+                await self.token_tracker.track_image_generation_usage(
+                    user_id=user_id,
+                    feature_type="image_editing",
+                    model_name=self.gemini_image_model,
+                    response=mock_response,
+                    request_metadata={
+                        "prompt": prompt[:200] if len(prompt) > 200 else prompt,
+                        "has_reference": reference_data is not None
+                    }
+                )
+            
             return image_bytes
             
         except Exception as e:
             logger.error(f"Error generating edited image: {e}")
             raise e
     
-    async def _generate_manual_edit(self, input_image_data: bytes, content: str, instructions: str) -> bytes:
+    async def _generate_manual_edit(self, input_image_data: bytes, content: str, instructions: str, user_id: str = None) -> bytes:
         """Generate edited image with manual instructions using Gemini"""
         try:
             
@@ -420,6 +446,7 @@ Generate a high-quality edited image that follows the instructions while maintai
             
             
             # Extract image data from response
+            image_bytes = None
             if response.candidates and len(response.candidates) > 0:
                 candidate = response.candidates[0]
                 if candidate.content and candidate.content.parts:
@@ -428,11 +455,36 @@ Generate a high-quality edited image that follows the instructions while maintai
                             image_data = part.inline_data.data
                             
                             if isinstance(image_data, bytes):
-                                return image_data
+                                image_bytes = image_data
                             else:
-                                return base64.b64decode(image_data)
+                                image_bytes = base64.b64decode(image_data)
+                            break
             
-            raise Exception("No image data returned from Gemini")
+            if not image_bytes:
+                raise Exception("No image data returned from Gemini")
+            
+            # Track token usage for Gemini image editing
+            if user_id:
+                # Create a mock response object for tracking (Gemini doesn't provide usage)
+                class MockGeminiResponse:
+                    def __init__(self):
+                        self.id = getattr(response, 'model_name', self.gemini_image_model)
+                        self.data = [{"url": "gemini_generated"}]
+                        self.usage = None
+                
+                mock_response = MockGeminiResponse()
+                await self.token_tracker.track_image_generation_usage(
+                    user_id=user_id,
+                    feature_type="image_editing",
+                    model_name=self.gemini_image_model,
+                    response=mock_response,
+                    request_metadata={
+                        "instructions": instructions[:200] if len(instructions) > 200 else instructions,
+                        "edit_type": "manual"
+                    }
+                )
+            
+            return image_bytes
             
         except Exception as e:
             logger.error(f"Error generating manual edit: {e}")

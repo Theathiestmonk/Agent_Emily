@@ -16,6 +16,7 @@ import openai
 from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
+from services.token_usage_service import TokenUsageService
 import requests
 from requests.auth import HTTPBasicAuth
 from urllib.parse import urlparse
@@ -123,6 +124,7 @@ class CustomBlogAgent:
         self.openai_api_key = openai_api_key
         self.client = openai.OpenAI(api_key=openai_api_key)
         self.supabase = supabase
+        self.token_tracker = TokenUsageService(supabase_url, supabase_key) if supabase_url and supabase_key else None
     
     async def greet_user(self, state: CustomBlogState) -> CustomBlogState:
         """Welcome the user and initialize conversation"""
@@ -1189,6 +1191,17 @@ class CustomBlogAgent:
                 max_tokens=50
             )
             
+            # Track token usage
+            user_id = state.get("user_id")
+            if user_id and self.token_tracker:
+                await self.token_tracker.track_chat_completion_usage(
+                    user_id=user_id,
+                    feature_type="custom_blog",
+                    model_name="gpt-4o-mini",
+                    response=response,
+                    request_metadata={"action": "suggest_keywords", "blog_topic": state.get("blog_topic")}
+                )
+            
             keywords_text = response.choices[0].message.content.strip()
             keywords = [k.strip() for k in keywords_text.split(',')[:3]]
             
@@ -1258,6 +1271,17 @@ Format as a clear, numbered list with section titles and brief descriptions."""
                 temperature=0.7,
                 max_tokens=500
             )
+            
+            # Track token usage
+            user_id = state.get("user_id")
+            if user_id and self.token_tracker:
+                await self.token_tracker.track_chat_completion_usage(
+                    user_id=user_id,
+                    feature_type="custom_blog",
+                    model_name="gpt-4o-mini",
+                    response=response,
+                    request_metadata={"action": "generate_outline", "blog_topic": state.get("blog_topic")}
+                )
             
             outline = response.choices[0].message.content.strip()
             return outline
@@ -1379,6 +1403,17 @@ Return a JSON object with:
                 temperature=0.7,
                 max_tokens=4000
             )
+            
+            # Track token usage
+            user_id = state.get("user_id")
+            if user_id and self.token_tracker:
+                await self.token_tracker.track_chat_completion_usage(
+                    user_id=user_id,
+                    feature_type="custom_blog",
+                    model_name="gpt-4o",
+                    response=response,
+                    request_metadata={"action": "generate_content", "blog_topic": state.get("blog_topic")}
+                )
             
             content_text = response.choices[0].message.content.strip()
             

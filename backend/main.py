@@ -34,6 +34,7 @@ from routers.leads import router as leads_router
 from routers.contact import router as contact_router
 from routers.whatsapp import router as whatsapp_router
 from routers.content_from_drive import router as content_from_drive_router
+from routers.admin import router as admin_router
 
 # Load environment variables
 load_dotenv()
@@ -115,6 +116,7 @@ app.include_router(leads_router)
 app.include_router(contact_router)
 app.include_router(whatsapp_router)
 app.include_router(content_from_drive_router)
+app.include_router(admin_router)
 
 # Health check endpoint
 @app.get("/health")

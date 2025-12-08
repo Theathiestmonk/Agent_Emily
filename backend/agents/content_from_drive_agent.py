@@ -124,6 +124,12 @@ class ContentFromDriveAgent:
         self.openai_api_key = openai_api_key
         self.client = openai.OpenAI(api_key=openai_api_key)
         self.supabase = supabase
+        # Initialize token tracker for usage tracking
+        if supabase_url and supabase_key:
+            from services.token_usage_service import TokenUsageService
+            self.token_tracker = TokenUsageService(supabase_url, supabase_key)
+        else:
+            self.token_tracker = None
         
     def create_graph(self) -> StateGraph:
         """Create the LangGraph workflow"""
@@ -844,6 +850,22 @@ class ContentFromDriveAgent:
                     
                     analysis = response.choices[0].message.content
                     
+                    # Track token usage (non-blocking)
+                    if self.token_tracker and state.get("user_id"):
+                        try:
+                            import asyncio
+                            asyncio.create_task(
+                                self.token_tracker.track_chat_completion_usage(
+                                    user_id=state["user_id"],
+                                    feature_type="content_generation",
+                                    model_name="gpt-4o",
+                                    response=response,
+                                    request_metadata={"action": "analyze_photo", "file_name": file_name}
+                                )
+                            )
+                        except Exception as e:
+                            logger.error(f"Error tracking token usage: {str(e)}")
+                    
                     analyzed_photos.append({
                         **file_info,
                         "analysis": analysis,
@@ -935,6 +957,22 @@ class ContentFromDriveAgent:
                         )
                         
                         analysis = response.choices[0].message.content
+                        
+                        # Track token usage (non-blocking)
+                        if self.token_tracker and state.get("user_id"):
+                            try:
+                                import asyncio
+                                asyncio.create_task(
+                                    self.token_tracker.track_chat_completion_usage(
+                                        user_id=state["user_id"],
+                                        feature_type="content_generation",
+                                        model_name="gpt-4o",
+                                        response=response,
+                                        request_metadata={"action": "analyze_carousel_photo", "folder_name": carousel_post.get("folder_name")}
+                                    )
+                                )
+                            except Exception as e:
+                                logger.error(f"Error tracking token usage: {str(e)}")
                         
                         # Download all carousel images for later upload to Supabase
                         carousel_image_bytes = []
@@ -1194,6 +1232,22 @@ CRITICAL INSTRUCTIONS:
                         raw_response = json_match.group(0)
                     
                     content_data = json.loads(raw_response)
+                    
+                    # Track token usage (non-blocking)
+                    if self.token_tracker and state.get("user_id"):
+                        try:
+                            import asyncio
+                            asyncio.create_task(
+                                self.token_tracker.track_chat_completion_usage(
+                                    user_id=state["user_id"],
+                                    feature_type="content_generation",
+                                    model_name="gpt-4o",
+                                    response=response,
+                                    request_metadata={"action": "generate_caption", "platform": platform, "is_carousel": is_carousel}
+                                )
+                            )
+                        except Exception as e:
+                            logger.error(f"Error tracking token usage: {str(e)}")
                     
                     if is_carousel:
                         # For carousel posts, include all images and carousel-specific data

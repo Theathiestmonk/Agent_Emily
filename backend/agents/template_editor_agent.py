@@ -93,6 +93,10 @@ class TemplateEditorAgent:
     """Template Editor Designer Agent using LangGraph"""
     
     def __init__(self):
+        from services.token_usage_service import TokenUsageService
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+        self.token_tracker = TokenUsageService(supabase_url, supabase_key) if supabase_url and supabase_key else None
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
@@ -541,6 +545,17 @@ class TemplateEditorAgent:
             generated_content = response.choices[0].message.content.strip()
             print(f"🔍 Generated content from custom prompt: {generated_content}")
             
+            # Track token usage
+            user_id = state.get('user_id')
+            if user_id and self.token_tracker:
+                await self.token_tracker.track_chat_completion_usage(
+                    user_id=user_id,
+                    feature_type="template_editing",
+                    model_name="gpt-3.5-turbo",
+                    response=response,
+                    request_metadata={"template_name": state.get('template_name')}
+                )
+            
             # Create content pieces structure based on template type
             template_name = prompt_data.get("name", "").lower()
             
@@ -772,6 +787,17 @@ class TemplateEditorAgent:
                 ],
                 max_tokens=2000
             )
+            
+            # Track token usage
+            user_id = state.get('user_id')
+            if user_id and self.token_tracker:
+                await self.token_tracker.track_chat_completion_usage(
+                    user_id=user_id,
+                    feature_type="template_editing",
+                    model_name="gpt-4-vision-preview",
+                    response=response,
+                    request_metadata={"action": "analyze_template"}
+                )
             
             # Parse the analysis result
             analysis_text = response.choices[0].message.content
@@ -1055,6 +1081,17 @@ class TemplateEditorAgent:
                     
                     validated_content = validation_response.choices[0].message.content.strip()
                     
+                    # Track token usage
+                    user_id = state.get('user_id')
+                    if user_id and self.token_tracker:
+                        await self.token_tracker.track_chat_completion_usage(
+                            user_id=user_id,
+                            feature_type="template_editing",
+                            model_name="gpt-4",
+                            response=validation_response,
+                            request_metadata={"action": "validate_content"}
+                        )
+                    
                     # Ensure content fits within max_length
                     if len(validated_content) > max_length:
                         # Truncate intelligently (at word boundary)
@@ -1139,6 +1176,17 @@ class TemplateEditorAgent:
                 ],
                 max_tokens=1000
             )
+            
+            # Track token usage
+            user_id = state.get('user_id')
+            if user_id and self.token_tracker:
+                await self.token_tracker.track_chat_completion_usage(
+                    user_id=user_id,
+                    feature_type="template_editing",
+                    model_name="gpt-4o",
+                    response=analysis_response,
+                    request_metadata={"action": "analyze_image"}
+                )
             
             try:
                 modifications = json.loads(analysis_response.choices[0].message.content)
@@ -1509,6 +1557,17 @@ OUTPUT: A single, professionally designed image that seamlessly combines the ori
                 ],
                 max_tokens=1000
             )
+            
+            # Track token usage
+            user_id = state.get('user_id')
+            if user_id and self.token_tracker:
+                await self.token_tracker.track_chat_completion_usage(
+                    user_id=user_id,
+                    feature_type="template_editing",
+                    model_name="gpt-4",
+                    response=response,
+                    request_metadata={"action": "custom_edit"}
+                )
             
             try:
                 edit_instructions = json.loads(response.choices[0].message.content)

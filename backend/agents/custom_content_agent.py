@@ -276,9 +276,9 @@ class CustomContentAgent:
         self.client = openai.OpenAI(api_key=openai_api_key)
         self.supabase = supabase
         
-        # Initialize media agent
+        # Initialize media agent and token tracker with service role key to bypass RLS
         supabase_url = os.getenv("SUPABASE_URL")
-        supabase_key = os.getenv("SUPABASE_ANON_KEY")
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
         gemini_api_key = os.getenv("GEMINI_API_KEY")
         
         if supabase_url and supabase_key and gemini_api_key:
@@ -286,6 +286,13 @@ class CustomContentAgent:
         else:
             logger.warning("Media agent not initialized - missing environment variables")
             self.media_agent = None
+        
+        # Initialize token tracker with service role key to bypass RLS
+        if supabase_url and supabase_key:
+            from services.token_usage_service import TokenUsageService
+            self.token_tracker = TokenUsageService(supabase_url, supabase_key)
+        else:
+            self.token_tracker = None
         
     def create_graph(self) -> StateGraph:
         """Create the LangGraph workflow with proper conditional edges and state management"""
@@ -1216,6 +1223,21 @@ Return ONLY valid JSON, no markdown code blocks."""
             )
             logger.info("✅ OpenAI API response received")
             
+            # Track token usage
+            user_id = state.get("user_id")
+            if user_id and self.token_tracker:
+                await self.token_tracker.track_chat_completion_usage(
+                    user_id=user_id,
+                    feature_type="custom_content",
+                    model_name="gpt-4",
+                    response=response,
+                    request_metadata={
+                        "conversation_id": state.get("conversation_id"),
+                        "platform": state.get("selected_platform"),
+                        "content_type": state.get("selected_content_type")
+                    }
+                )
+            
             # Parse JSON response
             raw_response = response.choices[0].message.content.strip()
             
@@ -1474,6 +1496,23 @@ Return ONLY valid JSON, no markdown code blocks."""
                     max_tokens=1000,
                     timeout=60  # 60 second timeout
                 )
+                
+                # Track token usage
+                user_id = state.get("user_id")
+                if user_id and self.token_tracker:
+                    await self.token_tracker.track_chat_completion_usage(
+                        user_id=user_id,
+                        feature_type="custom_content",
+                        model_name="gpt-4o",
+                        response=response,
+                        request_metadata={
+                            "conversation_id": state.get("conversation_id"),
+                            "platform": state.get("selected_platform"),
+                            "has_media": has_media,
+                            "is_carousel": is_carousel
+                        }
+                    )
+                
                 generated_text = response.choices[0].message.content
             except Exception as e:
                 error_msg = str(e)

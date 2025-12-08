@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { adminAPI } from '../services/admin'
 import SettingsMenu from './SettingsMenu'
 import { 
   Home, 
@@ -19,7 +20,8 @@ import {
   MessageSquare,
   Lightbulb,
   Pen,
-  TrendingUp
+  TrendingUp,
+  Shield
 } from 'lucide-react'
 
 const SideNavbar = () => {
@@ -30,6 +32,7 @@ const SideNavbar = () => {
   const [profileFetched, setProfileFetched] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState({})
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   // Cache key for localStorage
   const getCacheKey = (userId) => `profile_${userId}`
@@ -78,6 +81,40 @@ const SideNavbar = () => {
       loadProfile()
     }
   }, [user, profileFetched, loadProfile])
+
+  // Check admin status based on subscription plan
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (!user) {
+        setIsAdmin(false)
+        return
+      }
+      
+      try {
+        // Get user profile to check subscription plan
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('subscription_plan')
+          .eq('id', user.id)
+          .single()
+        
+        if (error || !profile) {
+          setIsAdmin(false)
+          return
+        }
+        
+        // Check if subscription plan is 'admin'
+        setIsAdmin(profile.subscription_plan === 'admin')
+      } catch (error) {
+        console.error('Error checking admin status:', error)
+        setIsAdmin(false)
+      }
+    }
+    
+    if (user) {
+      checkAdminStatus()
+    }
+  }, [user])
 
   const navigationItems = [
     {
@@ -277,6 +314,19 @@ const SideNavbar = () => {
 
       {/* User Section */}
       <div className="p-4 border-t border-gray-200 flex-shrink-0 space-y-1">
+        {isAdmin && (
+          <button
+            onClick={() => navigate('/admin')}
+            className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-colors group ${
+              location.pathname === '/admin'
+                ? 'bg-gray-200/50 backdrop-blur-md text-gray-900 border border-gray-300/30 shadow-sm'
+                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+            }`}
+          >
+            <Shield className="w-5 h-5 mr-3" />
+            <span className="font-medium">Admin</span>
+          </button>
+        )}
         <button
           onClick={() => setIsSettingsMenuOpen(true)}
           className="w-full flex items-center p-2 lg:p-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-lg transition-colors group"

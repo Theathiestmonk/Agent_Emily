@@ -17,6 +17,7 @@ from urllib.parse import urljoin, urlparse
 import re
 from textstat import flesch_reading_ease, flesch_kincaid_grade
 import hashlib
+from services.token_usage_service import TokenUsageService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -46,6 +47,12 @@ class WebsiteAnalyzerAgent:
         self.supabase_url = os.getenv("SUPABASE_URL")
         self.supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        
+        # Initialize token tracker for usage tracking
+        if self.supabase_url and self.supabase_service_key:
+            self.token_tracker = TokenUsageService(self.supabase_url, self.supabase_service_key)
+        else:
+            self.token_tracker = None
         
         if not self.pagespeed_api_key:
             logger.warning("GOOGLE_PAGESPEED_API_KEY not found. PageSpeed analysis will be limited.")
@@ -77,7 +84,7 @@ class WebsiteAnalyzerAgent:
             
             # Generate AI-powered recommendations
             recommendations = await self._generate_recommendations(
-                seo_analysis, performance_analysis, content_analysis, technical_analysis
+                seo_analysis, performance_analysis, content_analysis, technical_analysis, user_id, url
             )
             
             # Calculate overall scores
@@ -478,7 +485,8 @@ class WebsiteAnalyzerAgent:
             return {}
     
     async def _generate_recommendations(self, seo_analysis: Dict, performance_analysis: Dict, 
-                                      content_analysis: Dict, technical_analysis: Dict) -> List[Dict[str, Any]]:
+                                      content_analysis: Dict, technical_analysis: Dict, 
+                                      user_id: Optional[str] = None, url: Optional[str] = None) -> List[Dict[str, Any]]:
         """Generate AI-powered recommendations based on analysis"""
         try:
             if not self.openai_api_key:
@@ -511,6 +519,22 @@ class WebsiteAnalyzerAgent:
                 max_tokens=1000,
                 temperature=0.7
             )
+            
+            # Track token usage (non-blocking)
+            if self.token_tracker and user_id:
+                try:
+                    await self.token_tracker.track_chat_completion_usage(
+                        user_id=user_id,
+                        feature_type="website_analysis",
+                        model_name="gpt-3.5-turbo",
+                        response=response,
+                        request_metadata={
+                            "website_url": url,
+                            "analysis_type": "recommendations"
+                        }
+                    )
+                except Exception as e:
+                    logger.error(f"Error tracking website analyzer token usage: {str(e)}")
             
             recommendations_text = response.choices[0].message.content
             recommendations = json.loads(recommendations_text)

@@ -31,6 +31,43 @@ llm = ChatOpenAI(
     openai_api_key=openai_api_key
 )
 
+# Initialize token tracker for usage tracking
+token_tracker = None
+if supabase_url and supabase_key:
+    try:
+        from services.token_usage_service import TokenUsageService
+        token_tracker = TokenUsageService(supabase_url, supabase_key)
+    except Exception as e:
+        logger.warning(f"Could not initialize token tracker: {e}")
+
+def track_langchain_usage_async(user_id: str, response, messages: List, feature_type: str = "content_generation", metadata: Dict = None):
+    """Helper function to track LangChain usage asynchronously"""
+    if token_tracker and user_id:
+        try:
+            import asyncio
+            import threading
+            def track_in_thread():
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(
+                        token_tracker.track_langchain_usage(
+                            user_id=user_id,
+                            feature_type=feature_type,
+                            model_name="gpt-4o-mini",
+                            response=response,
+                            messages=messages,
+                            request_metadata=metadata or {}
+                        )
+                    )
+                    loop.close()
+                except Exception as e:
+                    logger.error(f"Error tracking scheduled messages token usage: {str(e)}")
+            thread = threading.Thread(target=track_in_thread, daemon=True)
+            thread.start()
+        except Exception as e:
+            logger.error(f"Error setting up scheduled messages token tracking: {str(e)}")
+
 logger = logging.getLogger(__name__)
 
 

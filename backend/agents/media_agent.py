@@ -20,6 +20,7 @@ from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
 import httpx
+from services.token_usage_service import TokenUsageService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -77,6 +78,7 @@ class MediaAgent:
         genai.configure(api_key=gemini_api_key)
         self.gemini_model = 'gemini-2.5-flash'  # Use stable model for text generation
         self.gemini_image_model = 'gemini-2.5-flash-image-preview'  # Use preview model for image generation
+        self.token_tracker = TokenUsageService(supabase_url, service_key or supabase_key)
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
@@ -568,6 +570,33 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                 storage_url = await self._upload_image_bytes(image_bytes, state["post_id"])
                 logger.info(f"Image uploaded successfully: {storage_url}")
                 
+                # Track token usage for Gemini image generation
+                # Note: Gemini doesn't provide usage object, so we track with estimated values
+                user_id = state.get("user_id")
+                if user_id:
+                    # Create a mock response object for tracking
+                    class MockGeminiResponse:
+                        def __init__(self):
+                            self.id = getattr(response, 'model_name', 'gemini-2.5-flash-image-preview')
+                            self.data = [{"url": storage_url}]
+                            self.usage = None  # Gemini doesn't provide usage
+                    
+                    mock_response = MockGeminiResponse()
+                    await self.token_tracker.track_image_generation_usage(
+                        user_id=user_id,
+                        feature_type="image_generation",
+                        model_name=self.gemini_image_model,  # Use actual model name: gemini-2.5-flash-image-preview
+                        response=mock_response,
+                        image_count=1,
+                        image_size=str(image_size),
+                        request_metadata={
+                            "post_id": state["post_id"],
+                            "prompt": image_prompt[:200] if len(image_prompt) > 200 else image_prompt,
+                            "size": str(image_size),
+                            "service": "gemini"
+                        }
+                    )
+                
             except Exception as api_error:
                 logger.error(f"Error generating image with Gemini: {str(api_error)}")
                 logger.error(f"API Error details: {type(api_error).__name__}: {str(api_error)}")
@@ -583,7 +612,7 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                     # Try DALL-E as fallback if available
                     logger.warning("Gemini failed, trying DALL-E as fallback...")
                     try:
-                        storage_url = await self._generate_with_dalle(image_prompt, image_size, state["post_id"])
+                        storage_url = await self._generate_with_dalle(image_prompt, image_size, state["post_id"], state.get("user_id"))
                         logger.info(f"DALL-E fallback successful: {storage_url}")
                         # Update metadata for DALL-E
                         state["generation_model"] = "dall-e-3"
@@ -1039,7 +1068,7 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
             logger.warning(f"Falling back to original URL: {image_url}")
             return image_url
     
-    async def _generate_with_dalle(self, prompt: str, image_size: ImageSize, post_id: str) -> str:
+    async def _generate_with_dalle(self, prompt: str, image_size: ImageSize, post_id: str, user_id: str = None) -> str:
         """Generate image using DALL-E as fallback"""
         try:
             import openai
@@ -1067,6 +1096,25 @@ OUTPUT: A single, professionally designed image that matches the prompt requirem
                 quality="standard",
                 n=1
             )
+            
+            # Track token usage
+            if user_id:
+                # Determine model name based on size (DALL-E 3 HD for 1024x1792)
+                model_name = "dall-e-3-hd" if "1792" in dalle_size else "dall-e-3"
+                await self.token_tracker.track_image_generation_usage(
+                    user_id=user_id,
+                    feature_type="image_generation",
+                    model_name=model_name,
+                    response=response,
+                    image_count=1,
+                    image_size=dalle_size,
+                    request_metadata={
+                        "post_id": post_id,
+                        "prompt": prompt[:200] if len(prompt) > 200 else prompt,
+                        "size": dalle_size,
+                        "quality": "standard"
+                    }
+                )
             
             image_url = response.data[0].url
             

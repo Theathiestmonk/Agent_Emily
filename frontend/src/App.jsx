@@ -20,6 +20,8 @@ import Profile from './components/Profile'
 import GoogleCallback from './components/GoogleCallback'
 import TokenExchangeHandler from './components/TokenExchangeHandler'
 import SettingsDashboard from './components/SettingsDashboard'
+import AdminDashboard from './components/AdminDashboard'
+import AdminProtectedRoute from './components/AdminProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingBar from './components/LoadingBar'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -277,6 +279,14 @@ function AppContent() {
             <ProtectedRoute>
               <SettingsDashboard />
             </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin" 
+          element={
+            <AdminProtectedRoute>
+              <AdminDashboard />
+            </AdminProtectedRoute>
           } 
         />
       </Routes>

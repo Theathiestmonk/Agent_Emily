@@ -292,12 +292,12 @@ async def get_campaign(
 async def generate_ads(current_user: dict = Depends(get_current_user)):
     """Generate ads for the current user"""
     try:
-        # Initialize ads creation agent
+        # Initialize ads creation agent with service role key to bypass RLS for token tracking
         import os
         ads_agent = AdsCreationAgent(
             supabase_url=os.getenv("SUPABASE_URL"),
-            supabase_key=os.getenv("SUPABASE_ANON_KEY"),
-            gemini_api_key=os.getenv("GEMINI_API_KEY")
+            supabase_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY"),
+            openai_api_key=os.getenv("OPENAI_API_KEY")
         )
         
         # Generate ads

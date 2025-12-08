@@ -1,7 +1,25 @@
 import axios from 'axios'
 import { supabase } from '../lib/supabase'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+// Get API URL from environment or use fallback
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL
+  if (envUrl) {
+    // If it starts with :, it's just a port, prepend localhost
+    if (envUrl.startsWith(':')) {
+      return `http://localhost${envUrl}`
+    }
+    // If it doesn't have a protocol, add http://
+    if (!envUrl.startsWith('http://') && !envUrl.startsWith('https://')) {
+      return `http://${envUrl}`
+    }
+    return envUrl
+  }
+  // Default fallback for local development
+  return 'http://localhost:8000'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 const api = axios.create({
   baseURL: API_BASE_URL,

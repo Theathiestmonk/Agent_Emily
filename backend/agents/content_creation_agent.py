@@ -15,6 +15,7 @@ import openai
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
+from services.token_usage_service import TokenUsageService, FEATURE_TYPES
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -174,6 +175,7 @@ class ContentCreationAgent:
         self.supabase: Client = create_client(supabase_url, supabase_key)
         self.openai_client = openai.AsyncOpenAI(api_key=openai_api_key)
         self.progress_callback = progress_callback
+        self.token_tracker = TokenUsageService(supabase_url, supabase_key)
         self.graph = self._build_graph()
     
     async def update_progress(self, user_id: str, step: str, percentage: int, details: str, current_platform: str = None):
@@ -492,13 +494,15 @@ class ContentCreationAgent:
                             platform
                         )
                     
-                    post = await self.generate_single_post(
+                        post = await self.generate_single_post(
                         platform=platform,
                         platform_config=platform_config,
                         business_context=business_context,
                         post_index=schedule_item["post_index"],
                         scheduled_date=schedule_item["scheduled_date"],
-                        scheduled_time=schedule_item["scheduled_time"]
+                        scheduled_time=schedule_item["scheduled_time"],
+                        user_id=user_id,
+                        campaign_id=state.campaign_id if hasattr(state, 'campaign_id') else None
                     )
                     
                     if post:
@@ -531,7 +535,8 @@ class ContentCreationAgent:
     
     async def generate_single_post(self, platform: str, platform_config: dict, 
                                  business_context: dict, post_index: int, 
-                                 scheduled_date: str, scheduled_time: str) -> ContentPost:
+                                 scheduled_date: str, scheduled_time: str,
+                                 user_id: str = None, campaign_id: str = None) -> ContentPost:
         """Generate a single post for a specific platform"""
         try:
             # Get content template for platform
@@ -611,6 +616,24 @@ class ContentCreationAgent:
                 ),
                 timeout=30.0  # 30 second timeout
             )
+            
+            # Track token usage
+            if user_id:
+                await self.token_tracker.track_chat_completion_usage(
+                    user_id=user_id,
+                    feature_type="content_generation",
+                    model_name="gpt-4",
+                    response=response,
+                    request_metadata={
+                        "platform": platform,
+                        "post_index": post_index,
+                        "campaign_id": campaign_id,
+                        "scheduled_date": scheduled_date
+                        "campaign_id": campaign_id,
+                        "scheduled_date": scheduled_date,
+                        "scheduled_time": scheduled_time
+                    }
+                )
             
             # Parse JSON response
             raw_response = response.choices[0].message.content.strip()
@@ -776,6 +799,7 @@ class ContentCreationAgent:
             
             # Generate refined content
             content_posts = []
+            user_id = state.user_profile.get('user_id')
             for schedule_item in posting_schedule:
                 post = await self.generate_single_post(
                     platform=platform,
@@ -783,7 +807,9 @@ class ContentCreationAgent:
                     business_context=business_context,
                     post_index=schedule_item["post_index"],
                     scheduled_date=schedule_item["scheduled_date"],
-                    scheduled_time=schedule_item["scheduled_time"]
+                    scheduled_time=schedule_item["scheduled_time"],
+                    user_id=user_id,
+                    campaign_id=state.campaign_id if hasattr(state, 'campaign_id') else None
                 )
                 content_posts.append(post)
             

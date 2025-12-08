@@ -56,6 +56,9 @@ class LeadManagementAgent:
     def __init__(self, supabase_url: str, supabase_key: str, openai_api_key: str):
         self.supabase = create_client(supabase_url, supabase_key)
         self.openai_client = openai.OpenAI(api_key=openai_api_key)
+        # Initialize token tracker for usage tracking
+        from services.token_usage_service import TokenUsageService
+        self.token_tracker = TokenUsageService(supabase_url, supabase_key)
         self.graph = self._build_graph()
     
     def get_supabase_admin(self):
@@ -252,6 +255,23 @@ Return a JSON object with:
                 temperature=0.7,
                 max_tokens=500
             )
+            
+            # Track token usage (non-blocking)
+            user_id = state.profile.get("user_id") if state.profile else None
+            if user_id and self.token_tracker:
+                try:
+                    import asyncio
+                    asyncio.create_task(
+                        self.token_tracker.track_chat_completion_usage(
+                            user_id=user_id,
+                            feature_type="lead_email",
+                            model_name="gpt-4",
+                            response=response,
+                            request_metadata={"action": "generate_email", "lead_id": state.lead_id if hasattr(state, 'lead_id') else None}
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"Error tracking token usage: {str(e)}")
             
             try:
                 email_data = json.loads(response.choices[0].message.content)
@@ -678,6 +698,23 @@ Return just the response text, no JSON, no quotes.
                 temperature=0.7,
                 max_tokens=300
             )
+            
+            # Track token usage (non-blocking)
+            user_id = state.profile.get("user_id") if state.profile else None
+            if user_id and self.token_tracker:
+                try:
+                    import asyncio
+                    asyncio.create_task(
+                        self.token_tracker.track_chat_completion_usage(
+                            user_id=user_id,
+                            feature_type="lead_email",
+                            model_name="gpt-4",
+                            response=response,
+                            request_metadata={"action": "generate_ai_response", "lead_id": state.lead_id if hasattr(state, 'lead_id') else None}
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"Error tracking token usage: {str(e)}")
             
             ai_response = response.choices[0].message.content.strip().strip('"').strip("'")
             

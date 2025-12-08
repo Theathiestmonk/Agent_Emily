@@ -101,6 +101,8 @@ class AdsCreationAgent:
         self.supabase = create_client(supabase_url, supabase_key)
         self.openai_client = openai.OpenAI(api_key=openai_api_key)
         self.media_agent = AdsMediaAgent(supabase_url, supabase_key, openai_api_key)
+        from services.token_usage_service import TokenUsageService
+        self.token_tracker = TokenUsageService(supabase_url, supabase_key)
         self.graph = self._build_graph()
     
     def get_supabase_admin(self):
@@ -306,6 +308,20 @@ Return the response as a JSON array with 3 ad copy objects.
                 temperature=0.7,
                 max_tokens=2000
             )
+            
+            # Track token usage
+            user_id = state.profile.get("user_id") if state.profile else None
+            if user_id and self.token_tracker:
+                await self.token_tracker.track_chat_completion_usage(
+                    user_id=user_id,
+                    feature_type="ads_creation",
+                    model_name="gpt-4",
+                    response=response,
+                    request_metadata={
+                        "platform": state.current_platform,
+                        "campaign_id": state.campaign_id if hasattr(state, 'campaign_id') else None
+                    }
+                )
             
             # Parse the response
             try:

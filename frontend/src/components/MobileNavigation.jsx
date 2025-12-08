@@ -305,7 +305,22 @@ const MobileNavigation = ({
           return
         }
 
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/social-media/task-executions`, {
+        // Get API URL with proper fallback
+        const getApiBaseUrl = () => {
+          const envUrl = import.meta.env.VITE_API_URL
+          if (envUrl) {
+            if (envUrl.startsWith(':')) {
+              return `http://localhost${envUrl}`
+            }
+            if (!envUrl.startsWith('http://') && !envUrl.startsWith('https://')) {
+              return `http://${envUrl}`
+            }
+            return envUrl
+          }
+          return 'http://localhost:8000'
+        }
+        const API_BASE_URL = getApiBaseUrl()
+        const response = await fetch(`${API_BASE_URL}/api/social-media/task-executions`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',

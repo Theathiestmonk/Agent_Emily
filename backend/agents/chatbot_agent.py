@@ -6,6 +6,7 @@ Handles queries about scheduled posts, insights, and industry trends
 import os
 import json
 import time
+import uuid
 from typing import Dict, List, Any, Optional, Generator
 from datetime import datetime, timedelta
 import requests
@@ -18,6 +19,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
 from typing import TypedDict
 from dotenv import load_dotenv
+from services.token_usage_service import TokenUsageService, FEATURE_TYPES
 
 # Load environment variables
 load_dotenv()
@@ -416,6 +418,12 @@ class BusinessChatbot:
     def __init__(self):
         self.llm = llm
         self.tools = tools
+        # Initialize token tracker for usage tracking
+        supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if supabase_url and supabase_service_key:
+            self.token_tracker = TokenUsageService(supabase_url, supabase_service_key)
+        else:
+            self.token_tracker = None
         self.setup_graph()
     
     def setup_graph(self):
@@ -618,6 +626,9 @@ Do not include any explanation or additional text.
     
     def chat(self, user_id: str, query: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
         """Main chat interface with conversation memory"""
+        # Generate or get conversation_id for session-based tracking
+        conversation_id = str(uuid.uuid4())
+        
         # Create initial state
         state = {
             "user_id": user_id,
@@ -655,10 +666,52 @@ Do not include any explanation or additional text.
         
         # Generate response
         response = self.llm.invoke(messages)
+        
+        # Track token usage (non-blocking, fire-and-forget)
+        if self.token_tracker:
+            try:
+                import threading
+                import asyncio
+                # Get model name from LLM
+                model_name = getattr(self.llm, 'model_name', 'gpt-4o-mini')
+                
+                # Run tracking in a background thread to avoid blocking
+                def track_in_thread():
+                    try:
+                        # Create new event loop for this thread
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        loop.run_until_complete(
+                            self.token_tracker.track_langchain_usage(
+                                user_id=user_id,
+                                feature_type="chatbot_conversation",
+                                model_name=model_name,
+                                response=response,
+                                messages=messages,
+                                request_metadata={
+                                    "conversation_id": conversation_id,
+                                    "message_count": len(conversation_history) + 1 if conversation_history else 1,
+                                    "classified_intent": result.get("classified_intent", "greeting_or_normal_chat")
+                                }
+                            )
+                        )
+                        loop.close()
+                    except Exception as e:
+                        logger.error(f"Error tracking chatbot token usage in thread: {str(e)}")
+                
+                thread = threading.Thread(target=track_in_thread, daemon=True)
+                thread.start()
+            except Exception as e:
+                # Log error but don't break the chat functionality
+                logger.error(f"Error setting up chatbot token tracking: {str(e)}")
+        
         return response.content
     
     def chat_stream(self, user_id: str, query: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> Generator[str, None, None]:
         """Streaming chat interface - streams only the final message with conversation memory"""
+        # Generate or get conversation_id for session-based tracking
+        conversation_id = str(uuid.uuid4())
+        
         # Create initial state
         state = {
             "user_id": user_id,
@@ -669,6 +722,11 @@ Do not include any explanation or additional text.
             "context": {},
             "response": None
         }
+        
+        # Store accumulated response for tracking
+        accumulated_response = ""
+        full_response = None
+        messages_for_tracking = None
         
         try:
             # Run the graph to classify intent and generate response
@@ -682,23 +740,77 @@ Do not include any explanation or additional text.
             
             # Build message history for LLM
             messages = [SystemMessage(content=system_prompt)]
+            messages_for_tracking = messages.copy()
             
             # Add conversation history if available
             if conversation_history:
                 for msg in conversation_history:
                     if msg.get("type") == "user" or msg.get("role") == "user":
                         messages.append(HumanMessage(content=msg.get("content", "")))
+                        messages_for_tracking.append(HumanMessage(content=msg.get("content", "")))
                     elif msg.get("type") == "bot" or msg.get("role") == "assistant" or msg.get("role") == "bot":
                         messages.append(AIMessage(content=msg.get("content", "")))
+                        messages_for_tracking.append(AIMessage(content=msg.get("content", "")))
             
             # Add current user query
             user_message = f"User query: {query}\n\nClassified Intent: {result.get('classified_intent', 'greeting_or_normal_chat')}"
             messages.append(HumanMessage(content=user_message))
+            messages_for_tracking.append(HumanMessage(content=user_message))
             
             # Stream the response directly without progress messages
             for chunk in self.llm.stream(messages):
                 if hasattr(chunk, 'content') and chunk.content:
+                    accumulated_response += chunk.content
+                    # Store the last chunk as full response for tracking
+                    full_response = chunk
                     yield chunk.content
+            
+            # Track token usage after streaming completes (non-blocking, fire-and-forget)
+            if self.token_tracker and full_response and messages_for_tracking:
+                try:
+                    import threading
+                    import asyncio
+                    # Create a mock response object with accumulated content for tracking
+                    class MockResponse:
+                        def __init__(self, content, response_metadata=None):
+                            self.content = content
+                            self.response_metadata = response_metadata or {}
+                            self.message = type('obj', (object,), {'content': content})()
+                    
+                    mock_response = MockResponse(accumulated_response)
+                    # Get model name from LLM
+                    model_name = getattr(self.llm, 'model_name', 'gpt-4o-mini')
+                    
+                    # Run tracking in a background thread to avoid blocking
+                    def track_in_thread():
+                        try:
+                            # Create new event loop for this thread
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            loop.run_until_complete(
+                                self.token_tracker.track_langchain_usage(
+                                    user_id=user_id,
+                                    feature_type="chatbot_conversation",
+                                    model_name=model_name,
+                                    response=mock_response,
+                                    messages=messages_for_tracking,
+                                    request_metadata={
+                                        "conversation_id": conversation_id,
+                                        "message_count": len(conversation_history) + 1 if conversation_history else 1,
+                                        "classified_intent": result.get("classified_intent", "greeting_or_normal_chat"),
+                                        "is_streaming": True
+                                    }
+                                )
+                            )
+                            loop.close()
+                        except Exception as e:
+                            logger.error(f"Error tracking chatbot token usage (streaming) in thread: {str(e)}")
+                    
+                    thread = threading.Thread(target=track_in_thread, daemon=True)
+                    thread.start()
+                except Exception as e:
+                    # Log error but don't break the chat functionality
+                    logger.error(f"Error setting up chatbot token tracking (streaming): {str(e)}")
                     
         except Exception as e:
             yield f"I apologize, but I encountered an error while processing your request: {str(e)}"

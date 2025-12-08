@@ -9,6 +9,7 @@ from langgraph.prebuilt import ToolNode
 from supabase import create_client
 import openai
 import os
+from services.token_usage_service import TokenUsageService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -74,6 +75,7 @@ class BlogWritingAgent:
     def __init__(self, supabase_url: str, supabase_key: str, openai_api_key: str):
         self.supabase = create_client(supabase_url, supabase_key)
         self.openai_client = openai.OpenAI(api_key=openai_api_key)
+        self.token_tracker = TokenUsageService(supabase_url, supabase_key)
         self.graph = self._build_graph()
 
     def get_supabase_admin(self):
@@ -469,6 +471,20 @@ class BlogWritingAgent:
                 temperature=0.7,
                 max_tokens=3000
             )
+            
+            # Track token usage
+            user_id = state.user_id
+            if user_id:
+                await self.token_tracker.track_chat_completion_usage(
+                    user_id=user_id,
+                    feature_type="blog_generation",
+                    model_name="gpt-4",
+                    response=response,
+                    request_metadata={
+                        "wordpress_site_id": state.current_site,
+                        "campaign_id": state.campaign.id if state.campaign else None
+                    }
+                )
             
             # Parse response
             content = response.choices[0].message.content.strip()
