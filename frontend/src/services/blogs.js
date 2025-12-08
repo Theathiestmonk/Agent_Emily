@@ -78,14 +78,32 @@ class BlogService {
     
     if (requireAuth && !token) {
       console.error('No authentication token found for protected endpoint')
-      // Clear any invalid tokens and redirect to login
-      localStorage.removeItem('authToken')
-      localStorage.removeItem('token')
-      localStorage.removeItem('access_token')
-      
-      // Redirect to login page
-      window.location.href = '/login'
-      throw new Error('Authentication required. Please log in.')
+      // Try one more time to get session before giving up
+      try {
+        const { supabase } = await import('../lib/supabase')
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) {
+          token = session.access_token
+          localStorage.setItem('authToken', token)
+          defaultOptions.headers['Authorization'] = `Bearer ${token}`
+        } else {
+          // Only redirect if we're absolutely sure there's no session
+          console.error('No session available, redirecting to login')
+          localStorage.removeItem('authToken')
+          localStorage.removeItem('token')
+          localStorage.removeItem('access_token')
+          window.location.href = '/login'
+          throw new Error('Authentication required. Please log in.')
+        }
+      } catch (error) {
+        console.error('Error checking session:', error)
+        // Only redirect if session check fails completely
+        localStorage.removeItem('authToken')
+        localStorage.removeItem('token')
+        localStorage.removeItem('access_token')
+        window.location.href = '/login'
+        throw new Error('Authentication required. Please log in.')
+      }
     }
 
     try {
@@ -96,14 +114,60 @@ class BlogService {
         const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
         console.error('Blog service error:', error)
         
-        // Handle authentication errors specifically
+        // Handle authentication errors with token refresh
         if (response.status === 401 && requireAuth) {
-          console.error('Authentication failed, clearing tokens and redirecting to login')
-          localStorage.removeItem('authToken')
-          localStorage.removeItem('token')
-          localStorage.removeItem('access_token')
-          window.location.href = '/login'
-          throw new Error('Authentication failed. Please log in again.')
+          console.log('🔄 401 error in blog service, attempting to refresh session...')
+          
+          // Try to refresh the session before logging out
+          try {
+            const { supabase } = await import('../lib/supabase')
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+            
+            if (session?.access_token && !sessionError) {
+              // Got a fresh token, retry the request
+              console.log('✅ Session refreshed, retrying blog request...')
+              const retryOptions = {
+                ...defaultOptions,
+                ...options,
+                headers: {
+                  ...defaultOptions.headers,
+                  ...options.headers,
+                  'Authorization': `Bearer ${session.access_token}`
+                }
+              }
+              localStorage.setItem('authToken', session.access_token)
+              
+              const retryResponse = await fetch(url, retryOptions)
+              if (retryResponse.ok) {
+                return retryResponse.json()
+              }
+              // If retry also fails with 401, then logout
+              if (retryResponse.status === 401) {
+                console.error('❌ Retry also failed with 401, redirecting to login')
+                localStorage.removeItem('authToken')
+                localStorage.removeItem('token')
+                localStorage.removeItem('access_token')
+                window.location.href = '/login'
+                throw new Error('Authentication failed. Please log in again.')
+              }
+            } else {
+              // No valid session, logout
+              console.error('❌ No valid session after 401, redirecting to login')
+              localStorage.removeItem('authToken')
+              localStorage.removeItem('token')
+              localStorage.removeItem('access_token')
+              window.location.href = '/login'
+              throw new Error('Authentication failed. Please log in again.')
+            }
+          } catch (refreshError) {
+            console.error('❌ Session refresh failed:', refreshError)
+            // Only logout if refresh completely fails
+            localStorage.removeItem('authToken')
+            localStorage.removeItem('token')
+            localStorage.removeItem('access_token')
+            window.location.href = '/login'
+            throw new Error('Authentication failed. Please log in again.')
+          }
         }
         
         throw new Error(error.detail || `HTTP ${response.status}`)
@@ -112,6 +176,10 @@ class BlogService {
       return response.json()
     } catch (error) {
       console.error('Blog service fetch error:', error)
+      // Don't redirect on network errors or other non-auth errors
+      if (error.message?.includes('Authentication') || error.message?.includes('401')) {
+        throw error // Already handled above
+      }
       throw error
     }
   }

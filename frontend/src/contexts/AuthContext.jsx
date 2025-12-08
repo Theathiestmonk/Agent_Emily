@@ -43,7 +43,7 @@ export function AuthProvider({ children }) {
       if (session) {
         setUser(session.user)
         setIsAuthenticated(true)
-        // Store token in localStorage for API calls
+        // Always update token in localStorage when session exists
         localStorage.setItem('authToken', session.access_token)
         
         // Ensure profile exists for new users (especially Google OAuth)
@@ -62,13 +62,41 @@ export function AuthProvider({ children }) {
           })
         }
       } else {
-        // Only log out if this is an explicit sign out event, not initial load
+        // Handle different auth events
         if (event === 'SIGNED_OUT') {
+          // Only log out on explicit sign out event
+          console.log('🚪 SIGNED_OUT event detected')
           setUser(null)
           setIsAuthenticated(false)
-          // Remove token from localStorage
           localStorage.removeItem('authToken')
+        } else if (event === 'TOKEN_REFRESHED') {
+          // Token was refreshed but session might be null temporarily
+          // Try to get the session again
+          console.log('🔄 TOKEN_REFRESHED event but session is null, checking session...')
+          const { data: { session: refreshedSession } } = await supabase.auth.getSession()
+          if (refreshedSession) {
+            console.log('✅ Found refreshed session')
+            setUser(refreshedSession.user)
+            setIsAuthenticated(true)
+            localStorage.setItem('authToken', refreshedSession.access_token)
+          } else {
+            console.log('⚠️ No session found after TOKEN_REFRESHED event')
+            // Don't logout - this might be a temporary state
+            // Let the user stay logged in if they were previously authenticated
+          }
+        } else if (event === 'USER_UPDATED') {
+          // User was updated but session might be null
+          // Try to get session
+          const { data: { session: updatedSession } } = await supabase.auth.getSession()
+          if (updatedSession) {
+            setUser(updatedSession.user)
+            setIsAuthenticated(true)
+            localStorage.setItem('authToken', updatedSession.access_token)
+          }
+          // Don't logout on USER_UPDATED
         }
+        // For other events (like INITIAL_SESSION), don't logout
+        // Only logout on explicit SIGNED_OUT
       }
       setLoading(false)
     })
