@@ -217,8 +217,8 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
 
       {/* Remarks Section */}
       {lead.last_remark && (
-        <div className="p-1.5 bg-gradient-to-r from-pink-50 via-purple-50 to-pink-50 border-t border-pink-200">
-          <p className="text-[10px] font-medium text-purple-700 mb-0.5">Last Remark:</p>
+        <div className={`p-1.5 ${statusConfig.bgColor} border-t ${statusConfig.borderColor}`}>
+          <p className={`text-[10px] font-medium ${statusConfig.textColor} mb-0.5`}>Last Remark:</p>
           <p className="text-[10px] text-gray-700 line-clamp-2">
             {lead.last_remark}
           </p>
