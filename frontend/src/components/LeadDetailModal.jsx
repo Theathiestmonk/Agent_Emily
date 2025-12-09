@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { 
   X, 
   Mail, 
@@ -37,6 +37,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const [activeTab, setActiveTab] = useState('timeline')
   const [conversations, setConversations] = useState([])
   const [loadingConversations, setLoadingConversations] = useState(false)
+  const [conversationsLoaded, setConversationsLoaded] = useState(false)
   const [statusHistory, setStatusHistory] = useState([])
   const [newMessage, setNewMessage] = useState('')
   const [sendingMessage, setSendingMessage] = useState(false)
@@ -68,8 +69,23 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const [addingRemark, setAddingRemark] = useState(false)
   const [showAddRemarkSection, setShowAddRemarkSection] = useState(false)
 
+  const fetchConversations = useCallback(async () => {
+    if (conversationsLoaded) return // Don't fetch if already loaded
+    
+    try {
+      setLoadingConversations(true)
+      const response = await leadsAPI.getLeadConversations(lead.id, { limit: 200 })
+      setConversations(response.data || [])
+      setConversationsLoaded(true)
+    } catch (error) {
+      console.error('Error fetching conversations:', error)
+      showError('Error', 'Failed to load conversations')
+    } finally {
+      setLoadingConversations(false)
+    }
+  }, [lead.id, conversationsLoaded, showError])
+
   useEffect(() => {
-    fetchConversations()
     fetchStatusHistory()
     const followUp = lead.follow_up_at || ''
     setFollowUpAt(followUp)
@@ -83,7 +99,17 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
     }
     fetchEmailTemplates()
     fetchPreviousEmails()
+    // Reset conversations loaded state when lead changes
+    setConversationsLoaded(false)
+    setConversations([])
   }, [lead.id, lead.follow_up_at])
+  
+  // Load conversations only when conversations tab is active
+  useEffect(() => {
+    if (activeTab === 'conversations' && !conversationsLoaded && lead.id) {
+      fetchConversations()
+    }
+  }, [activeTab, conversationsLoaded, lead.id, fetchConversations])
 
   const fetchPreviousEmails = async () => {
     try {
@@ -214,19 +240,6 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [statusDropdownOpen])
-
-  const fetchConversations = async () => {
-    try {
-      setLoadingConversations(true)
-      const response = await leadsAPI.getLeadConversations(lead.id, { limit: 200 })
-      setConversations(response.data || [])
-    } catch (error) {
-      console.error('Error fetching conversations:', error)
-      showError('Error', 'Failed to load conversations')
-    } finally {
-      setLoadingConversations(false)
-    }
-  }
 
   const fetchStatusHistory = async () => {
     try {
@@ -367,7 +380,6 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
       setAddingRemark(true)
       await leadsAPI.addRemark(lead.id, newRemark.trim())
       setNewRemark('')
-      setShowAddRemarkSection(false)
       showSuccess('Remark Added', 'Remark has been added successfully')
       // Refresh status history to show the new remark
       await fetchStatusHistory()
@@ -802,13 +814,13 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
               {/* Follow-up Date & Time */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-white">Follow-up</label>
-                <div className="flex flex-col space-y-2">
+                <div className="flex items-center gap-2 flex-nowrap">
                   <input
                     type="date"
                     value={followUpDate}
                     onChange={handleFollowUpDateChange}
                     disabled={updatingFollowUp}
-                    className="w-full px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
+                    className="flex-1 min-w-0 px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
                     placeholder="Date"
                   />
                   <input
@@ -816,33 +828,23 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     value={followUpTime}
                     onChange={handleFollowUpTimeChange}
                     disabled={updatingFollowUp}
-                    className="w-full px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
+                    className="flex-1 min-w-0 px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
                     placeholder="Time"
                   />
-                  {followUpAt && (
-                    <button
-                      onClick={clearFollowUp}
-                      disabled={updatingFollowUp}
-                      className="w-full px-2 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-xs font-medium transition-colors disabled:opacity-50"
-                      title="Clear follow-up"
-                    >
-                      Clear Follow-up
-                    </button>
-                  )}
-                  {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-white mx-auto" />}
                 </div>
+                {followUpAt && (
+                  <button
+                    onClick={clearFollowUp}
+                    disabled={updatingFollowUp}
+                    className="w-full px-2 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-xs font-medium transition-colors disabled:opacity-50"
+                    title="Clear follow-up"
+                  >
+                    Clear Follow-up
+                  </button>
+                )}
+                {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-white mx-auto" />}
               </div>
 
-              {/* Add Remark Button */}
-              <div className="space-y-2">
-                <button
-                  onClick={() => setShowAddRemarkSection(!showAddRemarkSection)}
-                  className="w-full px-4 py-2 bg-white/20 hover:bg-white/30 border border-white/30 rounded-lg text-white font-medium transition-colors flex items-center justify-center space-x-2"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Add Remark</span>
-                </button>
-              </div>
             </div>
             
             {/* Remarks Input */}
@@ -880,22 +882,10 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
               </div>
             )}
 
-            {/* Add Remarks Section */}
-            {showAddRemarkSection && (
+            {/* Add Remarks Section - Hide when status change is selected */}
+            {!(showRemarksInput && pendingStatus) && (
               <div className="mt-3 bg-white/10 backdrop-blur-sm rounded-lg p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-white">Add Remark</label>
-                  <button
-                    onClick={() => {
-                      setShowAddRemarkSection(false)
-                      setNewRemark('')
-                    }}
-                    className="p-1 hover:bg-white/20 rounded transition-colors"
-                    title="Close"
-                  >
-                    <X className="w-4 h-4 text-white" />
-                  </button>
-                </div>
+                <label className="text-sm font-medium text-white">Add Remark</label>
                 <textarea
                   value={newRemark}
                   onChange={(e) => setNewRemark(e.target.value)}
@@ -982,7 +972,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                       // Render Chase message as chatbot-style bubble
                       return (
                         <div key={index} className="flex flex-col items-start w-full mb-4">
-                          <div className="flex items-start gap-2 max-w-[50%] justify-start">
+                          <div className="flex items-start gap-2 max-w-[90%] justify-start">
                             {/* Chase Icon */}
                             <div className="flex-shrink-0">
                               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center shadow-md">
@@ -1124,8 +1114,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     {emailConversations.map((conv) => (
                       <div
                         key={conv.id}
-                        className={`p-4 rounded-lg border ${
-                          conv.sender === 'agent' ? 'bg-gradient-to-r from-pink-100 to-purple-100 ml-8 border-purple-200' : 'bg-gray-50 mr-8 border-gray-200'
+                        className={`p-4 rounded-lg border w-[90%] ${
+                          conv.sender === 'agent' ? 'bg-gradient-to-r from-pink-100 to-purple-100 ml-auto border-purple-200' : 'bg-gray-50 mr-auto border-gray-200'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-2">
@@ -1172,8 +1162,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     {whatsappConversations.map((conv) => (
                       <div
                         key={conv.id}
-                        className={`p-4 rounded-lg border ${
-                          conv.sender === 'agent' ? 'bg-gradient-to-r from-pink-100 to-purple-100 ml-8 border-purple-200' : 'bg-gray-50 mr-8 border-gray-200'
+                        className={`p-4 rounded-lg border w-[90%] ${
+                          conv.sender === 'agent' ? 'bg-gradient-to-r from-pink-100 to-purple-100 ml-auto border-purple-200' : 'bg-gray-50 mr-auto border-gray-200'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-2">
