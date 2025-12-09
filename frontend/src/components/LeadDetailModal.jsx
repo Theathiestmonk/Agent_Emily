@@ -472,12 +472,48 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
 
   const getStatusConfig = (status) => {
     const configs = {
-      new: { color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'New' },
-      contacted: { color: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Contacted' },
-      responded: { color: 'bg-green-100 text-green-700 border-green-200', label: 'Responded' },
-      qualified: { color: 'bg-orange-100 text-orange-700 border-orange-200', label: 'Qualified' },
-      converted: { color: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Converted' },
-      lost: { color: 'bg-gray-100 text-gray-700 border-gray-200', label: 'Lost' }
+      new: { 
+        color: 'bg-blue-100 text-blue-700 border-blue-200', 
+        bgColor: 'bg-blue-50',
+        borderColor: 'border-blue-200',
+        label: 'New' 
+      },
+      contacted: { 
+        color: 'bg-purple-100 text-purple-700 border-purple-200', 
+        bgColor: 'bg-purple-50',
+        borderColor: 'border-purple-200',
+        label: 'Contacted' 
+      },
+      responded: { 
+        color: 'bg-green-100 text-green-700 border-green-200', 
+        bgColor: 'bg-green-50',
+        borderColor: 'border-green-200',
+        label: 'Responded' 
+      },
+      qualified: { 
+        color: 'bg-orange-100 text-orange-700 border-orange-200', 
+        bgColor: 'bg-orange-50',
+        borderColor: 'border-orange-200',
+        label: 'Qualified' 
+      },
+      converted: { 
+        color: 'bg-emerald-100 text-emerald-700 border-emerald-200', 
+        bgColor: 'bg-emerald-50',
+        borderColor: 'border-emerald-200',
+        label: 'Converted' 
+      },
+      lost: { 
+        color: 'bg-gray-100 text-gray-700 border-gray-200', 
+        bgColor: 'bg-gray-50',
+        borderColor: 'border-gray-200',
+        label: 'Lost' 
+      },
+      invalid: {
+        color: 'bg-red-100 text-red-700 border-red-200',
+        bgColor: 'bg-red-50',
+        borderColor: 'border-red-200',
+        label: 'Invalid'
+      }
     }
     return configs[status] || configs.new
   }
@@ -697,13 +733,15 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const emailConversations = conversations.filter(c => c.message_type === 'email')
   const whatsappConversations = conversations.filter(c => c.message_type === 'whatsapp')
 
+  const statusConfig = getStatusConfig(selectedStatus || lead.status)
+
   return (
     <div className="fixed bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
       <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full h-[80vh] flex flex-col overflow-hidden p-4">
         {/* Two Column Layout */}
         <div className="flex flex-1 overflow-hidden">
           {/* Left Column - Lead Details */}
-          <div className="w-1/3 bg-gradient-to-r from-pink-50 to-purple-50 text-gray-900 flex flex-col rounded-xl overflow-hidden">
+          <div className={`w-1/3 ${statusConfig.bgColor} text-gray-900 flex flex-col rounded-xl overflow-hidden`}>
             <style>{`
               /* Style date and time input icons for light background */
               input[type="date"]::-webkit-calendar-picker-indicator,
@@ -722,7 +760,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
               }
             `}</style>
             {/* Header Section */}
-            <div className="p-6 border-b border-pink-200">
+            <div className={`p-6 border-b ${statusConfig.borderColor}`}>
               <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center shadow-md">
                   {getPlatformIcon(lead.source_platform)}
@@ -761,7 +799,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                   <button
                     onClick={() => !updatingStatus && !showRemarksInput && setStatusDropdownOpen(!statusDropdownOpen)}
                     disabled={updatingStatus || showRemarksInput}
-                    className="px-3 py-1.5 bg-white border border-pink-200 rounded-lg text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-pink-300 disabled:opacity-50 flex items-center space-x-2 min-w-[140px] justify-between"
+                    className={`px-3 py-1.5 bg-white border ${statusConfig.borderColor} rounded-lg text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:opacity-50 flex items-center space-x-2 min-w-[140px] justify-between`}
                   >
                     <span className="capitalize">{pendingStatus || selectedStatus}</span>
                     <ChevronDown className={`w-4 h-4 transition-transform ${statusDropdownOpen ? 'rotate-180' : ''}`} />
@@ -818,7 +856,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     value={followUpDate}
                     onChange={handleFollowUpDateChange}
                     disabled={updatingFollowUp}
-                    className="flex-1 min-w-0 px-3 py-1.5 bg-white border border-pink-200 rounded-lg text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-pink-300 disabled:opacity-50 placeholder-gray-400"
+                    className={`flex-1 min-w-0 px-3 py-1.5 bg-white border ${statusConfig.borderColor} rounded-lg text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:opacity-50 placeholder-gray-400`}
                     placeholder="Date"
                   />
                   <input
@@ -826,7 +864,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     value={followUpTime}
                     onChange={handleFollowUpTimeChange}
                     disabled={updatingFollowUp}
-                    className="flex-1 min-w-0 px-3 py-1.5 bg-white border border-pink-200 rounded-lg text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-pink-300 disabled:opacity-50 placeholder-gray-400"
+                    className={`flex-1 min-w-0 px-3 py-1.5 bg-white border ${statusConfig.borderColor} rounded-lg text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:opacity-50 placeholder-gray-400`}
                     placeholder="Time"
                   />
                 </div>
@@ -834,7 +872,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                   <button
                     onClick={clearFollowUp}
                     disabled={updatingFollowUp}
-                    className="w-full px-2 py-1.5 bg-white hover:bg-pink-100 border border-pink-200 rounded-lg text-gray-700 text-xs font-medium transition-colors disabled:opacity-50"
+                    className={`w-full px-2 py-1.5 bg-white hover:opacity-80 border ${statusConfig.borderColor} rounded-lg text-gray-700 text-xs font-medium transition-colors disabled:opacity-50`}
                     title="Clear follow-up"
                   >
                     Clear Follow-up
@@ -847,7 +885,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
             
             {/* Remarks Input */}
             {showRemarksInput && pendingStatus && (
-              <div className="mt-3 bg-white rounded-lg p-3 space-y-2 border border-pink-200">
+              <div className={`mt-3 bg-white rounded-lg p-3 space-y-2 border ${statusConfig.borderColor}`}>
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium text-gray-900">
                     Changing status to: <span className="capitalize font-semibold">{pendingStatus}</span>
@@ -859,20 +897,20 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                   onChange={(e) => setStatusRemarks(e.target.value)}
                   placeholder="Add remarks about this status change..."
                   rows={3}
-                  className="w-full px-3 py-2 bg-white border border-pink-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-300 resize-none"
+                  className={`w-full px-3 py-2 bg-white border ${statusConfig.borderColor} rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-opacity-50 resize-none`}
                 />
                 <div className="flex space-x-2">
                   <button
                     onClick={handleStatusUpdate}
                     disabled={updatingStatus}
-                    className="flex-1 px-4 py-2 bg-pink-500 hover:bg-pink-600 border border-pink-300 rounded-lg text-white font-medium transition-colors disabled:opacity-50"
+                    className={`flex-1 px-4 py-2 ${statusConfig.color.split(' ')[0]} hover:opacity-90 border ${statusConfig.borderColor} rounded-lg text-white font-medium transition-colors disabled:opacity-50`}
                   >
                     {updatingStatus ? 'Updating...' : 'Save Status Change'}
                   </button>
                   <button
                     onClick={handleCancelStatusUpdate}
                     disabled={updatingStatus}
-                    className="px-4 py-2 bg-white hover:bg-pink-50 border border-pink-200 rounded-lg text-gray-700 font-medium transition-colors disabled:opacity-50"
+                    className={`px-4 py-2 bg-white hover:opacity-80 border ${statusConfig.borderColor} rounded-lg text-gray-700 font-medium transition-colors disabled:opacity-50`}
                   >
                     Cancel
                   </button>
@@ -882,14 +920,13 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
 
             {/* Add Remarks Section - Hide when status change is selected */}
             {!(showRemarksInput && pendingStatus) && (
-              <div className="mt-3 bg-white rounded-lg p-3 space-y-2 border border-pink-200">
-                <label className="text-sm font-medium text-gray-900">Add Remark</label>
+              <div className="mt-3 px-6 pb-6 space-y-2">
                 <textarea
                   value={newRemark}
                   onChange={(e) => setNewRemark(e.target.value)}
                   placeholder="Add a remark about this lead..."
                   rows={3}
-                  className="w-full px-3 py-2 bg-white border border-pink-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-300 resize-none"
+                  className={`w-full px-3 py-2 bg-white border ${statusConfig.borderColor} rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-opacity-50 resize-none`}
                 />
                 <button
                   onClick={handleAddRemark}
@@ -952,8 +989,21 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
           {activeTab === 'timeline' && (
             <div className="space-y-4">
               {loadingConversations ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                <div className="flex flex-col items-start w-full mb-4">
+                  <div className="flex items-start gap-2 max-w-[90%] justify-start">
+                    {/* Chase Icon */}
+                    <div className="flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center shadow-md">
+                        <span className="text-white font-bold text-sm">C</span>
+                      </div>
+                    </div>
+                    {/* Message Bubble */}
+                    <div className="px-4 py-3 rounded-lg bg-white text-black chatbot-bubble-shadow">
+                      <p className="text-sm leading-relaxed">
+                        Loading timeline...
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ) : timeline.length === 0 ? (
                 <div className="text-center py-12">
