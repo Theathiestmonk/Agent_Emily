@@ -498,7 +498,7 @@ const SettingsMenu = ({ isOpen, onClose }) => {
                     : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                <span className="text-sm font-medium">Tools</span>
+                <span className="text-sm font-medium">Connections</span>
               </button>
               <button
                 onClick={() => setActiveTab('billing')}
@@ -585,20 +585,29 @@ const SettingsMenu = ({ isOpen, onClose }) => {
 
             {activeTab === 'tools' && (
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">Connected Tools</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">Connections</h3>
                 
                  {/* All Platforms as Toggle Switches */}
                  <div className="space-y-3">
                    {platforms.map((platform) => {
                      const isConnected = isPlatformConnected(platform.id)
                      const isSelected = selectedPlatform === platform.id
+                     const connection = connections.find(conn => 
+                       conn.platform?.toLowerCase() === platform.id.toLowerCase()
+                     )
+                     const pageName = connection?.page_name || connection?.page_username || connection?.site_name || connection?.wordpress_site_name
                      
                      return (
                        <div
                          key={platform.id}
                          className="flex items-center justify-between py-2"
                        >
-                         <span className="text-sm font-medium text-gray-900">{platform.name}</span>
+                         <span className="text-sm font-medium text-gray-900">
+                           {platform.name}
+                           {isConnected && pageName && (
+                             <span className="text-gray-500 font-normal ml-1">({pageName})</span>
+                           )}
+                         </span>
                          <div className="flex items-center">
                            {loading && isSelected && (
                              <span className="mr-3 text-xs text-gray-500">
