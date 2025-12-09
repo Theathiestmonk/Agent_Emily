@@ -485,24 +485,24 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const getPlatformIcon = (platform) => {
     switch (platform?.toLowerCase()) {
       case 'facebook':
-        return <Facebook className="w-5 h-5" />
+        return <Facebook className="w-5 h-5 text-white" />
       case 'instagram':
-        return <Instagram className="w-5 h-5" />
+        return <Instagram className="w-5 h-5 text-white" />
       case 'walk_ins':
       case 'walk-ins':
-        return <LogIn className="w-5 h-5" />
+        return <LogIn className="w-5 h-5 text-white" />
       case 'referral':
-        return <Users className="w-5 h-5" />
+        return <Users className="w-5 h-5 text-white" />
       case 'email':
-        return <Mail className="w-5 h-5" />
+        return <Mail className="w-5 h-5 text-white" />
       case 'website':
-        return <Globe className="w-5 h-5" />
+        return <Globe className="w-5 h-5 text-white" />
       case 'phone_call':
       case 'phone-call':
       case 'phone call':
-        return <Phone className="w-5 h-5" />
+        return <Phone className="w-5 h-5 text-white" />
       default:
-        return <User className="w-5 h-5" />
+        return <User className="w-5 h-5 text-white" />
     }
   }
 
@@ -703,39 +703,37 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
         {/* Two Column Layout */}
         <div className="flex flex-1 overflow-hidden">
           {/* Left Column - Lead Details */}
-          <div className="w-1/3 bg-gradient-to-r from-pink-500 to-purple-600 text-white flex flex-col">
+          <div className="w-1/3 bg-gradient-to-r from-pink-50 to-purple-50 text-gray-900 flex flex-col rounded-xl overflow-hidden">
             <style>{`
-              /* Style date and time input icons to be white */
+              /* Style date and time input icons for light background */
               input[type="date"]::-webkit-calendar-picker-indicator,
               input[type="time"]::-webkit-calendar-picker-indicator {
-                filter: invert(1);
                 cursor: pointer;
-                opacity: 1;
+                opacity: 0.7;
               }
               input[type="date"]::-webkit-inner-spin-button,
               input[type="time"]::-webkit-inner-spin-button {
-                filter: invert(1);
+                opacity: 0.7;
               }
               input[type="date"]::-moz-calendar-picker-indicator,
               input[type="time"]::-moz-calendar-picker-indicator {
-                filter: invert(1);
                 cursor: pointer;
-                opacity: 1;
+                opacity: 0.7;
               }
             `}</style>
             {/* Header Section */}
-            <div className="p-6 border-b border-white/20">
+            <div className="p-6 border-b border-pink-200">
               <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center shadow-md">
                   {getPlatformIcon(lead.source_platform)}
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold">
+                  <h2 className="text-2xl font-bold text-gray-900">
                     {lead.name || 'Unknown Lead'}
                   </h2>
                   {/* Contact Information */}
                   {(lead.email || lead.phone_number) && (
-                    <div className="flex flex-col gap-1.5 mt-2 text-xs opacity-80">
+                    <div className="flex flex-col gap-1.5 mt-2 text-xs text-gray-600">
                       {lead.email && (
                         <div className="flex items-center gap-1.5">
                           <Mail className="w-3 h-3" />
@@ -758,12 +756,12 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
             <div className="p-6 space-y-4 flex-1 overflow-y-auto">
               {/* Status */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-white">Status</label>
+                <label className="text-sm font-medium text-gray-900">Status</label>
                 <div className="relative status-dropdown-container">
                   <button
                     onClick={() => !updatingStatus && !showRemarksInput && setStatusDropdownOpen(!statusDropdownOpen)}
                     disabled={updatingStatus || showRemarksInput}
-                    className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 flex items-center space-x-2 min-w-[140px] justify-between"
+                    className="px-3 py-1.5 bg-white border border-pink-200 rounded-lg text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-pink-300 disabled:opacity-50 flex items-center space-x-2 min-w-[140px] justify-between"
                   >
                     <span className="capitalize">{pendingStatus || selectedStatus}</span>
                     <ChevronDown className={`w-4 h-4 transition-transform ${statusDropdownOpen ? 'rotate-180' : ''}`} />
@@ -808,19 +806,19 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     </div>
                   )}
                 </div>
-                {updatingStatus && <Loader2 className="w-4 h-4 animate-spin text-white mt-2" />}
+                {updatingStatus && <Loader2 className="w-4 h-4 animate-spin text-gray-600 mt-2" />}
               </div>
 
               {/* Follow-up Date & Time */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-white">Follow-up</label>
+                <label className="text-sm font-medium text-gray-900">Follow-up</label>
                 <div className="flex items-center gap-2 flex-nowrap">
                   <input
                     type="date"
                     value={followUpDate}
                     onChange={handleFollowUpDateChange}
                     disabled={updatingFollowUp}
-                    className="flex-1 min-w-0 px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
+                    className="flex-1 min-w-0 px-3 py-1.5 bg-white border border-pink-200 rounded-lg text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-pink-300 disabled:opacity-50 placeholder-gray-400"
                     placeholder="Date"
                   />
                   <input
@@ -828,7 +826,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     value={followUpTime}
                     onChange={handleFollowUpTimeChange}
                     disabled={updatingFollowUp}
-                    className="flex-1 min-w-0 px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
+                    className="flex-1 min-w-0 px-3 py-1.5 bg-white border border-pink-200 rounded-lg text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-pink-300 disabled:opacity-50 placeholder-gray-400"
                     placeholder="Time"
                   />
                 </div>
@@ -836,45 +834,45 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                   <button
                     onClick={clearFollowUp}
                     disabled={updatingFollowUp}
-                    className="w-full px-2 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-xs font-medium transition-colors disabled:opacity-50"
+                    className="w-full px-2 py-1.5 bg-white hover:bg-pink-100 border border-pink-200 rounded-lg text-gray-700 text-xs font-medium transition-colors disabled:opacity-50"
                     title="Clear follow-up"
                   >
                     Clear Follow-up
                   </button>
                 )}
-                {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-white mx-auto" />}
+                {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-gray-600 mx-auto" />}
               </div>
 
             </div>
             
             {/* Remarks Input */}
             {showRemarksInput && pendingStatus && (
-              <div className="mt-3 bg-white/10 backdrop-blur-sm rounded-lg p-3 space-y-2">
+              <div className="mt-3 bg-white rounded-lg p-3 space-y-2 border border-pink-200">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-white">
+                  <label className="text-sm font-medium text-gray-900">
                     Changing status to: <span className="capitalize font-semibold">{pendingStatus}</span>
                   </label>
                 </div>
-                <label className="text-sm font-medium text-white">Remarks (Optional)</label>
+                <label className="text-sm font-medium text-gray-900">Remarks (Optional)</label>
                 <textarea
                   value={statusRemarks}
                   onChange={(e) => setStatusRemarks(e.target.value)}
                   placeholder="Add remarks about this status change..."
                   rows={3}
-                  className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 resize-none"
+                  className="w-full px-3 py-2 bg-white border border-pink-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-300 resize-none"
                 />
                 <div className="flex space-x-2">
                   <button
                     onClick={handleStatusUpdate}
                     disabled={updatingStatus}
-                    className="flex-1 px-4 py-2 bg-white/20 hover:bg-white/30 border border-white/30 rounded-lg text-white font-medium transition-colors disabled:opacity-50"
+                    className="flex-1 px-4 py-2 bg-pink-500 hover:bg-pink-600 border border-pink-300 rounded-lg text-white font-medium transition-colors disabled:opacity-50"
                   >
                     {updatingStatus ? 'Updating...' : 'Save Status Change'}
                   </button>
                   <button
                     onClick={handleCancelStatusUpdate}
                     disabled={updatingStatus}
-                    className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white font-medium transition-colors disabled:opacity-50"
+                    className="px-4 py-2 bg-white hover:bg-pink-50 border border-pink-200 rounded-lg text-gray-700 font-medium transition-colors disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -884,19 +882,19 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
 
             {/* Add Remarks Section - Hide when status change is selected */}
             {!(showRemarksInput && pendingStatus) && (
-              <div className="mt-3 bg-white/10 backdrop-blur-sm rounded-lg p-3 space-y-2">
-                <label className="text-sm font-medium text-white">Add Remark</label>
+              <div className="mt-3 bg-white rounded-lg p-3 space-y-2 border border-pink-200">
+                <label className="text-sm font-medium text-gray-900">Add Remark</label>
                 <textarea
                   value={newRemark}
                   onChange={(e) => setNewRemark(e.target.value)}
                   placeholder="Add a remark about this lead..."
                   rows={3}
-                  className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 resize-none"
+                  className="w-full px-3 py-2 bg-white border border-pink-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-300 resize-none"
                 />
                 <button
                   onClick={handleAddRemark}
                   disabled={addingRemark || !newRemark.trim()}
-                  className="w-full px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 border border-white/30 rounded-lg text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                  className="w-full px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 border border-pink-300 rounded-lg text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
                   {addingRemark ? (
                     <>
@@ -925,7 +923,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
             </button>
             
             {/* Tabs */}
-            <div className="border-b border-gray-200 flex space-x-1 px-6 bg-gradient-to-r from-pink-50 to-purple-50">
+            <div className="border-b border-gray-200 flex space-x-1 px-6 bg-transparent">
               {[
                 { id: 'timeline', label: 'Timeline', icon: Clock },
                 { id: 'conversations', label: 'Conversations', icon: MessageCircle },
