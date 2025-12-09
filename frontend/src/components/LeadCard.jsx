@@ -12,7 +12,8 @@ import {
   Trash2,
   Globe,
   Users,
-  LogIn
+  LogIn,
+  Calendar
 } from 'lucide-react'
 
 const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null, selectionMode = false }) => {
@@ -147,6 +148,28 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
     })
   }
 
+  const formatFollowUpDate = (dateString) => {
+    if (!dateString) return null
+    
+    const date = new Date(dateString)
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const followUpDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const diffInDays = Math.floor((followUpDate - today) / (1000 * 60 * 60 * 24))
+    
+    if (diffInDays === 0) return 'Today'
+    if (diffInDays === 1) return 'Tomorrow'
+    if (diffInDays === -1) return 'Yesterday'
+    if (diffInDays < 0) return `${Math.abs(diffInDays)} days ago`
+    if (diffInDays <= 7) return `In ${diffInDays} days`
+    
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    })
+  }
+
   const statusConfig = getStatusConfig(lead.status)
   const StatusIcon = statusConfig.icon
   const platformColor = getPlatformColor(lead.source_platform)
@@ -215,12 +238,22 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
         </div>
       </div>
 
+      {/* Follow-up Date */}
+      {lead.follow_up_at && (
+        <div className="p-1.5 border-t border-gray-200">
+          <div className="flex items-center space-x-1 text-[10px] text-gray-600">
+            <Calendar className="w-3 h-3" />
+            <span className="font-medium">Follow-up:</span>
+            <span>{formatFollowUpDate(lead.follow_up_at)}</span>
+          </div>
+        </div>
+      )}
+
       {/* Remarks Section */}
       {lead.last_remark && (
         <div className={`p-1.5 ${statusConfig.bgColor} border-t ${statusConfig.borderColor}`}>
-          <p className={`text-[10px] font-medium ${statusConfig.textColor} mb-0.5`}>Last Remark:</p>
           <p className="text-[10px] text-gray-700 line-clamp-2">
-            {lead.last_remark}
+            {lead.last_remark.charAt(0).toUpperCase() + lead.last_remark.slice(1)}
           </p>
         </div>
       )}
