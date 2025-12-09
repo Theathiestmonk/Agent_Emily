@@ -711,10 +711,10 @@ function Dashboard() {
                                         <span className="text-xs text-gray-400">{formattedDate}</span>
                                       </div>
                                       <p className="text-xs text-gray-700 line-clamp-2">{preview}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
+                  </div>
+                </div>
+              </div>
+            </div>
                             )
                           })}
                         </div>

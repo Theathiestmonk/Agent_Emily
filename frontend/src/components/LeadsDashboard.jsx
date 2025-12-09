@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { leadsAPI } from '../services/leads'
@@ -24,6 +24,46 @@ import {
   X
 } from 'lucide-react'
 
+// Get date range for filtering (moved outside component to prevent recreation)
+const getDateRange = (range) => {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  
+  switch (range) {
+    case 'today':
+      return {
+        start: today,
+        end: new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1)
+      }
+    case 'this_week': {
+      const dayOfWeek = now.getDay()
+      const startOfWeek = new Date(today)
+      startOfWeek.setDate(today.getDate() - dayOfWeek)
+      return {
+        start: startOfWeek,
+        end: new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1)
+      }
+    }
+    case 'this_month': {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      return {
+        start: startOfMonth,
+        end: new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1)
+      }
+    }
+    case 'last_month': {
+      const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
+      return {
+        start: lastMonth,
+        end: endOfLastMonth
+      }
+    }
+    default:
+      return null
+  }
+}
+
 const LeadsDashboard = () => {
   const { user } = useAuth()
   const { showSuccess, showError, showInfo } = useNotifications()
@@ -35,23 +75,16 @@ const LeadsDashboard = () => {
   const [importingCSV, setImportingCSV] = useState(false)
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterPlatform, setFilterPlatform] = useState('all')
+  const [filterDateRange, setFilterDateRange] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
-  const [stats, setStats] = useState({
-    total: 0,
-    new: 0,
-    contacted: 0,
-    responded: 0,
-    qualified: 0,
-    converted: 0,
-    lost: 0,
-    invalid: 0
-  })
   const [lastFetchTime, setLastFetchTime] = useState(null)
   const [pollingInterval, setPollingInterval] = useState(null)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedLeadIds, setSelectedLeadIds] = useState(new Set())
   const [deletingBulk, setDeletingBulk] = useState(false)
+  const leadsRef = useRef([])
+  const lastFetchTimeRef = useRef(null)
 
   const fetchLeads = useCallback(async (showLoading = true) => {
     try {
@@ -70,24 +103,14 @@ const LeadsDashboard = () => {
       const response = await leadsAPI.getLeads(params)
       const fetchedLeads = response.data || []
 
-      // Calculate stats
-      const newStats = {
-        total: fetchedLeads.length,
-        new: fetchedLeads.filter(l => l.status === 'new').length,
-        contacted: fetchedLeads.filter(l => l.status === 'contacted').length,
-        responded: fetchedLeads.filter(l => l.status === 'responded').length,
-        qualified: fetchedLeads.filter(l => l.status === 'qualified').length,
-        converted: fetchedLeads.filter(l => l.status === 'converted').length,
-        lost: fetchedLeads.filter(l => l.status === 'lost').length,
-        invalid: fetchedLeads.filter(l => l.status === 'invalid').length
-      }
-      setStats(newStats)
-
-      // Check for new leads
-      if (lastFetchTime && leads.length > 0) {
+      // Check for new leads using refs to avoid dependency issues
+      const previousLeads = leadsRef.current
+      const previousFetchTime = lastFetchTimeRef.current
+      
+      if (previousFetchTime && previousLeads.length > 0) {
         const newLeads = fetchedLeads.filter(newLead => {
           const newLeadTime = new Date(newLead.created_at)
-          return newLeadTime > lastFetchTime && !leads.find(l => l.id === newLead.id)
+          return newLeadTime > previousFetchTime && !previousLeads.find(l => l.id === newLead.id)
         })
         
         if (newLeads.length > 0) {
@@ -102,8 +125,12 @@ const LeadsDashboard = () => {
         }
       }
 
+      // Update state and refs
       setLeads(fetchedLeads)
-      setLastFetchTime(new Date())
+      leadsRef.current = fetchedLeads
+      const now = new Date()
+      setLastFetchTime(now)
+      lastFetchTimeRef.current = now
       
     } catch (error) {
       console.error('Error fetching leads:', error)
@@ -111,21 +138,34 @@ const LeadsDashboard = () => {
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [filterStatus, filterPlatform, lastFetchTime, leads, showError, showInfo])
+  }, [filterStatus, filterPlatform, showError, showInfo])
 
-  // Initial fetch
+  // Clear leads data on logout
   useEffect(() => {
-    if (user) {
-      fetchLeads()
+    if (!user) {
+      setLeads([])
+      setLastFetchTime(null)
+      setSelectedLead(null)
+      setShowDetailModal(false)
+      setSelectedLeadIds(new Set())
+      setSelectionMode(false)
     }
   }, [user])
 
-  // Refetch when filters change
+  // Clear polling interval on logout
+  useEffect(() => {
+    if (!user && pollingInterval) {
+      clearInterval(pollingInterval)
+      setPollingInterval(null)
+    }
+  }, [user, pollingInterval])
+
+  // Initial fetch and refetch when filters change
   useEffect(() => {
     if (user) {
       fetchLeads()
     }
-  }, [filterStatus, filterPlatform, user])
+  }, [user, filterStatus, filterPlatform, fetchLeads])
 
   // Close filter dropdown when clicking outside
   useEffect(() => {
@@ -143,16 +183,16 @@ const LeadsDashboard = () => {
 
   // Set up polling for new leads
   useEffect(() => {
-    if (user) {
-      const interval = setInterval(() => {
-        fetchLeads(false) // Don't show loading spinner for polling
-      }, 30000) // Poll every 30 seconds
+    if (!user) return
 
-      setPollingInterval(interval)
+    const interval = setInterval(() => {
+      fetchLeads(false) // Don't show loading spinner for polling
+    }, 30000) // Poll every 30 seconds
 
-      return () => {
-        if (interval) clearInterval(interval)
-      }
+    setPollingInterval(interval)
+
+    return () => {
+      clearInterval(interval)
     }
   }, [user, fetchLeads])
 
@@ -336,26 +376,55 @@ const LeadsDashboard = () => {
     showSuccess('Refreshed', 'Leads list updated')
   }
 
-  const filteredLeads = leads.filter(lead => {
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      const matchesName = lead.name?.toLowerCase().includes(query)
-      const matchesEmail = lead.email?.toLowerCase().includes(query)
-      const matchesPhone = lead.phone_number?.toLowerCase().includes(query)
-      return matchesName || matchesEmail || matchesPhone
-    }
-    return true
-  })
+  const filteredLeads = useMemo(() => {
+    return leads.filter(lead => {
+      // Status filter
+      if (filterStatus !== 'all' && lead.status !== filterStatus) {
+        return false
+      }
+      
+      // Date range filter
+      if (filterDateRange !== 'all') {
+        const dateRange = getDateRange(filterDateRange)
+        if (dateRange) {
+          const leadDate = new Date(lead.created_at)
+          if (leadDate < dateRange.start || leadDate > dateRange.end) {
+            return false
+          }
+        }
+      }
+      
+      // Search query filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        const matchesName = lead.name?.toLowerCase().includes(query)
+        const matchesEmail = lead.email?.toLowerCase().includes(query)
+        const matchesPhone = lead.phone_number?.toLowerCase().includes(query)
+        if (!matchesName && !matchesEmail && !matchesPhone) {
+          return false
+        }
+      }
+      
+      return true
+    })
+  }, [leads, filterStatus, filterDateRange, searchQuery])
+
+  const dateRangeFilters = [
+    { value: 'all', label: 'All Time' },
+    { value: 'today', label: 'Today' },
+    { value: 'this_week', label: 'This Week' },
+    { value: 'this_month', label: 'This Month' },
+    { value: 'last_month', label: 'Last Month' }
+  ]
 
   const statusFilters = [
-    { value: 'all', label: 'All', count: stats.total },
-    { value: 'new', label: 'New', count: stats.new },
-    { value: 'contacted', label: 'Contacted', count: stats.contacted },
-    { value: 'responded', label: 'Responded', count: stats.responded },
-    { value: 'qualified', label: 'Qualified', count: stats.qualified },
-    { value: 'converted', label: 'Converted', count: stats.converted },
-    { value: 'lost', label: 'Lost', count: stats.lost },
-    { value: 'invalid', label: 'Invalid', count: stats.invalid }
+    { value: 'new', label: 'New' },
+    { value: 'contacted', label: 'Contacted' },
+    { value: 'responded', label: 'Responded' },
+    { value: 'qualified', label: 'Qualified' },
+    { value: 'converted', label: 'Converted' },
+    { value: 'lost', label: 'Lost' },
+    { value: 'invalid', label: 'Invalid' }
   ]
 
   const getStatusConfig = (status) => {
@@ -446,25 +515,20 @@ const LeadsDashboard = () => {
         <div className="bg-white shadow-sm border-b sticky top-0 z-20">
           <div className="px-4 lg:px-6 py-3 lg:py-4">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
-              {/* Stats Cards - Inline with buttons */}
+              {/* Date Range Filter */}
               <div className="flex items-center gap-2 overflow-x-auto flex-1">
-                {statusFilters.map((filter) => (
-                  <div
+                {dateRangeFilters.map((filter) => (
+                  <button
                     key={filter.value}
-                    onClick={() => setFilterStatus(filter.value)}
-                    className={`bg-gray-50 rounded-lg px-3 py-1.5 shadow-sm border-2 cursor-pointer transition-all whitespace-nowrap flex-shrink-0 min-w-[70px] text-center ${
-                      filterStatus === filter.value
-                        ? 'border-blue-500 shadow-md bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
+                    onClick={() => setFilterDateRange(filter.value)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
+                      filterDateRange === filter.value
+                        ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
                     }`}
                   >
-                    <div className="text-lg font-bold text-gray-900">
-                      {filter.count}
-                    </div>
-                    <div className="text-xs text-gray-600">
-                      {filter.label}
-                    </div>
-                  </div>
+                    {filter.label}
+                  </button>
                 ))}
               </div>
               

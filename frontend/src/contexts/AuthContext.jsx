@@ -368,6 +368,15 @@ Please check:
       localStorage.removeItem('socialMediaCache')
       localStorage.removeItem('contentCache')
       
+      // Clear leads cache
+      const leadsCacheKeys = Object.keys(localStorage).filter(key => 
+        key.startsWith('leads_') || 
+        key.startsWith('lead_') || 
+        key.includes('leadCache') ||
+        key.includes('leadsCache')
+      )
+      leadsCacheKeys.forEach(key => localStorage.removeItem(key))
+      
       // Clear connections cache
       connectionsCache.clearCache()
       

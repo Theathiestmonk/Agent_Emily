@@ -3149,38 +3149,38 @@ const ContentDashboard = () => {
                     ) : (
                       <>
                         {availableChannels.length > 0 && (
-                          <>
-                            <p className="text-sm text-black mb-2">
+                              <>
+                                <p className="text-sm text-black mb-2">
                               Here are a few fresh post ideas for you!
-                            </p>
+                                </p>
                             <p className="text-sm text-gray-700 mb-3">
                               Take a look at the suggestions and see what fits your vibe. I've tried to keep them simple, engaging, and easy to post.
-                            </p>
+                                </p>
                             {/* Channel Icons as Tabs */}
                             <div className="flex flex-wrap gap-2">
                               {availableChannels.map((channel) => {
-                                const channelCount = channelContentCounts[channel] || 0
-                                const isSelected = selectedChannel === channel
-                                return (
+                                        const channelCount = channelContentCounts[channel] || 0
+                                        const isSelected = selectedChannel === channel
+                                        return (
                                   <button
-                                    key={channel}
-                                    onClick={() => setSelectedChannel(channel)}
+                                            key={channel}
+                                            onClick={() => setSelectedChannel(channel)}
                                     className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
-                                      isSelected
+                                              isSelected 
                                         ? 'bg-purple-50 border-purple-300 shadow-sm'
                                         : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
-                                    }`}
-                                  >
+                                            }`}
+                                          >
                                     <span className={`flex-shrink-0 w-5 h-5 flex items-center justify-center ${
                                       isSelected ? 'text-purple-600' : 'text-gray-600'
                                     }`}>
-                                      {getPlatformIcon(channel)}
-                                    </span>
+                                              {getPlatformIcon(channel)}
+                                            </span>
                                     <span className={`text-xs font-medium ${
                                       isSelected ? 'text-purple-700' : 'text-gray-700'
                                     }`}>
                                       {channel.charAt(0).toUpperCase() + channel.slice(1)}
-                                    </span>
+                                            </span>
                                     {channelCount > 0 && (
                                       <span className={`text-xs ${
                                         isSelected ? 'text-purple-600' : 'text-gray-500'
@@ -3189,9 +3189,9 @@ const ContentDashboard = () => {
                                       </span>
                                     )}
                                   </button>
-                                )
-                              })}
-                            </div>
+                                        )
+                                      })}
+                                    </div>
                           </>
                         )}
                       </>
@@ -3850,12 +3850,12 @@ const ContentDashboard = () => {
                       {loadingAllContent ? (
                         <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
                       ) : (
-                        <ChevronDown className="w-5 h-5 text-gray-400 group-hover:text-purple-600 transition-colors" />
+                      <ChevronDown className="w-5 h-5 text-gray-400 group-hover:text-purple-600 transition-colors" />
                       )}
                     </button>
                   </div>
                 )}
-                </div>
+                  </div>
               </>
             )}
 

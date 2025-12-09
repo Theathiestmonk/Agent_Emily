@@ -18,6 +18,7 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess, isImporting = false }) => {
     metadata: {}
   })
   const [errors, setErrors] = useState({})
+  const [customSourcePlatform, setCustomSourcePlatform] = useState('')
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -78,6 +79,10 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess, isImporting = false }) => {
       newErrors.phone_number = 'Please enter a valid phone number'
     }
     
+    if (formData.source_platform === 'other' && !customSourcePlatform.trim()) {
+      newErrors.customSourcePlatform = 'Please enter a custom source platform'
+    }
+    
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -97,7 +102,7 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess, isImporting = false }) => {
         name: formData.name.trim(),
         email: formData.email.trim() || null,
         phone_number: formData.phone_number.trim() || null,
-        source_platform: formData.source_platform,
+        source_platform: formData.source_platform === 'other' ? customSourcePlatform.trim() : formData.source_platform,
         status: formData.status,
         form_data: formData.form_data,
         metadata: {
@@ -121,6 +126,7 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess, isImporting = false }) => {
         form_data: {},
         metadata: {}
       })
+      setCustomSourcePlatform('')
       setErrors({})
       
       if (onSuccess) {
@@ -153,6 +159,7 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess, isImporting = false }) => {
         form_data: {},
         metadata: {}
       })
+      setCustomSourcePlatform('')
       setErrors({})
       onClose()
     }
@@ -303,6 +310,34 @@ const AddLeadModal = ({ isOpen, onClose, onSuccess, isImporting = false }) => {
                 <option value="phone_call">Phone Call</option>
                 <option value="other">Other</option>
               </select>
+              {formData.source_platform === 'other' && (
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    value={customSourcePlatform}
+                    onChange={(e) => {
+                      setCustomSourcePlatform(e.target.value)
+                      if (errors.customSourcePlatform) {
+                        setErrors(prev => ({
+                          ...prev,
+                          customSourcePlatform: ''
+                        }))
+                      }
+                    }}
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.customSourcePlatform ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter custom source platform"
+                    disabled={loading}
+                  />
+                  {errors.customSourcePlatform && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center space-x-1">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{errors.customSourcePlatform}</span>
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Status */}

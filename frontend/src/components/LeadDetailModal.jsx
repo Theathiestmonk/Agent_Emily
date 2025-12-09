@@ -408,6 +408,56 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
     return formatTime(dateString)
   }
 
+  // Parse email content - handle HTML and plain text
+  const parseEmailContent = (content) => {
+    if (!content) return ''
+    
+    // Escape HTML to prevent XSS
+    const escapeHtml = (text) => {
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      }
+      return text.replace(/[&<>"']/g, (m) => map[m])
+    }
+    
+    // Check if content contains HTML tags
+    const hasHtmlTags = /<[^>]+>/g.test(content)
+    
+    if (hasHtmlTags) {
+      // Content appears to be HTML - sanitize and return
+      // Basic sanitization - remove script tags and dangerous attributes
+      let sanitized = content
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        .replace(/on\w+="[^"]*"/gi, '')
+        .replace(/on\w+='[^']*'/gi, '')
+        .replace(/javascript:/gi, '')
+      
+      return sanitized
+    } else {
+      // Plain text - convert line breaks and preserve formatting
+      const escaped = escapeHtml(content)
+      return escaped
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/\n\n+/g, '\n\n') // Multiple line breaks to double
+        .split('\n')
+        .map((line) => {
+          // Preserve empty lines
+          if (line.trim() === '') {
+            return '<br />'
+          }
+          // Convert URLs to links (after escaping)
+          const urlRegex = /(https?:\/\/[^\s<>&]+)/g
+          return line.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-purple-600 hover:text-purple-800 underline">$1</a>')
+        })
+        .join('<br />')
+    }
+  }
+
   const getStatusConfig = (status) => {
     const configs = {
       new: { color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'New' },
@@ -637,52 +687,66 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
 
   return (
     <div className="fixed bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white p-6 rounded-t-xl">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
-                {getPlatformIcon(lead.source_platform)}
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold">
-                  {lead.name || 'Unknown Lead'}
-                </h2>
-                {/* Contact Information */}
-                {(lead.email || lead.phone_number) && (
-                  <div className="flex items-center gap-3 mt-1 text-xs opacity-80">
-                    {lead.email && (
-                      <div className="flex items-center gap-1">
-                        <Mail className="w-3 h-3" />
-                        <span>{lead.email}</span>
-                      </div>
-                    )}
-                    {lead.email && lead.phone_number && <span>•</span>}
-                    {lead.phone_number && (
-                      <div className="flex items-center gap-1">
-                        <Phone className="w-3 h-3" />
-                        <span>{lead.phone_number}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+      <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full h-[80vh] flex flex-col overflow-hidden p-4">
+        {/* Two Column Layout */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Left Column - Lead Details */}
+          <div className="w-1/3 bg-gradient-to-r from-pink-500 to-purple-600 text-white flex flex-col">
+            <style>{`
+              /* Style date and time input icons to be white */
+              input[type="date"]::-webkit-calendar-picker-indicator,
+              input[type="time"]::-webkit-calendar-picker-indicator {
+                filter: invert(1);
+                cursor: pointer;
+                opacity: 1;
+              }
+              input[type="date"]::-webkit-inner-spin-button,
+              input[type="time"]::-webkit-inner-spin-button {
+                filter: invert(1);
+              }
+              input[type="date"]::-moz-calendar-picker-indicator,
+              input[type="time"]::-moz-calendar-picker-indicator {
+                filter: invert(1);
+                cursor: pointer;
+                opacity: 1;
+              }
+            `}</style>
+            {/* Header Section */}
+            <div className="p-6 border-b border-white/20">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                  {getPlatformIcon(lead.source_platform)}
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    {lead.name || 'Unknown Lead'}
+                  </h2>
+                  {/* Contact Information */}
+                  {(lead.email || lead.phone_number) && (
+                    <div className="flex flex-col gap-1.5 mt-2 text-xs opacity-80">
+                      {lead.email && (
+                        <div className="flex items-center gap-1.5">
+                          <Mail className="w-3 h-3" />
+                          <span>{lead.email}</span>
+                        </div>
+                      )}
+                      {lead.phone_number && (
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="w-3 h-3" />
+                          <span>{lead.phone_number}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
 
-          {/* Status and Follow-up Inline */}
-          <div className="mt-4">
-            <div className="flex items-center gap-4 flex-wrap">
+            {/* Status and Follow-up Section */}
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
               {/* Status */}
-              <div className="flex items-center space-x-3">
-                <span className="text-sm font-medium text-white">Status:</span>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-white">Status</label>
                 <div className="relative status-dropdown-container">
                   <button
                     onClick={() => !updatingStatus && !showRemarksInput && setStatusDropdownOpen(!statusDropdownOpen)}
@@ -732,20 +796,19 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     </div>
                   )}
                 </div>
-                {updatingStatus && <Loader2 className="w-4 h-4 animate-spin text-white" />}
+                {updatingStatus && <Loader2 className="w-4 h-4 animate-spin text-white mt-2" />}
               </div>
 
               {/* Follow-up Date & Time */}
-              <div className="flex items-center space-x-3 flex-1 min-w-[400px]">
-                <CalendarCheck className="w-4 h-4 text-white flex-shrink-0" />
-                <span className="text-sm font-medium text-white flex-shrink-0">Follow-up:</span>
-                <div className="flex items-center space-x-2 flex-1">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-white">Follow-up</label>
+                <div className="flex flex-col space-y-2">
                   <input
                     type="date"
                     value={followUpDate}
                     onChange={handleFollowUpDateChange}
                     disabled={updatingFollowUp}
-                    className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
+                    className="w-full px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
                     placeholder="Date"
                   />
                   <input
@@ -753,28 +816,28 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     value={followUpTime}
                     onChange={handleFollowUpTimeChange}
                     disabled={updatingFollowUp}
-                    className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
+                    className="w-full px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 placeholder-white/60"
                     placeholder="Time"
                   />
                   {followUpAt && (
                     <button
                       onClick={clearFollowUp}
                       disabled={updatingFollowUp}
-                      className="px-2 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-xs font-medium transition-colors disabled:opacity-50 flex-shrink-0"
+                      className="w-full px-2 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-xs font-medium transition-colors disabled:opacity-50"
                       title="Clear follow-up"
                     >
-                      <X className="w-3 h-3" />
+                      Clear Follow-up
                     </button>
                   )}
-                  {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-white flex-shrink-0" />}
+                  {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-white mx-auto" />}
                 </div>
               </div>
 
               {/* Add Remark Button */}
-              <div className="flex items-center">
+              <div className="space-y-2">
                 <button
                   onClick={() => setShowAddRemarkSection(!showAddRemarkSection)}
-                  className="px-4 py-1.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 border border-white/30 rounded-lg text-white font-medium transition-colors flex items-center space-x-2"
+                  className="w-full px-4 py-2 bg-white/20 hover:bg-white/30 border border-white/30 rounded-lg text-white font-medium transition-colors flex items-center justify-center space-x-2"
                 >
                   <FileText className="w-4 h-4" />
                   <span>Add Remark</span>
@@ -860,35 +923,44 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
               </div>
             )}
           </div>
-        </div>
 
-        {/* Tabs */}
-        <div className="border-b border-gray-200 flex space-x-1 px-6 bg-gradient-to-r from-pink-50 to-purple-50">
-          {[
-            { id: 'timeline', label: 'Timeline', icon: Clock },
-            { id: 'conversations', label: 'Conversations', icon: MessageCircle },
-            { id: 'email', label: 'Email', icon: MailIcon }
-          ].map(tab => {
-            const Icon = tab.icon
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-purple-600 text-purple-600'
-                    : 'border-transparent text-gray-600 hover:text-purple-600'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span className="font-medium">{tab.label}</span>
-              </button>
-            )
-          })}
-        </div>
+          {/* Right Column - Tabs and Content */}
+          <div className="w-2/3 bg-white flex flex-col relative">
+            {/* Close Button */}
+            <button
+              onClick={onClose}
+              className="absolute top-2 right-4 p-2 hover:bg-gray-100 rounded-lg transition-colors z-10"
+            >
+              <X className="w-6 h-6 text-gray-600" />
+            </button>
+            
+            {/* Tabs */}
+            <div className="border-b border-gray-200 flex space-x-1 px-6 bg-gradient-to-r from-pink-50 to-purple-50">
+              {[
+                { id: 'timeline', label: 'Timeline', icon: Clock },
+                { id: 'conversations', label: 'Conversations', icon: MessageCircle },
+                { id: 'email', label: 'Email', icon: MailIcon }
+              ].map(tab => {
+                const Icon = tab.icon
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
+                      activeTab === tab.id
+                        ? 'border-purple-600 text-purple-600'
+                        : 'border-transparent text-gray-600 hover:text-purple-600'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span className="font-medium">{tab.label}</span>
+                  </button>
+                )
+              })}
+            </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'timeline' && (
             <div className="space-y-4">
               {loadingConversations ? (
@@ -1062,7 +1134,15 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                           </span>
                           <span className="text-xs text-gray-500">{formatTimeAgo(conv.created_at)}</span>
                         </div>
-                        <p className="text-sm text-gray-700">{conv.content}</p>
+                        <div 
+                          className="text-sm text-gray-700 email-content prose prose-sm max-w-none"
+                          dangerouslySetInnerHTML={{ __html: parseEmailContent(conv.content) }}
+                          style={{
+                            wordWrap: 'break-word',
+                            overflowWrap: 'break-word',
+                            lineHeight: '1.6'
+                          }}
+                        />
                         {conv.status && (
                           <div className="mt-2">
                             <span className={`text-xs px-2 py-1 rounded ${
@@ -1127,6 +1207,56 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                   <p className="text-gray-500">No conversations yet</p>
                 </div>
               )}
+              <style>{`
+                .email-content p {
+                  margin: 0.5rem 0;
+                  color: #374151;
+                }
+                .email-content p:first-child {
+                  margin-top: 0;
+                }
+                .email-content p:last-child {
+                  margin-bottom: 0;
+                }
+                .email-content a {
+                  color: #9333ea;
+                  text-decoration: underline;
+                }
+                .email-content a:hover {
+                  color: #7e22ce;
+                }
+                .email-content ul, .email-content ol {
+                  margin: 0.5rem 0;
+                  padding-left: 1.5rem;
+                }
+                .email-content li {
+                  margin: 0.25rem 0;
+                }
+                .email-content br {
+                  line-height: 1.6;
+                }
+                .email-content strong, .email-content b {
+                  font-weight: 600;
+                }
+                .email-content em, .email-content i {
+                  font-style: italic;
+                }
+                /* Style date and time input icons to be white */
+                input[type="date"]::-webkit-calendar-picker-indicator,
+                input[type="time"]::-webkit-calendar-picker-indicator {
+                  filter: invert(1);
+                  cursor: pointer;
+                }
+                input[type="date"]::-webkit-inner-spin-button,
+                input[type="time"]::-webkit-inner-spin-button {
+                  filter: invert(1);
+                }
+                input[type="date"]::-moz-calendar-picker-indicator,
+                input[type="time"]::-moz-calendar-picker-indicator {
+                  filter: invert(1);
+                  cursor: pointer;
+                }
+              `}</style>
             </div>
           )}
 
@@ -1467,6 +1597,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
               )}
             </div>
           )}
+            </div>
+          </div>
         </div>
       </div>
       

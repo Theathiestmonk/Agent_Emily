@@ -338,7 +338,7 @@ class WhatsAppService:
         except Exception as e:
             logger.error(f"Error getting message status: {e}")
             return None
-    
+
     async def get_templates(self, user_id: str) -> List[Dict[str, Any]]:
         """
         Get list of approved WhatsApp message templates from Meta API
