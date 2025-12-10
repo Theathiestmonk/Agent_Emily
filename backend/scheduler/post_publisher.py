@@ -219,6 +219,15 @@ class PostPublisher:
                     
                     # Only schedule future posts
                     if scheduled_datetime_utc > now_utc:
+                        # Verify post still exists before scheduling (might have been deleted)
+                        try:
+                            post_check = self.supabase.table("content_posts").select("id").eq("id", post.get("id")).execute()
+                            if not post_check.data:
+                                logger.info(f"Post {post.get('id')} was deleted, skipping scheduling on startup")
+                                continue
+                        except Exception as check_error:
+                            logger.warning(f"Could not verify post {post.get('id')} existence on startup: {check_error}")
+                        
                         await self.schedule_post(post, scheduled_datetime_utc)
                 except Exception as e:
                     logger.error(f"Error loading scheduled post {post.get('id')}: {e}")
@@ -317,6 +326,19 @@ class PostPublisher:
         async def publish_at_time():
             try:
                 await asyncio.sleep(delay)
+                # Check if post still exists before publishing
+                try:
+                    post_check = self.supabase.table("content_posts").select("id, status").eq("id", post_id).execute()
+                    if not post_check.data:
+                        logger.info(f"Post {post_id} was deleted, cancelling scheduled publish task")
+                        if post_id in self.scheduled_tasks:
+                            del self.scheduled_tasks[post_id]
+                        if post_id in self.post_data_cache:
+                            del self.post_data_cache[post_id]
+                        return
+                except Exception as check_error:
+                    logger.warning(f"Could not verify post {post_id} existence before publishing: {check_error}")
+                
                 await self._publish_post_by_id(post_id)
             except asyncio.CancelledError:
                 logger.info(f"Publish task for post {post_id} was cancelled")
@@ -462,12 +484,26 @@ class PostPublisher:
                     # Double-check status before publishing (in case it was published between query and now)
                     # Query database directly to get the most current status
                     try:
-                        current_post = self.supabase.table("content_posts").select("status").eq("id", post_id).execute()
-                        if current_post.data:
-                            current_status = current_post.data[0].get("status", "").lower()
-                            if current_status == "published":
-                                logger.info(f"Post {post_id} is already published in database, skipping scheduled publish")
-                                continue
+                        current_post = self.supabase.table("content_posts").select("id, status").eq("id", post_id).execute()
+                        if not current_post.data:
+                            # Post was deleted, cancel task and skip
+                            logger.info(f"Post {post_id} was deleted, cancelling scheduled task and skipping publish")
+                            if post_id in self.scheduled_tasks:
+                                self.scheduled_tasks[post_id].cancel()
+                                del self.scheduled_tasks[post_id]
+                            if post_id in self.post_data_cache:
+                                del self.post_data_cache[post_id]
+                            continue
+                        
+                        current_status = current_post.data[0].get("status", "").lower()
+                        if current_status == "published":
+                            logger.info(f"Post {post_id} is already published in database, skipping scheduled publish")
+                            # Clean up task
+                            if post_id in self.scheduled_tasks:
+                                del self.scheduled_tasks[post_id]
+                            if post_id in self.post_data_cache:
+                                del self.post_data_cache[post_id]
+                            continue
                     except Exception as e:
                         logger.warning(f"Could not verify post {post_id} status before publishing: {e}")
                     
@@ -498,30 +534,41 @@ class PostPublisher:
                 logger.info(f"Post {post_id} is already published, skipping duplicate publish")
                 return
             
-            # Double-check by querying database for current status
+            # Double-check by querying database for current status and existence
             try:
-                current_post = self.supabase.table("content_posts").select("status, metadata").eq("id", post_id).execute()
-                if current_post.data:
-                    current_status = current_post.data[0].get("status", "").lower()
-                    current_metadata = current_post.data[0].get("metadata", {}) or {}
-                    
-                    # Check if already published
-                    if current_status == "published":
-                        logger.info(f"Post {post_id} is already published in database, skipping duplicate publish")
-                        return
-                    
-                    # Check if currently being published (prevent concurrent publishes)
-                    if isinstance(current_metadata, dict) and current_metadata.get("_publishing"):
-                        publishing_at = current_metadata.get("_publishing_at")
-                        if publishing_at:
-                            # If publishing flag is older than 5 minutes, allow retry (might be stuck)
-                            try:
-                                publishing_time = datetime.fromisoformat(publishing_at)
-                                if (datetime.now() - publishing_time).total_seconds() < 300:  # 5 minutes
-                                    logger.info(f"Post {post_id} is currently being published, skipping duplicate publish")
-                                    return
-                            except:
-                                pass
+                current_post = self.supabase.table("content_posts").select("id, status, metadata").eq("id", post_id).execute()
+                if not current_post.data:
+                    # Post was deleted, don't publish
+                    logger.warning(f"Post {post_id} does not exist in database (was deleted), skipping publish")
+                    # Clean up task and cache
+                    if post_id in self.scheduled_tasks:
+                        if not self.scheduled_tasks[post_id].done():
+                            self.scheduled_tasks[post_id].cancel()
+                        del self.scheduled_tasks[post_id]
+                    if post_id in self.post_data_cache:
+                        del self.post_data_cache[post_id]
+                    return
+                
+                current_status = current_post.data[0].get("status", "").lower()
+                current_metadata = current_post.data[0].get("metadata", {}) or {}
+                
+                # Check if already published
+                if current_status == "published":
+                    logger.info(f"Post {post_id} is already published in database, skipping duplicate publish")
+                    return
+                
+                # Check if currently being published (prevent concurrent publishes)
+                if isinstance(current_metadata, dict) and current_metadata.get("_publishing"):
+                    publishing_at = current_metadata.get("_publishing_at")
+                    if publishing_at:
+                        # If publishing flag is older than 5 minutes, allow retry (might be stuck)
+                        try:
+                            publishing_time = datetime.fromisoformat(publishing_at)
+                            if (datetime.now() - publishing_time).total_seconds() < 300:  # 5 minutes
+                                logger.info(f"Post {post_id} is currently being published, skipping duplicate publish")
+                                return
+                        except:
+                            pass
             except Exception as e:
                 logger.warning(f"Could not verify post status from database: {e}, continuing with publish")
             
@@ -1205,4 +1252,8 @@ async def stop_post_publisher():
     global post_publisher
     if post_publisher:
         await post_publisher.stop()
+
+def get_post_publisher() -> Optional[PostPublisher]:
+    """Get the global post publisher instance"""
+    return post_publisher
 

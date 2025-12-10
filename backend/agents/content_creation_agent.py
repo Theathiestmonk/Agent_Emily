@@ -549,12 +549,16 @@ class ContentCreationAgent:
                 template_prompt = "Create engaging content for {business_name} on {platform}. Make it relevant to {industry} industry."
             
             # Format template with business context
+            # Handle missing keys with defaults
+            industry = business_context.get("industry", ["Business"])
+            industry_str = ", ".join(industry) if isinstance(industry, list) else str(industry)
+            
             formatted_prompt = template_prompt.format(
-                business_name=business_context["business_name"],
+                business_name=business_context.get("business_name", "Your Business"),
                 platform=platform,
-                industry=", ".join(business_context["industry"]),
-                brand_voice=business_context["brand_voice"],
-                brand_tone=business_context["brand_tone"],
+                industry=industry_str,
+                brand_voice=business_context.get("brand_voice", "professional"),
+                brand_tone=business_context.get("brand_tone", "friendly"),
                 topic=self.get_topic_for_day(post_index, business_context)
             )
             
