@@ -220,25 +220,31 @@ async def shutdown_event():
     """Stop services on shutdown"""
     import asyncio
     
+    logger.info("Shutting down services...")
+    
     # Stop post publisher
     try:
         await stop_post_publisher()
         logger.info("Post publisher stopped successfully")
-    except asyncio.CancelledError:
+    except (asyncio.CancelledError, KeyboardInterrupt):
         # Normal during shutdown, ignore
+        logger.debug("Post publisher cancellation during shutdown (expected)")
         pass
     except Exception as e:
-        logger.error(f"Error stopping background scheduler: {e}")
+        logger.error(f"Error stopping post publisher: {e}")
     
     # Stop daily messages scheduler
     try:
         await stop_daily_messages_scheduler()
         logger.info("Daily messages scheduler stopped successfully")
-    except asyncio.CancelledError:
+    except (asyncio.CancelledError, KeyboardInterrupt):
         # Normal during shutdown, ignore
+        logger.debug("Daily messages scheduler cancellation during shutdown (expected)")
         pass
     except Exception as e:
         logger.error(f"Error stopping daily messages scheduler: {e}")
+    
+    logger.info("Shutdown complete")
 
 # Pydantic models
 class UserCreate(BaseModel):

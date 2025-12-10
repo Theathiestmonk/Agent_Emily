@@ -67,11 +67,23 @@ class PricingUpdateRequest(BaseModel):
     fixed_price_per_unit: Optional[float] = None
     is_active: Optional[bool] = None
 
+def apply_array_filter(query, field: str, values):
+    """Helper function to apply array filter to Supabase query"""
+    if values:
+        if isinstance(values, list) and len(values) > 0:
+            query = query.in_(field, values)
+        elif isinstance(values, str) and values:
+            # Handle comma-separated string for backward compatibility
+            values_list = [v.strip() for v in values.split(',') if v.strip()]
+            if values_list:
+                query = query.in_(field, values_list)
+    return query
+
 @router.get("/token-usage", response_model=List[TokenUsageResponse])
 async def get_token_usage(
-    user_id: Optional[str] = Query(None, description="Filter by user ID"),
-    feature_type: Optional[str] = Query(None, description="Filter by feature type"),
-    model_name: Optional[str] = Query(None, description="Filter by model name"),
+    user_id: Optional[List[str]] = Query(None, description="Filter by user ID(s)"),
+    feature_type: Optional[List[str]] = Query(None, description="Filter by feature type(s)"),
+    model_name: Optional[List[str]] = Query(None, description="Filter by model name(s)"),
     start_date: Optional[str] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[str] = Query(None, description="End date (ISO format)"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
@@ -82,13 +94,11 @@ async def get_token_usage(
     try:
         query = supabase.table("token_usage").select("*")
         
-        # Apply filters
-        if user_id:
-            query = query.eq("user_id", user_id)
-        if feature_type:
-            query = query.eq("feature_type", feature_type)
-        if model_name:
-            query = query.eq("model_name", model_name)
+        # Apply filters using array filter helper
+        query = apply_array_filter(query, "user_id", user_id)
+        query = apply_array_filter(query, "feature_type", feature_type)
+        query = apply_array_filter(query, "model_name", model_name)
+        
         if start_date:
             query = query.gte("created_at", start_date)
         if end_date:
@@ -112,7 +122,9 @@ async def get_token_usage(
 async def get_token_usage_stats(
     start_date: Optional[str] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[str] = Query(None, description="End date (ISO format)"),
-    user_id: Optional[str] = Query(None, description="Filter by user ID"),
+    user_id: Optional[List[str]] = Query(None, description="Filter by user ID(s)"),
+    feature_type: Optional[List[str]] = Query(None, description="Filter by feature type(s)"),
+    model_name: Optional[List[str]] = Query(None, description="Filter by model name(s)"),
     current_user: User = Depends(get_admin_user)
 ):
     """Get aggregated token usage statistics"""
@@ -120,8 +132,11 @@ async def get_token_usage_stats(
         # Build base query
         query = supabase.table("token_usage").select("*")
         
-        if user_id:
-            query = query.eq("user_id", user_id)
+        # Apply all filters including feature_type and model_name
+        query = apply_array_filter(query, "user_id", user_id)
+        query = apply_array_filter(query, "feature_type", feature_type)
+        query = apply_array_filter(query, "model_name", model_name)
+        
         if start_date:
             query = query.gte("created_at", start_date)
         if end_date:

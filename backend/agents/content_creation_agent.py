@@ -264,8 +264,8 @@ class ContentCreationAgent:
                 "Loading user profile and preferences..."
             )
             
-            # Get user profile
-            profile_response = self.supabase.table("profiles").select("*").eq("id", user_id).execute()
+            # Get user profile including embeddings
+            profile_response = self.supabase.table("profiles").select("*, profile_embedding").eq("id", user_id).execute()
             
             if profile_response.data:
                 profile_data = profile_response.data[0]
@@ -282,30 +282,29 @@ class ContentCreationAgent:
         return state
     
     async def extract_business_context(self, state: ContentState) -> ContentState:
-        """Extract business context from user profile"""
+        """Extract business context from user profile, using embeddings if available"""
         try:
             profile = state.user_profile
             
-            state.business_context = {
-                "business_name": profile.get("business_name", ""),
-                "business_type": profile.get("business_type", []),
-                "industry": profile.get("industry", []),
-                "business_description": profile.get("business_description", ""),
-                "target_audience": profile.get("target_audience", []),
-                "unique_value_proposition": profile.get("unique_value_proposition", ""),
-                "brand_voice": profile.get("brand_voice", ""),
-                "brand_tone": profile.get("brand_tone", ""),
-                "social_media_platforms": profile.get("social_media_platforms", []),
-                "primary_goals": profile.get("primary_goals", []),
-                "content_themes": profile.get("content_themes", []),
-                "monthly_budget_range": profile.get("monthly_budget_range", ""),
-                "automation_level": profile.get("automation_level", ""),
-                "posting_frequency": profile.get("posting_frequency", "daily")
-            }
+            # Import embedding context utility
+            from utils.embedding_context import get_profile_context_with_embedding
+            
+            # Get context with embeddings (prefers embeddings if available)
+            context = get_profile_context_with_embedding(profile)
+            
+            # Ensure posting_frequency is always included (critical for post count)
+            if "posting_frequency" not in context or not context.get("posting_frequency"):
+                context["posting_frequency"] = profile.get("posting_frequency", "daily")
+            
+            # Store the full context including embeddings
+            state.business_context = context
             
             # Set platforms from user profile
             state.platforms = profile.get("social_media_platforms", [])
             
+            # Log posting frequency for debugging
+            logger.info(f"Posting frequency from profile: {profile.get('posting_frequency', 'Not set')}")
+            logger.info(f"Posting frequency in business context: {context.get('posting_frequency', 'Not set')}")
             
         except Exception as e:
             logger.error(f"Error extracting business context: {e}")
@@ -559,20 +558,11 @@ class ContentCreationAgent:
                 topic=self.get_topic_for_day(post_index, business_context)
             )
             
-            # Create the full prompt for content generation
-            full_prompt = f"""
-            {formatted_prompt}
+            # Build prompt using embeddings if available
+            from utils.embedding_context import build_embedding_prompt
             
-            Business Context:
-            - Business: {business_context['business_name']}
-            - Industry: {', '.join(business_context['industry'])}
-            - Brand Voice: {business_context['brand_voice']}
-            - Brand Tone: {business_context['brand_tone']}
-            - Target Audience: {', '.join(business_context['target_audience'])}
-            - Content Themes: {', '.join(business_context['content_themes'])}
-            - Business Description: {business_context.get('business_description', 'Not specified')}
-            - Unique Value Proposition: {business_context.get('unique_value_proposition', 'Not specified')}
-            - Products and Services: {business_context.get('products_and_services', 'Not specified')}
+            task_description = f"""
+            {formatted_prompt}
             
             Platform Requirements:
             - Platform: {platform}
@@ -582,7 +572,7 @@ class ContentCreationAgent:
             - Post Index: {post_index}
             - Scheduled Date: {scheduled_date}
             
-            Content Theme for this post: {self.get_content_theme_for_day(post_index, business_context['content_themes'], business_context)}
+            Content Theme for this post: {self.get_content_theme_for_day(post_index, business_context.get('content_themes', []), business_context)}
             
             Please generate content that:
             1. Matches the brand voice and tone
@@ -605,8 +595,14 @@ class ContentCreationAgent:
             }}
             """
             
+            # Use embedding-aware prompt builder
+            full_prompt = build_embedding_prompt(
+                context=business_context,
+                task_description=task_description,
+                additional_requirements=f"Platform: {platform}, Post Index: {post_index}, Scheduled Date: {scheduled_date}"
+            )
+            
             # Call OpenAI API with timeout
-            import asyncio
             response = await asyncio.wait_for(
                 self.openai_client.chat.completions.create(
                 model="gpt-4",
@@ -627,8 +623,6 @@ class ContentCreationAgent:
                     request_metadata={
                         "platform": platform,
                         "post_index": post_index,
-                        "campaign_id": campaign_id,
-                        "scheduled_date": scheduled_date
                         "campaign_id": campaign_id,
                         "scheduled_date": scheduled_date,
                         "scheduled_time": scheduled_time

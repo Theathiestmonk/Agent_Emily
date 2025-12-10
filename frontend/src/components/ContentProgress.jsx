@@ -18,7 +18,21 @@ const ContentProgress = ({ isVisible, onComplete }) => {
         if (!session?.session?.access_token) return
 
         // Create Server-Sent Events connection with token as query parameter
-        const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
+        // Get API URL with proper fallback
+        const getApiBaseUrl = () => {
+          const envUrl = import.meta.env.VITE_API_URL
+          if (envUrl) {
+            if (envUrl.startsWith(':')) {
+              return `http://localhost${envUrl}`
+            }
+            if (!envUrl.startsWith('http://') && !envUrl.startsWith('https://')) {
+              return `http://${envUrl}`
+            }
+            return envUrl
+          }
+          return 'http://localhost:8000'
+        }
+        const API_BASE_URL = getApiBaseUrl().replace(/\/$/, '')
         eventSource = new EventSource(`${API_BASE_URL}/content/progress-stream?token=${session.session.access_token}`)
 
         eventSource.onmessage = (event) => {
@@ -41,9 +55,16 @@ const ContentProgress = ({ isVisible, onComplete }) => {
         }
 
         eventSource.onerror = (error) => {
-          console.error('SSE error:', error)
-          // Reconnect after 3 seconds
-          setTimeout(setupSSE, 3000)
+          // Only log error, don't reconnect automatically
+          // EventSource will automatically try to reconnect, and we don't want infinite loops
+          if (eventSource.readyState === EventSource.CLOSED) {
+            console.error('SSE connection closed')
+          } else if (eventSource.readyState === EventSource.CONNECTING) {
+            // Connection is trying to reconnect, just wait
+            return
+          } else {
+            console.error('SSE error:', error)
+          }
         }
 
       } catch (error) {

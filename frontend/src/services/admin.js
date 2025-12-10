@@ -12,9 +12,28 @@ const adminAPI = {
   async getTokenUsage(filters = {}) {
     const params = new URLSearchParams();
     
-    if (filters.userId) params.append('user_id', filters.userId);
-    if (filters.featureType) params.append('feature_type', filters.featureType);
-    if (filters.modelName) params.append('model_name', filters.modelName);
+    // Handle array filters - append multiple query params for arrays
+    if (filters.userId) {
+      if (Array.isArray(filters.userId)) {
+        filters.userId.forEach(id => params.append('user_id', id));
+      } else {
+        params.append('user_id', filters.userId);
+      }
+    }
+    if (filters.featureType) {
+      if (Array.isArray(filters.featureType)) {
+        filters.featureType.forEach(type => params.append('feature_type', type));
+      } else {
+        params.append('feature_type', filters.featureType);
+      }
+    }
+    if (filters.modelName) {
+      if (Array.isArray(filters.modelName)) {
+        filters.modelName.forEach(model => params.append('model_name', model));
+      } else {
+        params.append('model_name', filters.modelName);
+      }
+    }
     
     // Format dates to ISO format with time
     if (filters.startDate) {
@@ -40,9 +59,31 @@ const adminAPI = {
   /**
    * Get aggregated token usage statistics
    */
-  async getTokenUsageStats(startDate = null, endDate = null, userId = null) {
+  async getTokenUsageStats(startDate = null, endDate = null, userId = null, featureType = null, modelName = null) {
     const params = new URLSearchParams();
-    if (userId) params.append('user_id', userId);
+    
+    // Handle array filters - append multiple query params for arrays
+    if (userId) {
+      if (Array.isArray(userId)) {
+        userId.forEach(id => params.append('user_id', id));
+      } else {
+        params.append('user_id', userId);
+      }
+    }
+    if (featureType) {
+      if (Array.isArray(featureType)) {
+        featureType.forEach(type => params.append('feature_type', type));
+      } else {
+        params.append('feature_type', featureType);
+      }
+    }
+    if (modelName) {
+      if (Array.isArray(modelName)) {
+        modelName.forEach(model => params.append('model_name', model));
+      } else {
+        params.append('model_name', modelName);
+      }
+    }
     
     // Format dates to ISO format with time
     if (startDate) {
@@ -88,9 +129,28 @@ const adminAPI = {
   async exportTokenUsage(format = 'json', filters = {}) {
     const params = new URLSearchParams();
     
-    if (filters.userId) params.append('user_id', filters.userId);
-    if (filters.featureType) params.append('feature_type', filters.featureType);
-    if (filters.modelName) params.append('model_name', filters.modelName);
+    // Handle array filters - append multiple query params for arrays
+    if (filters.userId) {
+      if (Array.isArray(filters.userId)) {
+        filters.userId.forEach(id => params.append('user_id', id));
+      } else {
+        params.append('user_id', filters.userId);
+      }
+    }
+    if (filters.featureType) {
+      if (Array.isArray(filters.featureType)) {
+        filters.featureType.forEach(type => params.append('feature_type', type));
+      } else {
+        params.append('feature_type', filters.featureType);
+      }
+    }
+    if (filters.modelName) {
+      if (Array.isArray(filters.modelName)) {
+        filters.modelName.forEach(model => params.append('model_name', model));
+      } else {
+        params.append('model_name', filters.modelName);
+      }
+    }
     
     // Format dates to ISO format with time
     if (filters.startDate) {

@@ -7,7 +7,21 @@ import { Send, User, Mic, Sparkles, Bot, Copy, Reply, Trash2 } from 'lucide-reac
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
+// Get API URL with proper fallback
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL
+  if (envUrl) {
+    if (envUrl.startsWith(':')) {
+      return `http://localhost${envUrl}`
+    }
+    if (!envUrl.startsWith('http://') && !envUrl.startsWith('https://')) {
+      return `http://${envUrl}`
+    }
+    return envUrl
+  }
+  return 'http://localhost:8000'
+}
+const API_BASE_URL = getApiBaseUrl().replace(/\/$/, '')
 
 const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 'idle', onSpeakingChange, messageFilter = 'all' }, ref) => {
   const { user } = useAuth()
