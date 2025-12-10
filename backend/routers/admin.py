@@ -3,11 +3,15 @@ Admin Router - Token Usage Tracking and Budget Analysis
 Provides admin-only endpoints for monitoring token usage, costs, and budget analysis
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Response
+from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 import os
+import csv
+import io
+import json
 from supabase import create_client, Client
 from auth import get_admin_user, User
 from services.pricing_service import PricingService
@@ -280,6 +284,111 @@ async def get_token_usage_stats(
     except Exception as e:
         logger.error(f"Error calculating token usage stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error calculating stats: {str(e)}")
+
+@router.get("/token-usage/export")
+async def export_token_usage(
+    format: str = Query(..., description="Export format: json or csv"),
+    user_id: Optional[List[str]] = Query(None, description="Filter by user ID(s)"),
+    feature_type: Optional[List[str]] = Query(None, description="Filter by feature type(s)"),
+    model_name: Optional[List[str]] = Query(None, description="Filter by model name(s)"),
+    start_date: Optional[str] = Query(None, description="Start date (ISO format)"),
+    end_date: Optional[str] = Query(None, description="End date (ISO format)"),
+    current_user: User = Depends(get_admin_user)
+):
+    """Export token usage data in JSON or CSV format"""
+    try:
+        if format not in ['json', 'csv']:
+            raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
+        
+        # Build query with same filters as get_token_usage
+        query = supabase.table("token_usage").select("*")
+        
+        # Apply filters using array filter helper
+        query = apply_array_filter(query, "user_id", user_id)
+        query = apply_array_filter(query, "feature_type", feature_type)
+        query = apply_array_filter(query, "model_name", model_name)
+        
+        if start_date:
+            query = query.gte("created_at", start_date)
+        if end_date:
+            query = query.lte("created_at", end_date)
+        
+        # Order by created_at descending
+        query = query.order("created_at", desc=True)
+        
+        # Get all data (no pagination for export)
+        response = query.execute()
+        data = response.data
+        
+        if format == 'json':
+            return Response(
+                content=json.dumps(data, indent=2, default=str),
+                media_type="application/json",
+                headers={
+                    "Content-Disposition": f"attachment; filename=token_usage_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                }
+            )
+        elif format == 'csv':
+            if not data:
+                # Return empty CSV with headers
+                output = io.StringIO()
+                writer = csv.writer(output)
+                writer.writerow([
+                    'id', 'user_id', 'feature_type', 'model_name', 'input_tokens', 
+                    'output_tokens', 'total_tokens', 'input_cost', 'output_cost', 
+                    'total_cost', 'created_at'
+                ])
+                output.seek(0)
+                return StreamingResponse(
+                    iter([output.getvalue()]),
+                    media_type="text/csv",
+                    headers={
+                        "Content-Disposition": f"attachment; filename=token_usage_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                    }
+                )
+            
+            # Generate CSV
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            # Write header
+            writer.writerow([
+                'id', 'user_id', 'feature_type', 'model_name', 'input_tokens', 
+                'output_tokens', 'total_tokens', 'input_cost', 'output_cost', 
+                'total_cost', 'created_at', 'request_metadata'
+            ])
+            
+            # Write data rows
+            for item in data:
+                writer.writerow([
+                    item.get('id', ''),
+                    item.get('user_id', ''),
+                    item.get('feature_type', ''),
+                    item.get('model_name', ''),
+                    item.get('input_tokens', 0),
+                    item.get('output_tokens', 0),
+                    item.get('total_tokens', 0),
+                    item.get('input_cost', 0.0),
+                    item.get('output_cost', 0.0),
+                    item.get('total_cost', 0.0),
+                    item.get('created_at', ''),
+                    json.dumps(item.get('request_metadata', {}), default=str)
+                ])
+            
+            output.seek(0)
+            return StreamingResponse(
+                iter([output.getvalue()]),
+                media_type="text/csv",
+                headers={
+                    "Content-Disposition": f"attachment; filename=token_usage_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                }
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting token usage: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error exporting token usage: {str(e)}")
 
 @router.get("/token-usage/users")
 async def get_users_with_usage(

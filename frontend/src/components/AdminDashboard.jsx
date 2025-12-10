@@ -15,7 +15,8 @@ import {
   RefreshCw,
   Calendar,
   Search,
-  X
+  X,
+  ChevronDown
 } from 'lucide-react'
 
 const AdminDashboard = () => {
@@ -31,24 +32,41 @@ const AdminDashboard = () => {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   
+  // Calculate default dates (last 7 days)
+  const getDefaultDates = () => {
+    const today = new Date()
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(today.getDate() - 7)
+    
+    return {
+      start_date: sevenDaysAgo.toISOString().split('T')[0], // YYYY-MM-DD
+      end_date: today.toISOString().split('T')[0] // YYYY-MM-DD
+    }
+  }
+
   // Filters
-  const [filters, setFilters] = useState({
-    user_id: [],
-    feature_type: [],
-    model_name: [],
-    start_date: '',
-    end_date: ''
+  const [filters, setFilters] = useState(() => {
+    const defaultDates = getDefaultDates()
+    return {
+      user_id: [],
+      feature_type: [],
+      model_name: [],
+      start_date: defaultDates.start_date,
+      end_date: defaultDates.end_date
+    }
   })
   const [showFilters, setShowFilters] = useState(false)
   const [openDropdowns, setOpenDropdowns] = useState({
     user: false,
     feature: false,
-    model: false
+    model: false,
+    download: false
   })
   const dropdownRefs = {
     user: useRef(null),
     feature: useRef(null),
-    model: useRef(null)
+    model: useRef(null),
+    download: useRef(null)
   }
   
   // Available options for filters
@@ -204,12 +222,13 @@ const AdminDashboard = () => {
   }
 
   const clearFilters = () => {
+    const defaultDates = getDefaultDates()
     setFilters({
       user_id: [],
       feature_type: [],
       model_name: [],
-      start_date: '',
-      end_date: ''
+      start_date: defaultDates.start_date,
+      end_date: defaultDates.end_date
     })
     setPage(1)
   }
@@ -369,20 +388,42 @@ const AdminDashboard = () => {
                   Refresh
                 </button>
                 
-                <div className="flex gap-2">
+                {/* Unified Download Dropdown */}
+                <div className="relative" ref={dropdownRefs.download}>
                   <button
-                    onClick={() => handleExport('json')}
-                    className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm"
-                  >
-                    Export JSON
-                  </button>
-                  <button
-                    onClick={() => handleExport('csv')}
+                    onClick={() => toggleDropdown('download')}
                     className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm"
                   >
                     <Download className="w-4 h-4" />
-                    Export CSV
+                    Download
+                    <ChevronDown className="w-4 h-4" />
                   </button>
+                  {openDropdowns.download && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-lg shadow-lg z-20">
+                      <div className="py-1">
+                        <button
+                          onClick={() => {
+                            handleExport('csv')
+                            setOpenDropdowns(prev => ({ ...prev, download: false }))
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                        >
+                          <Download className="w-4 h-4" />
+                          Download as CSV
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleExport('json')
+                            setOpenDropdowns(prev => ({ ...prev, download: false }))
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                        >
+                          <Download className="w-4 h-4" />
+                          Download as JSON
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
