@@ -1311,41 +1311,11 @@ Format as a clear, numbered list with section titles and brief descriptions."""
             # Determine if images should be included
             include_images = image_option in [ImageOption.YES, ImageOption.BOTH]
             
-            # Get business context for personalized content
+            # Get business context for personalized content (already includes embeddings if available)
             business_context = state.get("business_context", {})
-            business_name = business_context.get("business_name", "")
-            brand_voice = business_context.get("brand_voice", "")
-            target_audience = business_context.get("target_audience", "")
-            industry = business_context.get("industry", "")
             
-            # Build comprehensive context string from user profile
-            context_info = ""
-            if business_name:
-                context_info += f"\nBUSINESS NAME: {business_name}"
-            if industry:
-                context_info += f"\nINDUSTRY: {industry}"
-            if target_audience:
-                context_info += f"\nTARGET AUDIENCE: {target_audience}"
-            if brand_voice:
-                context_info += f"\nBRAND VOICE: {brand_voice}"
-            
-            # Get additional profile information
-            brand_tone = business_context.get("brand_tone", "")
-            business_description = business_context.get("business_description", "")
-            brand_personality = business_context.get("brand_personality", "")
-            brand_values = business_context.get("brand_values", [])
-            
-            if brand_tone:
-                context_info += f"\nBRAND TONE: {brand_tone}"
-            if business_description:
-                context_info += f"\nBUSINESS DESCRIPTION: {business_description}"
-            if brand_personality:
-                context_info += f"\nBRAND PERSONALITY: {brand_personality}"
-            if brand_values:
-                values_str = ", ".join(brand_values) if isinstance(brand_values, list) else str(brand_values)
-                context_info += f"\nBRAND VALUES: {values_str}"
-            
-            prompt = f"""Write a comprehensive {blog_type} blog post based on this outline:
+            # Build task description
+            task_description = f"""Write a comprehensive {blog_type} blog post based on this outline:
 
 OUTLINE:
 {outline}
@@ -1354,7 +1324,6 @@ TOPIC: {blog_topic}
 TARGET LENGTH: {word_count_target} words
 SEO KEYWORDS (integrate naturally into content, NOT as hashtags): {', '.join(keywords) if keywords else 'None - use topic-related terms naturally'}
 INCLUDE IMAGES IN CONTENT: {'Yes - mention image concepts naturally in text where appropriate' if include_images else 'No - text only, no image references'}
-{context_info}
 
 CRITICAL STRUCTURE REQUIREMENTS:
 - Write in clean, professional HTML format with proper semantic structure
@@ -1393,6 +1362,15 @@ Return a JSON object with:
     "word_count": <number>,
     "reading_time": <number in minutes>
 }}"""
+            
+            # Use embedding-aware prompt builder
+            from utils.embedding_context import build_embedding_prompt
+            
+            prompt = build_embedding_prompt(
+                context=business_context,
+                task_description=task_description,
+                additional_requirements=f"Blog Type: {blog_type}, Topic: {blog_topic}, Target Length: {word_count_target} words, Keywords: {', '.join(keywords) if keywords else 'None'}, Include Images: {'Yes' if include_images else 'No'}"
+            )
             
             response = self.client.chat.completions.create(
                 model="gpt-4o",
@@ -1450,9 +1428,10 @@ Return a JSON object with:
             }
     
     async def _load_user_profile(self, user_id: str) -> Dict[str, Any]:
-        """Load user profile from Supabase"""
+        """Load user profile from Supabase including embeddings"""
         try:
-            response = self.supabase.table("profiles").select("*").eq("id", user_id).execute()
+            # Include embeddings in the query
+            response = self.supabase.table("profiles").select("*, profile_embedding").eq("id", user_id).execute()
             
             if response.data and len(response.data) > 0:
                 return response.data[0]
@@ -1465,18 +1444,11 @@ Return a JSON object with:
             return {}
     
     def _extract_business_context(self, profile_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract business context from user profile"""
-        return {
-            "business_name": profile_data.get("business_name", ""),
-            "industry": ", ".join(profile_data.get("industry", [])) if isinstance(profile_data.get("industry"), list) else profile_data.get("industry", ""),
-            "target_audience": ", ".join(profile_data.get("target_audience", [])) if isinstance(profile_data.get("target_audience"), list) else profile_data.get("target_audience", ""),
-            "brand_voice": profile_data.get("brand_voice", ""),
-            "brand_tone": profile_data.get("brand_tone", ""),
-            "business_description": profile_data.get("business_description", ""),
-            "content_goals": profile_data.get("primary_goals", []),
-            "brand_personality": profile_data.get("brand_personality", ""),
-            "brand_values": profile_data.get("brand_values", [])
-        }
+        """Extract business context from user profile, using embeddings if available"""
+        from utils.embedding_context import get_profile_context_with_embedding
+        
+        # Use embedding context utility which prefers embeddings if available
+        return get_profile_context_with_embedding(profile_data)
     
     async def _publish_to_wordpress(self, blog: Dict[str, Any], wordpress_connection: Dict[str, Any]) -> Optional[str]:
         """Publish blog to WordPress using REST API"""

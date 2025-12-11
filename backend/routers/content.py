@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from typing import List, Optional
 import os
+import logging
 from datetime import datetime, timedelta
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from pydantic import BaseModel
 import openai
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -486,6 +489,9 @@ async def delete_content(
             # Continue with content deletion even if image deletion fails
             pass
         
+        # Check if post was scheduled before deletion
+        was_scheduled = content.get("status", "").lower() == "scheduled"
+        
         # Delete the content post
         delete_response = supabase_admin.table("content_posts").delete().eq("id", content_id).execute()
         
@@ -494,6 +500,18 @@ async def delete_content(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to delete content"
             )
+        
+        # Cancel scheduled task if post was scheduled
+        if was_scheduled:
+            try:
+                from scheduler.post_publisher import get_post_publisher
+                publisher = get_post_publisher()
+                if publisher:
+                    await publisher.cancel_scheduled_post(content_id)
+                    logger.info(f"Cancelled scheduled task for deleted post {content_id}")
+            except Exception as cancel_error:
+                # Log warning but don't fail deletion if cancellation fails
+                logger.warning(f"Could not cancel scheduled task for deleted post {content_id}: {cancel_error}")
         
         return {
             "success": True,

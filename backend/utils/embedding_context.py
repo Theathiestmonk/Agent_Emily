@@ -19,17 +19,20 @@ def get_profile_context_with_embedding(profile_data: Dict[str, Any]) -> Dict[str
     Returns:
         Dictionary with either embedding-based or full context
     """
-    # Check if embedding exists
-    if profile_data.get("profile_embedding"):
+        # Check if embedding exists
+    embedding = profile_data.get("profile_embedding")
+    if embedding:
         # Use embedding-based context (much smaller)
         return {
             "use_embedding": True,
-            "profile_embedding": profile_data.get("profile_embedding"),
+            "profile_embedding": embedding,
             # Keep minimal essential fields for reference
             "business_name": profile_data.get("business_name", ""),
             "brand_voice": profile_data.get("brand_voice", ""),
             "brand_tone": profile_data.get("brand_tone", ""),
-            "social_media_platforms": profile_data.get("social_media_platforms", [])
+            "social_media_platforms": profile_data.get("social_media_platforms", []),
+            # Include posting_frequency - critical for post count calculation
+            "posting_frequency": profile_data.get("posting_frequency", "daily")
         }
     else:
         # Fallback to full context if embedding not available

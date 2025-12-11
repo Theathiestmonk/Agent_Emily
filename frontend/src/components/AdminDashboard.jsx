@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { adminAPI } from '../services/admin'
@@ -15,7 +15,8 @@ import {
   RefreshCw,
   Calendar,
   Search,
-  X
+  X,
+  ChevronDown
 } from 'lucide-react'
 
 const AdminDashboard = () => {
@@ -31,15 +32,42 @@ const AdminDashboard = () => {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   
+  // Calculate default dates (last 7 days)
+  const getDefaultDates = () => {
+    const today = new Date()
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(today.getDate() - 7)
+    
+    return {
+      start_date: sevenDaysAgo.toISOString().split('T')[0], // YYYY-MM-DD
+      end_date: today.toISOString().split('T')[0] // YYYY-MM-DD
+    }
+  }
+
   // Filters
-  const [filters, setFilters] = useState({
-    user_id: '',
-    feature_type: '',
-    model_name: '',
-    start_date: '',
-    end_date: ''
+  const [filters, setFilters] = useState(() => {
+    const defaultDates = getDefaultDates()
+    return {
+      user_id: [],
+      feature_type: [],
+      model_name: [],
+      start_date: defaultDates.start_date,
+      end_date: defaultDates.end_date
+    }
   })
   const [showFilters, setShowFilters] = useState(false)
+  const [openDropdowns, setOpenDropdowns] = useState({
+    user: false,
+    feature: false,
+    model: false,
+    download: false
+  })
+  const dropdownRefs = {
+    user: useRef(null),
+    feature: useRef(null),
+    model: useRef(null),
+    download: useRef(null)
+  }
   
   // Available options for filters
   const [availableUsers, setAvailableUsers] = useState([])
@@ -52,13 +80,34 @@ const AdminDashboard = () => {
     fetchUsers()
   }, [page, pageSize, filters])
 
+  // Fetch all available options for filters (only once on mount)
+  useEffect(() => {
+    fetchAllOptions()
+  }, [])
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      Object.keys(dropdownRefs).forEach(key => {
+        if (dropdownRefs[key].current && !dropdownRefs[key].current.contains(event.target)) {
+          setOpenDropdowns(prev => ({ ...prev, [key]: false }))
+        }
+      })
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
   const fetchData = async () => {
     try {
       setLoading(true)
       const result = await adminAPI.getTokenUsage({
-        userId: filters.user_id || null,
-        featureType: filters.feature_type || null,
-        modelName: filters.model_name || null,
+        userId: filters.user_id.length > 0 ? filters.user_id : null,
+        featureType: filters.feature_type.length > 0 ? filters.feature_type : null,
+        modelName: filters.model_name.length > 0 ? filters.model_name : null,
         startDate: filters.start_date || null,
         endDate: filters.end_date || null,
         limit: pageSize,
@@ -73,13 +122,9 @@ const AdminDashboard = () => {
       // API returns array directly
       const data = Array.isArray(result) ? result : []
       setTokenUsage(data)
+      // Note: Total count should come from backend with count query
+      // For now, we'll use the length, but ideally backend should return total count
       setTotal(data.length)
-      
-      // Extract unique values for filter options
-      const featureTypes = [...new Set(data.map(item => item.feature_type))]
-      const models = [...new Set(data.map(item => item.model_name))]
-      setAvailableFeatureTypes(featureTypes)
-      setAvailableModels(models)
     } catch (error) {
       showError('Failed to load token usage data')
       console.error('Error fetching token usage:', error)
@@ -93,7 +138,9 @@ const AdminDashboard = () => {
       const result = await adminAPI.getTokenUsageStats(
         filters.start_date || null,
         filters.end_date || null,
-        filters.user_id || null
+        filters.user_id.length > 0 ? filters.user_id : null,
+        filters.feature_type.length > 0 ? filters.feature_type : null,
+        filters.model_name.length > 0 ? filters.model_name : null
       )
       
       if (result.error) {
@@ -128,25 +175,89 @@ const AdminDashboard = () => {
     }
   }
 
+  const fetchAllOptions = async () => {
+    try {
+      // Fetch all data without filters to get all available options
+      const result = await adminAPI.getTokenUsage({
+        userId: null,
+        featureType: null,
+        modelName: null,
+        startDate: null,
+        endDate: null,
+        limit: 1000, // Get a large sample to extract unique values
+        offset: 0
+      })
+      
+      if (result.error) {
+        console.error('Error fetching options:', result.error)
+        return
+      }
+      
+      const data = Array.isArray(result) ? result : []
+      
+      // Extract unique values for filter options
+      const featureTypes = [...new Set(data.map(item => item.feature_type).filter(Boolean))]
+      const models = [...new Set(data.map(item => item.model_name).filter(Boolean))]
+      
+      setAvailableFeatureTypes(featureTypes.sort())
+      setAvailableModels(models.sort())
+    } catch (error) {
+      console.error('Error fetching filter options:', error)
+    }
+  }
+
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }))
     setPage(1) // Reset to first page when filter changes
   }
 
+  const handleMultiSelectChange = (key, value, checked) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: checked
+        ? [...prev[key], value]
+        : prev[key].filter(item => item !== value)
+    }))
+    setPage(1) // Reset to first page when filter changes
+  }
+
   const clearFilters = () => {
+    const defaultDates = getDefaultDates()
     setFilters({
-      user_id: '',
-      feature_type: '',
-      model_name: '',
-      start_date: '',
-      end_date: ''
+      user_id: [],
+      feature_type: [],
+      model_name: [],
+      start_date: defaultDates.start_date,
+      end_date: defaultDates.end_date
     })
+    setPage(1)
+  }
+
+  const toggleDropdown = (dropdown) => {
+    setOpenDropdowns(prev => ({
+      ...prev,
+      [dropdown]: !prev[dropdown]
+    }))
+  }
+
+  const removeFilter = (key, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: prev[key].filter(item => item !== value)
+    }))
     setPage(1)
   }
 
   const handleExport = async (format) => {
     try {
-      const result = await adminAPI.exportTokenUsage(filters, format)
+      const exportFilters = {
+        userId: filters.user_id.length > 0 ? filters.user_id : null,
+        featureType: filters.feature_type.length > 0 ? filters.feature_type : null,
+        modelName: filters.model_name.length > 0 ? filters.model_name : null,
+        startDate: filters.start_date || null,
+        endDate: filters.end_date || null
+      }
+      const result = await adminAPI.exportTokenUsage(format, exportFilters)
       if (result.error) {
         showError(result.error)
       } else {
@@ -234,9 +345,9 @@ const AdminDashboard = () => {
                   <div>
                     <p className="text-sm text-gray-600">Active Users</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {filters.user_id 
-                        ? formatNumber(1) 
-                        : formatNumber(usersList.length)}
+                      {stats.by_user && stats.by_user.length > 0
+                        ? formatNumber(stats.by_user.length)
+                        : formatNumber(0)}
                     </p>
                   </div>
                   <Users className="w-8 h-8 text-pink-500" />
@@ -257,7 +368,7 @@ const AdminDashboard = () => {
                   Filters
                 </button>
                 
-                {(filters.user_id || filters.feature_type || filters.model_name || filters.start_date || filters.end_date) && (
+                {(filters.user_id.length > 0 || filters.feature_type.length > 0 || filters.model_name.length > 0 || filters.start_date || filters.end_date) && (
                   <button
                     onClick={clearFilters}
                     className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
@@ -277,89 +388,239 @@ const AdminDashboard = () => {
                   Refresh
                 </button>
                 
-                <div className="flex gap-2">
+                {/* Unified Download Dropdown */}
+                <div className="relative" ref={dropdownRefs.download}>
                   <button
-                    onClick={() => handleExport('json')}
-                    className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm"
-                  >
-                    Export JSON
-                  </button>
-                  <button
-                    onClick={() => handleExport('csv')}
+                    onClick={() => toggleDropdown('download')}
                     className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm"
                   >
                     <Download className="w-4 h-4" />
-                    Export CSV
+                    Download
+                    <ChevronDown className="w-4 h-4" />
                   </button>
+                  {openDropdowns.download && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-lg shadow-lg z-20">
+                      <div className="py-1">
+                        <button
+                          onClick={() => {
+                            handleExport('csv')
+                            setOpenDropdowns(prev => ({ ...prev, download: false }))
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                        >
+                          <Download className="w-4 h-4" />
+                          Download as CSV
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleExport('json')
+                            setOpenDropdowns(prev => ({ ...prev, download: false }))
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                        >
+                          <Download className="w-4 h-4" />
+                          Download as JSON
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Filter Panel */}
             {showFilters && (
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 pt-4 border-t">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
-                  <select
-                    value={filters.user_id}
-                    onChange={(e) => handleFilterChange('user_id', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  >
-                    <option value="">All Users</option>
-                    {availableUsers.map(u => (
-                      <option key={u.user_id} value={u.user_id}>
-                        {u.name || u.email} ({formatCurrency(u.total_cost)})
-                      </option>
+              <div className="mt-4 space-y-4 pt-4 border-t">
+                {/* Selected Filters Display */}
+                {(filters.user_id.length > 0 || filters.feature_type.length > 0 || filters.model_name.length > 0) && (
+                  <div className="flex flex-wrap gap-2">
+                    {filters.user_id.map(userId => {
+                      const user = availableUsers.find(u => u.user_id === userId)
+                      return (
+                        <span
+                          key={`user-${userId}`}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs"
+                        >
+                          User: {user?.name || user?.email || userId}
+                          <button
+                            onClick={() => removeFilter('user_id', userId)}
+                            className="hover:text-blue-900"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )
+                    })}
+                    {filters.feature_type.map(feature => (
+                      <span
+                        key={`feature-${feature}`}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs"
+                      >
+                        Feature: {feature}
+                        <button
+                          onClick={() => removeFilter('feature_type', feature)}
+                          className="hover:text-purple-900"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
                     ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Feature Type</label>
-                  <select
-                    value={filters.feature_type}
-                    onChange={(e) => handleFilterChange('feature_type', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  >
-                    <option value="">All Features</option>
-                    {availableFeatureTypes.map(ft => (
-                      <option key={ft} value={ft}>{ft}</option>
+                    {filters.model_name.map(model => (
+                      <span
+                        key={`model-${model}`}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs"
+                      >
+                        Model: {model}
+                        <button
+                          onClick={() => removeFilter('model_name', model)}
+                          className="hover:text-green-900"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
                     ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
-                  <select
-                    value={filters.model_name}
-                    onChange={(e) => handleFilterChange('model_name', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  >
-                    <option value="">All Models</option>
-                    {availableModels.map(m => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                  <input
-                    type="date"
-                    value={filters.start_date}
-                    onChange={(e) => handleFilterChange('start_date', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                  <input
-                    type="date"
-                    value={filters.end_date}
-                    onChange={(e) => handleFilterChange('end_date', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  {/* User Multi-Select */}
+                  <div className="relative" ref={dropdownRefs.user}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => toggleDropdown('user')}
+                        className="w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white flex items-center justify-between"
+                      >
+                        <span className="text-gray-700">
+                          {filters.user_id.length === 0
+                            ? 'All Users'
+                            : `${filters.user_id.length} selected`}
+                        </span>
+                        <Search className="w-4 h-4 text-gray-400" />
+                      </button>
+                      {openDropdowns.user && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          <div className="p-2">
+                            {availableUsers.map(u => (
+                              <label
+                                key={u.user_id}
+                                className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={filters.user_id.includes(u.user_id)}
+                                  onChange={(e) => handleMultiSelectChange('user_id', u.user_id, e.target.checked)}
+                                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">
+                                  {u.name || u.email} ({formatCurrency(u.total_cost)})
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Feature Type Multi-Select */}
+                  <div className="relative" ref={dropdownRefs.feature}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Feature Type</label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => toggleDropdown('feature')}
+                        className="w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white flex items-center justify-between"
+                      >
+                        <span className="text-gray-700">
+                          {filters.feature_type.length === 0
+                            ? 'All Features'
+                            : `${filters.feature_type.length} selected`}
+                        </span>
+                        <Search className="w-4 h-4 text-gray-400" />
+                      </button>
+                      {openDropdowns.feature && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          <div className="p-2">
+                            {availableFeatureTypes.map(ft => (
+                              <label
+                                key={ft}
+                                className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={filters.feature_type.includes(ft)}
+                                  onChange={(e) => handleMultiSelectChange('feature_type', ft, e.target.checked)}
+                                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">{ft}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Model Multi-Select */}
+                  <div className="relative" ref={dropdownRefs.model}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => toggleDropdown('model')}
+                        className="w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white flex items-center justify-between"
+                      >
+                        <span className="text-gray-700">
+                          {filters.model_name.length === 0
+                            ? 'All Models'
+                            : `${filters.model_name.length} selected`}
+                        </span>
+                        <Search className="w-4 h-4 text-gray-400" />
+                      </button>
+                      {openDropdowns.model && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          <div className="p-2">
+                            {availableModels.map(m => (
+                              <label
+                                key={m}
+                                className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={filters.model_name.includes(m)}
+                                  onChange={(e) => handleMultiSelectChange('model_name', m, e.target.checked)}
+                                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">{m}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                    <input
+                      type="date"
+                      value={filters.start_date}
+                      onChange={(e) => handleFilterChange('start_date', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                    <input
+                      type="date"
+                      value={filters.end_date}
+                      onChange={(e) => handleFilterChange('end_date', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
                 </div>
               </div>
             )}

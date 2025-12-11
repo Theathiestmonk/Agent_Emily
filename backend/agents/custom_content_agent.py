@@ -2419,14 +2419,16 @@ Return ONLY valid JSON, no markdown code blocks."""
         return state
     
     def _load_business_context(self, user_id: str) -> Dict[str, Any]:
-        """Load business context from user profile"""
+        """Load business context from user profile, using embeddings if available"""
         try:
-            # Get user profile from Supabase
-            response = self.supabase.table("profiles").select("*").eq("id", user_id).execute()
+            # Get user profile from Supabase including embeddings
+            response = self.supabase.table("profiles").select("*, profile_embedding").eq("id", user_id).execute()
             
             if response.data and len(response.data) > 0:
                 profile_data = response.data[0]
-                return self._extract_business_context(profile_data)
+                # Use embedding context utility
+                from utils.embedding_context import get_profile_context_with_embedding
+                return get_profile_context_with_embedding(profile_data)
             else:
                 logger.warning(f"No profile found for user {user_id}")
                 return self._get_default_business_context()

@@ -12,9 +12,28 @@ const adminAPI = {
   async getTokenUsage(filters = {}) {
     const params = new URLSearchParams();
     
-    if (filters.userId) params.append('user_id', filters.userId);
-    if (filters.featureType) params.append('feature_type', filters.featureType);
-    if (filters.modelName) params.append('model_name', filters.modelName);
+    // Handle array filters - append multiple query params for arrays
+    if (filters.userId) {
+      if (Array.isArray(filters.userId)) {
+        filters.userId.forEach(id => params.append('user_id', id));
+      } else {
+        params.append('user_id', filters.userId);
+      }
+    }
+    if (filters.featureType) {
+      if (Array.isArray(filters.featureType)) {
+        filters.featureType.forEach(type => params.append('feature_type', type));
+      } else {
+        params.append('feature_type', filters.featureType);
+      }
+    }
+    if (filters.modelName) {
+      if (Array.isArray(filters.modelName)) {
+        filters.modelName.forEach(model => params.append('model_name', model));
+      } else {
+        params.append('model_name', filters.modelName);
+      }
+    }
     
     // Format dates to ISO format with time
     if (filters.startDate) {
@@ -40,9 +59,31 @@ const adminAPI = {
   /**
    * Get aggregated token usage statistics
    */
-  async getTokenUsageStats(startDate = null, endDate = null, userId = null) {
+  async getTokenUsageStats(startDate = null, endDate = null, userId = null, featureType = null, modelName = null) {
     const params = new URLSearchParams();
-    if (userId) params.append('user_id', userId);
+    
+    // Handle array filters - append multiple query params for arrays
+    if (userId) {
+      if (Array.isArray(userId)) {
+        userId.forEach(id => params.append('user_id', id));
+      } else {
+        params.append('user_id', userId);
+      }
+    }
+    if (featureType) {
+      if (Array.isArray(featureType)) {
+        featureType.forEach(type => params.append('feature_type', type));
+      } else {
+        params.append('feature_type', featureType);
+      }
+    }
+    if (modelName) {
+      if (Array.isArray(modelName)) {
+        modelName.forEach(model => params.append('model_name', model));
+      } else {
+        params.append('model_name', modelName);
+      }
+    }
     
     // Format dates to ISO format with time
     if (startDate) {
@@ -87,10 +128,30 @@ const adminAPI = {
    */
   async exportTokenUsage(format = 'json', filters = {}) {
     const params = new URLSearchParams();
+    params.append('format', format);
     
-    if (filters.userId) params.append('user_id', filters.userId);
-    if (filters.featureType) params.append('feature_type', filters.featureType);
-    if (filters.modelName) params.append('model_name', filters.modelName);
+    // Handle array filters - append multiple query params for arrays
+    if (filters.userId) {
+      if (Array.isArray(filters.userId)) {
+        filters.userId.forEach(id => params.append('user_id', id));
+      } else {
+        params.append('user_id', filters.userId);
+      }
+    }
+    if (filters.featureType) {
+      if (Array.isArray(filters.featureType)) {
+        filters.featureType.forEach(type => params.append('feature_type', type));
+      } else {
+        params.append('feature_type', filters.featureType);
+      }
+    }
+    if (filters.modelName) {
+      if (Array.isArray(filters.modelName)) {
+        filters.modelName.forEach(model => params.append('model_name', model));
+      } else {
+        params.append('model_name', filters.modelName);
+      }
+    }
     
     // Format dates to ISO format with time
     if (filters.startDate) {
@@ -104,25 +165,51 @@ const adminAPI = {
       params.append('end_date', end.toISOString());
     }
     
-    const response = await api.get(`/admin/token-usage/export?format=${format}&${params.toString()}`, {
-      responseType: format === 'csv' ? 'blob' : 'json'
+    // Get auth token for the request
+    const { supabase } = await import('../lib/supabase');
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || localStorage.getItem('authToken');
+    
+    // Use fetch for blob responses to properly handle file downloads
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const apiUrl = API_BASE_URL.startsWith(':') 
+      ? `http://localhost${API_BASE_URL}` 
+      : (API_BASE_URL.startsWith('http') ? API_BASE_URL : `http://${API_BASE_URL}`);
+    
+    const response = await fetch(`${apiUrl}/admin/token-usage/export?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
     });
     
-    if (format === 'csv') {
-      // Create download link for CSV
-      const blob = new Blob([response.data], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `token_usage_${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      return { success: true };
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `Export failed: ${response.status}`);
     }
     
-    return response.data;
+    // Get filename from Content-Disposition header or use default
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = `token_usage_${new Date().toISOString().split('T')[0]}.${format}`;
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+      if (filenameMatch) {
+        filename = filenameMatch[1];
+      }
+    }
+    
+    // Create blob and download
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    return { success: true };
   },
 
   /**

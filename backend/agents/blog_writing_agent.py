@@ -109,7 +109,8 @@ class BlogWritingAgent:
             logger.info(f"Fetching profile for user: {state.user_id}")
             
             supabase_admin = self.get_supabase_admin()
-            response = supabase_admin.table("profiles").select("*").eq("id", state.user_id).execute()
+            # Include embeddings in the query
+            response = supabase_admin.table("profiles").select("*, profile_embedding").eq("id", state.user_id).execute()
             
             if response.data:
                 state.profile = response.data[0]
@@ -412,26 +413,21 @@ class BlogWritingAgent:
                 logger.warning("No industry information found in profile data, using fallback")
                 industry = "Business"
             
-            # Create blog generation prompt with detailed business context
-            prompt = f"""
-            You are an expert blog writer creating content for WordPress. Generate a comprehensive blog post with the following requirements:
-
-            BUSINESS CONTEXT:
-            - Author: {profile_name}
-            - Business Name: {business_name}
-            - Site: {site_name}
-            - Industry: {industry}
-            - Business Description: {business_description}
-            - Target Audience: {target_audience}
-            - Content Themes: {', '.join(content_themes) if isinstance(content_themes, list) else content_themes}
-            - Unique Value Proposition: {unique_value_proposition}
-            - Brand Voice: {brand_voice}
-            - Brand Tone: {brand_tone}
-            - Products/Services: {products_or_services}
+            # Build business context with embeddings if available
+            from utils.embedding_context import get_profile_context_with_embedding, build_embedding_prompt
+            
+            # Get context with embeddings
+            business_context = get_profile_context_with_embedding(state.profile)
+            
+            # Build task description
+            task_description = f"""
+            You are an expert blog writer creating content for WordPress. Generate a comprehensive blog post.
+            
+            Site: {site_name}
             
             REQUIREMENTS:
             1. Create an engaging, SEO-optimized blog title that reflects the business and industry
-            2. Write comprehensive blog content (1000-2000 words) that is SPECIFICALLY relevant to {business_name} and their {industry} industry
+            2. Write comprehensive blog content (1000-2000 words) that is SPECIFICALLY relevant to the business and their industry
             3. Create a compelling excerpt (150-160 characters) that highlights the business value
             4. Generate a URL-friendly slug
             5. Suggest relevant categories (2-3) that match the business industry and content themes
@@ -441,7 +437,7 @@ class BlogWritingAgent:
             9. Calculate reading time and word count
             10. Provide SEO score (1-100)
             
-            IMPORTANT: The content must be highly relevant to {business_name}'s business, industry, and target audience. Avoid generic topics and focus on content that would genuinely interest and provide value to their specific customers and prospects.
+            IMPORTANT: The content must be highly relevant to the business, industry, and target audience. Avoid generic topics and focus on content that would genuinely interest and provide value to their specific customers and prospects.
             
             OUTPUT FORMAT (JSON):
             {{
