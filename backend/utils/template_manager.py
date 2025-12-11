@@ -52,7 +52,7 @@ class TemplateManager:
         return self.templates_config.get("categories", [])
     
     def get_template_image_path(self, template_id: str) -> Optional[str]:
-        """Get the file path for a template image"""
+        """Get the file path for a template (HTML or image)"""
         template = self.get_template_by_id(template_id)
         if not template:
             return None
@@ -63,24 +63,49 @@ class TemplateManager:
         if not filename or not category:
             return None
         
-        image_path = self.templates_dir / category / filename
-        return str(image_path) if image_path.exists() else None
+        template_path = self.templates_dir / category / filename
+        return str(template_path) if template_path.exists() else None
     
-    def get_template_image_base64(self, template_id: str) -> Optional[str]:
-        """Get template image as base64 string"""
-        import base64
-        
-        image_path = self.get_template_image_path(template_id)
-        if not image_path:
+    def get_template_html_path(self, template_id: str) -> Optional[str]:
+        """Get the file path for an HTML template"""
+        return self.get_template_image_path(template_id)  # Same method, different name for clarity
+    
+    def get_template_html_content(self, template_id: str) -> Optional[str]:
+        """Get HTML template content as string"""
+        html_path = self.get_template_html_path(template_id)
+        if not html_path:
             return None
         
         try:
-            with open(image_path, 'rb') as f:
-                image_data = f.read()
-                base64_data = base64.b64encode(image_data).decode('utf-8')
-                return f"data:image/jpeg;base64,{base64_data}"
+            with open(html_path, 'r', encoding='utf-8') as f:
+                return f.read()
         except Exception as e:
-            print(f"Error loading template image {template_id}: {e}")
+            print(f"Error loading HTML template {template_id}: {e}")
+            return None
+    
+    def get_template_image_base64(self, template_id: str) -> Optional[str]:
+        """Get template (HTML or image) as base64 string"""
+        import base64
+        
+        template_path = self.get_template_image_path(template_id)
+        if not template_path:
+            return None
+        
+        try:
+            # Check if it's an HTML file
+            if template_path.lower().endswith('.html'):
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    html_content = f.read()
+                base64_data = base64.b64encode(html_content.encode('utf-8')).decode('utf-8')
+                return f"data:text/html;base64,{base64_data}"
+            else:
+                # Handle image files
+                with open(template_path, 'rb') as f:
+                    image_data = f.read()
+                    base64_data = base64.b64encode(image_data).decode('utf-8')
+                    return f"data:image/jpeg;base64,{base64_data}"
+        except Exception as e:
+            print(f"Error loading template {template_id}: {e}")
             return None
     
     def get_template_preview_url(self, template_id: str) -> Optional[str]:
@@ -127,9 +152,9 @@ class TemplateManager:
         if not template:
             return False
         
-        # Check if image file exists
-        image_path = self.get_template_image_path(template_id)
-        if not image_path or not os.path.exists(image_path):
+        # Check if template file exists (HTML or image)
+        template_path = self.get_template_image_path(template_id)
+        if not template_path or not os.path.exists(template_path):
             return False
         
         # Check required fields

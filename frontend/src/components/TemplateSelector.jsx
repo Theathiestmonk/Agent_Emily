@@ -45,7 +45,7 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
   const [customTemplateCategory, setCustomTemplateCategory] = useState('')
   const [customTemplateDescription, setCustomTemplateDescription] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [showFullImage, setShowFullImage] = useState({ isOpen: false, imageUrl: '', title: '' })
+  const [showFullImage, setShowFullImage] = useState({ isOpen: false, imageUrl: '', title: '', isHtml: false, htmlContent: '' })
   
   // Confirmation popup state
   const [showConfirmation, setShowConfirmation] = useState(false)
@@ -179,8 +179,22 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
   }
 
   const getTemplateImageUrl = (template) => {
-    // Always return the image URL since we only show templates that have files
+    // Return the template URL (works for both HTML and image templates)
     return `${API_BASE_URL}/api/template-editor/template-image/${template.category}/${template.filename}`
+  }
+
+  const getTemplatePreviewUrl = (template) => {
+    // For HTML templates, return PNG preview URL; for images, return the image itself
+    if (isHtmlTemplate(template)) {
+      return `${API_BASE_URL}/api/template-editor/template-preview-image/${template.category}/${template.filename}`
+    }
+    // For non-HTML templates, return the image URL
+    return `${API_BASE_URL}/api/template-editor/template-image/${template.category}/${template.filename}`
+  }
+
+  const isHtmlTemplate = (template) => {
+    // Check if template format is HTML or if filename ends with .html
+    return template.format === 'html' || (template.filename && template.filename.toLowerCase().endsWith('.html'))
   }
 
   if (!isOpen) return null
@@ -280,16 +294,53 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
                     {/* Template Preview */}
                     <div className="aspect-video bg-gray-100 relative overflow-hidden">
                       <img
-                        src={getTemplateImageUrl(template)}
+                        src={getTemplatePreviewUrl(template)}
                         alt={template.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-pointer"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation()
-                          setShowFullImage({ isOpen: true, imageUrl: getTemplateImageUrl(template), title: template.name })
+                          try {
+                            if (isHtmlTemplate(template)) {
+                              // For HTML templates, fetch HTML content for full preview
+                              const response = await fetch(getTemplateImageUrl(template))
+                              const htmlContent = await response.text()
+                              setShowFullImage({ 
+                                isOpen: true, 
+                                imageUrl: getTemplateImageUrl(template), 
+                                title: template.name,
+                                isHtml: true,
+                                htmlContent: htmlContent
+                              })
+                            } else {
+                              // For image templates, show the image
+                              setShowFullImage({ 
+                                isOpen: true, 
+                                imageUrl: getTemplateImageUrl(template), 
+                                title: template.name,
+                                isHtml: false,
+                                htmlContent: ''
+                              })
+                            }
+                          } catch (error) {
+                            console.error('Error loading template:', error)
+                          }
                         }}
                         onError={(e) => {
+                          // If PNG preview fails, fallback to iframe for HTML or show error for images
                           e.target.style.display = 'none'
-                          e.target.nextSibling.style.display = 'flex'
+                          const fallback = e.target.nextSibling
+                          if (fallback) {
+                            fallback.style.display = 'flex'
+                            // If it's an HTML template and preview failed, try loading iframe as fallback
+                            if (isHtmlTemplate(template)) {
+                              const iframe = document.createElement('iframe')
+                              iframe.src = getTemplateImageUrl(template)
+                              iframe.className = 'w-full h-full border-0'
+                              iframe.sandbox = 'allow-same-origin'
+                              iframe.title = template.name
+                              fallback.appendChild(iframe)
+                            }
+                          }
                         }}
                       />
                       <div className="absolute inset-0 bg-gray-100 flex items-center justify-center" style={{ display: 'none' }}>
@@ -306,9 +357,32 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-300 flex items-center justify-center">
                         <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                           <button
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation()
-                              setShowFullImage({ isOpen: true, imageUrl: getTemplateImageUrl(template), title: template.name })
+                              try {
+                                if (isHtmlTemplate(template)) {
+                                  // Fetch HTML content for full preview
+                                  const response = await fetch(getTemplateImageUrl(template))
+                                  const htmlContent = await response.text()
+                                  setShowFullImage({ 
+                                    isOpen: true, 
+                                    imageUrl: getTemplateImageUrl(template), 
+                                    title: template.name,
+                                    isHtml: true,
+                                    htmlContent: htmlContent
+                                  })
+                                } else {
+                                  setShowFullImage({ 
+                                    isOpen: true, 
+                                    imageUrl: getTemplateImageUrl(template), 
+                                    title: template.name,
+                                    isHtml: false,
+                                    htmlContent: ''
+                                  })
+                                }
+                              } catch (error) {
+                                console.error('Error loading template:', error)
+                              }
                             }}
                             className="bg-white rounded-lg px-4 py-2 flex items-center space-x-2 hover:bg-gray-50 transition-colors"
                           >
@@ -482,28 +556,39 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
         </div>
       )}
 
-      {/* Full Image Modal */}
+      {/* Full Image/HTML Preview Modal */}
       {showFullImage.isOpen && (
         <div className="fixed bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4 md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
-          <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-2xl">
+          <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-2xl flex flex-col">
             {/* Header */}
             <div className="flex justify-between items-center p-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-800">{showFullImage.title}</h3>
               <button
-                onClick={() => setShowFullImage({ isOpen: false, imageUrl: '', title: '' })}
+                onClick={() => setShowFullImage({ isOpen: false, imageUrl: '', title: '', isHtml: false, htmlContent: '' })}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             
-            {/* Image */}
-            <div className="p-4">
-              <img
-                src={showFullImage.imageUrl}
-                alt={showFullImage.title}
-                className="max-w-full max-h-[70vh] object-contain rounded-lg"
-              />
+            {/* Preview Content */}
+            <div className="p-4 flex-1 overflow-auto">
+              {showFullImage.isHtml && showFullImage.htmlContent ? (
+                <div 
+                  className="w-full bg-gray-50 rounded-lg p-6"
+                  dangerouslySetInnerHTML={{ __html: showFullImage.htmlContent }}
+                  style={{
+                    lineHeight: '1.8',
+                    color: '#374151'
+                  }}
+                />
+              ) : (
+                <img
+                  src={showFullImage.imageUrl}
+                  alt={showFullImage.title}
+                  className="max-w-full max-h-[70vh] object-contain rounded-lg mx-auto"
+                />
+              )}
             </div>
           </div>
         </div>
@@ -528,14 +613,27 @@ const TemplateSelector = ({ isOpen, onClose, onTemplateSelect, onCustomUpload })
             {/* Content */}
             <div className="p-6">
               <div className="text-center mb-6">
-                <div className="aspect-video bg-gray-100 rounded-lg mb-4 flex items-center justify-center max-w-xs mx-auto">
+                <div className="aspect-video bg-gray-100 rounded-lg mb-4 flex items-center justify-center max-w-xs mx-auto relative overflow-hidden">
                   <img
-                    src={getTemplateImageUrl(templateToConfirm)}
+                    src={getTemplatePreviewUrl(templateToConfirm)}
                     alt={templateToConfirm.name}
                     className="w-full h-full object-cover rounded-lg"
                     onError={(e) => {
+                      // Fallback to iframe for HTML templates if preview fails
                       e.target.style.display = 'none'
-                      e.target.nextSibling.style.display = 'flex'
+                      const fallback = e.target.nextSibling
+                      if (fallback) {
+                        fallback.style.display = 'flex'
+                        if (isHtmlTemplate(templateToConfirm)) {
+                          const iframe = document.createElement('iframe')
+                          iframe.src = getTemplateImageUrl(templateToConfirm)
+                          iframe.className = 'w-full h-full border-0 rounded-lg'
+                          iframe.sandbox = 'allow-same-origin'
+                          iframe.title = templateToConfirm.name
+                          iframe.style.minHeight = '200px'
+                          fallback.appendChild(iframe)
+                        }
+                      }
                     }}
                   />
                   <div className="absolute inset-0 bg-gray-100 flex items-center justify-center" style={{ display: 'none' }}>
