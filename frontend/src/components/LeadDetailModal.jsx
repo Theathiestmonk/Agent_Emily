@@ -338,7 +338,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
       // Don't update if either is missing
       return
     }
-
+    
     try {
       setUpdatingFollowUp(true)
       const isoDateTime = new Date(`${date}T${time}`).toISOString()
@@ -701,24 +701,24 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
           }
         } else {
           // Status change with remarks - show status change and remark separately
-          return {
-            type: 'status_change',
-            title: 'Chase',
-            description: {
+        return {
+          type: 'status_change',
+          title: 'Chase',
+          description: {
               text: `Changed status to: ${statusText} on `,
               boldPart: '',
               textAfter: '',
-              boldTime: timeStr,
-              textEnd: '.'
-            },
+            boldTime: timeStr,
+            textEnd: '.'
+          },
             remarks: remarks.trim(),
             remarksText: `Remark: ${remarks.trim()}`,
-            timestamp: history.created_at,
-            icon: Bot,
-            color: 'text-purple-600 bg-purple-50',
-            oldStatus: history.old_status,
-            newStatus: history.new_status,
-            isChaseMessage: true
+          timestamp: history.created_at,
+          icon: Bot,
+          color: 'text-purple-600 bg-purple-50',
+          oldStatus: history.old_status,
+          newStatus: history.new_status,
+          isChaseMessage: true
           }
         }
       } else {
@@ -818,34 +818,34 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
             `}</style>
             {/* Header Section */}
             <div className={`p-6 border-b ${statusConfig.borderColor}`}>
-              <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center shadow-md">
-                  {getPlatformIcon(lead.source_platform)}
-                </div>
-                <div>
+                {getPlatformIcon(lead.source_platform)}
+              </div>
+              <div>
                   <h2 className="text-2xl font-bold text-gray-900">
-                    {lead.name || 'Unknown Lead'}
-                  </h2>
-                  {/* Contact Information */}
-                  {(lead.email || lead.phone_number) && (
+                  {lead.name || 'Unknown Lead'}
+                </h2>
+                {/* Contact Information */}
+                {(lead.email || lead.phone_number) && (
                     <div className="flex flex-col gap-1.5 mt-2 text-xs text-gray-600">
-                      {lead.email && (
+                    {lead.email && (
                         <div className="flex items-center gap-1.5">
-                          <Mail className="w-3 h-3" />
-                          <span>{lead.email}</span>
-                        </div>
-                      )}
-                      {lead.phone_number && (
+                        <Mail className="w-3 h-3" />
+                        <span>{lead.email}</span>
+                      </div>
+                    )}
+                    {lead.phone_number && (
                         <div className="flex items-center gap-1.5">
-                          <Phone className="w-3 h-3" />
-                          <span>{lead.phone_number}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                        <Phone className="w-3 h-3" />
+                        <span>{lead.phone_number}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
+          </div>
 
             {/* Status and Follow-up Section */}
             <div className="p-6 space-y-4 flex-1 overflow-y-auto">
@@ -925,18 +925,18 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     placeholder="Time"
                   />
                 </div>
-                {followUpAt && (
-                  <button
-                    onClick={clearFollowUp}
-                    disabled={updatingFollowUp}
+                  {followUpAt && (
+                    <button
+                      onClick={clearFollowUp}
+                      disabled={updatingFollowUp}
                     className={`w-full px-2 py-1.5 bg-white hover:opacity-80 border ${statusConfig.borderColor} rounded-lg text-gray-700 text-xs font-medium transition-colors disabled:opacity-50`}
-                    title="Clear follow-up"
-                  >
+                      title="Clear follow-up"
+                    >
                     Clear Follow-up
-                  </button>
-                )}
+                    </button>
+                  )}
                 {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-gray-600 mx-auto" />}
-              </div>
+                </div>
 
             </div>
             
@@ -1002,9 +1002,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     </>
                   )}
                 </button>
-              </div>
-            )}
           </div>
+            )}
+        </div>
 
           {/* Right Column - Tabs and Content */}
           <div className="w-2/3 bg-white flex flex-col relative">
@@ -1015,34 +1015,34 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
             >
               <X className="w-6 h-6 text-gray-600" />
             </button>
-            
-            {/* Tabs */}
-            <div className="border-b border-gray-200 flex space-x-1 px-6 bg-transparent">
-              {[
-                { id: 'timeline', label: 'Timeline', icon: Clock },
-                { id: 'conversations', label: 'Conversations', icon: MessageCircle },
-                { id: 'email', label: 'Email', icon: MailIcon }
-              ].map(tab => {
-                const Icon = tab.icon
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
-                      activeTab === tab.id
-                        ? 'border-purple-600 text-purple-600'
-                        : 'border-transparent text-gray-600 hover:text-purple-600'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span className="font-medium">{tab.label}</span>
-                  </button>
-                )
-              })}
-            </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6">
+        {/* Tabs */}
+            <div className="border-b border-gray-200 flex space-x-1 px-6 bg-transparent">
+          {[
+            { id: 'timeline', label: 'Timeline', icon: Clock },
+            { id: 'conversations', label: 'Conversations', icon: MessageCircle },
+            { id: 'email', label: 'Email', icon: MailIcon }
+          ].map(tab => {
+            const Icon = tab.icon
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-600 hover:text-purple-600'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span className="font-medium">{tab.label}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'timeline' && (
             <div className="space-y-4">
               {loadingConversations ? (

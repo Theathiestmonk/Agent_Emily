@@ -20,6 +20,8 @@ load_dotenv()
 
 # Import the chatbot agent
 from agents.chatbot_agent import get_chatbot_response, get_chatbot_response_stream, search_business_news, get_user_profile
+# Import the intent-based chatbot
+from agents.emily import get_intent_based_response, get_intent_based_response_stream, clear_partial_payload_cache
 from supabase import create_client, Client
 
 # Initialize Supabase client
@@ -209,6 +211,147 @@ async def chat_with_bot_stream(
         )
         
     except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing streaming chat request: {str(e)}"
+        )
+
+@router.post("/chat/v2")
+async def chat_with_bot_v2(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Chat with the intent-based business assistant bot (v2)"""
+    try:
+        # Use the user_id from the request or fall back to current user
+        user_id = request.user_id or current_user.id
+        
+        # Get response from intent-based chatbot
+        result = get_intent_based_response(user_id, request.message, request.conversation_history)
+        
+        return {
+            "response": result.get("response", ""),
+            "options": result.get("options"),
+            "user_id": user_id,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in chat_with_bot_v2: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing chat request: {str(e)}"
+        )
+
+@router.post("/chat/v2/stream")
+async def chat_with_bot_v2_stream(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Stream chat response from the intent-based business assistant bot (v2)"""
+    try:
+        # Use the user_id from the request or fall back to current user
+        user_id = request.user_id or current_user.id
+        
+        # Save user message to conversation history
+        try:
+            user_message_data = {
+                "user_id": user_id,
+                "message_type": "user",
+                "content": request.message,
+                "metadata": {}
+            }
+            supabase_client.table("chatbot_conversations").insert(user_message_data).execute()
+        except Exception as e:
+            logger.error(f"Error saving user message to conversation history: {e}")
+        
+        full_response = ""
+        
+        def generate_stream() -> Generator[str, None, None]:
+            nonlocal full_response
+            options = None
+            content_data = None
+            try:
+                for chunk in get_intent_based_response_stream(user_id, request.message, request.conversation_history):
+                    # Check if chunk contains options
+                    if chunk.startswith('\n\nOPTIONS:'):
+                        try:
+                            options_json = chunk.replace('\n\nOPTIONS:', '')
+                            options = json.loads(options_json)
+                            # Send options separately
+                            yield f"data: {json.dumps({'options': options, 'done': False})}\n\n"
+                            continue
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to parse options from chunk: {chunk}")
+                    
+                    # Check if chunk contains content_data
+                    if chunk.startswith('\n\nCONTENT_DATA:'):
+                        try:
+                            content_data_json = chunk.replace('\n\nCONTENT_DATA:', '')
+                            content_data = json.loads(content_data_json)
+                            logger.info(f"📤 Parsed content_data from stream: {json.dumps(content_data, default=str)[:200]}...")
+                            logger.info(f"   Images in content_data: {content_data.get('images')}")
+                            # Send content_data separately
+                            sse_data = {'content_data': content_data, 'done': False}
+                            logger.info(f"📡 Sending content_data SSE event: {json.dumps(sse_data, default=str)[:200]}...")
+                            yield f"data: {json.dumps(sse_data, default=str)}\n\n"
+                            continue
+                        except json.JSONDecodeError as e:
+                            logger.error(f"Failed to parse content_data from chunk: {chunk[:200]}... Error: {e}")
+                        except Exception as e:
+                            logger.error(f"Error processing content_data chunk: {e}", exc_info=True)
+                    
+                    # Only add to full_response if it's not the OPTIONS or CONTENT_DATA chunk
+                    if not chunk.startswith('\n\nOPTIONS:') and not chunk.startswith('\n\nCONTENT_DATA:'):
+                        full_response += chunk
+                        # Format as Server-Sent Events
+                        yield f"data: {json.dumps({'content': chunk, 'done': False})}\n\n"
+                
+                # Save bot response to conversation history after streaming completes
+                try:
+                    bot_message_data = {
+                        "user_id": user_id,
+                        "message_type": "bot",
+                        "content": full_response,
+                        "metadata": {
+                            "options": options if options else None,
+                            "content_data": content_data if content_data else None
+                        }
+                    }
+                    supabase_client.table("chatbot_conversations").insert(bot_message_data).execute()
+                except Exception as e:
+                    logger.error(f"Error saving bot response to conversation history: {e}")
+                
+                # Send final done message with options and content_data if available
+                done_message = {
+                    'content': '', 
+                    'done': True, 
+                    'options': options, 
+                    'content_data': content_data
+                }
+                logger.info(f"📤 Sending final done message with content_data: {content_data is not None}")
+                if content_data:
+                    logger.info(f"   Content_data images: {content_data.get('images')}")
+                yield f"data: {json.dumps(done_message, default=str)}\n\n"
+                
+            except Exception as e:
+                logger.error(f"Error in generate_stream: {e}", exc_info=True)
+                # Send error but preserve any content we already sent
+                error_msg = f"Error: {str(e)}"
+                yield f"data: {json.dumps({'content': error_msg, 'done': True, 'error': True, 'options': options})}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream",
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in chat_with_bot_v2_stream: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing streaming chat request: {str(e)}"
@@ -410,6 +553,26 @@ async def get_post_reminder(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting post reminder: {str(e)}"
+        )
+
+@router.post("/chat/v2/refresh")
+async def refresh_chat_v2(
+    current_user: User = Depends(get_current_user)
+):
+    """Clear the partial payload cache and reset the intent-based chatbot state for a user"""
+    try:
+        user_id = current_user.id
+        clear_partial_payload_cache(user_id)
+        logger.info(f"Refreshed chat state for user {user_id}")
+        return {
+            "success": True,
+            "message": "Chat state refreshed successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error refreshing chat state: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error refreshing chat state: {str(e)}"
         )
 
 @router.get("/health")

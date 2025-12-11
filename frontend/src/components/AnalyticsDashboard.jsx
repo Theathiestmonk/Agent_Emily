@@ -385,8 +385,8 @@ const AnalyticsDashboard = () => {
                     </span>
                   )}
                 </button>
-                
-                {/* Refresh Button */}
+              
+              {/* Refresh Button */}
                 <button
                   onClick={handleRefresh}
                   disabled={refreshing}

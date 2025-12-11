@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
-import { Send, User, Mic, Sparkles, Bot, Copy, Reply, Trash2 } from 'lucide-react'
+import { Send, User, Mic, Sparkles, Bot, Copy, Reply, Trash2, Heart, MessageCircle, Share2, Bookmark, MoreHorizontal } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -23,7 +23,7 @@ const getApiBaseUrl = () => {
 }
 const API_BASE_URL = getApiBaseUrl().replace(/\/$/, '')
 
-const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 'idle', onSpeakingChange, messageFilter = 'all' }, ref) => {
+const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 'idle', onSpeakingChange, messageFilter = 'all', useV2 = false }, ref) => {
   const { user } = useAuth()
   const { showError, showSuccess } = useNotifications()
   const navigate = useNavigate()
@@ -79,111 +79,113 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
 
   useEffect(() => {
     scrollToBottom()
-    // Don't auto-refocus if user is selecting text or if a modal is open
-    if (inputRef.current && !isCallActive && !isLoading && !isSelectingTextRef.current && !isModalOpen()) {
-      setTimeout(() => {
-        if (!isSelectingTextRef.current && !isModalOpen()) {
-          inputRef.current?.focus()
+    // Aggressively refocus after messages update - NO RESTRICTIONS
+    if (inputRef.current && !isCallActive && !isLoading && !isStreaming) {
+      // Use requestAnimationFrame for immediate refocus after messages update
+      requestAnimationFrame(() => {
+        if (!isCallActive && !isLoading && !isStreaming && inputRef.current) {
+          inputRef.current.focus()
         }
-      }, 100)
+      })
     }
-  }, [messages, isLoading, isCallActive])
+  }, [messages, isLoading, isStreaming, isCallActive])
 
   // Auto-focus input when component mounts and maintain focus
   useEffect(() => {
-    if (inputRef.current && !isCallActive && !isModalOpen()) {
-      inputRef.current.focus()
-    }
+    // Use a small delay to ensure the component is fully rendered
+    const timer = setTimeout(() => {
+      if (inputRef.current && !isCallActive && !isModalOpen()) {
+        inputRef.current.focus()
+      }
+    }, 100)
+    
+    return () => clearTimeout(timer)
   }, [])
 
-  // Keep focus on input field at all times (when not in call), but allow text selection
+  // EXTRA AGGRESSIVE: Focus check on every render - NO RESTRICTIONS
+  useEffect(() => {
+    if (isCallActive || isLoading || isStreaming) return
+    
+    // Use requestAnimationFrame to check focus after render
+    requestAnimationFrame(() => {
+      if (inputRef.current && document.activeElement !== inputRef.current) {
+        inputRef.current.focus()
+      }
+    })
+  })
+
+  // Keep focus on input field at all times - NO RESTRICTIONS
   useEffect(() => {
     if (isCallActive) return // Don't focus during calls
     
     const maintainFocus = () => {
-      // Don't refocus if user is selecting text or if a modal is open
-      if (isSelectingTextRef.current || isModalOpen()) return
+      if (!inputRef.current) return
       
-      if (inputRef.current && document.activeElement !== inputRef.current) {
-        // Check if user has selected text
-        const selection = window.getSelection()
-        if (selection && selection.toString().length > 0) {
-          return // Don't refocus if text is selected
-        }
-        // Don't refocus if active element is inside a modal
-        const activeElement = document.activeElement
-        if (activeElement && activeElement.closest('[role="dialog"], .modal, [class*="modal"], [class*="Modal"]')) {
-          return
-        }
+      // ALWAYS focus - no restrictions, no conditions
+      if (document.activeElement !== inputRef.current) {
         inputRef.current.focus()
       }
     }
 
-    // Set up interval to check and maintain focus (less aggressive)
-    const focusInterval = setInterval(maintainFocus, 500) // Increased from 100ms to 500ms
+    // Set up interval to check and maintain focus (EXTREMELY aggressive)
+    const focusInterval = setInterval(maintainFocus, 25) // Check every 25ms
 
-    // Track mouse down/up for text selection
-    const handleMouseDown = (e) => {
-      mouseDownTimeRef.current = Date.now()
-      // Check if clicking on a message bubble or its content
+    // Focus on any click - NO RESTRICTIONS
+    const handleClick = (e) => {
       const target = e.target
-      const messageBubble = target.closest('.message-bubble, [class*="chatbot-bubble"]')
-      if (messageBubble) {
-        isSelectingTextRef.current = true
+      
+      // If clicking anywhere except our input, refocus immediately
+      if (target !== inputRef.current && !inputRef.current?.contains(target)) {
+        setTimeout(() => {
+          if (inputRef.current) {
+            inputRef.current.focus()
+          }
+        }, 10)
       }
     }
 
-    const handleMouseUp = (e) => {
-      const timeDiff = Date.now() - mouseDownTimeRef.current
-      // If mouse was held down for more than 100ms, likely a text selection
-      if (timeDiff > 100) {
-        const selection = window.getSelection()
-        if (selection && selection.toString().length > 0) {
-          isSelectingTextRef.current = true
-          // Clear selection flag after a delay
-          setTimeout(() => {
-            isSelectingTextRef.current = false
-          }, 2000)
-          return
+    // Capture keyboard events to focus input when user types ANY KEYSTROKE - NO RESTRICTIONS
+    const handleKeyDown = (e) => {
+      // Focus on ANY keystroke (except Tab and Escape)
+      if (e.key !== 'Tab' && e.key !== 'Escape' && inputRef.current) {
+        // If input is not focused, focus it immediately
+        if (document.activeElement !== inputRef.current) {
+          // Focus synchronously
+          inputRef.current.focus()
+          
+          // For printable characters, manually insert them since focus happened after keydown
+          if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            // Prevent default to stop the key from being lost
+            e.preventDefault()
+            e.stopPropagation()
+            
+            // Get current value and cursor position
+            const currentValue = inputMessage
+            const cursorPos = inputRef.current.selectionStart || currentValue.length
+            
+            // Insert the character
+            const newValue = currentValue.slice(0, cursorPos) + e.key + currentValue.slice(cursorPos)
+            setInputMessage(newValue)
+            
+            // Set cursor position after the inserted character
+            requestAnimationFrame(() => {
+              if (inputRef.current) {
+                inputRef.current.setSelectionRange(cursorPos + 1, cursorPos + 1)
+              }
+            })
+          }
         }
       }
-      // Clear selection flag after a short delay
-      setTimeout(() => {
-        isSelectingTextRef.current = false
-      }, 300)
     }
 
-    // Also focus on any click outside the input, but not if selecting text or modal is open
-    const handleClick = (e) => {
-      if (isSelectingTextRef.current || isModalOpen()) return
-      
-      const target = e.target
-      const messageBubble = target.closest('.message-bubble, [class*="chatbot-bubble"]')
-      if (messageBubble) return // Don't refocus if clicking on message
-      
-      // Don't refocus if clicking inside a modal
-      if (target.closest('[role="dialog"], .modal, [class*="modal"], [class*="Modal"]')) {
-        return
-      }
-      
-      if (target !== inputRef.current && !inputRef.current.contains(target)) {
-        setTimeout(() => {
-          if (!isSelectingTextRef.current && !isModalOpen()) {
-            maintainFocus()
-          }
-        }, 200)
-      }
-    }
-
-    document.addEventListener('mousedown', handleMouseDown)
-    document.addEventListener('mouseup', handleMouseUp)
     document.addEventListener('click', handleClick)
+    // Use capture phase to intercept keydown events early, before they reach other handlers
+    document.addEventListener('keydown', handleKeyDown, true)
 
     return () => {
       clearInterval(focusInterval)
-      document.removeEventListener('mousedown', handleMouseDown)
-      document.removeEventListener('mouseup', handleMouseUp)
       document.removeEventListener('click', handleClick)
+      document.removeEventListener('keydown', handleKeyDown, true)
     }
   }, [isCallActive])
 
@@ -442,7 +444,45 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         },
         (payload) => {
           const newMessage = payload.new
-          const metadata = newMessage.metadata || {}
+          
+          // Parse metadata - handle string, object, or null
+          let metadata = newMessage.metadata
+          if (typeof metadata === 'string') {
+            try {
+              metadata = JSON.parse(metadata)
+            } catch (e) {
+              console.error('Failed to parse metadata JSON:', e)
+              metadata = {}
+            }
+          }
+          if (!metadata || typeof metadata !== 'object') {
+            metadata = {}
+          }
+          
+          // Extract content_data and options from metadata
+          let contentData = metadata.content_data || null
+          let options = metadata.options || null
+          
+          // If content_data is a string, parse it
+          if (contentData && typeof contentData === 'string') {
+            try {
+              contentData = JSON.parse(contentData)
+            } catch (e) {
+              console.error('Failed to parse content_data JSON:', e)
+              contentData = null
+            }
+          }
+          
+          // If options is a string, parse it
+          if (options && typeof options === 'string') {
+            try {
+              options = JSON.parse(options)
+            } catch (e) {
+              console.error('Failed to parse options JSON:', e)
+              options = null
+            }
+          }
+          
           const isChase = metadata.sender === 'chase'
           
           // Only add if it's a new message (not already in messages)
@@ -465,6 +505,8 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
               isNew: true,
               scheduledMessageId: metadata.scheduled_message_id || null,
               isChase: isChase,
+              content_data: contentData, // Extract content_data from metadata
+              options: options, // Extract options from metadata
               chaseMetadata: isChase ? {
                 leadId: metadata.lead_id,
                 leadName: metadata.lead_name,
@@ -554,10 +596,48 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         if (data.conversations.length > 0) {
           // Convert conversations to message format
           const conversationMessages = data.conversations.map(conv => {
-            const metadata = conv.metadata || {}
+            // Parse metadata - handle string, object, or null
+            let metadata = conv.metadata
+            if (typeof metadata === 'string') {
+              try {
+                metadata = JSON.parse(metadata)
+              } catch (e) {
+                console.error('Failed to parse metadata JSON:', e)
+                metadata = {}
+              }
+            }
+            if (!metadata || typeof metadata !== 'object') {
+              metadata = {}
+            }
+            
+            // Extract content_data and options from metadata
+            let contentData = metadata.content_data || null
+            let options = metadata.options || null
+            
+            // If content_data is a string, parse it
+            if (contentData && typeof contentData === 'string') {
+              try {
+                contentData = JSON.parse(contentData)
+              } catch (e) {
+                console.error('Failed to parse content_data JSON:', e)
+                contentData = null
+              }
+            }
+            
+            // If options is a string, parse it
+            if (options && typeof options === 'string') {
+              try {
+                options = JSON.parse(options)
+              } catch (e) {
+                console.error('Failed to parse options JSON:', e)
+                options = null
+              }
+            }
+            
             const isChase = metadata.sender === 'chase'
             const isLeo = metadata.sender === 'leo'
             const isEmily = conv.message_type === 'bot' && !isChase && !isLeo
+            
             return {
               id: `conv-${conv.id}`,
               conversationId: conv.id, // Store Supabase ID for deletion
@@ -569,6 +649,8 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
               isChase: isChase,
               isLeo: isLeo,
               isEmily: isEmily,
+              content_data: contentData, // Extract content_data from metadata
+              options: options, // Extract options from metadata
               chaseMetadata: isChase ? {
                 leadId: metadata.lead_id,
                 leadName: metadata.lead_name,
@@ -700,9 +782,10 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       const authToken = await getAuthToken()
       
       // Use non-streaming endpoint when in call to avoid TTS issues
+      // Use v2 endpoint if useV2 prop is true
       const endpoint = isCallActive && callStatus === 'connected' 
-        ? `${API_BASE_URL}/chatbot/chat` 
-        : `${API_BASE_URL}/chatbot/chat/stream`
+        ? `${API_BASE_URL}/chatbot/chat${useV2 ? '/v2' : ''}` 
+        : `${API_BASE_URL}/chatbot/chat${useV2 ? '/v2' : ''}/stream`
       
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -725,20 +808,34 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Try to get error message from response
+        let errorMessage = `HTTP error! status: ${response.status}`
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.detail || errorData.error || errorData.message || errorMessage
+        } catch (e) {
+          // If response isn't JSON, use status text
+          errorMessage = response.statusText || errorMessage
+        }
+        throw new Error(errorMessage)
       }
 
+      // Declare options at function scope so it's accessible in catch block
+      let options = null
+      
       // Handle non-streaming response (when in call)
       if (isCallActive && callStatus === 'connected') {
         const data = await response.json()
         const botResponse = data.response || data.content || ''
         const cleanContent = botResponse.replace(/🔍.*?\n|📅.*?\n|🔍.*?\n|✅.*?\n|📝.*?\n|❌.*?\n|📊.*?\n|📈.*?\n|🤖.*?\n|✨.*?\n|---CLEAR_PROGRESS---.*?\n/g, '').trim()
+        options = data.options || null
+        const contentData = data.content_data || null
         
-        // Update bot message with full response
+        // Update bot message with full response, options, and content_data
         setMessages(prev => 
           prev.map(msg => 
             msg.id === botMessageId 
-              ? { ...msg, content: cleanContent, isStreaming: false }
+              ? { ...msg, content: cleanContent, isStreaming: false, options: options, content_data: contentData }
               : msg
           )
         )
@@ -749,95 +846,252 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         }
       } else {
         // Handle streaming response (normal mode)
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
+        const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
 
-      if (!reader) {
-        throw new Error('No response body reader available')
-      }
-
-      let buffer = ''
-      let isDone = false
-
-      while (!isDone) {
-        const { done, value } = await reader.read()
-        
-        if (done) {
-          isDone = true
-          break
+        if (!reader) {
+          throw new Error('No response body reader available')
         }
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
+        let buffer = ''
+        let isDone = false
+        let finalContentData = null
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6))
-              
-              if (data.done) {
-                isDone = true
-                setIsStreaming(false)
-                break
+        while (!isDone) {
+          const { done, value } = await reader.read()
+          
+          if (done) {
+            isDone = true
+            // Check final buffer for CONTENT_DATA before breaking
+            if (buffer && buffer.includes('CONTENT_DATA:')) {
+              try {
+                const contentDataMatch = buffer.match(/CONTENT_DATA:(.+)/)
+                if (contentDataMatch) {
+                  finalContentData = JSON.parse(contentDataMatch[1].trim())
+                }
+              } catch (e) {
+                console.error('Error parsing final CONTENT_DATA:', e)
               }
+            }
+            break
+          }
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const rawData = line.slice(6)
+                console.log('📥 Raw SSE data received:', rawData.substring(0, 200))
+                const data = JSON.parse(rawData)
+                console.log('📦 Parsed SSE data:', data)
               
-              if (data.content) {
-                // Check if this is a clear progress command
-                if (data.content.includes('---CLEAR_PROGRESS---')) {
-                  // Clear the progress messages by removing lines that look like progress
+                // Check if this message contains options
+                if (data.options) {
+                  options = data.options
                   setMessages(prev => 
-                      prev.map(msg => {
-                        if (msg.id === botMessageId) {
-                          const finalContent = msg.content.replace(/🔍.*?\n|📅.*?\n|🔍.*?\n|✅.*?\n|📝.*?\n|❌.*?\n|📊.*?\n|📈.*?\n|🤖.*?\n|✨.*?\n|---CLEAR_PROGRESS---.*?\n/g, '').trim()
-                          return { 
-                            ...msg, 
-                            content: finalContent,
-                            isStreaming: false 
-                          }
-                        }
-                        return msg
-                      })
-                  )
-                } else {
-                  setMessages(prev => 
-                      prev.map(msg => {
-                        if (msg.id === botMessageId) {
-                          const updatedContent = msg.content + data.content
-                          return { ...msg, content: updatedContent, isStreaming: false }
-                        }
-                        return msg
-                      })
+                    prev.map(msg => {
+                      if (msg.id === botMessageId) {
+                        return { ...msg, options: options, isStreaming: false }
+                      }
+                      return msg
+                    })
                   )
                 }
-              }
-            } catch (e) {
-              console.error('Error parsing SSE data:', e)
+                
+                // Check if this message contains content_data (from SSE stream)
+                if (data.content_data) {
+                  console.log('📷 Received content_data from SSE stream:', data.content_data)
+                  console.log('   Images:', data.content_data.images)
+                  console.log('   Images type:', typeof data.content_data.images)
+                  console.log('   Is array?', Array.isArray(data.content_data.images))
+                  finalContentData = data.content_data
+                  setMessages(prev => 
+                    prev.map(msg => {
+                      if (msg.id === botMessageId) {
+                        console.log('✅ Updating message with content_data:', data.content_data)
+                        return { ...msg, content_data: data.content_data, isStreaming: false }
+                      }
+                      return msg
+                    })
+                  )
+                }
+                
+                if (data.done) {
+                  isDone = true
+                  setIsStreaming(false)
+                  // If done message has content_data, use it
+                  if (data.content_data) {
+                    finalContentData = data.content_data
+                    console.log('📷 Final done message has content_data:', data.content_data)
+                  }
+                  break
+                }
+                
+                if (data.content) {
+                  // Skip if content is the OPTIONS marker (already handled above)
+                  if (data.content.includes('OPTIONS:')) {
+                    continue
+                  }
+                  
+                // Check if content contains CONTENT_DATA marker
+                if (data.content.includes('CONTENT_DATA:')) {
+                  try {
+                    // Extract CONTENT_DATA from the content string
+                    const contentDataMatch = data.content.match(/CONTENT_DATA:(.+)/s)
+                    if (contentDataMatch) {
+                      const contentDataJson = contentDataMatch[1].trim()
+                      const contentData = JSON.parse(contentDataJson)
+                      console.log('Parsed content_data from CONTENT_DATA marker:', contentData)
+                      setMessages(prev => 
+                        prev.map(msg => {
+                          if (msg.id === botMessageId) {
+                            return { ...msg, content_data: contentData, isStreaming: false }
+                          }
+                          return msg
+                        })
+                      )
+                      // Remove CONTENT_DATA marker from content
+                      const contentWithoutMarker = data.content.replace(/CONTENT_DATA:.*/s, '').trim()
+                      if (contentWithoutMarker) {
+                        setMessages(prev => 
+                          prev.map(msg => {
+                            if (msg.id === botMessageId) {
+                              const currentContent = msg.content || ''
+                              return { ...msg, content: currentContent + contentWithoutMarker, isStreaming: false }
+                            }
+                            return msg
+                          })
+                        )
+                      }
+                      continue
+                    }
+                  } catch (e) {
+                    console.error('Error parsing CONTENT_DATA:', e)
+                  }
+                }
+                  
+                  // Skip error messages that are being streamed - we'll handle them in the catch block
+                  if (data.content.startsWith('Error:') || data.content.includes('Sorry, I encountered an error')) {
+                    console.error('Error content in stream:', data.content)
+                    continue
+                  }
+                  
+                  // Check if this is a clear progress command
+                  if (data.content.includes('---CLEAR_PROGRESS---')) {
+                    // Clear the progress messages by removing lines that look like progress
+                    setMessages(prev => 
+                        prev.map(msg => {
+                          if (msg.id === botMessageId) {
+                            const finalContent = msg.content.replace(/🔍.*?\n|📅.*?\n|🔍.*?\n|✅.*?\n|📝.*?\n|❌.*?\n|📊.*?\n|📈.*?\n|🤖.*?\n|✨.*?\n|---CLEAR_PROGRESS---.*?\n/g, '').trim()
+                            return { 
+                              ...msg, 
+                              content: finalContent,
+                              isStreaming: false,
+                              options: options
+                            }
+                          }
+                          return msg
+                        })
+                    )
+                  } else {
+                    setMessages(prev => 
+                        prev.map(msg => {
+                          if (msg.id === botMessageId) {
+                            const currentContent = msg.content || ''
+                            const updatedContent = currentContent + data.content
+                            return { ...msg, content: updatedContent, isStreaming: false, options: options }
+                          }
+                          return msg
+                        })
+                    )
+                  }
+                }
+                
+                // Handle error flag in data - but don't append to existing content
+                if (data.error) {
+                  console.error('Error flag in stream data:', data)
+                  // Don't modify message content if error occurs - just log it
+                  // The catch block will handle actual errors
+                }
+              } catch (e) {
+                console.error('Error parsing SSE data:', e)
               }
             }
           }
+        }
+        
+        // Final update with options and content_data if they exist (for streaming)
+        if (options || finalContentData) {
+          console.log('📦 Final update - options:', options, 'content_data:', finalContentData)
+          setMessages(prev => 
+            prev.map(msg => {
+              if (msg.id === botMessageId) {
+                const updated = { 
+                  ...msg, 
+                  options: options || msg.options, 
+                  content_data: finalContentData || msg.content_data, 
+                  isStreaming: false 
+                }
+                console.log('✅ Final message update:', updated)
+                console.log('   Updated content_data:', updated.content_data)
+                console.log('   Updated images:', updated.content_data?.images)
+                return updated
+              }
+              return msg
+            })
+          )
         }
       }
 
     } catch (error) {
       console.error('Error sending message:', error)
-      showError('Failed to send message', error.message)
+      const errorMessage = error.message || 'An unknown error occurred'
+      showError('Failed to send message', errorMessage)
       
-      // Update the bot message with error
+      // Try to get more detailed error from response if available
+      let detailedError = 'Sorry, I encountered an error. Please try again.'
+      if (error.response) {
+        try {
+          const errorData = await error.response.json()
+          detailedError = errorData.detail || errorData.error || errorData.message || detailedError
+        } catch (e) {
+          // If response isn't JSON, use the status text
+          detailedError = error.response.statusText || detailedError
+        }
+      }
+      
+      // Update the bot message with error, but preserve existing content if it exists
       setMessages(prev => 
-        prev.map(msg => 
-          msg.id === botMessageId 
-            ? { ...msg, content: 'Sorry, I encountered an error. Please try again.' }
-            : msg
-        )
+        prev.map(msg => {
+          if (msg.id === botMessageId) {
+            const existingContent = msg.content || ''
+            // Only show error if we don't have any content yet
+            // If we have content, the response was successful and we shouldn't show an error
+            if (!existingContent || existingContent.trim().length === 0) {
+              // No content yet, show error
+              return { ...msg, content: detailedError, isStreaming: false }
+            } else {
+              // We have content, response was successful - don't show error
+              // Just log it for debugging
+              console.warn('Error occurred but message already has content, not showing error to user:', detailedError)
+              return { ...msg, isStreaming: false }
+            }
+          }
+          return msg
+        })
       )
     } finally {
       setIsLoading(false)
       setIsStreaming(false)
       // Refocus input after sending message
-      if (inputRef.current) {
-        inputRef.current.focus()
-      }
+      setTimeout(() => {
+        if (inputRef.current && !isCallActive && !isLoading && !isStreaming && !isModalOpen()) {
+          inputRef.current.focus()
+        }
+      }, 150)
     }
   }
 
@@ -1294,6 +1548,19 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" })
       }, 100)
     },
+    clearChat: () => {
+      setMessages([])
+      setInputMessage('')
+      setReplyingToMessage(null)
+      // Clear any cached messages
+      if (typeof Storage !== 'undefined') {
+        try {
+          localStorage.removeItem('chatbot_messages_cache')
+        } catch (e) {
+          console.error('Error clearing message cache:', e)
+        }
+      }
+    },
     startCall: () => {
       // Call already started via useEffect
       console.log('Call started')
@@ -1334,12 +1601,12 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
             key={message.id}
             className={`flex flex-col ${message.type === 'user' ? 'items-end' : 'items-start'} w-full px-4 ${message.isNew ? 'animate-slide-in' : ''}`}
           >
-            <div className={`flex items-start gap-2 max-w-[70%] ${message.type === 'user' ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+            <div className={`flex items-start gap-2 ${message.type === 'user' ? 'justify-end flex-row-reverse ml-auto' : 'justify-start'} max-w-[85%]`}>
               {/* Icon */}
               <div className={`flex-shrink-0 ${message.type === 'user' ? 'order-2' : ''}`}>
                 {message.type === 'user' ? (
                   profile?.logo_url ? (
-                    <div className="w-8 h-8 rounded-full overflow-hidden backdrop-blur-md bg-pink-500/80 border border-pink-400/30 shadow-lg" style={{ boxShadow: '0 4px 16px 0 rgba(236, 72, 153, 0.3)' }}>
+                    <div className="w-5 h-5 md:w-8 md:h-8 rounded-full overflow-hidden backdrop-blur-md bg-pink-500/80 border border-pink-400/30 shadow-lg" style={{ boxShadow: '0 4px 16px 0 rgba(236, 72, 153, 0.3)' }}>
                     <img 
                       src={profile.logo_url} 
                       alt="User" 
@@ -1347,17 +1614,17 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                     />
                     </div>
                   ) : (
-                    <div className="w-8 h-8 rounded-full backdrop-blur-md bg-pink-500/80 border border-pink-400/30 flex items-center justify-center shadow-lg" style={{ boxShadow: '0 4px 16px 0 rgba(236, 72, 153, 0.3)' }}>
-                      <User className="w-5 h-5 text-white" />
+                    <div className="w-5 h-5 md:w-8 md:h-8 rounded-full backdrop-blur-md bg-pink-500/80 border border-pink-400/30 flex items-center justify-center shadow-lg" style={{ boxShadow: '0 4px 16px 0 rgba(236, 72, 153, 0.3)' }}>
+                      <User className="w-3 h-3 md:w-5 md:h-5 text-white" />
                     </div>
                   )
                 ) : (
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-md ${
+                  <div className={`w-5 h-5 md:w-8 md:h-8 rounded-full flex items-center justify-center shadow-md ${
                     message.isChase 
                       ? 'bg-gradient-to-br from-blue-400 to-blue-600' 
                       : 'bg-gradient-to-br from-pink-400 to-purple-500'
                   }`}>
-                    <span className="text-white font-bold text-sm">
+                    <span className="text-white font-bold text-xs md:text-sm">
                       {message.isChase ? 'C' : message.isLeo ? 'L' : 'E'}
                     </span>
                   </div>
@@ -1365,10 +1632,10 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
               </div>
               {/* Message Bubble */}
               <div 
-                className={`px-4 py-3 rounded-lg relative group message-bubble backdrop-blur-md ${
+                className={`px-4 rounded-lg relative group message-bubble backdrop-blur-md ${
                   message.type === 'user'
-                    ? 'bg-pink-500/80 text-white border border-pink-400/30 user-bubble-shadow'
-                    : 'bg-white/70 text-black chatbot-bubble-shadow border border-white/30'
+                    ? 'py-2 bg-pink-500/80 text-white border border-pink-400/30 user-bubble-shadow text-right'
+                    : 'py-3 bg-white/70 text-black chatbot-bubble-shadow border border-white/30 text-left'
                 }`}
                 onMouseEnter={() => setHoveredMessageId(message.id)}
                 onMouseLeave={() => setHoveredMessageId(null)}
@@ -1445,8 +1712,8 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
             </div>
           </div>
         )}
-                {message.content ? (
-                  <div className="text-sm leading-relaxed prose prose-sm max-w-none">
+                {(message.content || message.content_data) ? (
+                  <div className={`text-sm leading-relaxed prose prose-sm max-w-none ${message.type === 'user' ? 'text-right' : 'text-left'}`}>
                     {shouldShowReadMore(message.content) && !expandedMessages.has(message.id) ? (
                       <div className="message-content-truncated">
                         <ReactMarkdown 
@@ -1651,6 +1918,171 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                             />
                           </div>
                         )}
+                      </div>
+                    )}
+                    
+                    {/* Clickable Options */}
+                    {/* Social Media Post Card */}
+                    {message.content_data && (
+                      <div className="mt-4 max-w-lg mx-auto">
+                        <div className="bg-white rounded-lg border border-gray-200 shadow-lg overflow-hidden">
+                          {/* Post Header */}
+                          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-6 h-6 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-xs md:text-sm">
+                                {message.content_data.platform ? 
+                                  message.content_data.platform.charAt(0).toUpperCase() : 
+                                  'AI'
+                                }
+                              </div>
+                              <div>
+                                <div className="font-semibold text-gray-900 text-sm">
+                                  {message.content_data.platform ? 
+                                    message.content_data.platform.charAt(0).toUpperCase() + message.content_data.platform.slice(1) : 
+                                    'AI Content'
+                                  }
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {message.content_data.content_type ? 
+                                    message.content_data.content_type.charAt(0).toUpperCase() + message.content_data.content_type.slice(1) : 
+                                    'Post'
+                                  }
+                                </div>
+                              </div>
+                            </div>
+                            <button className="p-1 hover:bg-gray-100 rounded-full transition-colors">
+                              <MoreHorizontal className="w-5 h-5 text-gray-600" />
+                            </button>
+                          </div>
+
+                          {/* Post Images */}
+                          {message.content_data.images && 
+                           Array.isArray(message.content_data.images) && 
+                           message.content_data.images.length > 0 && (
+                            <div className="relative">
+                              {message.content_data.images.length === 1 ? (
+                                <img
+                                  src={message.content_data.images[0]}
+                                  alt="Post content"
+                                  className="w-full h-auto object-cover"
+                                  onError={(e) => {
+                                    console.error('❌ Failed to load image:', message.content_data.images[0])
+                                    e.target.style.display = 'none'
+                                  }}
+                                />
+                              ) : (
+                                <div className="grid grid-cols-2 gap-0">
+                                  {message.content_data.images.slice(0, 4).map((imageUrl, index) => (
+                                    <div key={index} className="relative aspect-square">
+                                      <img
+                                        src={imageUrl}
+                                        alt={`Post content ${index + 1}`}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          console.error('❌ Failed to load image:', imageUrl)
+                                          e.target.style.display = 'none'
+                                        }}
+                                      />
+                                      {index === 3 && message.content_data.images.length > 4 && (
+                                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center text-white font-bold text-xl">
+                                          +{message.content_data.images.length - 4}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Post Actions */}
+                          <div className="px-4 py-3 border-b border-gray-200">
+                            <div className="flex items-center space-x-4">
+                              <button className="hover:opacity-70 transition-opacity">
+                                <Heart className="w-6 h-6 text-gray-800" />
+                              </button>
+                              <button className="hover:opacity-70 transition-opacity">
+                                <MessageCircle className="w-6 h-6 text-gray-800" />
+                              </button>
+                              <button className="hover:opacity-70 transition-opacity">
+                                <Share2 className="w-6 h-6 text-gray-800" />
+                              </button>
+                              <div className="flex-1" />
+                              <button className="hover:opacity-70 transition-opacity">
+                                <Bookmark className="w-6 h-6 text-gray-800" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Post Content */}
+                          <div className="px-4 py-3 space-y-2">
+                            {/* Title */}
+                            {message.content_data.title && (
+                              <h3 className="font-bold text-gray-900 text-base">
+                                {message.content_data.title}
+                              </h3>
+                            )}
+                            
+                            {/* Content Text */}
+                            {message.content_data.content && (
+                              <div className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">
+                                {message.content_data.content}
+                              </div>
+                            )}
+
+                            {/* Hashtags */}
+                            {message.content_data.hashtags && 
+                             Array.isArray(message.content_data.hashtags) && 
+                             message.content_data.hashtags.length > 0 && (
+                              <div className="flex flex-wrap gap-2 pt-2">
+                                {message.content_data.hashtags.map((tag, index) => {
+                                  const cleanTag = tag.replace('#', '')
+                                  return (
+                                    <span
+                                      key={index}
+                                      className="text-blue-600 hover:text-blue-800 text-sm font-medium cursor-pointer"
+                                    >
+                                      #{cleanTag}
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {message.options && Array.isArray(message.options) && message.options.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {message.options.map((option, index) => (
+                          <button
+                            key={index}
+                            onClick={async (e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              // Set the input message and send it
+                              setInputMessage(option)
+                              // Small delay to ensure state is updated
+                              setTimeout(() => {
+                                sendMessage(option)
+                                // Refocus input after sending
+                                setTimeout(() => {
+                                  if (inputRef.current && !isCallActive && !isLoading && !isStreaming) {
+                                    inputRef.current.focus()
+                                  }
+                                }, 200)
+                              }, 100)
+                            }}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                              message.type === 'user'
+                                ? 'bg-white/20 text-white border border-white/30 hover:bg-white/30'
+                                : 'bg-purple-100 text-purple-700 border border-purple-200 hover:bg-purple-200'
+                            }`}
+                          >
+                            {option.charAt(0).toUpperCase() + option.slice(1)}
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -1930,16 +2362,24 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                   }
                 }}
                 onBlur={(e) => {
-                  // Don't refocus if user is selecting text or if a modal is open
-                  if (isSelectingTextRef.current || isModalOpen()) return
-                  
-                  // Immediately refocus if not in call
-                  if (!isCallActive && !isLoading && !isStreaming) {
-                    setTimeout(() => {
-                      if (!isSelectingTextRef.current && !isModalOpen()) {
-                        e.target.focus()
+                  // IMMEDIATELY refocus - NO RESTRICTIONS
+                  if (!isCallActive && !isLoading && !isStreaming && inputRef.current) {
+                    // Strategy 1: Immediate synchronous focus
+                    inputRef.current.focus()
+                    
+                    // Strategy 2: requestAnimationFrame for next frame
+                    requestAnimationFrame(() => {
+                      if (inputRef.current) {
+                        inputRef.current.focus()
                       }
-                    }, 200)
+                    })
+                    
+                    // Strategy 3: setTimeout as backup
+                    setTimeout(() => {
+                      if (inputRef.current && document.activeElement !== inputRef.current) {
+                        inputRef.current.focus()
+                      }
+                    }, 10)
                   }
                 }}
                 placeholder={replyingToMessage ? `Replying to: ${replyingToMessage.content.substring(0, 30)}...` : "Ask Emily..."}

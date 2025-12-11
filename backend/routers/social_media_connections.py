@@ -48,37 +48,74 @@ class User(BaseModel):
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Get current user from Supabase JWT token (same as main app)"""
+    import concurrent.futures
+    
+    token = credentials.credentials
+    
+    def authenticate_with_timeout():
+        """Authenticate with Supabase with timeout handling"""
+        try:
+            supabase_client = get_supabase_client()
+            response = supabase_client.auth.get_user(token)
+            if not response.user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid token"
+                )
+            return response.user
+        except HTTPException:
+            raise
+        except Exception as e:
+            error_str = str(e).lower()
+            if "timeout" in error_str or "handshake" in error_str or "timed out" in error_str:
+                print(f"Supabase authentication timeout: {e}")
+                raise HTTPException(
+                    status_code=503,
+                    detail="Authentication service temporarily unavailable. Please try again."
+                )
+            raise
+    
+    # Try authentication with timeout (5 seconds)
     try:
-        token = credentials.credentials
-        
-        # Verify token with Supabase
-        supabase_client = get_supabase_client()
-        response = supabase_client.auth.get_user(token)
-        if not response.user:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid token"
-            )
-        
-        # Convert created_at to string if it's a datetime object
-        created_at_str = response.user.created_at
-        if hasattr(created_at_str, 'isoformat'):
-            created_at_str = created_at_str.isoformat()
-        else:
-            created_at_str = str(created_at_str)
-        
-        return User(
-            id=response.user.id,
-            email=response.user.email,
-            name=response.user.user_metadata.get("name", response.user.email),
-            created_at=created_at_str
-        )
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(authenticate_with_timeout)
+            try:
+                user = future.result(timeout=5.0)
+            except concurrent.futures.TimeoutError:
+                print("Authentication request timed out after 5 seconds")
+                raise HTTPException(
+                    status_code=503,
+                    detail="Authentication service timeout. Please try again."
+                )
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Authentication error: {e}")
+        # Check if it's a timeout-related error
+        error_str = str(e).lower()
+        if "timeout" in error_str or "handshake" in error_str or "timed out" in error_str:
+            raise HTTPException(
+                status_code=503,
+                detail="Authentication service temporarily unavailable. Please try again."
+            )
         raise HTTPException(
             status_code=401,
             detail="Could not validate credentials"
         )
+    
+    # Convert created_at to string if it's a datetime object
+    created_at_str = user.created_at
+    if hasattr(created_at_str, 'isoformat'):
+        created_at_str = created_at_str.isoformat()
+    else:
+        created_at_str = str(created_at_str)
+    
+    return User(
+        id=user.id,
+        email=user.email,
+        name=user.user_metadata.get("name", user.email),
+        created_at=created_at_str
+    )
 
 class SocialMediaConnection(BaseModel):
     platform: str

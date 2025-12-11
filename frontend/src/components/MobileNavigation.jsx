@@ -22,14 +22,17 @@ import {
   RefreshCw,
   Bell,
   CheckCircle,
-  Clock
+  Clock,
+  PanelRight
 } from 'lucide-react'
 
 const MobileNavigation = ({ 
   setShowCustomContentChatbot, 
   handleGenerateContent, 
   generating = false, 
-  fetchingFreshData = false 
+  fetchingFreshData = false,
+  onOpenChatHistory = null,
+  showChatHistory = false
 }) => {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -410,23 +413,15 @@ const MobileNavigation = ({
 
             {/* Right Side - Action Buttons + Hamburger Menu */}
             <div className="flex items-center space-x-1">
-              {/* Action Buttons removed for mobile view */}
-
-              {/* Task Notification Bell - Only on dashboard page */}
-              {(location.pathname === '/' || location.pathname === '/dashboard') && (
-                <div className="relative">
-                  <button
-                    onClick={() => setShowTaskNotifications(!showTaskNotifications)}
-                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <Bell className="w-5 h-5 text-gray-600" />
-                  </button>
-                  {tasks.length > 0 && (
-                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-                      <span className="text-xs text-white font-bold">{tasks.length}</span>
-                    </div>
-                  )}
-                </div>
+              {/* Chat History Button - Only on dashboard/emily page */}
+              {(location.pathname === '/' || location.pathname === '/dashboard' || location.pathname === '/emily') && onOpenChatHistory && (
+                <button
+                  onClick={() => onOpenChatHistory()}
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Chat History"
+                >
+                  <PanelRight className="w-5 h-5 text-gray-600" />
+                </button>
               )}
 
               {/* Hamburger Menu */}

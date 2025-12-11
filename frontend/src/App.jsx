@@ -5,7 +5,7 @@ import { HelmetProvider } from 'react-helmet-async'
 import Login from './components/Login'
 import SignUp from './components/SignUp'
 import ForgotPassword from './components/ForgotPassword'
-import Dashboard from './components/Dashboard'
+import EmilyDashboard from './components/EmilyDashboard'
 import ContentDashboard from './components/ContentDashboard'
 import ContentCalendar from './components/ContentCalendar'
 import SocialMediaDashboard from './components/SocialMediaDashboard'
@@ -203,7 +203,15 @@ function AppContent() {
           path="/dashboard" 
           element={
             <ProtectedRoute>
-              <Dashboard />
+              <EmilyDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/emily" 
+          element={
+            <ProtectedRoute>
+              <EmilyDashboard />
             </ProtectedRoute>
           } 
         />

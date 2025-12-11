@@ -14,7 +14,7 @@ import Chatbot from './Chatbot'
 import RecentTasks from './RecentTasks'
 import CustomContentChatbot from './CustomContentChatbot'
 import ContentCard from './ContentCard'
-import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar, PanelRight, PanelLeft, X, ChevronRight, Video, Phone, ChevronDown, MessageSquare } from 'lucide-react'
+import { Sparkles, TrendingUp, Users, Target, BarChart3, FileText, Calendar, PanelRight, PanelLeft, X, ChevronRight, Video, Phone, ChevronDown, MessageSquare, RefreshCw } from 'lucide-react'
 import WhatsAppMessageModal from './WhatsAppMessageModal'
 
 // Voice Orb Component with animated border (spring-like animation)
@@ -140,7 +140,7 @@ const VoiceOrb = ({ isSpeaking }) => {
 
 // Import components directly
 
-function Dashboard() {
+function EmilyDashboard() {
   const { user, logout } = useAuth()
   const { showContentGeneration, showSuccess, showError, showInfo } = useNotifications()
   const navigate = useNavigate()
@@ -163,6 +163,7 @@ function Dashboard() {
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false)
   const [showCustomContentChatbot, setShowCustomContentChatbot] = useState(false)
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false)
+  const [showMobileChatHistory, setShowMobileChatHistory] = useState(false)
 
   const handleCallClick = async () => {
     if (isCallActive) {
@@ -219,6 +220,39 @@ function Dashboard() {
         setCallStatus('idle')
         showError('Microphone permission denied', 'Please allow microphone access to use voice calling.')
       }
+    }
+  }
+
+  const handleRefreshChat = async () => {
+    try {
+      const authToken = await getAuthToken()
+      if (!authToken) {
+        showError('Authentication required', 'Please log in again.')
+        return
+      }
+
+      // Clear the partial payload cache on the backend
+      const response = await fetch(`${API_BASE_URL}/chatbot/chat/v2/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+
+      if (response.ok) {
+        // Clear the chat messages in the frontend
+        if (chatbotRef.current && chatbotRef.current.clearChat) {
+          chatbotRef.current.clearChat()
+        }
+        showSuccess('Chat refreshed', 'The conversation has been reset to start fresh.')
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to refresh chat' }))
+        showError('Failed to refresh chat', errorData.detail || 'Please try again.')
+      }
+    } catch (error) {
+      console.error('Error refreshing chat:', error)
+      showError('Error refreshing chat', error.message || 'Please try again.')
     }
   }
 
@@ -447,6 +481,13 @@ function Dashboard() {
         handleGenerateContent={() => {}}
         generating={false}
         fetchingFreshData={false}
+        onOpenChatHistory={() => {
+          setShowMobileChatHistory(true)
+          if (!conversations.length && user) {
+            fetchAllConversations()
+          }
+        }}
+        showChatHistory={showMobileChatHistory}
       />
       
       {/* Side Navbar */}
@@ -455,7 +496,7 @@ function Dashboard() {
       {/* Main Content */}
       <div className="md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden">
         {/* Header */}
-        <div className="bg-white shadow-sm border-b z-30 flex-shrink-0">
+        <div className="hidden md:block bg-white shadow-sm border-b z-30 flex-shrink-0">
           <div className="px-4 lg:px-6 py-3 lg:py-4">
             <div className="flex justify-between items-center">
               <div className="hidden md:flex items-center gap-3">
@@ -532,6 +573,15 @@ function Dashboard() {
               </div>
               
               <div className="flex items-center gap-2">
+                {/* Refresh Chat Button */}
+                <button
+                  onClick={handleRefreshChat}
+                  className="p-2 rounded-md hover:bg-purple-50 transition-colors border border-purple-200 bg-purple-50"
+                  title="Refresh Chat - Reset conversation and clear intent state"
+                >
+                  <RefreshCw className="w-5 h-5 text-purple-600" />
+                </button>
+                
                 {/* WhatsApp Message Button */}
                 <button
                   onClick={() => setShowWhatsAppModal(true)}
@@ -590,6 +640,7 @@ function Dashboard() {
                     callStatus={callStatus} 
                     onSpeakingChange={setIsCallSpeaking} 
                     messageFilter={messageFilter}
+                    useV2={true}
                     onOpenCustomContent={() => setShowCustomContentChatbot(true)}
                     isModalOpen={showCustomContentChatbot}
                   />
@@ -598,7 +649,7 @@ function Dashboard() {
 
               {/* Right Side Panel - Part of main content */}
               <div 
-                className={`bg-white border-l border-gray-200 transition-all duration-300 ease-in-out overflow-hidden h-full ${
+                className={`hidden md:flex bg-white border-l border-gray-200 transition-all duration-300 ease-in-out overflow-hidden h-full ${
                   isPanelOpen ? 'w-48 xl:w-64' : 'w-0'
                 }`}
               >
@@ -818,9 +869,103 @@ function Dashboard() {
         isOpen={showWhatsAppModal}
         onClose={() => setShowWhatsAppModal(false)}
       />
+
+      {/* Mobile Chat History Panel - Full Screen */}
+      {showMobileChatHistory && (
+        <div className="md:hidden fixed inset-0 z-50 bg-white">
+          <div className="flex flex-col h-full">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 flex-shrink-0">
+              <h2 className="text-lg font-semibold text-gray-900">Chat History</h2>
+              <button
+                onClick={() => setShowMobileChatHistory(false)}
+                className="p-2 rounded-md hover:bg-gray-200 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingConversations ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-sm text-gray-500">Loading conversations...</div>
+                </div>
+              ) : conversations.length === 0 ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-sm text-gray-500">No conversations yet</div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {groupConversationsByDate(conversations).map(({ date, dateObj, lastConversation }) => {
+                    if (!lastConversation) return null
+                    
+                    const isUser = lastConversation.message_type === 'user'
+                    const preview = lastConversation.content?.substring(0, 50) + (lastConversation.content?.length > 50 ? '...' : '')
+                    const messageDate = new Date(lastConversation.created_at)
+                    const formattedDate = messageDate.toLocaleDateString('en-US', { 
+                      month: 'short', 
+                      day: 'numeric',
+                      year: messageDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+                    })
+                    
+                    // Check if this date is selected
+                    const isSelected = selectedDate && 
+                      selectedDate.toDateString() === new Date(dateObj).toDateString()
+                    
+                    return (
+                      <div key={date}>
+                        <div
+                          onClick={() => {
+                            setSelectedDate(new Date(dateObj))
+                            loadConversationsForDate(dateObj)
+                            setShowMobileChatHistory(false)
+                          }}
+                          className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                            isSelected 
+                              ? 'bg-gray-100'
+                              : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm ${
+                              isUser ? 'bg-pink-400' : 'bg-gradient-to-br from-pink-400 to-purple-500'
+                            }`}>
+                              {isUser ? (
+                                profile?.logo_url ? (
+                                  <img src={profile.logo_url} alt="User" className="w-10 h-10 rounded-full object-cover" />
+                                ) : (
+                                  <span className="text-white">U</span>
+                                )
+                              ) : (
+                                <span className="text-white font-bold">E</span>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className={`text-sm font-medium ${isUser ? 'text-pink-700' : 'text-purple-700'}`}>
+                                  {isUser ? 'You' : 'Emily'}
+                                </span>
+                                <span className="text-xs text-gray-400">{formattedDate}</span>
+                              </div>
+                              <p className="text-sm text-gray-700 line-clamp-2">{preview}</p>
+                              <p className="text-xs text-gray-500 mt-1">{date}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-export default Dashboard
+export default EmilyDashboard
 

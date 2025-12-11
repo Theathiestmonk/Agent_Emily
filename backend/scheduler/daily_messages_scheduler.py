@@ -13,10 +13,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from agents.morning_scheduled_message import generate_morning_message
 from agents.scheduled_messages import (
-    generate_mid_morning_message,
     generate_leads_reminder_message,
-    generate_afternoon_message,
-    generate_evening_message,
     generate_night_message,
     get_user_timezone
 )
@@ -31,7 +28,7 @@ scheduler: Optional[AsyncIOScheduler] = None
 
 async def check_and_send_all_messages():
     """Check all message types and send to users where it's the right time"""
-    message_types = ["morning", "leads_reminder", "mid_morning", "afternoon", "evening", "night"]
+    message_types = ["morning", "leads_reminder", "night"]
     for msg_type in message_types:
         await send_scheduled_messages(msg_type)
 
@@ -60,9 +57,6 @@ async def send_scheduled_messages(message_type: str):
         target_times = {
             "morning": (9, 0),
             "leads_reminder": (10, 0),
-            "mid_morning": (11, 30),
-            "afternoon": (14, 0),
-            "evening": (18, 0),
             "night": (21, 30)
         }
         
@@ -97,12 +91,6 @@ async def send_scheduled_messages(message_type: str):
                         result = generate_morning_message(user_id, user_tz)
                     elif message_type == "leads_reminder":
                         result = generate_leads_reminder_message(user_id, user_tz)
-                    elif message_type == "mid_morning":
-                        result = generate_mid_morning_message(user_id, user_tz)
-                    elif message_type == "afternoon":
-                        result = generate_afternoon_message(user_id, user_tz)
-                    elif message_type == "evening":
-                        result = generate_evening_message(user_id, user_tz)
                     elif message_type == "night":
                         result = generate_night_message(user_id, user_tz)
                     
@@ -168,7 +156,7 @@ async def start_daily_messages_scheduler():
     
     scheduler.start()
     logger.info("Daily messages scheduler started")
-    logger.info("Checking for scheduled messages every hour (9:00 AM, 11:30 AM, 2:00 PM, 6:00 PM, 9:30 PM in user's local timezone)")
+    logger.info("Checking for scheduled messages every hour (9:00 AM, 10:00 AM, 9:30 PM in user's local timezone)")
 
 
 async def stop_daily_messages_scheduler():
@@ -190,12 +178,8 @@ async def trigger_message_manually(message_type: str, user_id: Optional[str] = N
             user_tz = get_user_timezone(user_id)
             if message_type == "morning":
                 result = generate_morning_message(user_id, user_tz)
-            elif message_type == "mid_morning":
-                result = generate_mid_morning_message(user_id, user_tz)
-            elif message_type == "afternoon":
-                result = generate_afternoon_message(user_id, user_tz)
-            elif message_type == "evening":
-                result = generate_evening_message(user_id, user_tz)
+            elif message_type == "leads_reminder":
+                result = generate_leads_reminder_message(user_id, user_tz)
             elif message_type == "night":
                 result = generate_night_message(user_id, user_tz)
             else:
