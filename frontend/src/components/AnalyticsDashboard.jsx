@@ -8,6 +8,8 @@ import MobileNavigation from './MobileNavigation'
 import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import WebsiteAnalysisDashboard from './WebsiteAnalysisDashboard'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { 
   Facebook, 
   Instagram, 
@@ -21,7 +23,9 @@ import {
   Zap,
   TrendingUp,
   Globe,
-  Search
+  Search,
+  X,
+  TestTube
 } from 'lucide-react'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
@@ -44,6 +48,9 @@ const AnalyticsDashboard = () => {
   const [activeTab, setActiveTab] = useState('website') // 'social' or 'website'
   const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 768)
   const tooltipRef = useRef(null)
+  const [showTestModal, setShowTestModal] = useState(false)
+  const [testMessage, setTestMessage] = useState('')
+  const [loadingTest, setLoadingTest] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -78,6 +85,49 @@ const AnalyticsDashboard = () => {
       showError('Failed to refresh analytics data')
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  const handleTestMorningMessage = async () => {
+    setLoadingTest(true)
+    setTestMessage('')
+    setShowTestModal(true)
+    
+    try {
+      const session = await supabase.auth.getSession()
+      if (!session.data.session) {
+        showError('Please log in to test the morning message')
+        setShowTestModal(false)
+        return
+      }
+
+      const token = session.data.session.access_token
+      const response = await fetch(`${API_BASE_URL}/chatbot/scheduled-messages/regenerate-morning`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.detail || 'Failed to generate morning message')
+      }
+
+      const data = await response.json()
+      if (data.success && data.content) {
+        setTestMessage(data.content)
+        showSuccess('Morning message generated successfully!')
+      } else {
+        throw new Error(data.error || 'Failed to generate message')
+      }
+    } catch (error) {
+      console.error('Error testing morning message:', error)
+      showError(`Failed to generate morning message: ${error.message}`)
+      setTestMessage('Error: ' + error.message)
+    } finally {
+      setLoadingTest(false)
     }
   }
 
@@ -316,8 +366,27 @@ const AnalyticsDashboard = () => {
                 </button>
               </div>
               
-              {/* Refresh Button */}
-              <div className="flex items-center flex-shrink-0 ml-auto min-w-0">
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 flex-shrink-0 ml-auto min-w-0">
+                {/* Test Morning Message Button */}
+                <button
+                  onClick={handleTestMorningMessage}
+                  className={`flex items-center justify-center bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all duration-200 ${
+                    isLargeScreen 
+                      ? 'px-2 sm:px-2.5 md:px-3 lg:px-4 py-1 sm:py-1.5 md:py-1.5 lg:py-2 gap-1 sm:gap-1.5 md:gap-2' 
+                      : 'w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9'
+                  }`}
+                  title="Test Morning Message"
+                >
+                  <TestTube className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 flex-shrink-0" />
+                  {isLargeScreen && (
+                    <span className="text-[10px] sm:text-xs md:text-sm font-medium whitespace-nowrap">
+                      Test Message
+                    </span>
+                  )}
+                </button>
+                
+                {/* Refresh Button */}
                 <button
                   onClick={handleRefresh}
                   disabled={refreshing}
@@ -328,7 +397,7 @@ const AnalyticsDashboard = () => {
                   }`}
                   title={refreshing ? 'Refreshing...' : 'Refresh'}
                 >
-                  <RefreshCw className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 flex-shrink-0" />
+                  <RefreshCw className={`w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 flex-shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
                   {isLargeScreen && (
                     <span className="text-[10px] sm:text-xs md:text-sm font-medium whitespace-nowrap">
                       {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -549,6 +618,118 @@ const AnalyticsDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Test Morning Message Modal */}
+      {showTestModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+              <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900">
+                Morning Message Test
+              </h2>
+              <button
+                onClick={() => {
+                  setShowTestModal(false)
+                  setTestMessage('')
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              {loadingTest ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="flex flex-col items-center space-y-4">
+                    <RefreshCw className="w-8 h-8 text-purple-600 animate-spin" />
+                    <p className="text-gray-600">Generating morning message...</p>
+                  </div>
+                </div>
+              ) : testMessage ? (
+                <div className="prose prose-sm max-w-none">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      table: ({ children }) => (
+                        <div className="overflow-x-auto my-4">
+                          <table className="min-w-full border-collapse border border-gray-300">
+                            {children}
+                          </table>
+                        </div>
+                      ),
+                      thead: ({ children }) => (
+                        <thead className="bg-gradient-to-r from-pink-500 to-purple-600 text-white">
+                          {children}
+                        </thead>
+                      ),
+                      th: ({ children }) => (
+                        <th className="border border-gray-300 px-4 py-2 text-left font-semibold">
+                          {children}
+                        </th>
+                      ),
+                      td: ({ children }) => (
+                        <td className="border border-gray-300 px-4 py-2">
+                          {children}
+                        </td>
+                      ),
+                      tbody: ({ children }) => (
+                        <tbody className="bg-white">
+                          {children}
+                        </tbody>
+                      ),
+                      tr: ({ children }) => (
+                        <tr className="hover:bg-gray-50">
+                          {children}
+                        </tr>
+                      ),
+                      p: ({ children }) => (
+                        <p className="mb-2 text-gray-700">
+                          {children}
+                        </p>
+                      ),
+                      strong: ({ children }) => (
+                        <strong className="font-semibold text-gray-900">
+                          {children}
+                        </strong>
+                      ),
+                    }}
+                  >
+                    {testMessage}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  Click "Generate" to test the morning message
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-3 p-4 sm:p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowTestModal(false)
+                  setTestMessage('')
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors font-medium"
+              >
+                Close
+              </button>
+              {!loadingTest && (
+                <button
+                  onClick={handleTestMorningMessage}
+                  className="px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all font-medium"
+                >
+                  Regenerate
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

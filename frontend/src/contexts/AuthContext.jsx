@@ -60,6 +60,11 @@ export function AuthProvider({ children }) {
               console.log('⚠️ Failed to load connections in background:', error.message)
             })
           })
+          
+          // Check and generate morning message on login if needed
+          checkMorningMessageOnLogin(session.access_token).catch(error => {
+            console.log('⚠️ Failed to check morning message on login:', error.message)
+          })
         }
       } else {
         // Handle different auth events
@@ -103,6 +108,34 @@ export function AuthProvider({ children }) {
 
     return () => subscription.unsubscribe()
   }, [])
+
+  const checkMorningMessageOnLogin = async (accessToken) => {
+    try {
+      const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/+$/, '')
+      
+      const response = await fetch(`${API_BASE_URL}/chatbot/scheduled-messages/check-morning-on-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      if (data.success && data.generated) {
+        console.log('✅ Morning message generated on login')
+      } else if (data.success) {
+        console.log('ℹ️ Morning message check completed:', data.message)
+      }
+    } catch (error) {
+      console.error('Error checking morning message on login:', error)
+      // Don't throw - this is a background operation
+    }
+  }
 
   const login = async (email, password) => {
     try {

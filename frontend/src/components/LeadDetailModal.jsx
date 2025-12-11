@@ -244,7 +244,19 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
   const fetchStatusHistory = async () => {
     try {
       const response = await leadsAPI.getStatusHistory(lead.id)
-      setStatusHistory(response.data || [])
+      const historyData = response.data || []
+      // Debug: log to see what we're getting
+      console.log('Status History Data:', historyData)
+      historyData.forEach((h, idx) => {
+        console.log(`History ${idx}:`, {
+          id: h.id,
+          old_status: h.old_status,
+          new_status: h.new_status,
+          reason: h.reason,
+          created_at: h.created_at
+        })
+      })
+      setStatusHistory(historyData)
     } catch (error) {
       console.error('Error fetching status history:', error)
       // Don't show error notification, just log it
@@ -619,7 +631,23 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
       const timeStr = formatTime(history.created_at)
       const oldStatus = history.old_status?.toLowerCase() || ''
       const newStatus = history.new_status?.toLowerCase() || ''
-      const remarks = history.reason || ''
+      // Get remarks from reason column - handle both reason and remarks fields
+      const remarks = (history.reason || history.remarks || '').trim()
+      
+      // Debug: log remarks for each history entry
+      if (remarks) {
+        console.log('Found remarks in history:', {
+          id: history.id,
+          old_status: oldStatus,
+          new_status: newStatus,
+          reason: history.reason,
+          remarks: remarks,
+          created_at: history.created_at
+        })
+      }
+      
+      // Check if this is a remark-only entry (same status, but has remarks)
+      const isRemarkOnly = oldStatus === newStatus && remarks
       
       // Format all status changes as Chase messages
       // Capitalize status names for display
@@ -647,37 +675,66 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
       }
       
       // Format message: if remarks exist, show them first, otherwise show status
-      if (remarks) {
-        return {
-          type: 'status_change',
-          title: 'Chase',
-          description: {
-            text: '',
-            boldPart: remarks,
-            textAfter: ' at ',
-            boldTime: timeStr,
-            textEnd: '.'
-          },
-          remarks: history.reason,
-          timestamp: history.created_at,
-          icon: Bot,
-          color: 'text-purple-600 bg-purple-50',
-          oldStatus: history.old_status,
-          newStatus: history.new_status,
-          isChaseMessage: true
+      // Ensure remarks is not empty after trimming
+      const hasRemarks = remarks && remarks.trim().length > 0
+      if (hasRemarks) {
+        // If it's a remark-only entry (no status change), show "Added remark: {remark} at {time}"
+        if (isRemarkOnly) {
+          return {
+            type: 'remark',
+            title: 'Chase',
+            description: {
+              text: 'Remark added at ',
+              boldPart: '',
+              textAfter: '',
+              boldTime: timeStr,
+              textEnd: '.'
+            },
+            remarks: remarks.trim(),
+            remarksText: `Added remark: ${remarks.trim()} at ${timeStr}.`,
+            timestamp: history.created_at,
+            icon: Bot,
+            color: 'text-purple-600 bg-purple-50',
+            oldStatus: history.old_status,
+            newStatus: history.new_status,
+            isChaseMessage: true
+          }
+        } else {
+          // Status change with remarks - show status change and remark separately
+          return {
+            type: 'status_change',
+            title: 'Chase',
+            description: {
+              text: `Changed status to: ${statusText} on `,
+              boldPart: '',
+              textAfter: '',
+              boldTime: timeStr,
+              textEnd: '.'
+            },
+            remarks: remarks.trim(),
+            remarksText: `Remark: ${remarks.trim()}`,
+            timestamp: history.created_at,
+            icon: Bot,
+            color: 'text-purple-600 bg-purple-50',
+            oldStatus: history.old_status,
+            newStatus: history.new_status,
+            isChaseMessage: true
+          }
         }
       } else {
+        // Status change without remarks
         return {
           type: 'status_change',
           title: 'Chase',
           description: {
-            text: `${statusText} at `,
+            text: `Changed status to: ${statusText} on `,
             boldPart: '',
             textAfter: '',
             boldTime: timeStr,
             textEnd: '.'
           },
-          remarks: history.reason,
+          remarks: remarks, // Use processed remarks (will be empty string if no reason)
+          remarksText: '', // No remarks for status changes without remarks
           timestamp: history.created_at,
           icon: Bot,
           color: 'text-purple-600 bg-purple-50',
@@ -1067,6 +1124,17 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                     }
                     
                     // Render other timeline events in original style
+                    // Debug: log event data for status changes and remarks
+                    if ((event.type === 'status_change' || event.type === 'remark')) {
+                      console.log('Rendering timeline event:', {
+                        type: event.type,
+                        remarks: event.remarks,
+                        remarksText: event.remarksText,
+                        hasRemarks: !!(event.remarks || event.remarksText),
+                        fullEvent: event
+                      })
+                    }
+                    
                     return (
                       <div key={index} className="relative flex items-start space-x-4 mb-6">
                         <div className={`relative z-10 w-8 h-8 rounded-full ${event.color} flex items-center justify-center flex-shrink-0`}>
@@ -1077,11 +1145,26 @@ const LeadDetailModal = ({ lead, onClose, onUpdate }) => {
                             <h4 className="font-semibold text-gray-900">{event.title}</h4>
                             <span className="text-xs text-gray-500">{formatTimeAgo(event.timestamp)}</span>
                           </div>
-                          <p className="text-sm text-gray-600">{event.description}</p>
-                          {event.type === 'status_change' && event.remarks && (
+                          <p className="text-sm text-gray-600">
+                            {typeof event.description === 'object' ? (
+                              <>
+                                {event.description.text}
+                                <strong>{event.description.boldPart}</strong>
+                                {event.description.textAfter}
+                                {event.description.boldTime ? (
+                                  <strong>{event.description.boldTime}</strong>
+                                ) : null}
+                                {event.description.textEnd}
+                              </>
+                            ) : (
+                              event.description
+                            )}
+                          </p>
+                          {((event.type === 'status_change' || event.type === 'remark') && (event.remarksText || event.remarks)) && (
                             <div className="mt-3 p-3 bg-white/60 rounded-lg border border-blue-200">
-                              <div className="text-xs font-semibold text-blue-700 mb-1">Remarks:</div>
-                              <p className="text-sm text-gray-700">{event.remarks}</p>
+                              <p className="text-sm text-gray-700 font-medium">
+                                {event.remarksText || (event.remarks ? `Remark: ${event.remarks}` : '')}
+                              </p>
                             </div>
                           )}
                           {event.status && (

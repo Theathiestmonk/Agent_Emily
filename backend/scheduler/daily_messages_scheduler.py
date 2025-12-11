@@ -11,8 +11,8 @@ import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from agents.morning_scheduled_message import generate_morning_message
 from agents.scheduled_messages import (
-    generate_morning_message,
     generate_mid_morning_message,
     generate_leads_reminder_message,
     generate_afternoon_message,

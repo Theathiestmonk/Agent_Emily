@@ -1457,6 +1457,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                             blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
                             strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
                             em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
+                            br: () => <br className="block" />,
                             a: ({ children, href }) => {
                               // Handle lead links - navigate to leads dashboard
                               if (href && href.startsWith('leads/')) {
@@ -1521,6 +1522,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                             blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
                             strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
                             em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
+                            br: () => <br className="block" />,
                             a: ({ children, href }) => {
                               // Handle lead links - navigate to leads dashboard
                               if (href && href.startsWith('leads/')) {
@@ -1670,6 +1672,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                             blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
                             strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
                             em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
+                            br: () => <br className="block" />,
                             a: ({ children, href }) => {
                               // Handle lead links - navigate to leads dashboard
                               if (href && href.startsWith('leads/')) {
@@ -1734,6 +1737,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
                             blockquote: ({ children }) => <blockquote className={`border-l-4 pl-3 italic mb-2 ${message.type === 'user' ? 'border-white/30 text-white/90' : 'border-purple-400 text-black/80'}`}>{children}</blockquote>,
                             strong: ({ children }) => <strong className={`font-semibold ${message.type === 'user' ? 'text-white' : 'text-black'}`}>{children}</strong>,
                             em: ({ children }) => <em className={`italic ${message.type === 'user' ? 'text-white/90' : 'text-black/80'}`}>{children}</em>,
+                            br: () => <br className="block" />,
                             a: ({ children, href }) => {
                               // Handle lead links - navigate to leads dashboard
                               if (href && href.startsWith('leads/')) {

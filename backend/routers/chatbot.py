@@ -603,10 +603,16 @@ async def get_scheduled_messages(
         
         logger.info(f"Fetching scheduled messages for user {user_id} in timezone {user_tz}. Current time: {current_hour}:{current_minute:02d}")
         
-        # Get today's date range in UTC
-        today_utc = now_utc.date()
-        today_start = datetime.combine(today_utc, datetime.min.time()).replace(tzinfo=pytz.UTC)
-        today_end = datetime.combine(today_utc, datetime.max.time()).replace(tzinfo=pytz.UTC)
+        # Get today's date in user's timezone, then convert to UTC for query
+        today_user_tz = now_user_tz.date()
+        # Create start and end of day in user's timezone, then convert to UTC
+        today_start_user_tz = user_timezone.localize(datetime.combine(today_user_tz, datetime.min.time()))
+        today_end_user_tz = user_timezone.localize(datetime.combine(today_user_tz, datetime.max.time()))
+        # Convert to UTC for database query
+        today_start = today_start_user_tz.astimezone(pytz.UTC)
+        today_end = today_end_user_tz.astimezone(pytz.UTC)
+        
+        logger.info(f"Querying messages between {today_start.isoformat()} and {today_end.isoformat()} (user's today: {today_user_tz})")
         
         # Get undelivered scheduled messages for today
         undelivered_response = supabase_client.table("chatbot_scheduled_messages").select("*").eq(
@@ -617,6 +623,12 @@ async def get_scheduled_messages(
         
         undelivered_messages = undelivered_response.data if undelivered_response.data else []
         logger.info(f"Found {len(undelivered_messages)} undelivered scheduled messages for user {user_id}")
+        # Log morning messages specifically
+        morning_msgs = [msg for msg in undelivered_messages if msg.get("message_type") == "morning"]
+        if morning_msgs:
+            logger.info(f"Found {len(morning_msgs)} undelivered morning message(s): {[msg.get('id') for msg in morning_msgs]}")
+        else:
+            logger.info(f"No undelivered morning messages found in undelivered_messages")
         
         # Also check for delivered messages that might not be in conversations yet
         # Get all delivered messages for today
@@ -628,6 +640,10 @@ async def get_scheduled_messages(
         
         delivered_messages = delivered_response.data if delivered_response.data else []
         logger.info(f"Found {len(delivered_messages)} delivered scheduled messages for user {user_id}")
+        # Log morning messages in delivered
+        delivered_morning_msgs = [msg for msg in delivered_messages if msg.get("message_type") == "morning"]
+        if delivered_morning_msgs:
+            logger.info(f"Found {len(delivered_morning_msgs)} delivered morning message(s): {[msg.get('id') for msg in delivered_morning_msgs]}")
         
         # Check which delivered messages are in conversations
         if delivered_messages:
@@ -683,13 +699,29 @@ async def get_scheduled_messages(
                     scheduled_hour = scheduled_time.hour
                     scheduled_minute = scheduled_time.minute
                     scheduled_minutes = scheduled_hour * 60 + scheduled_minute
+                    message_type = msg.get("message_type", "")
                     
-                    # Only include if scheduled time has passed
-                    if scheduled_minutes <= current_minutes:
-                        filtered_messages.append(msg)
-                        logger.debug(f"Including message {msg.get('message_type')} scheduled at {scheduled_hour}:{scheduled_minute:02d} (current: {current_hour}:{current_minute:02d})")
+                    # Special handling for morning messages: show if current time is before 9:00 AM
+                    if message_type == "morning":
+                        morning_time_minutes = 9 * 60  # 9:00 AM
+                        logger.info(f"Processing morning message: scheduled at {scheduled_hour}:{scheduled_minute:02d}, current time: {current_hour}:{current_minute:02d} ({current_minutes} minutes)")
+                        if current_minutes < morning_time_minutes:
+                            # It's before 9:00 AM, show the morning message
+                            filtered_messages.append(msg)
+                            logger.info(f"✓ Including morning message (before 9:00 AM) - scheduled at {scheduled_hour}:{scheduled_minute:02d}, current: {current_hour}:{current_minute:02d}")
+                        elif scheduled_minutes <= current_minutes:
+                            # It's 9:00 AM or later, show if scheduled time has passed
+                            filtered_messages.append(msg)
+                            logger.info(f"✓ Including morning message (after 9:00 AM) - scheduled at {scheduled_hour}:{scheduled_minute:02d}, current: {current_hour}:{current_minute:02d}")
+                        else:
+                            logger.info(f"✗ Excluding morning message - scheduled at {scheduled_hour}:{scheduled_minute:02d} hasn't passed yet, current: {current_hour}:{current_minute:02d}")
                     else:
-                        logger.debug(f"Excluding message {msg.get('message_type')} scheduled at {scheduled_hour}:{scheduled_minute:02d} (current: {current_hour}:{current_minute:02d})")
+                        # For other messages, only include if scheduled time has passed
+                        if scheduled_minutes <= current_minutes:
+                            filtered_messages.append(msg)
+                            logger.debug(f"Including message {message_type} scheduled at {scheduled_hour}:{scheduled_minute:02d} (current: {current_hour}:{current_minute:02d})")
+                        else:
+                            logger.debug(f"Excluding message {message_type} scheduled at {scheduled_hour}:{scheduled_minute:02d} (current: {current_hour}:{current_minute:02d})")
                 except Exception as e:
                     logger.warning(f"Error parsing scheduled_time for message {msg.get('id')}: {e}, including anyway")
                     filtered_messages.append(msg)
@@ -720,8 +752,8 @@ async def generate_today_messages(
     try:
         from datetime import date, time, datetime as dt
         import pytz
+        from agents.morning_scheduled_message import generate_morning_message
         from agents.scheduled_messages import (
-            generate_morning_message,
             generate_leads_reminder_message,
             generate_mid_morning_message,
             generate_afternoon_message,
@@ -839,6 +871,136 @@ async def generate_today_messages(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating today's messages: {str(e)}"
+        )
+
+@router.post("/scheduled-messages/check-morning-on-login")
+async def check_morning_message_on_login(
+    current_user: User = Depends(get_current_user)
+):
+    """Check and generate morning message on login if needed (before 9:00 AM)"""
+    try:
+        from agents.morning_scheduled_message import ensure_morning_message_on_login
+        from agents.scheduled_messages import get_user_timezone
+        
+        user_id = current_user.id
+        user_tz = get_user_timezone(user_id)
+        
+        result = ensure_morning_message_on_login(user_id, user_tz)
+        
+        return {
+            "success": result.get("success", False),
+            "message": result.get("message", ""),
+            "generated": result.get("generated", False)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking morning message on login: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error checking morning message: {str(e)}"
+        )
+
+@router.post("/scheduled-messages/regenerate-morning")
+async def regenerate_morning_message(
+    current_user: User = Depends(get_current_user)
+):
+    """Delete today's morning message and regenerate it with the new format"""
+    try:
+        import pytz
+        from agents.morning_scheduled_message import generate_morning_message
+        from agents.scheduled_messages import get_user_timezone
+        
+        user_id = current_user.id
+        user_tz = get_user_timezone(user_id)
+        
+        # Get today's date range in user's timezone, then convert to UTC
+        user_tz = get_user_timezone(user_id)
+        try:
+            user_timezone = pytz.timezone(user_tz)
+        except:
+            user_timezone = pytz.UTC
+        
+        now_utc = datetime.now(pytz.UTC)
+        now_user_tz = now_utc.astimezone(user_timezone)
+        today_user_tz = now_user_tz.date()
+        
+        # Create start and end of day in user's timezone, then convert to UTC
+        today_start_user_tz = user_timezone.localize(datetime.combine(today_user_tz, datetime.min.time()))
+        today_end_user_tz = user_timezone.localize(datetime.combine(today_user_tz, datetime.max.time()))
+        # Convert to UTC for database query
+        today_start = today_start_user_tz.astimezone(pytz.UTC)
+        today_end = today_end_user_tz.astimezone(pytz.UTC)
+        
+        # Delete existing morning messages for today (using user's timezone date)
+        delete_response = supabase_client.table("chatbot_scheduled_messages").delete().eq(
+            "user_id", user_id
+        ).eq("message_type", "morning").gte(
+            "scheduled_time", today_start.isoformat()
+        ).lt(
+            "scheduled_time", today_end.isoformat()
+        ).execute()
+        
+        logger.info(f"Deleted {len(delete_response.data) if delete_response.data else 0} existing morning messages for user {user_id}")
+        
+        # Generate new morning message
+        result = generate_morning_message(user_id, user_tz)
+        
+        if result and result.get("success"):
+            # Get current time in user's timezone
+            try:
+                user_timezone = pytz.timezone(user_tz)
+            except:
+                user_timezone = pytz.UTC
+            
+            now_user_tz = now_utc.astimezone(user_timezone)
+            today = now_user_tz.date()
+            
+            # Save to database with scheduled time of 9:00 AM today
+            from datetime import time as dt_time
+            # Use today's date, not tomorrow
+            scheduled_time = user_timezone.localize(
+                datetime.combine(today, dt_time(9, 0))
+            )
+            
+            # If the scheduled time is in the past (e.g., it's already past 9 AM today), 
+            # we still want to show it, so keep it as today
+            logger.info(f"Setting scheduled_time to {scheduled_time} (today: {today}, 9:00 AM in {user_tz})")
+            
+            # Convert to UTC for storage
+            scheduled_time_utc = scheduled_time.astimezone(pytz.UTC)
+            
+            message_data = {
+                "user_id": user_id,
+                "message_type": "morning",
+                "content": result["content"],
+                "scheduled_time": scheduled_time_utc.isoformat(),
+                "metadata": result.get("metadata", {}),
+                "is_delivered": False
+            }
+            
+            insert_result = supabase_client.table("chatbot_scheduled_messages").insert(message_data).execute()
+            
+            if insert_result.data:
+                logger.info(f"Successfully regenerated morning message for user {user_id}")
+                # Return the full message data so frontend can display it immediately
+                return {
+                    "success": True,
+                    "message": "Morning message regenerated successfully",
+                    "content": result["content"],
+                    "message_data": insert_result.data[0]  # Return the full message object
+                }
+            else:
+                logger.error(f"Failed to save regenerated morning message for user {user_id}")
+                return {"success": False, "error": "Failed to save message"}
+        else:
+            logger.error(f"Failed to generate morning message for user {user_id}: {result.get('error', 'Unknown error') if result else 'No result'}")
+            return {"success": False, "error": result.get("error", "Failed to generate message") if result else "No result"}
+        
+    except Exception as e:
+        logger.error(f"Error regenerating morning message: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error regenerating morning message: {str(e)}"
         )
 
 @router.post("/scheduled-messages/{message_id}/deliver")

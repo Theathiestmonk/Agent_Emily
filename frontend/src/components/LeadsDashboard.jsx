@@ -167,6 +167,26 @@ const LeadsDashboard = () => {
     }
   }, [user, filterStatus, filterPlatform, fetchLeads])
 
+  // Handle leadId from URL query parameter (for opening lead from chatbot link)
+  useEffect(() => {
+    if (!user || !leads.length) return
+
+    const urlParams = new URLSearchParams(window.location.search)
+    const leadId = urlParams.get('leadId')
+    
+    if (leadId) {
+      // Find the lead in the leads list
+      const lead = leads.find(l => l.id === leadId)
+      if (lead) {
+        setSelectedLead(lead)
+        setShowDetailModal(true)
+        // Remove leadId from URL to prevent reopening on refresh
+        const newUrl = window.location.pathname + window.location.search.replace(/[?&]leadId=[^&]*/, '').replace(/^\?/, '?').replace(/\?$/, '')
+        window.history.replaceState({}, '', newUrl || window.location.pathname)
+      }
+    }
+  }, [user, leads])
+
   // Close filter dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -185,13 +205,13 @@ const LeadsDashboard = () => {
   useEffect(() => {
     if (!user) return
 
-    const interval = setInterval(() => {
-      fetchLeads(false) // Don't show loading spinner for polling
-    }, 30000) // Poll every 30 seconds
+      const interval = setInterval(() => {
+        fetchLeads(false) // Don't show loading spinner for polling
+      }, 30000) // Poll every 30 seconds
 
-    setPollingInterval(interval)
+      setPollingInterval(interval)
 
-    return () => {
+      return () => {
       clearInterval(interval)
     }
   }, [user, fetchLeads])
@@ -395,18 +415,18 @@ const LeadsDashboard = () => {
       }
       
       // Search query filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase()
-        const matchesName = lead.name?.toLowerCase().includes(query)
-        const matchesEmail = lead.email?.toLowerCase().includes(query)
-        const matchesPhone = lead.phone_number?.toLowerCase().includes(query)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      const matchesName = lead.name?.toLowerCase().includes(query)
+      const matchesEmail = lead.email?.toLowerCase().includes(query)
+      const matchesPhone = lead.phone_number?.toLowerCase().includes(query)
         if (!matchesName && !matchesEmail && !matchesPhone) {
           return false
         }
-      }
+    }
       
-      return true
-    })
+    return true
+  })
   }, [leads, filterStatus, filterDateRange, searchQuery])
 
   const dateRangeFilters = [
@@ -527,7 +547,7 @@ const LeadsDashboard = () => {
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
                     }`}
                   >
-                    {filter.label}
+                      {filter.label}
                   </button>
                 ))}
               </div>
