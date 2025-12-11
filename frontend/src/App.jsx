@@ -55,7 +55,7 @@ function ProtectedRoute({ children }) {
   const [checkingStatus, setCheckingStatus] = useState(true)
 
   useEffect(() => {
-    const checkUserStatus = async () => {
+    const checkUserStatus = async (retryCount = 0) => {
       if (isAuthenticated && user) {
         try {
           console.log('Checking subscription status for user:', user.id)
@@ -75,16 +75,37 @@ function ProtectedRoute({ children }) {
           }
         } catch (error) {
           console.error('Error checking user status:', error)
-          // Only set as no subscription if it's a clear 404 or similar error
-          // For network errors, keep checking
+          // Only set as no subscription if it's a clear 404 or 403 error
           if (error.response?.status === 404 || error.response?.status === 403) {
+            // User not found or forbidden - definitely no subscription
             setSubscriptionStatus({ has_active_subscription: false })
             setOnboardingStatus('subscription_required')
           } else {
-            // For other errors, retry or show error
-            console.log('Network or server error, will retry...')
-            setSubscriptionStatus({ has_active_subscription: false })
-            setOnboardingStatus('subscription_required')
+            // For network errors, 500 errors, etc. - retry with exponential backoff
+            // Don't assume no subscription on transient errors
+            const maxRetries = 2
+            if (retryCount < maxRetries) {
+              const delay = Math.pow(2, retryCount) * 1000 // Exponential backoff: 1s, 2s
+              console.log(`Network or server error, retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries + 1})`)
+              setTimeout(() => {
+                checkUserStatus(retryCount + 1)
+              }, delay)
+              // Don't set checkingStatus to false yet - we're retrying
+              return
+            } else {
+              // Max retries reached - assume active to prevent false redirect
+              // Set error flag but don't redirect
+              console.log('Max retries reached, assuming active subscription to prevent false redirect')
+              setSubscriptionStatus({ has_active_subscription: true, error: true })
+              // Still check onboarding if we assume active
+              try {
+                const onboardingResponse = await onboardingAPI.getOnboardingStatus()
+                setOnboardingStatus(onboardingResponse.data.onboarding_completed ? 'completed' : 'incomplete')
+              } catch (onboardingError) {
+                console.error('Error checking onboarding status:', onboardingError)
+                setOnboardingStatus('completed') // Default to completed to prevent redirect
+              }
+            }
           }
         }
       }
@@ -111,8 +132,21 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/login" />
   }
 
+  // IMPORTANT: Wait for subscription check to complete before redirecting
+  if (checkingStatus) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Checking subscription status...</p>
+        </div>
+      </div>
+    )
+  }
+
   // Check subscription status - only redirect if we've actually checked and confirmed no subscription
-  if (subscriptionStatus !== null && !subscriptionStatus?.has_active_subscription) {
+  // Also check that it's not an error state (where we assume active to prevent false redirects)
+  if (subscriptionStatus !== null && !subscriptionStatus?.has_active_subscription && !subscriptionStatus?.error) {
     console.log('User does not have active subscription, redirecting to subscription page')
     return <Navigate to="/subscription" />
   }

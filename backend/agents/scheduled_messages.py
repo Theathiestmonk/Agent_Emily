@@ -489,6 +489,99 @@ def generate_night_message(user_id: str, timezone: str = "UTC") -> Dict[str, Any
         return {"success": False, "error": str(e)}
 
 
+def generate_mid_morning_message(user_id: str, timezone: str = "UTC") -> Dict[str, Any]:
+    """Generate mid-morning message at 11:30 AM"""
+    try:
+        logger.info(f"Generating mid-morning message for user {user_id}")
+        profile = get_user_profile(user_id)
+        if not profile:
+            logger.error(f"Profile not found for user {user_id}")
+            return {"success": False, "error": "Profile not found"}
+        
+        business_name = profile.get("business_name", "there")
+        
+        data = {
+            "business_name": business_name,
+            "message_type": "mid_morning"
+        }
+        
+        message = f"Hey {business_name}! 👋\n\nJust checking in - how's your day going? Ready to tackle some great content? 💪"
+        
+        return {
+            "success": True,
+            "content": message,
+            "metadata": {
+                **data,
+                "sender": "chase"
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error generating mid-morning message: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+def generate_afternoon_message(user_id: str, timezone: str = "UTC") -> Dict[str, Any]:
+    """Generate afternoon message at 2:00 PM"""
+    try:
+        logger.info(f"Generating afternoon message for user {user_id}")
+        profile = get_user_profile(user_id)
+        if not profile:
+            logger.error(f"Profile not found for user {user_id}")
+            return {"success": False, "error": "Profile not found"}
+        
+        business_name = profile.get("business_name", "there")
+        
+        data = {
+            "business_name": business_name,
+            "message_type": "afternoon"
+        }
+        
+        message = f"Afternoon {business_name}! ☀️\n\nHope you're having a productive day! Time to create some amazing content? 🚀"
+        
+        return {
+            "success": True,
+            "content": message,
+            "metadata": {
+                **data,
+                "sender": "chase"
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error generating afternoon message: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+def generate_evening_message(user_id: str, timezone: str = "UTC") -> Dict[str, Any]:
+    """Generate evening message at 6:00 PM"""
+    try:
+        logger.info(f"Generating evening message for user {user_id}")
+        profile = get_user_profile(user_id)
+        if not profile:
+            logger.error(f"Profile not found for user {user_id}")
+            return {"success": False, "error": "Profile not found"}
+        
+        business_name = profile.get("business_name", "there")
+        
+        data = {
+            "business_name": business_name,
+            "message_type": "evening"
+        }
+        
+        message = f"Evening {business_name}! 🌆\n\nHow did your day go? Ready to plan tomorrow's content? Let's make it great! ✨"
+        
+        return {
+            "success": True,
+            "content": message,
+            "metadata": {
+                **data,
+                "sender": "chase"
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error generating evening message: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
 # Helper functions for generating content
 
 def get_industry_trends(industry: str, business_description: str = "") -> Dict[str, Any]:

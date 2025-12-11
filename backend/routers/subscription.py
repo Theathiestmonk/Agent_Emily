@@ -136,11 +136,35 @@ async def get_subscription_status(
             subscription_end_date = profile_result.data[0].get("subscription_end_date")
             subscription_start_date = profile_result.data[0].get("subscription_start_date")
         
+        # IMPORTANT: Double-check expiration date even if database function says active
+        # This is a safety net in case subscription_end_date wasn't properly checked
+        has_active_subscription = user_info["has_active_subscription"]
+        if has_active_subscription and subscription_end_date:
+            try:
+                # Parse the end date and check if it's in the future
+                if isinstance(subscription_end_date, str):
+                    # Handle ISO format strings
+                    end_date = datetime.fromisoformat(subscription_end_date.replace('Z', '+00:00'))
+                    # Convert to UTC if timezone-aware, otherwise assume UTC
+                    if end_date.tzinfo:
+                        end_date = end_date.replace(tzinfo=None)
+                else:
+                    end_date = subscription_end_date
+                
+                # Compare with current UTC time
+                if datetime.utcnow() > end_date:
+                    # Subscription expired but status not updated
+                    has_active_subscription = False
+                    logger.warning(f"User {current_user.id} has expired subscription (end_date: {subscription_end_date}, current: {datetime.utcnow()})")
+            except Exception as e:
+                logger.error(f"Error parsing subscription_end_date for user {current_user.id}: {e}")
+                # If we can't parse the date, trust the database function result
+        
         return JSONResponse(content={
             "success": True,
             "status": user_info["subscription_status"],
             "plan": user_info["subscription_plan"],
-            "has_active_subscription": user_info["has_active_subscription"],
+            "has_active_subscription": has_active_subscription,
             "migration_status": user_info["migration_status"],
             "grace_period_end": user_info["grace_period_end"],
             "days_left": user_info["days_left"],

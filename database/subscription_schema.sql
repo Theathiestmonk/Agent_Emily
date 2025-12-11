@@ -94,6 +94,7 @@ DECLARE
 BEGIN
     SELECT 
         subscription_status,
+        subscription_end_date,
         created_at,
         grace_period_end,
         migration_status
@@ -101,9 +102,15 @@ BEGIN
     FROM profiles 
     WHERE id = user_uuid;
     
-    -- Check if user has active subscription
+    -- Check if user has active subscription AND subscription hasn't expired
     IF user_record.subscription_status = 'active' THEN
-        RETURN TRUE;
+        -- IMPORTANT: Also check if subscription_end_date is in the future or NULL
+        IF user_record.subscription_end_date IS NULL OR user_record.subscription_end_date > NOW() THEN
+            RETURN TRUE;
+        ELSE
+            -- Subscription expired but status not updated - return FALSE
+            RETURN FALSE;
+        END IF;
     END IF;
     
     -- Check if user is grandfathered and within grace period
