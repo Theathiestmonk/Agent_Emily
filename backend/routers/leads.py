@@ -15,6 +15,8 @@ import hashlib
 import json
 import csv
 import io
+import time
+from functools import wraps
 
 from agents.lead_management_agent import LeadManagementAgent
 from services.whatsapp_service import WhatsAppService
@@ -48,6 +50,29 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 security = HTTPBearer()
+
+# Retry decorator for database operations
+def retry_db_operation(max_retries=3, delay=0.5):
+    """Retry decorator for database operations"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_retries - 1:
+                        raise
+                    error_str = str(e).lower()
+                    # Only retry on connection/timeout errors
+                    if any(keyword in error_str for keyword in ['timeout', 'connection', 'network', 'pool', 'temporarily']):
+                        logger.warning(f"Database operation failed (attempt {attempt + 1}/{max_retries}): {e}")
+                        time.sleep(delay * (attempt + 1))
+                    else:
+                        raise
+            return None
+        return wrapper
+    return decorator
 
 # User model
 class User(BaseModel):
@@ -451,29 +476,55 @@ def check_duplicate_lead(user_id: str, email: Optional[str] = None, phone_number
         if not normalized_email and not normalized_phone:
             return None
         
-        # Fetch all leads for this user once (optimized)
-        all_leads_result = supabase_admin.table("leads").select("*").eq("user_id", user_id).execute()
+        # Use targeted database queries instead of fetching all leads
+        # Check email first (case-insensitive)
+        if normalized_email:
+            # Use ILIKE for case-insensitive matching
+            result = supabase_admin.table("leads").select("*").eq("user_id", user_id).ilike("email", normalized_email).limit(1).execute()
+            if result.data:
+                # Verify exact match after normalization
+                for lead in result.data:
+                    lead_email = normalize_email(lead.get("email"))
+                    if lead_email == normalized_email:
+                        return lead
         
-        if not all_leads_result.data:
-            return None
-        
-        # Check for duplicate by email or phone (case-insensitive and normalized)
-        for lead in all_leads_result.data:
-            lead_email = normalize_email(lead.get("email"))
-            lead_phone = normalize_phone(lead.get("phone_number"))
-            
-            # Check if email matches
-            if normalized_email and lead_email and lead_email == normalized_email:
-                return lead
-            
-            # Check if phone matches
-            if normalized_phone and lead_phone and lead_phone == normalized_phone:
-                return lead
+        # Check phone number (exact match, already normalized)
+        if normalized_phone:
+            result = supabase_admin.table("leads").select("*").eq("user_id", user_id).eq("phone_number", normalized_phone).limit(1).execute()
+            if result.data:
+                return result.data[0]
         
         return None
     except Exception as e:
         logger.error(f"Error checking for duplicate lead: {e}")
         return None
+
+# Batch insert helper function
+@retry_db_operation(max_retries=3, delay=0.5)
+def batch_insert_leads(leads_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Insert multiple leads in a single batch operation"""
+    if not leads_data:
+        return []
+    
+    try:
+        result = supabase_admin.table("leads").insert(leads_data).execute()
+        return result.data if result.data else []
+    except Exception as e:
+        error_str = str(e).lower()
+        # Handle unique constraint violations gracefully
+        if "duplicate" in error_str or "unique" in error_str or "violates" in error_str:
+            # Try inserting one by one to identify which ones are duplicates
+            successful = []
+            for lead_data in leads_data:
+                try:
+                    single_result = supabase_admin.table("leads").insert(lead_data).execute()
+                    if single_result.data:
+                        successful.append(single_result.data[0])
+                except Exception:
+                    # Skip duplicates or other errors for individual inserts
+                    continue
+            return successful
+        raise
 
 # Lead CRUD Endpoints
 @router.post("", response_model=LeadResponse)
@@ -737,9 +788,20 @@ async def import_leads_csv(
         if not file.filename.endswith('.csv'):
             raise HTTPException(status_code=400, detail="File must be a CSV file")
         
-        # Read file content
+        # Read file content with encoding detection
         contents = await file.read()
-        file_content = contents.decode('utf-8')
+        # Try to detect encoding
+        encodings_to_try = ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']
+        file_content = None
+        for encoding in encodings_to_try:
+            try:
+                file_content = contents.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+
+        if file_content is None:
+            raise HTTPException(status_code=400, detail="Unable to decode CSV file. Please ensure it's UTF-8 encoded.")
         
         # Parse CSV
         csv_reader = csv.DictReader(io.StringIO(file_content))
@@ -762,6 +824,9 @@ async def import_leads_csv(
         created_leads = []
         errors = []
         duplicates = []
+        valid_leads_batch = []  # Collect valid leads for batch processing
+        batch_size = 50
+        checked_duplicates = set()  # Cache for duplicate checks within this upload session
         
         for idx, row in enumerate(rows, start=2):  # Start at 2 because row 1 is header
             try:
@@ -911,7 +976,15 @@ async def import_leads_csv(
                     errors.append(f"Row {idx}: Either email or phone_number is required")
                     continue
                 
-                # Check for duplicate lead
+                # Create unique key for duplicate check caching
+                duplicate_key = f"{normalize_email(email) or ''}:{normalize_phone(phone_number) or ''}"
+                
+                # Check cache first to avoid redundant database queries
+                if duplicate_key in checked_duplicates:
+                    duplicates.append(f"Row {idx}: Lead already processed in this upload (Name: {name})")
+                    continue
+                
+                # Check for duplicate lead in database
                 duplicate = check_duplicate_lead(
                     user_id=current_user["id"],
                     email=email,
@@ -926,6 +999,7 @@ async def import_leads_csv(
                         duplicate_info.append("phone number")
                     
                     duplicates.append(f"Row {idx}: Lead already exists with the same {', '.join(duplicate_info)} (Name: {name})")
+                    checked_duplicates.add(duplicate_key)
                     continue  # Skip this duplicate lead
                 
                 # Create lead data
@@ -949,27 +1023,255 @@ async def import_leads_csv(
                 if follow_up_at:
                     lead_data["follow_up_at"] = follow_up_at
                     logger.info(f"Row {idx}: Adding follow_up_at to lead_data: {follow_up_at}")
-                else:
-                    logger.info(f"Row {idx}: No follow_up_at to add (value was None or parsing failed)")
                 
-                # Insert lead
-                logger.info(f"Row {idx}: Inserting lead with data keys: {list(lead_data.keys())}")
-                if 'follow_up_at' in lead_data:
-                    logger.info(f"Row {idx}: follow_up_at value before insert: {lead_data.get('follow_up_at')}")
+                # Add to batch for batch processing
+                lead_data["_row_idx"] = idx  # Store row index for error reporting
+                valid_leads_batch.append(lead_data)
+                checked_duplicates.add(duplicate_key)  # Mark as processed
                 
-                result = supabase_admin.table("leads").insert(lead_data).execute()
-                
-                if result.data:
-                    inserted_lead = result.data[0]
-                    logger.info(f"Row {idx}: Lead inserted successfully. follow_up_at in response: {inserted_lead.get('follow_up_at')}")
-                    created_leads.append(inserted_lead)
-                else:
-                    logger.error(f"Row {idx}: Insert returned no data. Response: {result}")
-                    errors.append(f"Row {idx}: Failed to create lead")
+                # Process batch when it reaches batch_size
+                if len(valid_leads_batch) >= batch_size:
+                    try:
+                        # Remove row index before inserting
+                        batch_data = [{k: v for k, v in lead.items() if k != "_row_idx"} for lead in valid_leads_batch]
+                        batch_result = batch_insert_leads(batch_data)
+                        created_leads.extend(batch_result)
+                        logger.info(f"Batch inserted {len(batch_result)} leads")
+                    except Exception as batch_error:
+                        error_str = str(batch_error).lower()
+                        # Handle batch errors - try individual inserts
+                        for lead_data_item in valid_leads_batch:
+                            row_idx = lead_data_item.pop("_row_idx", "unknown")
+                            try:
+                                single_result = supabase_admin.table("leads").insert(lead_data_item).execute()
+                                if single_result.data:
+                                    created_leads.append(single_result.data[0])
+                            except Exception as single_error:
+                                single_error_str = str(single_error).lower()
+                                if "duplicate" in single_error_str or "unique" in single_error_str or "violates" in single_error_str:
+                                    duplicates.append(f"Row {row_idx}: Lead already exists (database constraint) - {lead_data_item.get('name', 'Unknown')}")
+                                else:
+                                    errors.append(f"Row {row_idx}: Database error - {str(single_error)}")
+                        logger.error(f"Batch insert failed, processed individually: {batch_error}")
+                    # Clear batch after processing
+                    valid_leads_batch = []
                     
             except Exception as e:
                 logger.error(f"Error processing row {idx}: {e}")
                 errors.append(f"Row {idx}: {str(e)}")
+        
+        # Process remaining batch if any
+        if valid_leads_batch:
+            try:
+                # Remove row index before inserting
+                batch_data = [{k: v for k, v in lead.items() if k != "_row_idx"} for lead in valid_leads_batch]
+                batch_result = batch_insert_leads(batch_data)
+                created_leads.extend(batch_result)
+                logger.info(f"Final batch inserted {len(batch_result)} leads")
+            except Exception as batch_error:
+                error_str = str(batch_error).lower()
+                # Handle batch errors - try individual inserts
+                for lead_data_item in valid_leads_batch:
+                    row_idx = lead_data_item.pop("_row_idx", "unknown")
+                    try:
+                        single_result = supabase_admin.table("leads").insert(lead_data_item).execute()
+                        if single_result.data:
+                            created_leads.append(single_result.data[0])
+                    except Exception as single_error:
+                        single_error_str = str(single_error).lower()
+                        if "duplicate" in single_error_str or "unique" in single_error_str or "violates" in single_error_str:
+                            duplicates.append(f"Row {row_idx}: Lead already exists (database constraint) - {lead_data_item.get('name', 'Unknown')}")
+                        else:
+                            errors.append(f"Row {row_idx}: Database error - {str(single_error)}")
+                logger.error(f"Final batch insert failed, processed individually: {batch_error}")
+        
+        # Send welcome emails to imported leads if Google connection exists
+        emails_sent = 0
+        if created_leads:
+            try:
+                # Check for Google connection
+                connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user["id"]).execute()
+                
+                if connection.data:
+                    # Get user profile for business context (once for all leads)
+                    profile = supabase_admin.table("profiles").select("*").eq("id", current_user["id"]).execute()
+                    profile_data = profile.data[0] if profile.data else {}
+                    
+                    business_name = profile_data.get("business_name", "our business")
+                    business_description = profile_data.get("business_description", "")
+                    brand_voice = profile_data.get("brand_voice", "professional")
+                    brand_tone = profile_data.get("brand_tone", "friendly")
+                    
+                    # Import Google connection functions
+                    from routers.google_connections import send_gmail_message, User as GoogleUser
+                    
+                    # Create User object for send_gmail_message
+                    created_at_value = current_user.get("created_at", "")
+                    if created_at_value and hasattr(created_at_value, 'isoformat'):
+                        created_at_str = created_at_value.isoformat()
+                    elif created_at_value:
+                        created_at_str = str(created_at_value)
+                    else:
+                        created_at_str = ""
+                    
+                    google_user = GoogleUser(
+                        id=current_user["id"],
+                        email=current_user["email"],
+                        name=current_user["name"],
+                        created_at=created_at_str
+                    )
+                    
+                    # Send emails to each lead - generate personalized email for each
+                    openai_api_key = os.getenv("OPENAI_API_KEY")
+                    
+                    for lead in created_leads:
+                        lead_id = lead.get("id")
+                        lead_email = lead.get("email")
+                        lead_name = lead.get("name", "there")
+                        lead_status = lead.get("status", "new")
+                        
+                        # Only send to leads with email and status "new"
+                        if lead_email and lead_status == "new":
+                            try:
+                                # Generate personalized email for this specific lead
+                                email_subject = None
+                                email_body = None
+                                
+                                if openai_api_key:
+                                    try:
+                                        openai_client = openai.OpenAI(api_key=openai_api_key)
+                                        
+                                        # Generate personalized email for this specific lead
+                                        prompt = f"""
+You are an expert email marketer writing a personalized thanking email to a new lead.
+
+Business Information:
+- Business Name: {business_name}
+- Business Description: {business_description}
+- Brand Voice: {brand_voice}
+- Brand Tone: {brand_tone}
+
+Lead Information:
+- Name: {lead_name}
+- Email: {lead_email}
+
+Create a personalized, warm, and engaging thanking email that:
+1. Thanks {lead_name} for contacting {business_name} (use the actual name: {lead_name})
+2. Shows understanding of the business context: {business_description if business_description else 'their interest in our services'}
+3. Provides an introductory message for further contact and engagement
+4. Matches the brand voice ({brand_voice}) and tone ({brand_tone})
+5. Is concise (under 200 words)
+6. Uses HTML format with proper paragraph tags (<p>), line breaks (<br>), and formatting
+7. Does NOT include links unless absolutely necessary
+8. Is professional yet friendly and inviting
+9. IMPORTANT: Use the actual lead name "{lead_name}" directly in the email, NOT a placeholder
+
+Return a JSON object with:
+- "subject": Email subject line (engaging and personalized, use the actual name {lead_name}, no HTML)
+- "body": Email body in HTML format with proper tags (<p>, <br>, etc.), use the actual name {lead_name} directly in the text
+"""
+                                        
+                                        response = openai_client.chat.completions.create(
+                                            model="gpt-4",
+                                            messages=[
+                                                {"role": "system", "content": "You are an expert email marketer. Always respond with valid JSON. Always use the actual lead name provided, never use placeholders."},
+                                                {"role": "user", "content": prompt}
+                                            ],
+                                            temperature=0.7,
+                                            max_tokens=600
+                                        )
+                                        
+                                        # Track token usage
+                                        from services.token_usage_service import TokenUsageService
+                                        if supabase_url and supabase_service_key:
+                                            token_tracker = TokenUsageService(supabase_url, supabase_service_key)
+                                            await token_tracker.track_chat_completion_usage(
+                                                user_id=current_user["id"],
+                                                feature_type="lead_email",
+                                                model_name="gpt-4",
+                                                response=response,
+                                                request_metadata={"lead_id": str(lead_id), "source": "csv_import"}
+                                            )
+                                        
+                                        try:
+                                            email_data = json.loads(response.choices[0].message.content)
+                                            email_subject = email_data.get("subject", f"Thank you for contacting {business_name}")
+                                            email_body = email_data.get("body", f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>")
+                                        except json.JSONDecodeError:
+                                            content = response.choices[0].message.content
+                                            email_subject = f"Thank you for contacting {business_name}"
+                                            email_body = content
+                                            # Fallback: replace any placeholders that might exist
+                                            email_body = email_body.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                                            email_subject = email_subject.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                                    except Exception as email_gen_error:
+                                        logger.error(f"Error generating email for lead {lead_id}: {email_gen_error}")
+                                        # Fallback email
+                                        email_subject = f"Thank you for contacting {business_name}"
+                                        email_body = f"<p>Dear {lead_name},</p><p>Thank you for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
+                                else:
+                                    # Fallback if OpenAI is not available
+                                    email_subject = f"Thank you for contacting {business_name}"
+                                    email_body = f"<p>Dear {lead_name},</p><p>Thank you for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
+                                
+                                # Final safety check: replace any remaining placeholders
+                                email_subject = email_subject.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                                email_body = email_body.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                                email_subject = email_subject.replace("{business_name}", business_name)
+                                email_body = email_body.replace("{business_name}", business_name)
+                                
+                                logger.info(f"Sending personalized email to lead {lead_id}: {lead_name} ({lead_email})")
+                                
+                                # Send email
+                                email_result = await send_gmail_message(
+                                    to=lead_email,
+                                    subject=email_subject,
+                                    body=email_body,
+                                    current_user=google_user
+                                )
+                                
+                                if email_result.get("success"):
+                                    # Store conversation
+                                    supabase_admin.table("lead_conversations").insert({
+                                        "lead_id": lead_id,
+                                        "message_type": "email",
+                                        "content": email_body,
+                                        "sender": "agent",
+                                        "direction": "outbound",
+                                        "message_id": email_result.get("message_id"),
+                                        "status": "sent"
+                                    }).execute()
+                                    
+                                    # Update status to "contacted"
+                                    supabase_admin.table("leads").update({
+                                        "status": "contacted",
+                                        "updated_at": datetime.now().isoformat()
+                                    }).eq("id", lead_id).execute()
+                                    
+                                    # Create status history entry
+                                    supabase_admin.table("lead_status_history").insert({
+                                        "lead_id": lead_id,
+                                        "old_status": "new",
+                                        "new_status": "contacted",
+                                        "changed_by": "system",
+                                        "reason": "Automatic welcome email sent from CSV import"
+                                    }).execute()
+                                    
+                                    emails_sent += 1
+                                    logger.info(f"Welcome email sent to lead {lead_id} ({lead_email}) from CSV import")
+                                    
+                            except Exception as email_send_error:
+                                logger.error(f"Error sending welcome email to lead {lead_id}: {email_send_error}")
+                                # Continue with other leads even if one fails
+                                continue
+                    
+                    if emails_sent > 0:
+                        logger.info(f"Sent {emails_sent} welcome emails to imported leads")
+                else:
+                    logger.info("No Google connection found, skipping automatic welcome emails for CSV imported leads")
+            except Exception as auto_email_error:
+                logger.error(f"Error in automatic email sending for CSV import: {auto_email_error}")
+                # Don't fail the import if email sending fails
         
         return {
             "success": True,
@@ -977,9 +1279,10 @@ async def import_leads_csv(
             "created": len(created_leads),
             "duplicates": len(duplicates),
             "errors": len(errors),
+            "emails_sent": emails_sent,
             "error_details": errors[:10],  # Limit error details to first 10
             "duplicate_details": duplicates[:10],  # Limit duplicate details to first 10
-            "message": f"Successfully imported {len(created_leads)} out of {len(rows)} leads. {len(duplicates)} duplicate(s) skipped."
+            "message": f"Successfully imported {len(created_leads)} out of {len(rows)} leads. {len(duplicates)} duplicate(s) skipped. {emails_sent} welcome email(s) sent."
         }
         
     except HTTPException:
@@ -1458,6 +1761,40 @@ async def get_whatsapp_connection(current_user: dict = Depends(get_current_user)
     except Exception as e:
         logger.error(f"Error getting WhatsApp connection: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/google/connection")
+async def get_google_connection(current_user: dict = Depends(get_current_user)):
+    """Get Google connection status for current user"""
+    try:
+        # Check for Google connection
+        connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user["id"]).execute()
+        
+        if not connection.data:
+            return {
+                "connected": False,
+                "message": "No active Google connection found",
+                "user_id": current_user["id"]
+            }
+        
+        conn = connection.data[0]
+        # Don't return encrypted tokens
+        return {
+            "connected": True,
+            "user_id": current_user["id"],
+            "connection_id": conn.get('id'),
+            "page_name": conn.get('page_name'),
+            "email": conn.get('page_name'),  # Usually email for Google
+            "connected_at": conn.get('connected_at'),
+            "connection_status": conn.get('connection_status')
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting Google connection: {e}")
+        return {
+            "connected": False,
+            "error": f"Error checking connection: {str(e)}",
+            "user_id": current_user["id"]
+        }
 
 @router.post("/{lead_id}/generate-email")
 async def generate_email(

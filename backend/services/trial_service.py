@@ -279,23 +279,32 @@ class TrialService:
                 "updated_at": profile.get("updated_at")
             }
             
-            # Add trial-specific information
-            if subscription_status == "trial":
+            # Always add trial-specific information if trial_expires_at exists (regardless of subscription_status)
+            # This ensures we can show countdown timer even if user upgraded or trial expired
+            trial_expires_at = profile.get("trial_expires_at")
+            trial_activated_at = profile.get("trial_activated_at")
+            
+            if trial_expires_at or trial_activated_at:
                 trial_info.update({
-                    "trial_start": profile.get("trial_activated_at"),
-                    "trial_end": profile.get("trial_expires_at"),
+                    "trial_start": trial_activated_at,
+                    "trial_end": trial_expires_at,
+                    "trial_expires_at": trial_expires_at,  # Add this explicitly for frontend
                     "subscription_start_date": profile.get("subscription_start_date"),
                     "subscription_end_date": profile.get("subscription_end_date")
                 })
                 
-                # Calculate days remaining
-                trial_expires_at = profile.get("trial_expires_at")
+                # Calculate days remaining if trial_expires_at exists
                 if trial_expires_at:
-                    expires_datetime = datetime.fromisoformat(trial_expires_at.replace('Z', '+00:00'))
-                    now = datetime.utcnow()
-                    days_remaining = max(0, (expires_datetime - now).days)
-                    trial_info["days_remaining"] = days_remaining
-                    trial_info["trial_expired"] = now > expires_datetime
+                    try:
+                        expires_datetime = datetime.fromisoformat(trial_expires_at.replace('Z', '+00:00'))
+                        now = datetime.utcnow()
+                        days_remaining = max(0, (expires_datetime - now).days)
+                        trial_info["days_remaining"] = days_remaining
+                        trial_info["trial_expired"] = now > expires_datetime
+                    except Exception as e:
+                        logger.error(f"Error calculating days remaining for user {user_id}: {e}")
+                        trial_info["days_remaining"] = 0
+                        trial_info["trial_expired"] = True
             
             return trial_info
             

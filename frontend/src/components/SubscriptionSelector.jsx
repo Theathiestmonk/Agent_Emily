@@ -493,8 +493,8 @@ const SubscriptionSelector = () => {
             const isPaidPlanActive = isCurrentPaidPlan && subscriptionStatus?.has_active_subscription && !isPaidPlanExpired;
             
             // Disable free trial card if user already has active trial/subscription
-            // Show as active if has_had_trial is true AND trial hasn't expired
-            const isTrialAlreadyActive = hasActiveTrial || (isFreeTrial && hasActiveSubscription && !isTrialExpired);
+            // Show as active ONLY if has_had_trial is true AND trial hasn't expired
+            const isTrialAlreadyActive = hasActiveTrial || (isFreeTrial && trialInfo?.has_had_trial === true && hasActiveSubscription && !isTrialExpired);
             
             // Dynamically update display name based on billing cycle
             const getDisplayName = () => {
