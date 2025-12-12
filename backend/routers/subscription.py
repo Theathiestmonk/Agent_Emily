@@ -128,42 +128,90 @@ async def get_subscription_status(
         
         user_info = result.data[0]
         
-        # Also fetch subscription_end_date directly from profiles table
-        profile_result = supabase.table("profiles").select("subscription_end_date, subscription_start_date").eq("id", current_user.id).execute()
+        # Fetch subscription data directly from profiles table to ensure we have latest data
+        # Using correct column names from schema: subscription_status, subscription_plan, subscription_end_date, subscription_start_date
+        profile_result = supabase.table("profiles").select(
+            "subscription_status, subscription_plan, subscription_end_date, subscription_start_date"
+        ).eq("id", current_user.id).execute()
+        
         subscription_end_date = None
         subscription_start_date = None
+        subscription_plan = None
+        subscription_status = None
+        
         if profile_result.data:
-            subscription_end_date = profile_result.data[0].get("subscription_end_date")
-            subscription_start_date = profile_result.data[0].get("subscription_start_date")
+            profile_data = profile_result.data[0]
+            subscription_end_date = profile_data.get("subscription_end_date")
+            subscription_start_date = profile_data.get("subscription_start_date")
+            subscription_plan = profile_data.get("subscription_plan")
+            subscription_status = profile_data.get("subscription_status", "inactive")
+        
+        # Fallback to user_info if profile_result didn't have data
+        if not subscription_plan:
+            subscription_plan = user_info.get("subscription_plan", "")
+        if not subscription_status:
+            subscription_status = user_info.get("subscription_status", "inactive")
         
         # IMPORTANT: Double-check expiration date even if database function says active
         # This is a safety net in case subscription_end_date wasn't properly checked
+        # Also automatically update subscription_status to 'expired' for paid plans (not trial)
         has_active_subscription = user_info["has_active_subscription"]
-        if has_active_subscription and subscription_end_date:
+        
+        # Only check expiration for paid plans (not trial plans)
+        # Trial plans use trial_expires_at, not subscription_end_date
+        is_paid_plan = subscription_plan and subscription_plan not in ["free_trial", "trial", None, ""]
+        
+        # Check if subscription has expired (only for paid plans)
+        if subscription_end_date and is_paid_plan:
             try:
-                # Parse the end date and check if it's in the future
+                # Parse the end date - subscription_end_date is timestamp without time zone
                 if isinstance(subscription_end_date, str):
-                    # Handle ISO format strings
-                    end_date = datetime.fromisoformat(subscription_end_date.replace('Z', '+00:00'))
-                    # Convert to UTC if timezone-aware, otherwise assume UTC
+                    # Handle ISO format strings (remove timezone info if present)
+                    end_date_str = subscription_end_date.replace('Z', '').replace('+00:00', '')
+                    end_date = datetime.fromisoformat(end_date_str)
+                    # Ensure it's timezone-naive (timestamp without time zone)
                     if end_date.tzinfo:
                         end_date = end_date.replace(tzinfo=None)
                 else:
                     end_date = subscription_end_date
+                    # Ensure it's timezone-naive
+                    if hasattr(end_date, 'tzinfo') and end_date.tzinfo:
+                        end_date = end_date.replace(tzinfo=None)
                 
-                # Compare with current UTC time
-                if datetime.utcnow() > end_date:
-                    # Subscription expired but status not updated
+                # Compare with current UTC time (timezone-naive)
+                now_utc = datetime.utcnow()
+                
+                if now_utc > end_date:
+                    # Subscription expired - update status in database immediately
                     has_active_subscription = False
-                    logger.warning(f"User {current_user.id} has expired subscription (end_date: {subscription_end_date}, current: {datetime.utcnow()})")
+                    logger.warning(
+                        f"User {current_user.id} has expired subscription "
+                        f"(plan: {subscription_plan}, end_date: {subscription_end_date}, current: {now_utc})"
+                    )
+                    
+                    # Update subscription_status to 'expired' in database immediately (only for paid plans)
+                    # Using correct column name: subscription_status (character varying(20))
+                    if subscription_status != 'expired':
+                        try:
+                            update_result = supabase.table("profiles").update({
+                                "subscription_status": "expired"
+                            }).eq("id", current_user.id).execute()
+                            
+                            if update_result.data:
+                                logger.info(f"✅ Updated subscription_status to 'expired' for user {current_user.id} (plan: {subscription_plan})")
+                                subscription_status = "expired"
+                            else:
+                                logger.warning(f"Failed to update subscription_status for user {current_user.id}")
+                        except Exception as update_error:
+                            logger.error(f"Error updating subscription_status to expired: {update_error}")
             except Exception as e:
                 logger.error(f"Error parsing subscription_end_date for user {current_user.id}: {e}")
                 # If we can't parse the date, trust the database function result
         
         return JSONResponse(content={
             "success": True,
-            "status": user_info["subscription_status"],
-            "plan": user_info["subscription_plan"],
+            "status": subscription_status,  # Use updated status
+            "plan": subscription_plan,
             "has_active_subscription": has_active_subscription,
             "migration_status": user_info["migration_status"],
             "grace_period_end": user_info["grace_period_end"],

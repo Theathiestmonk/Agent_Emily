@@ -19,46 +19,82 @@ const SubscriptionSelector = () => {
   const [countdown, setCountdown] = useState(null);
   const { logout } = useAuth();
 
-  useEffect(() => {
-    const fetchData = async () => {
+  // Function to fetch subscription data
+  const fetchSubscriptionData = async () => {
+    try {
+      // Fetch subscription plans
+      const plansResponse = await subscriptionAPI.getPlans();
+      const plansData = plansResponse?.data?.plans || plansResponse?.plans || [];
+      console.log('Plans fetched:', plansData);
+      setPlans(Array.isArray(plansData) ? plansData : []);
+      setLoadingPlans(false);
+
+      // Fetch trial information
       try {
-        // Fetch subscription plans
-        const plansResponse = await subscriptionAPI.getPlans();
-        const plansData = plansResponse?.data?.plans || plansResponse?.plans || [];
-        console.log('Plans fetched:', plansData);
-        setPlans(Array.isArray(plansData) ? plansData : []);
-        setLoadingPlans(false);
+        const trialResponse = await trialAPI.getTrialInfo();
+        const trialData = trialResponse?.data?.trial_info || trialResponse?.trial_info;
+        console.log('Trial info fetched:', trialData);
+        setTrialInfo(trialData || null);
+      } catch (trialError) {
+        console.log('No trial information available:', trialError);
+        setTrialInfo(null);
+      }
 
-        // Fetch trial information
-        try {
-          const trialResponse = await trialAPI.getTrialInfo();
-          const trialData = trialResponse?.data?.trial_info || trialResponse?.trial_info;
-          console.log('Trial info fetched:', trialData);
-          setTrialInfo(trialData || null);
-        } catch (trialError) {
-          console.log('No trial information available:', trialError);
-          setTrialInfo(null);
-        }
+      // Fetch subscription status to check if user has active subscription
+      try {
+        const statusResponse = await subscriptionAPI.getSubscriptionStatus();
+        console.log('Subscription status fetched:', statusResponse.data);
+        setSubscriptionStatus(statusResponse.data);
+      } catch (statusError) {
+        console.log('No subscription status available:', statusError);
+        setSubscriptionStatus(null);
+      }
+    } catch (error) {
+      console.error('Error fetching subscription plans:', error);
+      setPlans([]); // Ensure plans is always an array
+      setLoadingPlans(false);
+    } finally {
+      setLoadingTrial(false);
+    }
+  };
 
-        // Fetch subscription status to check if user has active subscription
-        try {
-          const statusResponse = await subscriptionAPI.getSubscriptionStatus();
-          console.log('Subscription status fetched:', statusResponse.data);
-          setSubscriptionStatus(statusResponse.data);
-        } catch (statusError) {
-          console.log('No subscription status available:', statusError);
-          setSubscriptionStatus(null);
-        }
-      } catch (error) {
-        console.error('Error fetching subscription plans:', error);
-        setPlans([]); // Ensure plans is always an array
-        setLoadingPlans(false);
-      } finally {
-        setLoadingTrial(false);
+  useEffect(() => {
+    fetchSubscriptionData();
+    
+    // Check if user is returning from payment (check URL parameters)
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentSuccess = urlParams.get('payment_success');
+    const paymentFailed = urlParams.get('payment_failed');
+    
+    if (paymentSuccess === 'true') {
+      console.log('Payment successful, refreshing subscription status...');
+      // Wait a moment for webhook to process, then refresh
+      setTimeout(() => {
+        fetchSubscriptionData();
+      }, 2000);
+      // Clean up URL parameter
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (paymentFailed === 'true') {
+      console.log('Payment failed');
+      // Clean up URL parameter
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    
+    // Also refresh when page becomes visible (user returns from payment page)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Page visible, refreshing subscription status...');
+        setTimeout(() => {
+          fetchSubscriptionData();
+        }, 1000);
       }
     };
-
-    fetchData();
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   // Countdown timer effect for active trial - calculate from trial_expires_at or trial_end
@@ -394,25 +430,6 @@ const SubscriptionSelector = () => {
           </div>
         </div>
 
-        {/* Trial Expired Message */}
-        {trialInfo && !trialInfo.trial_active && trialInfo.subscription_status === 'expired' && (
-          <div className="mb-6 sm:mb-8">
-            <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-xl p-4 sm:p-6 max-w-2xl mx-auto">
-              <div className="flex items-center space-x-3 sm:space-x-4">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-orange-500 to-red-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900">⏰ Trial Expired</h3>
-                  <p className="text-xs sm:text-sm text-gray-600">
-                    Your free trial has ended. Choose a plan to continue using Emily.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Plans Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-6xl mx-auto">
           {plans && Array.isArray(plans) && plans.length > 0 ? (
@@ -429,21 +446,35 @@ const SubscriptionSelector = () => {
             const price = billingCycle === 'monthly' ? plan.price_monthly : plan.price_yearly;
             const isPro = plan.name === 'pro';
             
-            // Get expiration date
+            // Get expiration date for trial
             const expirationDate = trialInfo?.trial_expires_at || trialInfo?.trial_end;
             
+            // Get subscription end date for paid plans
+            const subscriptionEndDate = subscriptionStatus?.subscription_end_date;
+            const currentPlan = subscriptionStatus?.plan;
+            const subscriptionStatusValue = subscriptionStatus?.status;
+            
+            // Check if this is the user's current paid plan (monthly/yearly, not trial)
+            // Plan names are stored as "starter", "pro", etc. (without _monthly/_yearly suffix)
+            const isCurrentPaidPlan = !isFreeTrial && currentPlan && 
+                                     (currentPlan === plan.name || 
+                                      currentPlan.startsWith(plan.name + '_') ||
+                                      plan.name === currentPlan);
+            
+            // Check if paid plan has expired (subscription_end_date has passed)
+            const isPaidPlanExpired = isCurrentPaidPlan && subscriptionEndDate && 
+                                     new Date(subscriptionEndDate) <= new Date() &&
+                                     (subscriptionStatusValue === 'expired' || !subscriptionStatus?.has_active_subscription);
+            
             // Check if trial has expired
-            // Trial is expired if:
-            // 1. has_had_trial === true AND expiration date exists and has passed, OR
-            // 2. trial_active is false AND subscription_status is 'expired', OR
-            // 3. days_remaining is 0 or less (even if trial_active is still true), OR
-            // 4. trial_expires_at or trial_end exists and the date has passed
-            const isTrialExpired = isFreeTrial && trialInfo && (
-              (trialInfo.has_had_trial === true && expirationDate && new Date(expirationDate) <= new Date()) ||
-              (!trialInfo.trial_active && trialInfo.subscription_status === 'expired') ||
-              (trialInfo.days_remaining !== undefined && trialInfo.days_remaining <= 0) ||
-              (expirationDate && new Date(expirationDate) <= new Date())
-            );
+            // Trial is expired ONLY if:
+            // 1. has_had_trial === true (user actually used the trial), AND
+            // 2. trial_end_date (trial_expires_at or trial_end) exists and has passed
+            // If has_had_trial === false, trial is NOT expired (it's available to use)
+            const isTrialExpired = isFreeTrial && trialInfo && 
+                                   trialInfo.has_had_trial === true && 
+                                   expirationDate && 
+                                   new Date(expirationDate) <= new Date();
             
             // Check if user has an active trial
             // Show countdown if: has_had_trial === true AND trial hasn't expired AND expiration date exists
@@ -457,6 +488,9 @@ const SubscriptionSelector = () => {
             // Check if user already has active subscription (for paid plans)
             const hasActiveSubscription = subscriptionStatus?.has_active_subscription || 
                                          (trialInfo?.subscription_status === 'active');
+            
+            // Check if user has this paid plan active (not expired)
+            const isPaidPlanActive = isCurrentPaidPlan && subscriptionStatus?.has_active_subscription && !isPaidPlanExpired;
             
             // Disable free trial card if user already has active trial/subscription
             // Show as active if has_had_trial is true AND trial hasn't expired
@@ -498,7 +532,9 @@ const SubscriptionSelector = () => {
                 className={`relative rounded-xl p-4 sm:p-6 border transition-all duration-300 ${
                   isTrialExpired
                     ? 'bg-gray-100 border-gray-300 grayscale opacity-75 cursor-not-allowed'
-                    : isTrialAlreadyActive
+                    : isPaidPlanExpired
+                    ? 'bg-white border-gray-300 hover:border-[#FF4D94] hover:shadow-lg'
+                    : isTrialAlreadyActive || isPaidPlanActive
                     ? 'bg-gradient-to-br from-pink-50 to-purple-50 border-[#FF4D94] shadow-md'
                     : isPro 
                     ? 'bg-white border-[#FF4D94] shadow-lg hover:shadow-xl' 
@@ -521,6 +557,14 @@ const SubscriptionSelector = () => {
                   </div>
                 )}
                 
+                {isPaidPlanExpired && (
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                    <div className="bg-gray-500 text-white px-3 py-1 rounded-full text-xs font-medium">
+                      Plan Expired
+                    </div>
+                  </div>
+                )}
+                
                 {isTrialAlreadyActive && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                     <div className="bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
@@ -529,13 +573,25 @@ const SubscriptionSelector = () => {
                   </div>
                 )}
                 
+                {isPaidPlanActive && !isPaidPlanExpired && (
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                    <div className="bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
+                      Current Plan
+                    </div>
+                  </div>
+                )}
+                
                 <div className="text-center mb-4 sm:mb-6">
-                  <h3 className={`text-lg sm:text-xl font-bold mb-2 ${isTrialExpired ? 'text-gray-500' : isTrialAlreadyActive ? 'text-gray-900' : 'text-gray-900'}`}>
+                  <h3 className={`text-lg sm:text-xl font-bold mb-2 ${isTrialExpired || isPaidPlanExpired ? 'text-gray-500' : isTrialAlreadyActive || isPaidPlanActive ? 'text-gray-900' : 'text-gray-900'}`}>
                     {displayName}
                   </h3>
                   {isTrialExpired ? (
                     <div className="text-base sm:text-lg font-semibold text-gray-500 mb-2">
                       Your trial is expired
+                    </div>
+                  ) : isPaidPlanExpired ? (
+                    <div className="text-base sm:text-lg font-semibold text-gray-500 mb-2">
+                      Your plan is expired please upgrade your plan or renewal your plan
                     </div>
                   ) : isTrialAlreadyActive ? (
                     <div className="space-y-2">
@@ -622,17 +678,25 @@ const SubscriptionSelector = () => {
                 </div>
                 
                 <button
-                  onClick={() => !isTrialExpired && !isTrialAlreadyActive && handleSubscribe(plan.name)}
-                  disabled={loadingPlan === plan.name || isTrialExpired || isTrialAlreadyActive}
+                  onClick={() => {
+                    // Allow clicking on expired paid plans to renew/upgrade
+                    // Only disable for expired trials or already active plans
+                    if (!isTrialExpired && !isTrialAlreadyActive && !isPaidPlanActive) {
+                      handleSubscribe(plan.name);
+                    }
+                  }}
+                  disabled={loadingPlan === plan.name || isTrialExpired || isTrialAlreadyActive || isPaidPlanActive}
                   className={`w-full py-2 sm:py-2.5 rounded-lg font-medium transition-all duration-300 flex items-center justify-center text-xs sm:text-sm ${
                     isTrialExpired
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : isTrialAlreadyActive
+                      : isPaidPlanExpired
+                      ? 'bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white hover:from-[#9E005C] hover:to-[#FF4D94] hover:scale-105'
+                      : isTrialAlreadyActive || isPaidPlanActive
                       ? 'bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white cursor-not-allowed opacity-75'
                       : isPro
                       ? 'bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white hover:from-[#9E005C] hover:to-[#FF4D94]'
                       : 'bg-gradient-to-r from-[#9E005C] to-[#FF4D94] text-white hover:from-[#FF4D94] hover:to-[#9E005C]'
-                  } ${loadingPlan === plan.name ? 'opacity-50 cursor-not-allowed' : isTrialExpired || isTrialAlreadyActive ? '' : 'hover:scale-105'}`}
+                  } ${loadingPlan === plan.name ? 'opacity-50 cursor-not-allowed' : (isTrialExpired || isTrialAlreadyActive || isPaidPlanActive) ? '' : 'hover:scale-105'}`}
                 >
                   {loadingPlan === plan.name ? (
                     <>
@@ -642,6 +706,10 @@ const SubscriptionSelector = () => {
                   ) : isTrialExpired ? (
                     <>
                       Trial Period Ended
+                    </>
+                  ) : isPaidPlanExpired ? (
+                    <>
+                      Renew Plan →
                     </>
                   ) : isTrialAlreadyActive ? (
                     <>

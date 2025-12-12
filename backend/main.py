@@ -214,6 +214,7 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Failed to start daily messages scheduler: {e}")
         logger.info("Continuing without daily messages scheduler")
+    
 
 @app.on_event("shutdown")
 async def shutdown_event():

@@ -7,6 +7,7 @@ python-dotenv
 pydantic
 pydantic-settings
 email-validator>=2.0.0
+dnspython>=2.0.0
 langgraph
 langchain
 langchain-openai

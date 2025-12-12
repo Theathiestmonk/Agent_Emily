@@ -52,7 +52,6 @@ function ProtectedRoute({ children }) {
   const { isAuthenticated, user, loading } = useAuth()
   const [subscriptionStatus, setSubscriptionStatus] = useState(null)
   const [onboardingStatus, setOnboardingStatus] = useState(null)
-  const [checkingStatus, setCheckingStatus] = useState(true)
 
   useEffect(() => {
     const checkUserStatus = async (retryCount = 0) => {
@@ -90,7 +89,7 @@ function ProtectedRoute({ children }) {
               setTimeout(() => {
                 checkUserStatus(retryCount + 1)
               }, delay)
-              // Don't set checkingStatus to false yet - we're retrying
+              // Retrying, don't do anything yet
               return
             } else {
               // Max retries reached - assume active to prevent false redirect
@@ -109,7 +108,6 @@ function ProtectedRoute({ children }) {
           }
         }
       }
-      setCheckingStatus(false)
     }
 
     checkUserStatus()
@@ -130,18 +128,6 @@ function ProtectedRoute({ children }) {
   if (!isAuthenticated) {
     console.log('User not authenticated, redirecting to login')
     return <Navigate to="/login" />
-  }
-
-  // IMPORTANT: Wait for subscription check to complete before redirecting
-  if (checkingStatus) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Checking subscription status...</p>
-        </div>
-      </div>
-    )
   }
 
   // Check subscription status - only redirect if we've actually checked and confirmed no subscription
