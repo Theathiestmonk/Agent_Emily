@@ -143,12 +143,18 @@ async def get_subscription_status(
             profile_data = profile_result.data[0]
             subscription_end_date = profile_data.get("subscription_end_date")
             subscription_start_date = profile_data.get("subscription_start_date")
+            # Trim whitespace from plan name to prevent matching issues
             subscription_plan = profile_data.get("subscription_plan")
+            if subscription_plan and isinstance(subscription_plan, str):
+                subscription_plan = subscription_plan.strip()
             subscription_status = profile_data.get("subscription_status", "inactive")
         
         # Fallback to user_info if profile_result didn't have data
         if not subscription_plan:
             subscription_plan = user_info.get("subscription_plan", "")
+            # Trim whitespace from plan name
+            if subscription_plan and isinstance(subscription_plan, str):
+                subscription_plan = subscription_plan.strip()
         if not subscription_status:
             subscription_status = user_info.get("subscription_status", "inactive")
         

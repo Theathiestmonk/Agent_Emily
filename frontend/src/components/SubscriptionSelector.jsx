@@ -92,8 +92,16 @@ const SubscriptionSelector = () => {
     
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
+    // Periodically refresh subscription status to catch backend updates
+    // This ensures the UI reflects status changes (e.g., expired -> active when date hasn't passed)
+    const statusRefreshInterval = setInterval(() => {
+      console.log('Periodically refreshing subscription status...');
+      fetchSubscriptionData();
+    }, 10000); // Refresh every 10 seconds
+    
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(statusRefreshInterval);
     };
   }, []);
 
@@ -451,20 +459,34 @@ const SubscriptionSelector = () => {
             
             // Get subscription end date for paid plans
             const subscriptionEndDate = subscriptionStatus?.subscription_end_date;
-            const currentPlan = subscriptionStatus?.plan;
+            // Trim whitespace from plan name to handle trailing spaces from backend
+            const currentPlan = subscriptionStatus?.plan ? subscriptionStatus.plan.trim() : null;
             const subscriptionStatusValue = subscriptionStatus?.status;
             
             // Check if this is the user's current paid plan (monthly/yearly, not trial)
             // Plan names are stored as "starter", "pro", etc. (without _monthly/_yearly suffix)
+            // Make comparison case-insensitive to handle "Starter" vs "starter"
+            // Also trim to handle trailing spaces
+            const currentPlanLower = currentPlan ? currentPlan.toLowerCase().trim() : '';
+            const planNameLower = plan.name ? plan.name.toLowerCase().trim() : '';
             const isCurrentPaidPlan = !isFreeTrial && currentPlan && 
-                                     (currentPlan === plan.name || 
-                                      currentPlan.startsWith(plan.name + '_') ||
-                                      plan.name === currentPlan);
+                                     (currentPlanLower === planNameLower || 
+                                      currentPlanLower.startsWith(planNameLower + '_') ||
+                                      planNameLower === currentPlanLower);
             
-            // Check if paid plan has expired (subscription_end_date has passed)
-            const isPaidPlanExpired = isCurrentPaidPlan && subscriptionEndDate && 
-                                     new Date(subscriptionEndDate) <= new Date() &&
-                                     (subscriptionStatusValue === 'expired' || !subscriptionStatus?.has_active_subscription);
+            // Debug logging
+            if (currentPlan) {
+              console.log(`Plan matching: currentPlan="${currentPlan}", plan.name="${plan.name}", isCurrentPaidPlan=${isCurrentPaidPlan}`);
+            }
+            
+            // Check if paid plan has expired - check date directly, not just status
+            // A plan is expired ONLY if the subscription_end_date has actually passed
+            const subscriptionEndDateObj = subscriptionEndDate ? new Date(subscriptionEndDate) : null;
+            const now = new Date();
+            const hasEndDatePassed = subscriptionEndDateObj && subscriptionEndDateObj <= now;
+            
+            // Plan is expired if: it's the current plan AND end date has passed
+            const isPaidPlanExpired = isCurrentPaidPlan && hasEndDatePassed;
             
             // Check if trial has expired
             // Trial is expired ONLY if:
@@ -486,11 +508,23 @@ const SubscriptionSelector = () => {
                                    !isTrialExpired;
             
             // Check if user already has active subscription (for paid plans)
+            // Consider active if: has_active_subscription is true OR status is 'active' OR end date hasn't passed
             const hasActiveSubscription = subscriptionStatus?.has_active_subscription || 
-                                         (trialInfo?.subscription_status === 'active');
+                                         (trialInfo?.subscription_status === 'active') ||
+                                         (isCurrentPaidPlan && subscriptionEndDateObj && subscriptionEndDateObj > now);
             
             // Check if user has this paid plan active (not expired)
-            const isPaidPlanActive = isCurrentPaidPlan && subscriptionStatus?.has_active_subscription && !isPaidPlanExpired;
+            // Plan is active if: it's the current plan AND (has_active_subscription OR end date hasn't passed OR status is 'active')
+            const isPaidPlanActive = isCurrentPaidPlan && 
+                                    (subscriptionStatus?.has_active_subscription || 
+                                     (subscriptionEndDateObj && subscriptionEndDateObj > now) ||
+                                     subscriptionStatusValue === 'active') && 
+                                    !isPaidPlanExpired;
+            
+            // Debug logging for active plan check
+            if (isCurrentPaidPlan) {
+              console.log(`Active plan check: isCurrentPaidPlan=${isCurrentPaidPlan}, has_active_subscription=${subscriptionStatus?.has_active_subscription}, endDatePassed=${hasEndDatePassed}, status=${subscriptionStatusValue}, isPaidPlanActive=${isPaidPlanActive}`);
+            }
             
             // Disable free trial card if user already has active trial/subscription
             // Show as active ONLY if has_had_trial is true AND trial hasn't expired
@@ -541,15 +575,16 @@ const SubscriptionSelector = () => {
                     : 'bg-white border-gray-200 hover:border-[#9E005C] hover:shadow-lg'
                 }`}
               >
-                {isPro && (
+                {/* Show badges in priority order: Current Plan > Expired > Active Trial > Most Popular */}
+                {isPaidPlanActive && !isPaidPlanExpired && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                    <div className="bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white px-3 py-1 rounded-full text-xs font-medium">
-                      Most Popular
+                    <div className="bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
+                      Current Plan
                     </div>
                   </div>
                 )}
                 
-                {isTrialExpired && (
+                {isTrialExpired && !isPaidPlanActive && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                     <div className="bg-gray-500 text-white px-3 py-1 rounded-full text-xs font-medium">
                       Trial Expired
@@ -557,7 +592,7 @@ const SubscriptionSelector = () => {
                   </div>
                 )}
                 
-                {isPaidPlanExpired && (
+                {isPaidPlanExpired && !isPaidPlanActive && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                     <div className="bg-gray-500 text-white px-3 py-1 rounded-full text-xs font-medium">
                       Plan Expired
@@ -565,7 +600,7 @@ const SubscriptionSelector = () => {
                   </div>
                 )}
                 
-                {isTrialAlreadyActive && (
+                {isTrialAlreadyActive && !isPaidPlanActive && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                     <div className="bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
                       Trial Active
@@ -573,10 +608,11 @@ const SubscriptionSelector = () => {
                   </div>
                 )}
                 
-                {isPaidPlanActive && !isPaidPlanExpired && (
+                {/* Show "Most Popular" only if pro plan is not active */}
+                {isPro && !isPaidPlanActive && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                    <div className="bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
-                      Current Plan
+                    <div className="bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white px-3 py-1 rounded-full text-xs font-medium">
+                      Most Popular
                     </div>
                   </div>
                 )}
