@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Check, ArrowRight, Loader2, Home, HelpCircle, Settings, LogOut, Clock, Gift } from 'lucide-react';
 import { subscriptionAPI } from '../services/subscription';
 import { trialAPI } from '../services/trial';
+import { onboardingAPI } from '../services/onboarding';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -14,6 +15,8 @@ const SubscriptionSelector = () => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [trialInfo, setTrialInfo] = useState(null);
   const [loadingTrial, setLoadingTrial] = useState(true);
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
+  const [countdown, setCountdown] = useState(null);
   const { logout } = useAuth();
 
   useEffect(() => {
@@ -21,19 +24,34 @@ const SubscriptionSelector = () => {
       try {
         // Fetch subscription plans
         const plansResponse = await subscriptionAPI.getPlans();
-        setPlans(plansResponse.data.plans);
+        const plansData = plansResponse?.data?.plans || plansResponse?.plans || [];
+        console.log('Plans fetched:', plansData);
+        setPlans(Array.isArray(plansData) ? plansData : []);
         setLoadingPlans(false);
 
         // Fetch trial information
         try {
           const trialResponse = await trialAPI.getTrialInfo();
-          setTrialInfo(trialResponse.data.trial_info);
+          const trialData = trialResponse?.data?.trial_info || trialResponse?.trial_info;
+          console.log('Trial info fetched:', trialData);
+          setTrialInfo(trialData || null);
         } catch (trialError) {
           console.log('No trial information available:', trialError);
           setTrialInfo(null);
         }
+
+        // Fetch subscription status to check if user has active subscription
+        try {
+          const statusResponse = await subscriptionAPI.getSubscriptionStatus();
+          console.log('Subscription status fetched:', statusResponse.data);
+          setSubscriptionStatus(statusResponse.data);
+        } catch (statusError) {
+          console.log('No subscription status available:', statusError);
+          setSubscriptionStatus(null);
+        }
       } catch (error) {
         console.error('Error fetching subscription plans:', error);
+        setPlans([]); // Ensure plans is always an array
         setLoadingPlans(false);
       } finally {
         setLoadingTrial(false);
@@ -42,6 +60,79 @@ const SubscriptionSelector = () => {
 
     fetchData();
   }, []);
+
+  // Countdown timer effect for active trial - calculate from trial_expires_at or trial_end
+  // Only show countdown if has_had_trial is true (user actually activated the trial)
+  useEffect(() => {
+    // Use trial_expires_at first, fallback to trial_end
+    const expirationDate = trialInfo?.trial_expires_at || trialInfo?.trial_end;
+    
+    // Only set up countdown if:
+    // 1. User has activated trial (has_had_trial === true)
+    // 2. Expiration date exists
+    if (expirationDate && trialInfo?.has_had_trial === true) {
+      console.log('Setting up countdown timer for expiration date:', expirationDate, 'has_had_trial:', trialInfo.has_had_trial);
+      const updateCountdown = () => {
+        try {
+          const now = new Date();
+          let expiresAt;
+          
+          // Handle timezone issues - try multiple formats
+          const expiresAtStr = expirationDate;
+          if (typeof expiresAtStr === 'string') {
+            // Try parsing as-is first
+            expiresAt = new Date(expiresAtStr);
+            
+            // If invalid, try adding Z for UTC
+            if (isNaN(expiresAt.getTime())) {
+              expiresAt = new Date(expiresAtStr + 'Z');
+            }
+          } else {
+            expiresAt = new Date(expiresAtStr);
+          }
+          
+          // Check if date is valid
+          if (isNaN(expiresAt.getTime())) {
+            console.error('Invalid expiration date:', expirationDate);
+            setCountdown(null);
+            return;
+          }
+          
+          const diff = expiresAt - now;
+          console.log('Countdown diff:', diff, 'expiresAt:', expiresAt, 'now:', now);
+
+          if (diff > 0) {
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            const countdownValue = { days, hours, minutes, seconds };
+            console.log('Setting countdown:', countdownValue);
+            setCountdown(countdownValue);
+          } else {
+            console.log('Trial expired, setting countdown to 0');
+            setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+          }
+        } catch (error) {
+          console.error('Error calculating countdown:', error, trialInfo);
+          setCountdown(null);
+        }
+      };
+
+      updateCountdown();
+      const interval = setInterval(updateCountdown, 1000);
+
+      return () => clearInterval(interval);
+    } else {
+      if (!expirationDate) {
+        console.log('No expiration date (trial_expires_at or trial_end), clearing countdown');
+      } else if (trialInfo?.has_had_trial !== true) {
+        console.log('has_had_trial is not true, clearing countdown. has_had_trial:', trialInfo?.has_had_trial);
+      }
+      setCountdown(null);
+    }
+  }, [trialInfo?.trial_expires_at, trialInfo?.trial_end, trialInfo?.has_had_trial]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -102,12 +193,33 @@ const SubscriptionSelector = () => {
           console.log('✅ Payment URL received, redirecting to:', response.data.payment_url);
           // Redirect to Razorpay payment page for paid plans
           window.location.href = response.data.payment_url;
-        } else {
+        } else if (planName === 'free_trial') {
           console.log('✅ Free trial activated successfully!');
-          // For free trials, show success message and refresh page to show trial banner
-          alert('Free trial activated successfully!');
-          // Refresh the page to update subscription status and show trial banner
-          window.location.reload();
+          // Free trial - check onboarding and redirect accordingly
+          // Add a small delay to ensure subscription is saved
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          try {
+            const onboardingResponse = await onboardingAPI.getOnboardingStatus();
+            console.log('📋 Onboarding status response:', onboardingResponse);
+            console.log('📋 Onboarding completed value:', onboardingResponse?.data?.onboarding_completed);
+            
+            if (onboardingResponse?.data?.onboarding_completed === true) {
+              // Onboarding complete - go to dashboard
+              console.log('🎯 Onboarding complete, redirecting to dashboard');
+              window.location.href = '/dashboard';
+            } else {
+              // Onboarding incomplete - go to onboarding
+              console.log('📝 Onboarding incomplete, redirecting to onboarding');
+              window.location.href = '/onboarding';
+            }
+          } catch (error) {
+            console.error('Error checking onboarding status:', error);
+            console.error('Error details:', error.response?.data || error.message);
+            // Default to onboarding if check fails
+            console.log('⚠️ Defaulting to onboarding due to error');
+            window.location.href = '/onboarding';
+          }
         }
       } else {
         console.error('❌ Failed to create subscription');
@@ -282,50 +394,6 @@ const SubscriptionSelector = () => {
           </div>
         </div>
 
-        {/* Trial Information Card */}
-        {trialInfo && trialInfo.trial_active && (
-          <div className="mb-6 sm:mb-8">
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl p-4 sm:p-6 max-w-2xl mx-auto">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-4 sm:space-y-0">
-                <div className="flex items-center space-x-3 sm:space-x-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Gift className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">🎉 Free Trial Active!</h3>
-                    <p className="text-xs sm:text-sm text-gray-600">
-                      <span className="font-semibold text-blue-600">Full access for 3 days</span> - You have <span className="font-semibold text-blue-600">{trialInfo.days_remaining}</span> days remaining
-                    </p>
-                    {trialInfo.trial_expires_at && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Expires on {new Date(trialInfo.trial_expires_at).toLocaleDateString()}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2 text-blue-600">
-                  <Clock className="w-4 h-4" />
-                  <span className="text-xs sm:text-sm font-medium">Trial Period</span>
-                </div>
-              </div>
-              
-              <div className="mt-4 pt-4 border-t border-blue-200">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
-                  <p className="text-xs sm:text-sm text-gray-600">
-                    Enjoy full access to all Emily features during your trial
-                  </p>
-                  <button
-                    onClick={() => window.location.href = '/onboarding'}
-                    className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs sm:text-sm font-medium rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-300"
-                  >
-                    Continue to Onboarding
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Trial Expired Message */}
         {trialInfo && !trialInfo.trial_active && trialInfo.subscription_status === 'expired' && (
           <div className="mb-6 sm:mb-8">
@@ -347,7 +415,8 @@ const SubscriptionSelector = () => {
 
         {/* Plans Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-6xl mx-auto">
-          {plans
+          {plans && Array.isArray(plans) && plans.length > 0 ? (
+            plans
             .sort((a, b) => {
               // Define the order: trial, basic, pro
               const order = { 'free_trial': 0, 'starter': 1, 'basic': 1, 'pro': 2 };
@@ -359,6 +428,39 @@ const SubscriptionSelector = () => {
             const isFreeTrial = plan.name === 'free_trial';
             const price = billingCycle === 'monthly' ? plan.price_monthly : plan.price_yearly;
             const isPro = plan.name === 'pro';
+            
+            // Get expiration date
+            const expirationDate = trialInfo?.trial_expires_at || trialInfo?.trial_end;
+            
+            // Check if trial has expired
+            // Trial is expired if:
+            // 1. has_had_trial === true AND expiration date exists and has passed, OR
+            // 2. trial_active is false AND subscription_status is 'expired', OR
+            // 3. days_remaining is 0 or less (even if trial_active is still true), OR
+            // 4. trial_expires_at or trial_end exists and the date has passed
+            const isTrialExpired = isFreeTrial && trialInfo && (
+              (trialInfo.has_had_trial === true && expirationDate && new Date(expirationDate) <= new Date()) ||
+              (!trialInfo.trial_active && trialInfo.subscription_status === 'expired') ||
+              (trialInfo.days_remaining !== undefined && trialInfo.days_remaining <= 0) ||
+              (expirationDate && new Date(expirationDate) <= new Date())
+            );
+            
+            // Check if user has an active trial
+            // Show countdown if: has_had_trial === true AND trial hasn't expired AND expiration date exists
+            const hasActiveTrial = isFreeTrial && 
+                                   trialInfo && 
+                                   trialInfo.has_had_trial === true && 
+                                   expirationDate && 
+                                   new Date(expirationDate) > new Date() &&
+                                   !isTrialExpired;
+            
+            // Check if user already has active subscription (for paid plans)
+            const hasActiveSubscription = subscriptionStatus?.has_active_subscription || 
+                                         (trialInfo?.subscription_status === 'active');
+            
+            // Disable free trial card if user already has active trial/subscription
+            // Show as active if has_had_trial is true AND trial hasn't expired
+            const isTrialAlreadyActive = hasActiveTrial || (isFreeTrial && hasActiveSubscription && !isTrialExpired);
             
             // Dynamically update display name based on billing cycle
             const getDisplayName = () => {
@@ -393,10 +495,14 @@ const SubscriptionSelector = () => {
             return (
               <div
                 key={plan.id}
-                className={`relative bg-white rounded-xl p-4 sm:p-6 border transition-all duration-300 ${
-                  isPro 
-                    ? 'border-[#FF4D94] shadow-lg hover:shadow-xl' 
-                    : 'border-gray-200 hover:border-[#9E005C] hover:shadow-lg'
+                className={`relative rounded-xl p-4 sm:p-6 border transition-all duration-300 ${
+                  isTrialExpired
+                    ? 'bg-gray-100 border-gray-300 grayscale opacity-75 cursor-not-allowed'
+                    : isTrialAlreadyActive
+                    ? 'bg-gradient-to-br from-pink-50 to-purple-50 border-[#FF4D94] shadow-md'
+                    : isPro 
+                    ? 'bg-white border-[#FF4D94] shadow-lg hover:shadow-xl' 
+                    : 'bg-white border-gray-200 hover:border-[#9E005C] hover:shadow-lg'
                 }`}
               >
                 {isPro && (
@@ -407,16 +513,55 @@ const SubscriptionSelector = () => {
                   </div>
                 )}
                 
-                <div className="text-center mb-4 sm:mb-6">
-                  <h3 className="text-lg sm:text-xl font-bold mb-2 text-gray-900">{displayName}</h3>
-                  <div className="text-2xl sm:text-3xl font-bold mb-1">
-                    <span className={`${isPro ? 'text-[#FF4D94]' : 'text-[#9E005C]'}`}>
-                      {priceInfo.price}
-                    </span>
-                    {priceInfo.period && (
-                      <span className="text-gray-500 text-sm sm:text-base">/{priceInfo.period}</span>
-                    )}
+                {isTrialExpired && (
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                    <div className="bg-gray-500 text-white px-3 py-1 rounded-full text-xs font-medium">
+                      Trial Expired
+                    </div>
                   </div>
+                )}
+                
+                {isTrialAlreadyActive && (
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                    <div className="bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
+                      Trial Active
+                    </div>
+                  </div>
+                )}
+                
+                <div className="text-center mb-4 sm:mb-6">
+                  <h3 className={`text-lg sm:text-xl font-bold mb-2 ${isTrialExpired ? 'text-gray-500' : isTrialAlreadyActive ? 'text-gray-900' : 'text-gray-900'}`}>
+                    {displayName}
+                  </h3>
+                  {isTrialExpired ? (
+                    <div className="text-base sm:text-lg font-semibold text-gray-500 mb-2">
+                      Your trial is expired
+                    </div>
+                  ) : isTrialAlreadyActive ? (
+                    <div className="space-y-2">
+                      <div className="text-base sm:text-lg font-semibold bg-gradient-to-r from-[#FF4D94] to-[#9E005C] bg-clip-text text-transparent mb-2">
+                        Your trial is active
+                      </div>
+                      {(trialInfo?.trial_expires_at || trialInfo?.trial_end) && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Expires: {new Date(trialInfo.trial_expires_at || trialInfo.trial_end).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-2xl sm:text-3xl font-bold mb-1">
+                      <span className={`${isPro ? 'text-[#FF4D94]' : 'text-[#9E005C]'}`}>
+                        {priceInfo.price}
+                      </span>
+                      {priceInfo.period && (
+                        <span className="text-gray-500 text-sm sm:text-base">/{priceInfo.period}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 
                 <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
@@ -457,8 +602,8 @@ const SubscriptionSelector = () => {
                       <>
                         {featuresArray.slice(0, 4).map((feature, index) => (
                           <div key={index} className="flex items-center space-x-2">
-                            <Check className={`w-3 h-3 sm:w-4 sm:h-4 ${isPro ? 'text-[#FF4D94]' : 'text-[#9E005C]'}`} />
-                            <span className="text-xs sm:text-sm text-gray-700">{formatFeature(feature)}</span>
+                            <Check className={`w-3 h-3 sm:w-4 sm:h-4 ${isTrialExpired ? 'text-gray-400' : isTrialAlreadyActive ? 'text-[#9E005C]' : isPro ? 'text-[#FF4D94]' : 'text-[#9E005C]'}`} />
+                            <span className={`text-xs sm:text-sm ${isTrialExpired ? 'text-gray-500' : isTrialAlreadyActive ? 'text-gray-700' : 'text-gray-700'}`}>{formatFeature(feature)}</span>
                           </div>
                         ))}
                         {featuresArray.length > 4 && (
@@ -477,18 +622,76 @@ const SubscriptionSelector = () => {
                 </div>
                 
                 <button
-                  onClick={() => handleSubscribe(plan.name)}
-                  disabled={loadingPlan === plan.name}
+                  onClick={() => !isTrialExpired && !isTrialAlreadyActive && handleSubscribe(plan.name)}
+                  disabled={loadingPlan === plan.name || isTrialExpired || isTrialAlreadyActive}
                   className={`w-full py-2 sm:py-2.5 rounded-lg font-medium transition-all duration-300 flex items-center justify-center text-xs sm:text-sm ${
-                    isPro
+                    isTrialExpired
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : isTrialAlreadyActive
+                      ? 'bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white cursor-not-allowed opacity-75'
+                      : isPro
                       ? 'bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white hover:from-[#9E005C] hover:to-[#FF4D94]'
                       : 'bg-gradient-to-r from-[#9E005C] to-[#FF4D94] text-white hover:from-[#FF4D94] hover:to-[#9E005C]'
-                  } ${loadingPlan === plan.name ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+                  } ${loadingPlan === plan.name ? 'opacity-50 cursor-not-allowed' : isTrialExpired || isTrialAlreadyActive ? '' : 'hover:scale-105'}`}
                 >
                   {loadingPlan === plan.name ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin mr-2" />
                       Processing...
+                    </>
+                  ) : isTrialExpired ? (
+                    <>
+                      Trial Period Ended
+                    </>
+                  ) : isTrialAlreadyActive ? (
+                    <>
+                      <Clock className="w-4 h-4 mr-2" />
+                      {(() => {
+                        // Use trial_expires_at first, fallback to trial_end
+                        const expirationDate = trialInfo?.trial_expires_at || trialInfo?.trial_end;
+                        
+                        if (expirationDate) {
+                          try {
+                            const now = new Date();
+                            let expiresAt = new Date(expirationDate);
+                            
+                            // Handle invalid date
+                            if (isNaN(expiresAt.getTime())) {
+                              expiresAt = new Date(expirationDate + 'Z');
+                            }
+                            
+                            // If still invalid, try without timezone
+                            if (isNaN(expiresAt.getTime())) {
+                              console.error('Cannot parse expiration date:', expirationDate);
+                              return <span>Trial Active</span>;
+                            }
+                            
+                            const diff = expiresAt - now;
+                            
+                            if (diff > 0) {
+                              const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                              const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                              const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                              const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                              
+                              // Use countdown state if available (updates every second), otherwise use calculated value
+                              const displayCountdown = countdown || { days, hours, minutes, seconds };
+                              
+                              return (
+                                <span className="font-mono">
+                                  {displayCountdown.days}D {String(displayCountdown.hours).padStart(2, '0')}H {String(displayCountdown.minutes).padStart(2, '0')}M {String(displayCountdown.seconds).padStart(2, '0')}S
+                                </span>
+                              );
+                            } else {
+                              return <span>Expired</span>;
+                            }
+                          } catch (e) {
+                            console.error('Error calculating countdown in button:', e, trialInfo);
+                            return <span>Trial Active</span>;
+                          }
+                        }
+                        return <span>Trial Active</span>;
+                      })()}
                     </>
                   ) : (
                     <>
@@ -499,7 +702,12 @@ const SubscriptionSelector = () => {
                 </button>
               </div>
             );
-          })}
+          })
+          ) : (
+            <div className="col-span-full text-center py-8">
+              <p className="text-gray-500">No subscription plans available. Please try again later.</p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

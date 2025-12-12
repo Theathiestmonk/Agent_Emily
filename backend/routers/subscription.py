@@ -295,9 +295,67 @@ async def create_subscription(
         # Check if user already has active subscription
         result = supabase.rpc("get_user_subscription_info", {"user_uuid": current_user.id}).execute()
         
-        if result.data and result.data[0]["has_active_subscription"]:
-            logger.warning(f"User {current_user.id} already has active subscription")
-            raise HTTPException(status_code=400, detail="User already has an active subscription")
+        # Also get subscription_end_date directly from profile
+        profile_result = supabase.table("profiles").select("subscription_status, subscription_plan, subscription_end_date").eq("id", current_user.id).execute()
+        subscription_end_date = None
+        if profile_result.data:
+            subscription_end_date = profile_result.data[0].get("subscription_end_date")
+            current_plan = profile_result.data[0].get("subscription_plan", "")
+            current_status = profile_result.data[0].get("subscription_status", "")
+        else:
+            current_plan = ""
+            current_status = ""
+        
+        # Check if subscription has actually expired (end_date in the past)
+        is_subscription_expired = False
+        if subscription_end_date:
+            from datetime import datetime
+            try:
+                if isinstance(subscription_end_date, str):
+                    end_date = datetime.fromisoformat(subscription_end_date.replace('Z', '+00:00'))
+                else:
+                    end_date = subscription_end_date
+                from datetime import timezone
+                now = datetime.now(timezone.utc) if end_date.tzinfo else datetime.utcnow()
+                if end_date.tzinfo:
+                    now = now.replace(tzinfo=timezone.utc)
+                else:
+                    end_date = end_date.replace(tzinfo=None)
+                    now = now.replace(tzinfo=None)
+                is_subscription_expired = end_date < now
+                logger.info(f"User {current_user.id} subscription_end_date: {subscription_end_date}, is_expired: {is_subscription_expired}")
+            except Exception as e:
+                logger.warning(f"Error parsing subscription_end_date: {e}")
+        
+        has_active_subscription = result.data and result.data[0].get("has_active_subscription", False)
+        
+        # If subscription has expired, allow renewal/upgrade regardless of status
+        if is_subscription_expired:
+            logger.info(f"User {current_user.id} subscription has expired, allowing renewal/upgrade to {request.plan_name}")
+            # Continue with subscription creation - will renew/upgrade
+        elif has_active_subscription:
+            # Allow upgrading from trial to paid plans or changing between paid plans
+            # If user is trying to activate free trial again, block it
+            if request.plan_name == "free_trial":
+                logger.warning(f"User {current_user.id} already has active subscription, cannot activate free trial again")
+                raise HTTPException(status_code=400, detail="You already have an active subscription. Please upgrade to a paid plan.")
+            
+            # If user is on trial and trying to upgrade to paid plan, allow it
+            if current_status == "trial" and request.plan_name != "free_trial":
+                logger.info(f"User {current_user.id} upgrading from trial to {request.plan_name}, allowing upgrade")
+                # Continue with subscription creation - will update subscription
+            elif current_status == "active" and current_plan != request.plan_name:
+                # User is upgrading/downgrading between paid plans - allow it
+                logger.info(f"User {current_user.id} changing plan from {current_plan} to {request.plan_name}, allowing change")
+                # Continue with subscription creation - will update subscription
+            elif current_plan == request.plan_name:
+                # User already has the same plan and it's still active - allow renewal if they want to extend
+                logger.info(f"User {current_user.id} renewing/extending plan {current_plan}, allowing renewal")
+                # Continue with subscription creation - will extend subscription
+            else:
+                # Other cases - allow upgrade/change
+                logger.info(f"User {current_user.id} has {current_status} status with plan {current_plan}, allowing change to {request.plan_name}")
+                # Continue with subscription creation
         
         # Get plan details
         plan_result = supabase.table("subscription_plans").select("*").eq("name", request.plan_name).eq("is_active", True).execute()

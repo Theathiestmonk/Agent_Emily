@@ -273,6 +273,7 @@ class TrialService:
                 "subscription_status": subscription_status,
                 "subscription_plan": profile.get("subscription_plan"),
                 "trial_active": subscription_status == "trial",
+                "has_had_trial": profile.get("has_had_trial", False),
                 "onboarding_completed": profile.get("onboarding_completed", False),
                 "created_at": profile.get("created_at"),
                 "updated_at": profile.get("updated_at")
