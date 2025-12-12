@@ -21,24 +21,24 @@ const SubscriptionSelector = () => {
 
   // Function to fetch subscription data
   const fetchSubscriptionData = async () => {
-    try {
-      // Fetch subscription plans
-      const plansResponse = await subscriptionAPI.getPlans();
+      try {
+        // Fetch subscription plans
+        const plansResponse = await subscriptionAPI.getPlans();
       const plansData = plansResponse?.data?.plans || plansResponse?.plans || [];
       console.log('Plans fetched:', plansData);
       setPlans(Array.isArray(plansData) ? plansData : []);
-      setLoadingPlans(false);
+        setLoadingPlans(false);
 
-      // Fetch trial information
-      try {
-        const trialResponse = await trialAPI.getTrialInfo();
+        // Fetch trial information
+        try {
+          const trialResponse = await trialAPI.getTrialInfo();
         const trialData = trialResponse?.data?.trial_info || trialResponse?.trial_info;
         console.log('Trial info fetched:', trialData);
         setTrialInfo(trialData || null);
-      } catch (trialError) {
-        console.log('No trial information available:', trialError);
-        setTrialInfo(null);
-      }
+        } catch (trialError) {
+          console.log('No trial information available:', trialError);
+          setTrialInfo(null);
+        }
 
       // Fetch subscription status to check if user has active subscription
       try {
@@ -49,14 +49,14 @@ const SubscriptionSelector = () => {
         console.log('No subscription status available:', statusError);
         setSubscriptionStatus(null);
       }
-    } catch (error) {
-      console.error('Error fetching subscription plans:', error);
+      } catch (error) {
+        console.error('Error fetching subscription plans:', error);
       setPlans([]); // Ensure plans is always an array
-      setLoadingPlans(false);
-    } finally {
-      setLoadingTrial(false);
-    }
-  };
+        setLoadingPlans(false);
+      } finally {
+        setLoadingTrial(false);
+      }
+    };
 
   useEffect(() => {
     fetchSubscriptionData();
@@ -244,7 +244,7 @@ const SubscriptionSelector = () => {
               // Onboarding complete - go to dashboard
               console.log('🎯 Onboarding complete, redirecting to dashboard');
               window.location.href = '/dashboard';
-            } else {
+        } else {
               // Onboarding incomplete - go to onboarding
               console.log('📝 Onboarding incomplete, redirecting to onboarding');
               window.location.href = '/onboarding';
@@ -609,14 +609,14 @@ const SubscriptionSelector = () => {
                       )}
                     </div>
                   ) : (
-                    <div className="text-2xl sm:text-3xl font-bold mb-1">
-                      <span className={`${isPro ? 'text-[#FF4D94]' : 'text-[#9E005C]'}`}>
-                        {priceInfo.price}
-                      </span>
-                      {priceInfo.period && (
-                        <span className="text-gray-500 text-sm sm:text-base">/{priceInfo.period}</span>
-                      )}
-                    </div>
+                  <div className="text-2xl sm:text-3xl font-bold mb-1">
+                    <span className={`${isPro ? 'text-[#FF4D94]' : 'text-[#9E005C]'}`}>
+                      {priceInfo.price}
+                    </span>
+                    {priceInfo.period && (
+                      <span className="text-gray-500 text-sm sm:text-base">/{priceInfo.period}</span>
+                    )}
+                  </div>
                   )}
                 </div>
                 
