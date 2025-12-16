@@ -7,6 +7,7 @@ import os
 import json
 import logging
 import numpy as np
+import re
 from typing import Dict, List, Any, Optional, Literal, TypedDict
 from datetime import datetime
 from pydantic import BaseModel, Field, EmailStr
@@ -144,8 +145,54 @@ class ContentGenerationPayload(BaseModel):
 # =============================================================================
 
 class AnalyticsPayload(BaseModel):
-    query: Optional[str] = None
-    platform: Optional[str] = None
+    # User wants INSIGHT or IMPROVEMENT?
+    insight_type: Literal["insight", "improvement"]
+
+    # Source of analytics
+    source: Literal["social_media", "blog"]
+
+    # SOCIAL MEDIA FIELDS
+    platform: Optional[List[Literal[
+        "instagram",
+        "facebook",
+        "youtube",
+        "linkedin",
+        "twitter",
+        "pinterest"
+    ]]] = None
+
+    metrics: Optional[List[Literal[
+        # Social media metrics
+        "reach",
+        "impressions",
+        "engagement",
+        "likes",
+        "comments",
+        "shares",
+        "saves",
+        "views",
+        "profile_visits",
+        "followers",
+        "avg_view_time",
+        "average_watch_time",
+        "watch_time",
+        "growth",
+        "top_posts",
+        "all_posts"   # for "saare posts"
+    ]]] = None
+
+    # BLOG METRICS
+    blog_metrics: Optional[List[Literal[
+        "views",
+        "read_time",
+        "bounce_rate",
+        "engagement",
+        "traffic_sources",
+        "top_articles",
+        "all_articles"  # optional aggregate
+    ]]] = None
+
+    # Applied to BOTH social + blog
     date_range: Optional[str] = None
 
 # =============================================================================
@@ -271,6 +318,50 @@ class IntentBasedChatbotState(TypedDict):
 # =============================================================================
 
 class IntentBasedChatbot:
+    # Platform aliases mapping
+    PLATFORM_ALIASES = {
+        "insta": "instagram",
+        "ig": "instagram",
+        "fb": "facebook",
+        "yt": "youtube",
+        "ytube": "youtube",
+        "x": "twitter",
+        "linkedin": "linkedin",
+        "pinterest": "pinterest",
+        "pin": "pinterest"
+    }
+    
+    # Valid platform names
+    VALID_PLATFORMS = ["instagram", "facebook", "youtube", "linkedin", "twitter", "pinterest"]
+    
+    # Valid social media metrics
+    VALID_SOCIAL_METRICS = [
+        "reach", "impressions", "engagement", "likes", "comments", "shares",
+        "saves", "views", "profile_visits", "followers", "avg_view_time",
+        "average_watch_time", "watch_time", "growth", "top_posts", "all_posts"
+    ]
+    
+    # Metric synonyms mapping
+    METRIC_SYNONYMS = {
+        "profile visit": "profile_visits",
+        "profile visits": "profile_visits",
+        "avg view time": "avg_view_time",
+        "average view time": "avg_view_time",
+        "watch time": "watch_time",
+        "average watch time": "average_watch_time",
+        "top post": "top_posts",
+        "top posts": "top_posts",
+        "all post": "all_posts",
+        "all posts": "all_posts",
+        "saare posts": "all_posts"
+    }
+    
+    # Valid blog metrics
+    VALID_BLOG_METRICS = [
+        "views", "read_time", "bounce_rate", "engagement",
+        "traffic_sources", "top_articles", "all_articles"
+    ]
+    
     def __init__(self):
         self.llm = llm
         # Initialize token tracker for usage tracking
@@ -331,7 +422,45 @@ class IntentBasedChatbot:
         return state["intent_payload"].intent
     
     def _normalize_payload(self, payload_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """Normalize and fix payload structure before validation"""
+        """
+        Normalize and fix payload structure before validation.
+        
+        FIX 6: Never overwrite existing valid fields.
+        """
+        # Fix analytics payload field mappings using comprehensive normalization
+        if payload_dict.get("intent") == "analytics" and payload_dict.get("analytics"):
+            analytics = payload_dict["analytics"]
+            if isinstance(analytics, dict):
+                # Use comprehensive normalization utility (user_query not available here, but that's OK)
+                normalized_analytics = self._normalize_analytics_payload(analytics, user_query=None)
+                # FIX 6: Merge normalized fields but preserve existing valid fields
+                for key, value in normalized_analytics.items():
+                    if value is not None:
+                        existing_value = analytics.get(key)
+                        # Preserve existing valid values
+                        if key == "insight_type" and existing_value in ["insight", "improvement"]:
+                            continue
+                        elif key == "source" and existing_value in ["social_media", "blog"]:
+                            continue
+                        elif key in ["platform", "metrics", "blog_metrics"] and existing_value and isinstance(existing_value, list) and len(existing_value) > 0:
+                            continue  # Preserve existing valid lists
+                        else:
+                            analytics[key] = value
+                
+                # Remove old fields that were normalized (only if they're not the canonical field)
+                analytics.pop("type", None)
+                analytics.pop("analysis_type", None)
+                analytics.pop("mode", None)
+                analytics.pop("analytics_type", None)
+                analytics.pop("insight", None)
+                analytics.pop("preference", None)
+                analytics.pop("metric", None)
+                analytics.pop("metric_type", None)
+                analytics.pop("blog_metric", None)
+                
+                payload_dict["analytics"] = analytics
+                logger.info(f"Normalized analytics payload: {json.dumps(analytics, indent=2, default=str)}")
+        
         # Fix content_generation payload if type is missing or null
         if payload_dict.get("intent") == "content_generation" and payload_dict.get("content"):
             content = payload_dict["content"]
@@ -610,7 +739,13 @@ class IntentBasedChatbot:
         return payload_dict
     
     def _merge_payloads(self, existing: Optional[Dict[str, Any]], new: Dict[str, Any]) -> Dict[str, Any]:
-        """Deep merge new payload data into existing partial payload"""
+        """
+        Deep merge new payload data into existing partial payload.
+        
+        FIX 2: New non-null values override old ones, empty lists do NOT count as valid.
+        FIX 6: Properly merge nested dicts without overwriting valid existing fields.
+        For analytics, new values always override old ones (except when old value is valid and new is invalid).
+        """
         if not existing:
             return new.copy()
         
@@ -619,12 +754,384 @@ class IntentBasedChatbot:
         # Recursively merge nested dictionaries
         for key, value in new.items():
             if value is not None:  # Only merge non-null values
+                # FIX 2: Empty lists do NOT count as valid values - skip them
+                if isinstance(value, list) and len(value) == 0:
+                    continue
+                
                 if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
-                    merged[key] = self._merge_payloads(merged[key], value)
+                    # Special handling for analytics dict
+                    if key == "analytics":
+                        # Merge analytics dict - new values override old ones
+                        merged_analytics = merged[key].copy()
+                        for analytics_key, analytics_value in value.items():
+                            if analytics_value is not None:
+                                # FIX 2: Empty lists don't override existing values
+                                if isinstance(analytics_value, list) and len(analytics_value) == 0:
+                                    continue
+                                
+                                # FIX 2: New non-null values always override old ones
+                                # Special case: preserve valid existing values only if new value is invalid
+                                existing_analytics_value = merged_analytics.get(analytics_key)
+                                
+                                if analytics_key == "insight_type":
+                                    if analytics_value in ["insight", "improvement"]:
+                                        merged_analytics[analytics_key] = analytics_value
+                                    # If new value is invalid but old is valid, keep old
+                                    elif existing_analytics_value in ["insight", "improvement"]:
+                                        continue  # Keep existing valid value
+                                    else:
+                                        merged_analytics[analytics_key] = analytics_value
+                                elif analytics_key == "source":
+                                    if analytics_value in ["social_media", "blog"]:
+                                        merged_analytics[analytics_key] = analytics_value
+                                    # If new value is invalid but old is valid, keep old
+                                    elif existing_analytics_value in ["social_media", "blog"]:
+                                        continue  # Keep existing valid value
+                                    else:
+                                        merged_analytics[analytics_key] = analytics_value
+                                else:
+                                    # For other fields, new value always overrides
+                                    merged_analytics[analytics_key] = analytics_value
+                        merged[key] = merged_analytics
+                    else:
+                        # Regular nested dict merge
+                        merged[key] = self._merge_payloads(merged[key], value)
                 else:
+                    # Update top-level or non-dict values
+                    # FIX 2: Empty lists don't override existing values
+                    if isinstance(value, list) and len(value) == 0:
+                        continue
                     merged[key] = value
         
         return merged
+    
+    def _normalize_platform(self, platform: Any) -> Optional[str]:
+        """Normalize platform name to valid enum value"""
+        if platform is None:
+            return None
+        
+        if isinstance(platform, list):
+            if len(platform) == 0:
+                return None
+            platform = platform[0]
+        
+        platform_str = str(platform).strip().lower()
+        
+        if platform_str in self.PLATFORM_ALIASES:
+            platform_str = self.PLATFORM_ALIASES[platform_str]
+        
+        if platform_str in self.VALID_PLATFORMS:
+            return platform_str
+        
+        logger.warning(f"Invalid platform: {platform}, normalized to None")
+        return None
+    
+    def _normalize_platform_list(self, platforms: Any) -> List[str]:
+        """Normalize a list of platforms to valid enum values"""
+        if platforms is None:
+            return []
+        
+        if isinstance(platforms, str):
+            platforms = [platforms]
+        
+        if not isinstance(platforms, list):
+            platforms = [platforms]
+        
+        normalized = []
+        for p in platforms:
+            norm_p = self._normalize_platform(p)
+            if norm_p and norm_p not in normalized:
+                normalized.append(norm_p)
+        
+        return normalized
+    
+    def _normalize_metric(self, metric: str) -> Optional[str]:
+        """Normalize a single metric name to valid enum value"""
+        if not metric:
+            return None
+        
+        metric_str = str(metric).strip().lower()
+        
+        if metric_str in self.METRIC_SYNONYMS:
+            metric_str = self.METRIC_SYNONYMS[metric_str]
+        
+        if metric_str in self.VALID_SOCIAL_METRICS:
+            return metric_str
+        
+        logger.warning(f"Invalid metric: {metric}, normalized to None")
+        return None
+    
+    def _normalize_metrics(self, metrics: Any) -> List[str]:
+        """Normalize metrics list to valid enum values"""
+        if metrics is None:
+            return []
+        
+        # Handle string input (comma-separated or single value)
+        if isinstance(metrics, str):
+            metrics_str = metrics.strip()
+            if not metrics_str:
+                return []
+            if "," in metrics_str:
+                metrics = [m.strip() for m in metrics_str.split(",")]
+            else:
+                metrics = [metrics_str]
+        
+        # Convert non-list to list
+        if not isinstance(metrics, list):
+            metrics = [metrics]
+        
+        # Normalize each metric and remove duplicates
+        normalized = []
+        for m in metrics:
+            if m is None:
+                continue
+            norm_m = self._normalize_metric(m)
+            if norm_m and norm_m not in normalized:
+                normalized.append(norm_m)
+        
+        return normalized
+    
+    def _normalize_blog_metrics(self, metrics: Any) -> List[str]:
+        """Normalize blog metrics list to valid enum values"""
+        if metrics is None:
+            return []
+        
+        # Handle string input (comma-separated or single value)
+        if isinstance(metrics, str):
+            metrics_str = metrics.strip()
+            if not metrics_str:
+                return []
+            if "," in metrics_str:
+                metrics = [m.strip() for m in metrics_str.split(",")]
+            else:
+                metrics = [metrics_str]
+        
+        # Convert non-list to list
+        if not isinstance(metrics, list):
+            metrics = [metrics]
+        
+        # Normalize each metric and remove duplicates
+        normalized = []
+        for m in metrics:
+            if m is None:
+                continue
+            m_str = str(m).strip().lower()
+            if m_str in self.VALID_BLOG_METRICS and m_str not in normalized:
+                normalized.append(m_str)
+        
+        return normalized
+    
+    def _normalize_insight_type(self, insight_type: Any) -> Optional[str]:
+        """
+        Normalize insight_type to valid enum value.
+        
+        Handles multiple input formats:
+        - String: "insight", "improvement"
+        - List: ["insight"], ["improvement"]
+        - Nested dict: {"type": "insight"}
+        - Various synonyms and aliases
+        """
+        if insight_type is None:
+            return None
+        
+        # Handle list - take first element
+        if isinstance(insight_type, list):
+            if len(insight_type) == 0:
+                return None
+            insight_type = insight_type[0]
+        
+        # Handle dict - extract value
+        if isinstance(insight_type, dict):
+            # Try common keys
+            insight_type = (
+                insight_type.get("type") or
+                insight_type.get("value") or
+                insight_type.get("insight_type") or
+                list(insight_type.values())[0] if insight_type else None
+            )
+            if insight_type is None:
+                return None
+        
+        # Convert to string and normalize
+        insight_str = str(insight_type).strip().lower()
+        
+        # Map synonyms to canonical values
+        if insight_str in ["insight", "insights", "analyze", "analysis", "analytics"]:
+            return "insight"
+        
+        if insight_str in ["improvement", "improve", "suggestions", "suggestion", "recommendations", "suggest"]:
+            return "improvement"
+        
+        logger.warning(f"Invalid insight_type: {insight_type}, normalized to None")
+        return None
+    
+    def _normalize_source(self, source: Any) -> Optional[str]:
+        """Normalize source to valid enum value"""
+        if source is None:
+            return None
+        
+        source_str = str(source).strip().lower()
+        
+        if source_str in ["social_media", "social", "social media", "sns"]:
+            return "social_media"
+        
+        if source_str in ["blog", "blogs", "blogging"]:
+            return "blog"
+        
+        logger.warning(f"Invalid source: {source}, normalized to None")
+        return None
+    
+    def _normalize_analytics_payload(self, analytics_dict: Dict[str, Any], user_query: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Comprehensive normalization of analytics payload from LLM.
+        
+        FIX 1: Strong canonical mapping for insight_type from multiple variants.
+        FIX 3: Platform implies source - if platform provided, auto-assign source.
+        FIX 6: Never overwrite existing valid fields.
+        
+        Args:
+            analytics_dict: The analytics dictionary to normalize
+            user_query: Optional user query to help with normalization when LLM extraction fails
+        """
+        if not analytics_dict:
+            return {}
+        
+        normalized = {}
+        
+        # FIX 1: Strong canonical mapping for insight_type
+        # Check multiple possible keys that might contain insight_type
+        insight_type = (
+            analytics_dict.get("insight_type") or
+            analytics_dict.get("type") or
+            analytics_dict.get("analysis_type") or
+            analytics_dict.get("mode") or
+            analytics_dict.get("analytics_type") or
+            analytics_dict.get("insight") or
+            analytics_dict.get("preference")
+        )
+        
+        # FIX 1: Also check user_query if provided (fallback when LLM extraction fails)
+        if not insight_type and user_query:
+            user_query_lower = user_query.strip().lower()
+            if user_query_lower in ["insight", "improvement"]:
+                insight_type = user_query_lower
+                logger.info(f"FIX 1: Extracted insight_type from user_query fallback: {insight_type}")
+        
+        # FIX 6: Only normalize if not already present and valid
+        existing_insight_type = analytics_dict.get("insight_type")
+        if existing_insight_type and existing_insight_type in ["insight", "improvement"]:
+            # Already valid, don't override
+            normalized["insight_type"] = existing_insight_type
+            logger.info(f"Preserving existing valid insight_type: {existing_insight_type}")
+        else:
+            # Normalize from extracted value
+            normalized["insight_type"] = self._normalize_insight_type(insight_type)
+        
+        # 2. Normalize source (FIX 3: platform implies source, FIX 6: preserve if valid)
+        existing_source = analytics_dict.get("source")
+        if existing_source and existing_source in ["social_media", "blog"]:
+            normalized["source"] = existing_source
+        else:
+            # FIX 3: Check if platform implies source
+            platform = analytics_dict.get("platform")
+            inferred_source = None
+            
+            if platform:
+                # Handle both list and single platform
+                platform_list = platform if isinstance(platform, list) else [platform] if platform else []
+                # Filter out None/empty values and normalize
+                platform_list = [str(p).strip().lower() for p in platform_list if p]
+                
+                if platform_list:  # Only proceed if we have valid platforms
+                    # Social media platforms
+                    social_media_platforms = ["instagram", "facebook", "twitter", "youtube", "linkedin", "tiktok", "snapchat", "pinterest"]
+                    # Blog platforms
+                    blog_platforms = ["wordpress", "medium", "substack", "blogger"]
+                    
+                    # Check if any platform is a social media platform
+                    has_social_media = any(p in social_media_platforms for p in platform_list)
+                    # Check if any platform is a blog platform
+                    has_blog = any(p in blog_platforms for p in platform_list)
+                    
+                    # Priority: social_media platforms take precedence if mixed
+                    if has_social_media:
+                        inferred_source = "social_media"
+                        logger.info(f"FIX 3: Platform {platform_list} implies source='social_media'")
+                    elif has_blog:
+                        inferred_source = "blog"
+                        logger.info(f"FIX 3: Platform {platform_list} implies source='blog'")
+            
+            # Use inferred source if available, otherwise normalize from source field
+            if inferred_source:
+                normalized["source"] = inferred_source
+            else:
+                # CRITICAL FIX: If source was already set by direct answer detection, preserve it
+                # Don't normalize it away if it's already valid
+                if existing_source and existing_source in ["social_media", "blog"]:
+                    normalized["source"] = existing_source
+                else:
+                    normalized["source"] = self._normalize_source(analytics_dict.get("source"))
+        
+        # 3. Normalize platform (FIX 6: preserve if valid list)
+        existing_platform = analytics_dict.get("platform")
+        if existing_platform and isinstance(existing_platform, list) and len(existing_platform) > 0:
+            # Already valid list, normalize but preserve structure
+            normalized["platform"] = self._normalize_platform_list(existing_platform)
+        elif existing_platform:
+            normalized["platform"] = self._normalize_platform_list(existing_platform)
+        else:
+            platform = analytics_dict.get("platform")
+            if platform:
+                normalized["platform"] = self._normalize_platform_list(platform)
+            else:
+                normalized["platform"] = None
+        
+        # 4. Normalize metrics (FIX 6: preserve if valid list)
+        existing_metrics = analytics_dict.get("metrics")
+        if existing_metrics and isinstance(existing_metrics, list) and len(existing_metrics) > 0:
+            # Already valid list, normalize but preserve
+            normalized["metrics"] = self._normalize_metrics(existing_metrics)
+        else:
+            metrics = (
+                analytics_dict.get("metrics") or
+                analytics_dict.get("metric") or
+                analytics_dict.get("metric_type")
+            )
+            if metrics:
+                normalized["metrics"] = self._normalize_metrics(metrics)
+            else:
+                normalized["metrics"] = None
+        
+        # 5. Normalize blog_metrics (FIX 6: preserve if valid list)
+        existing_blog_metrics = analytics_dict.get("blog_metrics")
+        if existing_blog_metrics and isinstance(existing_blog_metrics, list) and len(existing_blog_metrics) > 0:
+            normalized["blog_metrics"] = self._normalize_blog_metrics(existing_blog_metrics)
+        else:
+            blog_metrics = (
+                analytics_dict.get("blog_metrics") or
+                analytics_dict.get("blog_metric")
+            )
+            if blog_metrics:
+                normalized["blog_metrics"] = self._normalize_blog_metrics(blog_metrics)
+            else:
+                normalized["blog_metrics"] = None
+        
+        # 6. Normalize date_range (FIX 6: preserve if valid)
+        existing_date_range = analytics_dict.get("date_range")
+        if existing_date_range and isinstance(existing_date_range, str) and existing_date_range.strip():
+            normalized["date_range"] = existing_date_range.strip()
+        else:
+            date_range = analytics_dict.get("date_range")
+            if date_range:
+                normalized["date_range"] = str(date_range).strip()
+            else:
+                normalized["date_range"] = None
+        
+        # Remove None values to allow Pydantic defaults (but preserve empty lists as they indicate "provided but empty")
+        normalized = {k: v for k, v in normalized.items() if v is not None}
+        
+        logger.info(f"Normalized analytics payload: {normalized}")
+        return normalized
     
     def _get_missing_fields_for_social_media(self, payload: Any) -> List[Dict[str, Any]]:
         """Get list of missing required fields for social media payload"""
@@ -662,6 +1169,200 @@ class IntentBasedChatbot:
                 "options": None,
                 "priority": 3
             })
+        
+        # Sort by priority
+        missing.sort(key=lambda x: x.get("priority", 999))
+        return missing
+    
+    def _get_missing_fields_for_analytics(self, analytics_dict: Dict[str, Any], user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Get list of missing REQUIRED fields for analytics payload.
+        
+        FIX 3: Check for empty lists, not just None.
+        FIX 4: Platform implies source - skip source question if platform provided.
+        FIX 6: Don't overwrite existing valid fields.
+        
+        Emily ONLY checks for fields that MUST be provided by the user.
+        All defaults, platform inference, and business logic is handled by Orion.
+        
+        Required fields checked:
+        - insight_type: REQUIRED (priority 1)
+        - source: REQUIRED (priority 2) - SKIPPED if platform implies source
+        - platform: REQUIRED if multiple platforms connected or none connected (priority 3)
+        - metrics: REQUIRED only for improvement mode with social_media (priority 4)
+        - blog_metrics: REQUIRED only for improvement mode with blog (priority 4)
+        
+        NOT checked here (handled by Orion):
+        - date_range (optional, Orion handles defaults)
+        - metrics for insight mode (Orion applies defaults: ["reach", "impressions", "engagement"])
+        - blog_metrics for insight mode (Orion applies defaults: ["views", "read_time", "top_articles"])
+        """
+        missing = []
+        
+        if not analytics_dict:
+            return [{
+                "field": "insight_type",
+                "question": "I'd love to help you with analytics! Do you want insights about your performance, or suggestions for improvement?",
+                "options": ["insight", "improvement"],
+                "priority": 1
+            }]
+        
+        # Get insight_type (already normalized)
+        insight_type = analytics_dict.get("insight_type")
+        
+        # FIX 4: Priority 1: insight_type (REQUIRED) - check for None OR empty string
+        if not insight_type or (isinstance(insight_type, str) and not insight_type.strip()):
+            missing.append({
+                "field": "insight_type",
+                "question": "Do you want insights or improvements?",
+                "options": ["insight", "improvement"],
+                "priority": 1
+            })
+            # Return early - can't check other fields without insight_type
+            return missing
+        
+        # FIX 4: Priority 2: source (REQUIRED) - check for None OR empty string
+        # FIX 3: SKIP source question if platform implies source
+        source = analytics_dict.get("source")
+        platform = analytics_dict.get("platform")
+        
+        # FIX 3: Check if platform implies source
+        platform_implies_source = False
+        if platform:
+            # Normalize platform to list format
+            platform_list = platform if isinstance(platform, list) else [platform] if platform else []
+            # Filter out None/empty values
+            platform_list = [str(p).strip().lower() for p in platform_list if p]
+            
+            if platform_list:  # Only proceed if we have valid platforms
+                social_media_platforms = ["instagram", "facebook", "twitter", "youtube", "linkedin", "tiktok", "snapchat", "pinterest"]
+                blog_platforms = ["wordpress", "medium", "substack", "blogger"]
+                
+                # Check if any platform is a social media platform
+                has_social_media = any(p in social_media_platforms for p in platform_list)
+                # Check if any platform is a blog platform
+                has_blog = any(p in blog_platforms for p in platform_list)
+                
+                # Priority: social_media platforms take precedence if mixed
+                if has_social_media:
+                    # Platform implies social_media source
+                    if not source or source not in ["social_media", "blog"]:
+                        # Auto-assign source
+                        analytics_dict["source"] = "social_media"
+                        source = "social_media"
+                        platform_implies_source = True
+                        logger.info(f"FIX 3: Platform {platform_list} implies source='social_media', auto-assigned")
+                elif has_blog:
+                    # Platform implies blog source
+                    if not source or source not in ["social_media", "blog"]:
+                        # Auto-assign source
+                        analytics_dict["source"] = "blog"
+                        source = "blog"
+                        platform_implies_source = True
+                        logger.info(f"FIX 3: Platform {platform_list} implies source='blog', auto-assigned")
+        
+        # Only ask for source if it's still missing after platform inference
+        if not source or (isinstance(source, str) and not source.strip()):
+            missing.append({
+                "field": "source",
+                "question": "Do you want social media analytics or blog analytics?",
+                "options": ["social_media", "blog"],
+                "priority": 2
+            })
+            # Return early - can't check mode-specific fields without source
+            return missing
+        
+        # Priority 3: platform (REQUIRED if multiple platforms connected or none connected)
+        # IMPORTANT: Check platform AFTER source is determined, but BEFORE metrics
+        # This ensures we ask for platform selection when needed
+        # Check if platform is missing - ask user to specify which platform
+        platform = analytics_dict.get("platform")
+        platform_list = platform if isinstance(platform, list) else [platform] if platform else []
+        platform_list = [str(p).strip().lower() for p in platform_list if p]
+        
+        logger.info(f"🔍 Platform check: platform={platform}, platform_list={platform_list}, user_id={user_id}")
+        
+        # If no platform specified, check connected platforms
+        if not platform_list and user_id:
+            try:
+                from agents.tools.Orion_Analytics_query import fetch_connected_platforms
+                connected_platforms = fetch_connected_platforms(user_id)
+                if len(connected_platforms) > 1:
+                    # Multiple platforms - ask user to choose
+                    missing.append({
+                        "field": "platform",
+                        "question": "Which platform would you like to analyze?",
+                        "options": connected_platforms,
+                        "priority": 3
+                    })
+                    return missing
+                elif len(connected_platforms) == 1:
+                    # Only one platform - auto-assign it
+                    analytics_dict["platform"] = connected_platforms
+                    platform_list = connected_platforms
+                    logger.info(f"Auto-assigned single connected platform: {connected_platforms}")
+                else:
+                    # No platforms connected - ask user to specify
+                    missing.append({
+                        "field": "platform",
+                        "question": "Which platform would you like to analyze?",
+                        "options": ["instagram", "facebook", "youtube", "linkedin", "twitter", "pinterest"],
+                        "priority": 3
+                    })
+                    return missing
+            except Exception as e:
+                logger.warning(f"Error checking connected platforms: {e}")
+                # If we can't check, ask user to specify
+                missing.append({
+                    "field": "platform",
+                    "question": "Which platform would you like to analyze?",
+                    "options": ["instagram", "facebook", "youtube", "linkedin", "twitter", "pinterest"],
+                    "priority": 3
+                })
+                return missing
+        elif not platform_list:
+            # No user_id available - ask user to specify platform
+            missing.append({
+                "field": "platform",
+                "question": "Which platform would you like to analyze?",
+                "options": ["instagram", "facebook", "youtube", "linkedin", "twitter", "pinterest"],
+                "priority": 3
+            })
+            return missing
+        
+        # Priority 4: metrics/blog_metrics (conditional)
+        # Only check if we have insight_type and source
+        if insight_type == "improvement":
+            # IMPROVEMENT MODE: metrics are REQUIRED
+            if source == "social_media":
+                # FIX 4: Check for None OR empty list
+                metrics = analytics_dict.get("metrics")
+                if not metrics or (isinstance(metrics, list) and len(metrics) == 0):
+                    missing.append({
+                        "field": "metrics",
+                        "question": "What would you like to improve? Choose one or more metrics:",
+                        "options": [
+                            "reach", "impressions", "engagement", "likes", "comments", "shares",
+                            "saves", "views", "profile_visits", "followers", "growth", "top_posts",
+                            "all_posts", "average_watch_time", "avg_view_time", "watch_time"
+                        ],
+                        "priority": 3
+                    })
+            elif source == "blog":
+                # FIX 4: Check for None OR empty list
+                blog_metrics = analytics_dict.get("blog_metrics")
+                if not blog_metrics or (isinstance(blog_metrics, list) and len(blog_metrics) == 0):
+                    missing.append({
+                        "field": "blog_metrics",
+                        "question": "Which blog metrics would you like to improve?",
+                        "options": [
+                            "views", "read_time", "bounce_rate", "engagement",
+                            "traffic_sources", "top_articles", "all_articles"
+                        ],
+                        "priority": 3
+                    })
+            # INSIGHT MODE: metrics are OPTIONAL (will use defaults)
+            # Don't add to missing fields - we'll use defaults
         
         # Sort by priority
         missing.sort(key=lambda x: x.get("priority", 999))
@@ -1400,29 +2101,351 @@ Return ONLY valid JSON matching the IntentPayload structure. No explanations, no
         return state
     
     def handle_analytics(self, state: IntentBasedChatbotState) -> IntentBasedChatbotState:
-        """Handle analytics intent"""
+        """
+        Handle analytics intent - COLLECTOR ONLY.
+        
+        FIX 1: Correct order - merge FIRST, then normalize, then check missing fields.
+        FIX 2: Merge logic - new non-null values override old ones, empty lists not valid.
+        FIX 3: Platform implies source - if platform provided, auto-assign source.
+        FIX 4: Empty list handling - empty arrays count as missing.
+        FIX 5: Direct answer handling - detect user answers without LLM.
+        FIX 6: needs_clarification reset - reset when fields provided.
+        FIX 7: Comprehensive logging.
+        
+        Emily's responsibilities:
+        1. Extract analytics fields from partial_payload (from classify_intent)
+        2. Detect direct user answers (fallback if LLM fails)
+        3. Merge new data into partial_payload
+        4. Normalize analytics payload (handle LLM drift, platform→source inference)
+        5. Detect missing REQUIRED fields
+        6. Ask clarifying questions if fields missing
+        7. Validate into AnalyticsPayload
+        8. Pass clean payload to Orion
+        
+        Emily does NOT:
+        - Apply default metrics
+        - Infer platforms (handled by Orion)
+        - Execute analytics logic
+        - Format responses
+        - Handle DB calls
+        
+        All business logic is handled by Orion_Analytics_query.py
+        """
         try:
             from agents.tools.Orion_Analytics_query import execute_analytics_query
             
-            payload = state["intent_payload"].analytics
-            if not payload:
-                state["response"] = "I need more information about what analytics you'd like to see. Please specify your query."
+            # Get the partial payload dictionary (not validated yet)
+            partial_payload = state.get("partial_payload", {})
+            user_query = state.get("current_query", "").strip()
+            needs_clarification = state.get("needs_clarification", False)
+            
+            # Ensure analytics dict exists in partial_payload
+            if "analytics" not in partial_payload:
+                partial_payload["analytics"] = {}
+            
+            analytics_dict = partial_payload.get("analytics", {})
+            
+            # FIX 1 & FIX 5: STEP 1 - Extract and merge user answers FIRST (before normalization)
+            # This ensures user input is captured even if LLM extraction fails
+            # CRITICAL FIX: Run direct answer detection on ALL queries, not just when needs_clarification is True
+            # This allows platform detection from first query like "i want analytics of instagram"
+            if user_query:
+                user_query_lower = user_query.strip().lower()
+                
+                # Direct answer detection for insight_type
+                if user_query_lower in ["insight", "improvement"]:
+                    existing_insight_type = analytics_dict.get("insight_type")
+                    if not existing_insight_type or existing_insight_type not in ["insight", "improvement"]:
+                        analytics_dict["insight_type"] = user_query_lower
+                        logger.info(f"FIX 5: Direct answer detected for insight_type: {user_query_lower}")
+                
+                # Direct answer detection for source
+                elif user_query_lower in ["social_media", "social", "blog", "blogs"]:
+                    existing_source = analytics_dict.get("source")
+                    if not existing_source or existing_source not in ["social_media", "blog"]:
+                        source_value = "social_media" if user_query_lower in ["social_media", "social"] else "blog"
+                        analytics_dict["source"] = source_value
+                        logger.info(f"FIX 5: Direct answer detected for source: {source_value}")
+                
+                # Direct answer detection for platforms (FIX 3: platform implies source)
+                # CRITICAL FIX: Check for platform names in the query using word-boundary matching
+                # This handles cases like "analytics of instagram" or "instagram analytics"
+                social_media_platforms = ["instagram", "facebook", "twitter", "youtube", "linkedin", "tiktok", "snapchat", "pinterest"]
+                blog_platforms = ["wordpress", "medium", "substack", "blogger"]
+                
+                platform_found = None
+                
+                # First check if query is exactly a platform name
+                if user_query_lower in social_media_platforms:
+                    platform_found = user_query_lower
+                elif user_query_lower in blog_platforms:
+                    platform_found = user_query_lower
+                else:
+                    # Check if query contains a platform name (word-boundary match)
+                    # This handles "analytics of instagram", "instagram analytics", etc.
+                    for platform in social_media_platforms:
+                        pattern = r'\b' + re.escape(platform) + r'\b'
+                        if re.search(pattern, user_query_lower):
+                            platform_found = platform
+                            break
+                    
+                    if not platform_found:
+                        for platform in blog_platforms:
+                            pattern = r'\b' + re.escape(platform) + r'\b'
+                            if re.search(pattern, user_query_lower):
+                                platform_found = platform
+                                break
+                
+                if platform_found:
+                    # Update platform list
+                    existing_platforms = analytics_dict.get("platform", [])
+                    if not existing_platforms or not isinstance(existing_platforms, list):
+                        existing_platforms = []
+                    if platform_found not in existing_platforms:
+                        existing_platforms.append(platform_found)
+                        analytics_dict["platform"] = existing_platforms
+                        logger.info(f"FIX 5: Direct answer detected for platform: {platform_found}")
+                    
+                    # FIX 3: Platform implies source - auto-assign source based on platform
+                    if platform_found in social_media_platforms:
+                        if not analytics_dict.get("source") or analytics_dict.get("source") not in ["social_media", "blog"]:
+                            analytics_dict["source"] = "social_media"
+                            logger.info(f"FIX 3: Platform '{platform_found}' implies source='social_media'")
+                    elif platform_found in blog_platforms:
+                        if not analytics_dict.get("source") or analytics_dict.get("source") not in ["social_media", "blog"]:
+                            analytics_dict["source"] = "blog"
+                            logger.info(f"FIX 3: Platform '{platform_found}' implies source='blog'")
+                
+                # Direct answer detection for metrics (only if not already handled above)
+                if not platform_found and user_query_lower not in ["insight", "improvement", "social_media", "social", "blog", "blogs"]:
+                    # BUG 2 FIX: Use word-boundary matching instead of substring matching to avoid false positives
+                    # Example: "reach my goals" should NOT match "reach" metric
+                    metric_keywords = ["reach", "impressions", "engagement", "likes", "comments", "shares", "saves", "views", "followers", "growth", "top_posts", "all_posts", "watch_time", "avg_view_time"]
+                    
+                    # Create word-boundary regex pattern for each metric
+                    metrics_list = []
+                    for keyword in metric_keywords:
+                        # Use word boundaries to match whole words only
+                        # \b matches word boundaries (start/end of string or non-word characters)
+                        pattern = r'\b' + re.escape(keyword) + r'\b'
+                        if re.search(pattern, user_query_lower):
+                            metrics_list.append(keyword)
+                    
+                    if metrics_list:
+                        existing_metrics = analytics_dict.get("metrics", [])
+                        if not existing_metrics or not isinstance(existing_metrics, list) or len(existing_metrics) == 0:
+                            analytics_dict["metrics"] = list(set(metrics_list))  # Remove duplicates
+                            logger.info(f"FIX 5: Direct answer detected for metrics (word-boundary match): {metrics_list}")
+            
+            # FIX 1: STEP 2 - Normalize analytics payload (after merging user answers)
+            # This handles LLM drift and applies platform→source inference
+            normalized_analytics = self._normalize_analytics_payload(analytics_dict, user_query)
+            
+            # FIX 2: Merge normalized fields - new non-null values override old ones
+            # Empty lists do NOT count as valid values
+            for key, value in normalized_analytics.items():
+                if value is not None:
+                    # FIX 2: For lists, empty list is not valid - only merge non-empty lists
+                    if isinstance(value, list):
+                        if len(value) == 0:
+                            continue  # Skip empty lists
+                    
+                    # FIX 2: New non-null values always override old ones
+                    # BUT: Don't overwrite valid existing values with None or empty values
+                    existing_value = analytics_dict.get(key)
+                    
+                    # Special handling: preserve valid existing values only if new value is also valid
+                    if key == "insight_type":
+                        if value in ["insight", "improvement"]:
+                            analytics_dict[key] = value
+                    elif key == "source":
+                        # CRITICAL FIX: Always update source if value is valid, even if existing value exists
+                        # This ensures user selections (like clicking "social_media" button) are always applied
+                        if value in ["social_media", "blog"]:
+                            analytics_dict[key] = value
+                            logger.info(f"Source updated to: {value}")
+                    elif key in ["platform", "metrics", "blog_metrics"]:
+                        # For lists, only overwrite if new value is non-empty
+                        if isinstance(value, list) and len(value) > 0:
+                            analytics_dict[key] = value
+                        # If existing value is valid and new value is empty, preserve existing
+                        elif existing_value and isinstance(existing_value, list) and len(existing_value) > 0:
+                            # Keep existing value, don't overwrite with empty
+                            pass
+                    elif key == "date_range":
+                        # Always update date_range if provided (user might want to change it)
+                        if isinstance(value, str) and value.strip():
+                            analytics_dict[key] = value.strip()
+                    else:
+                        # For other fields, update if value is valid
+                        analytics_dict[key] = value
+            
+            # Remove old fields that were normalized
+            analytics_dict.pop("type", None)
+            analytics_dict.pop("analysis_type", None)
+            analytics_dict.pop("mode", None)
+            analytics_dict.pop("analytics_type", None)
+            analytics_dict.pop("insight", None)
+            analytics_dict.pop("preference", None)
+            analytics_dict.pop("metric", None)
+            analytics_dict.pop("metric_type", None)
+            analytics_dict.pop("blog_metric", None)
+            
+            # CRITICAL FIX: Ensure analytics_dict is stored back to partial_payload BEFORE checking missing fields
+            # This ensures all direct answer detections and normalizations are persisted
+            partial_payload["analytics"] = analytics_dict
+            
+            # FIX 7: Log post-normalization state
+            logger.info(f"Post-normalization analytics payload: {json.dumps(analytics_dict, indent=2, default=str)}")
+            logger.info(f"Source after normalization: {analytics_dict.get('source')}, Platform: {analytics_dict.get('platform')}")
+            
+            # FIX 1: STEP 3 - Check missing fields AFTER normalization
+            user_id = state.get("user_id")
+            missing_fields = self._get_missing_fields_for_analytics(analytics_dict, user_id)
+            
+            # FIX 7: Log missing fields
+            logger.info(f"Missing fields after normalization: {missing_fields}")
+            
+            # FIX 6: Reset needs_clarification if fields were provided
+            previous_missing_count = len(state.get("_previous_missing_fields", []))
+            current_missing_count = len(missing_fields)
+            
+            if needs_clarification:
+                if current_missing_count == 0:
+                    # All fields provided
+                    state["needs_clarification"] = False
+                    logger.info("FIX 6: All required fields provided, resetting needs_clarification")
+                elif current_missing_count < previous_missing_count:
+                    # Some fields provided, progress made
+                    logger.info(f"FIX 6: Progress made - missing fields reduced from {previous_missing_count} to {current_missing_count}")
+            
+            # Store current missing count for next iteration
+            state["_previous_missing_fields"] = missing_fields
+            
+            if missing_fields:
+                # FIX 6: Set needs_clarification if we're asking a question
+                state["needs_clarification"] = True
+                
+                # Ask clarifying question
+                question = self._generate_clarifying_question(missing_fields, "analytics")
+                state["response"] = question
+                # Store options for frontend rendering
+                field_info = missing_fields[0]
+                state["options"] = field_info.get("options")
+                # IMPORTANT: Store partial_payload back in state so cache can save it
+                state["partial_payload"] = partial_payload
+                logger.info(f"Generated clarifying question: {question}")
+                logger.info(f"Options for frontend: {state['options']}")
+                logger.info(f"Stored partial_payload in state for caching: {json.dumps(partial_payload, indent=2, default=str)}")
                 return state
             
-            result = execute_analytics_query(payload, state["user_id"])
+            # 4. VALIDATE: All required fields present, validate into AnalyticsPayload
+            try:
+                # ERROR 1 FIX: Explicitly validate AnalyticsPayload before sending to Orion
+                # AnalyticsPayload requires: insight_type and source (both non-optional)
+                insight_type = analytics_dict.get("insight_type")
+                source = analytics_dict.get("source")
+                
+                if not insight_type or insight_type not in ["insight", "improvement"]:
+                    logger.error(f"insight_type missing or invalid after normalization: {insight_type}")
+                    state["response"] = "I encountered an error: insight_type is missing or invalid. Please try again."
+                    state["needs_clarification"] = True
+                    state["partial_payload"] = partial_payload
+                    return state
+                
+                if not source or source not in ["social_media", "blog"]:
+                    logger.error(f"source missing or invalid after normalization: {source}")
+                    state["response"] = "I encountered an error: source is missing or invalid. Please try again."
+                    state["needs_clarification"] = True
+                    state["partial_payload"] = partial_payload
+                    return state
+                
+                # Normalize one more time to ensure structure is correct
+                normalized_payload = self._normalize_payload(partial_payload.copy())
+                logger.info(f"Normalized payload before validation: {json.dumps(normalized_payload, indent=2, default=str)}")
+                
+                # Validate into IntentPayload first
+                intent_payload = IntentPayload(**normalized_payload)
+                payload = intent_payload.analytics
+                
+                if not payload:
+                    logger.error("Analytics payload is None after validation")
+                    state["response"] = "I encountered an error: Analytics payload is missing. Please try again."
+                    state["needs_clarification"] = True
+                    state["partial_payload"] = partial_payload
+                    return state
+                
+                # ERROR 1 FIX: Explicitly validate AnalyticsPayload object
+                # The payload from IntentPayload should already be validated, but we ensure it's correct
+                # AnalyticsPayload is already imported at module level, payload is already validated
+                if not payload.insight_type or payload.insight_type not in ["insight", "improvement"]:
+                    logger.error(f"Payload missing or invalid insight_type: {payload.insight_type}")
+                    state["response"] = "I encountered an error: Required analytics fields are missing. Please try again."
+                    state["needs_clarification"] = True
+                    state["partial_payload"] = partial_payload
+                    return state
+                
+                if not payload.source or payload.source not in ["social_media", "blog"]:
+                    logger.error(f"Payload missing or invalid source: {payload.source}")
+                    state["response"] = "I encountered an error: Required analytics fields are missing. Please try again."
+                    state["needs_clarification"] = True
+                    state["partial_payload"] = partial_payload
+                    return state
+                
+                logger.info(f"✅ Validated AnalyticsPayload: insight_type={payload.insight_type}, source={payload.source}, platform={payload.platform}, metrics={payload.metrics}")
+                
+                # 5. EXECUTE: Pass clean AnalyticsPayload to Orion (Orion handles all business logic)
+                logger.info("All required fields present, passing validated AnalyticsPayload to Orion for execution")
+                result = execute_analytics_query(payload, state["user_id"])
+            except Exception as validation_error:
+                import traceback
+                error_trace = traceback.format_exc()
+                logger.error(f"Validation error when all fields should be present: {validation_error}")
+                logger.error(f"Error traceback: {error_trace}")
+                logger.error(f"Partial payload that failed: {json.dumps(partial_payload, indent=2, default=str)}")
+                state["response"] = f"I encountered an error validating your request: {str(validation_error)}. Please try again or provide the information in a different way."
+                state["needs_clarification"] = True  # Keep asking for clarification
+                return state
             
+            # 6. HANDLE RESPONSE: Pass through Orion's response (Orion handles all formatting)
+            # ERROR 7 FIX: Properly handle Orion's clarifying_question structure
             if result.get("clarifying_question"):
+                # Orion needs more info (e.g., platform selection, metrics)
                 state["response"] = result["clarifying_question"]
+                state["needs_clarification"] = True
+                if "options" in result:
+                    state["options"] = result["options"]
+                # Keep partial_payload so user can continue the conversation
+                state["partial_payload"] = partial_payload
+                logger.info(f"Orion requested clarification: {result['clarifying_question']}")
+                return state
             elif result.get("success") and result.get("data"):
-                state["response"] = self._format_analytics_response(result["data"])
+                # Orion provides formatted message in data["message"]
+                response_message = result["data"].get("message")
+                if not response_message:
+                    response_message = "Analytics data retrieved successfully."
+                state["response"] = response_message
+                state["needs_clarification"] = False
+                state["partial_payload"] = None  # Clear partial payload on success
             elif result.get("error"):
                 state["response"] = f"I encountered an error: {result['error']}"
+                state["needs_clarification"] = False
+            elif result.get("message"):
+                # Handle messages from Orion (e.g., "No analytics data found")
+                state["response"] = result["message"]
+                state["needs_clarification"] = False
             else:
                 state["response"] = "I've processed your analytics query."
+                state["needs_clarification"] = False
+                state["partial_payload"] = None
                 
         except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
             logger.error(f"Error in handle_analytics: {e}")
-            state["response"] = "I encountered an error while processing your analytics query. Please try again."
+            logger.error(f"Error traceback: {error_trace}")
+            state["response"] = f"I encountered an error while processing your analytics query: {str(e)}. Please try again."
+            state["needs_clarification"] = True  # Keep asking for clarification instead of giving up
         
         return state
     
@@ -1767,14 +2790,6 @@ Provide a helpful and accurate answer based on the FAQ data above."""
                 return data["content"]
         return str(data)
     
-    def _format_analytics_response(self, data: Any) -> str:
-        """Format analytics response"""
-        if isinstance(data, dict):
-            if "message" in data:
-                return data["message"]
-            elif "summary" in data:
-                return data["summary"]
-        return str(data)
     
     def _format_leads_response(self, data: Any) -> str:
         """Format leads management response"""
