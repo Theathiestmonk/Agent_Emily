@@ -218,7 +218,7 @@ async def google_auth(current_user: User = Depends(get_current_user)):
                     print(f"🔧 Development mode detected, using localhost:8000")
                 else:
                     api_base_url = 'https://agent-emily.onrender.com'
-            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
+            redirect_uri = f"{api_base_url}/connections/google/callback"
             print(f"⚠️  GOOGLE_REDIRECT_URI not set, using constructed URI: {redirect_uri}")
         
         # Validate redirect URI format - ensure it's a full URL
@@ -517,7 +517,7 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
                     api_base_url = 'http://localhost:8000'
                 else:
                     api_base_url = 'https://agent-emily.onrender.com'
-            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
+            redirect_uri = f"{api_base_url}/connections/google/callback"
             logger.info(f"GOOGLE_REDIRECT_URI not set in callback, using constructed URI: {redirect_uri}")
         
         # Validate redirect URI format
@@ -1035,26 +1035,6 @@ async def send_gmail_message(
         }
         
     except Exception as e:
-        error_str = str(e).lower()
-        
-        # Check if this is an unauthorized_client error (invalid refresh token)
-        if "unauthorized_client" in error_str or "refresh" in error_str and "unauthorized" in error_str:
-            account_email = conn.get('account_email') or conn.get('email') or 'your Google account'
-            # Mark connection as inactive
-            try:
-                supabase_admin.table('platform_connections').update({
-                    'is_active': False,
-                    'updated_at': datetime.now().isoformat()
-                }).eq('user_id', current_user.id).eq('platform', 'google').eq('id', conn.get('id')).execute()
-                print(f"⚠️  Marked Google connection as inactive for account {account_email} (user {current_user.id}) due to invalid refresh token")
-            except Exception as deactivate_error:
-                print(f"❌ Failed to deactivate connection: {str(deactivate_error)}")
-            
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Google account connection ({account_email}) has expired. Please disconnect and reconnect this Google account to continue sending emails."
-            )
-        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to send email: {str(e)}"
@@ -1152,7 +1132,7 @@ async def reconnect_google_account(current_user: User = Depends(get_current_user
                     api_base_url = 'http://localhost:8000'
                 else:
                     api_base_url = 'https://agent-emily.onrender.com'
-            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
+            redirect_uri = f"{api_base_url}/connections/google/callback"
             logger.info(f"GOOGLE_REDIRECT_URI not set in reconnect, using constructed URI: {redirect_uri}")
         
         # Validate redirect URI format
@@ -1306,7 +1286,7 @@ async def debug_redirect_uri():
         "ENVIRONMENT": environment,
         "redirect_uri_length": len(redirect_uri) if redirect_uri else 0,
         "redirect_uri_repr": repr(redirect_uri) if redirect_uri else None,
-        "constructed_uri": f"{api_base_url}/connections/auth/google/callback" if api_base_url else None
+        "constructed_uri": f"{api_base_url}/connections/google/callback" if api_base_url else None
     }
 
 @router.get("/disconnect")

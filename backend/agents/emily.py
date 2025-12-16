@@ -6,6 +6,7 @@ Handles user queries by classifying intent and routing to appropriate tools
 import os
 import json
 import logging
+import numpy as np
 from typing import Dict, List, Any, Optional, Literal, TypedDict
 from datetime import datetime
 from pydantic import BaseModel, Field, EmailStr
@@ -15,6 +16,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from dotenv import load_dotenv
 from services.token_usage_service import TokenUsageService
+from utils.profile_embedding_helper import get_embedding_service
+from utils.embedding_context import get_profile_context_with_embedding
 
 # Load environment variables
 load_dotenv()
@@ -31,6 +34,9 @@ llm = ChatOpenAI(
     temperature=0.3,
     openai_api_key=openai_api_key
 )
+
+# Embedding service will be loaded via get_embedding_service() when needed
+# This matches the pattern used in profile_embedding_helper.py
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +217,13 @@ class GeneralTalkPayload(BaseModel):
     message: Optional[str] = None
 
 # =============================================================================
+# FAQ
+# =============================================================================
+
+class FAQPayload(BaseModel):
+    query: Optional[str] = None
+
+# =============================================================================
 # TOP-LEVEL INTENT PAYLOAD
 # =============================================================================
 
@@ -220,7 +233,8 @@ class IntentPayload(BaseModel):
         "analytics",
         "leads_management",
         "posting_manager",
-        "general_talks"
+        "general_talks",
+        "faq"
     ]
 
     content: Optional[ContentGenerationPayload] = None
@@ -228,10 +242,12 @@ class IntentPayload(BaseModel):
     leads: Optional[LeadsManagementPayload] = None
     posting: Optional[PostingManagerPayload] = None
     general: Optional[GeneralTalkPayload] = None
+    faq: Optional[FAQPayload] = None
 
 # Rebuild forward references
 IntentPayload.model_rebuild()
 ContentGenerationPayload.model_rebuild()
+FAQPayload.model_rebuild()
 
 # =============================================================================
 # LANGGRAPH STATE
@@ -276,6 +292,7 @@ class IntentBasedChatbot:
         workflow.add_node("handle_leads_management", self.handle_leads_management)
         workflow.add_node("handle_posting_manager", self.handle_posting_manager)
         workflow.add_node("handle_general_talks", self.handle_general_talks)
+        workflow.add_node("handle_faq", self.handle_faq)
         workflow.add_node("generate_final_response", self.generate_final_response)
         
         # Set entry point
@@ -290,7 +307,8 @@ class IntentBasedChatbot:
                 "analytics": "handle_analytics",
                 "leads_management": "handle_leads_management",
                 "posting_manager": "handle_posting_manager",
-                "general_talks": "handle_general_talks"
+                "general_talks": "handle_general_talks",
+                "faq": "handle_faq"
             }
         )
         
@@ -300,6 +318,7 @@ class IntentBasedChatbot:
         workflow.add_edge("handle_leads_management", "generate_final_response")
         workflow.add_edge("handle_posting_manager", "generate_final_response")
         workflow.add_edge("handle_general_talks", "generate_final_response")
+        workflow.add_edge("handle_faq", "generate_final_response")
         workflow.add_edge("generate_final_response", END)
         
         # Compile the graph
@@ -695,7 +714,7 @@ class IntentBasedChatbot:
 
 Your job:
 1. Read the user's natural language query
-2. Classify it into the correct intent (one of: content_generation, analytics, leads_management, posting_manager, general_talks)
+2. Classify it into the correct intent (one of: content_generation, analytics, leads_management, posting_manager, general_talks, faq)
 3. Extract ALL entities and information from the user's query - be thorough and extract everything mentioned
 4. Produce a Pydantic-validated payload according to the provided schema
 5. If the user query does not contain enough information, populate whatever fields you can and leave the rest as null
@@ -711,7 +730,8 @@ Your output MUST strictly follow this root structure:
   "analytics": {{...}} | null,
   "leads": {{...}} | null,
   "posting": {{...}} | null,
-  "general": {{...}} | null
+  "general": {{...}} | null,
+  "faq": {{"query": "..."}} | null
 }}
 
 CRITICAL: ENTITY EXTRACTION FOR CONTENT GENERATION
@@ -870,8 +890,27 @@ SOCIAL MEDIA TASK AND DATE RULES:
   Output: {{"intent": "content_generation", "content": {{"type": "social_media", "social_media": {{"task": "delete"}}}}}}
 - When merging with existing partial payload, preserve all non-null social_media fields and only update with new information
 
+FAQ INTENT DETECTION:
+- Classify as "faq" when the user asks informational questions about:
+  • Pricing, plans, costs, subscriptions
+  • How Emily works, features, capabilities
+  • Onboarding, getting started, usage instructions
+  • Support, help, documentation
+  • Limits, restrictions, what's included
+- Examples of FAQ queries:
+  - "what is the basic plan price?"
+  - "how does emily help my business?"
+  - "what can emily do?"
+  - "how do I get started?"
+  - "what features are included?"
+  - "what are the pricing plans?"
+  - "how much does it cost?"
+- If the query is informational and NOT a task (not asking to create, update, or manage something), classify as "faq"
+- If the query is conversational but not informational, classify as "general_talks"
+- For FAQ intent, set faq: {{"query": "<user's question>"}}
+
 General Rules:
-- EXACT intent labels must be used: content_generation, analytics, leads_management, posting_manager, general_talks
+- EXACT intent labels must be used: content_generation, analytics, leads_management, posting_manager, general_talks, faq
 - EXACT enum values must be used (e.g., "facebook", "instagram" for platforms; "post", "reel", "video", "story", "carousel" for content_type)
 - Never output fields that are not in the Pydantic schema
 - Never assume unknown fields
@@ -954,7 +993,8 @@ Return ONLY valid JSON matching the IntentPayload structure. No explanations, no
                         "analytics": None,
                         "leads": None,
                         "posting": None,
-                        "general": None
+                        "general": None,
+                        "faq": None
                     }
                     intent_payload = IntentPayload(**minimal_payload)
                     state["intent_payload"] = intent_payload
@@ -996,7 +1036,8 @@ Return ONLY valid JSON matching the IntentPayload structure. No explanations, no
                             "analytics": None,
                             "leads": None,
                             "posting": None,
-                            "general": None
+                            "general": None,
+                            "faq": None
                         }
                         intent_payload = IntentPayload(**minimal_payload)
                         state["intent_payload"] = intent_payload
@@ -1460,6 +1501,249 @@ Return ONLY valid JSON matching the IntentPayload structure. No explanations, no
         except Exception as e:
             logger.error(f"Error in handle_general_talks: {e}")
             state["response"] = "I'm here to help! How can I assist you today?"
+        
+        return state
+    
+    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """Calculate cosine similarity between two vectors"""
+        try:
+            v1 = np.array(vec1)
+            v2 = np.array(vec2)
+            dot_product = np.dot(v1, v2)
+            norm1 = np.linalg.norm(v1)
+            norm2 = np.linalg.norm(v2)
+            if norm1 == 0 or norm2 == 0:
+                return 0.0
+            return float(dot_product / (norm1 * norm2))
+        except Exception as e:
+            logger.error(f"Error calculating cosine similarity: {e}")
+            return 0.0
+    
+    def handle_faq(self, state: IntentBasedChatbotState) -> IntentBasedChatbotState:
+        """Handle FAQ intent with RAG retrieval from Supabase using semantic similarity
+        
+        Uses sentence-transformers embeddings for semantic search instead of keyword matching.
+        """
+        try:
+            user_query = state.get("current_query", "").strip()
+            logger.info(f"Handling FAQ query: {user_query}")
+            
+            # Load user profile with embedding for business context
+            user_id = state.get("user_id")
+            business_context = None
+            try:
+                logger.info(f"🔍 Loading business context for user: {user_id}")
+                profile_response = supabase.table("profiles").select("*, profile_embedding").eq("id", user_id).execute()
+                
+                if profile_response.data and len(profile_response.data) > 0:
+                    profile_data = profile_response.data[0]
+                    business_context = get_profile_context_with_embedding(profile_data)
+                    logger.info(f"✅ Loaded business context (has embedding: {business_context.get('use_embedding', False)})")
+                else:
+                    logger.warning(f"⚠️ No profile found for user {user_id}")
+            except Exception as profile_error:
+                logger.error(f"❌ Error loading profile: {profile_error}")
+                # Continue without business context
+            
+            # Retrieve FAQ records from Supabase
+            faq_list = []
+            try:
+                # Get embedding service (same pattern as profile_embedding_helper.py)
+                embedding_service = get_embedding_service()
+                
+                # Fetch all FAQs from Supabase
+                # Schema: id, faq_key, response, category
+                logger.info("🔍 Fetching all FAQs from Supabase...")
+                all_faqs = supabase.table("faq_responses").select("id, faq_key, response, category").execute()
+                
+                if not all_faqs.data or len(all_faqs.data) == 0:
+                    logger.warning("⚠️ No FAQs found in database")
+                    state["response"] = "I don't have an exact answer for that yet, but I can help you with features, pricing, or usage. How can I assist you?"
+                    return state
+                
+                logger.info(f"✅ Retrieved {len(all_faqs.data)} FAQs from database")
+                
+                # Generate embedding for user query
+                logger.info("🔍 Generating embedding for user query...")
+                query_embedding = embedding_service.generate_embedding_from_text(user_query)
+                logger.info(f"✅ Generated query embedding (dimension: {len(query_embedding)})")
+                
+                # Get profile embedding if available for business-context-aware matching
+                profile_embedding = None
+                if business_context and business_context.get("use_embedding"):
+                    profile_embedding = business_context.get("profile_embedding")
+                    if profile_embedding:
+                        logger.info(f"✅ Using profile embedding for business-context-aware matching")
+                
+                # Generate embeddings for all FAQs and calculate similarity
+                logger.info("🔍 Computing semantic similarity for all FAQs...")
+                faq_similarities = []
+                
+                for faq in all_faqs.data:
+                    faq_id = faq.get("id")
+                    faq_key = faq.get("faq_key", "")
+                    response = faq.get("response", "")
+                    category = faq.get("category", "")
+                    
+                    # Combine faq_key, response, and category for better semantic matching
+                    # This helps match queries like "pricing" to "pricing_basic" or "pricing_pro"
+                    faq_text = f"{faq_key} {response}"
+                    if category:
+                        faq_text = f"{category} {faq_text}"
+                    
+                    # Generate embedding for this FAQ
+                    faq_embedding = embedding_service.generate_embedding_from_text(faq_text)
+                    
+                    # Calculate cosine similarity with query
+                    query_similarity = self._cosine_similarity(query_embedding, faq_embedding)
+                    
+                    # If profile embedding is available, also calculate business context similarity
+                    business_similarity = 0.0
+                    if profile_embedding:
+                        business_similarity = self._cosine_similarity(profile_embedding, faq_embedding)
+                        logger.debug(f"FAQ {faq_key}: query_sim={query_similarity:.4f}, business_sim={business_similarity:.4f}")
+                    
+                    # Combined similarity: 70% query relevance, 30% business context relevance
+                    # This ensures FAQs relevant to both the query AND the business get higher scores
+                    if profile_embedding:
+                        combined_similarity = (0.7 * query_similarity) + (0.3 * business_similarity)
+                    else:
+                        combined_similarity = query_similarity
+                    
+                    faq_similarities.append({
+                        "faq": faq,
+                        "similarity": combined_similarity,
+                        "query_similarity": query_similarity,
+                        "business_similarity": business_similarity,
+                        "faq_key": faq_key,
+                        "response": response,
+                        "category": category
+                    })
+                
+                # Sort by similarity (highest first) and get top 5
+                faq_similarities.sort(key=lambda x: x["similarity"], reverse=True)
+                top_faqs = faq_similarities[:5]
+                
+                logger.info(f"✅ Top FAQ similarities:")
+                for idx, item in enumerate(top_faqs, 1):
+                    if profile_embedding:
+                        logger.info(f"   {idx}. {item['faq_key']}: combined={item['similarity']:.4f} (query={item['query_similarity']:.4f}, business={item['business_similarity']:.4f})")
+                    else:
+                        logger.info(f"   {idx}. {item['faq_key']}: {item['similarity']:.4f}")
+                
+                # Filter by similarity threshold (only include FAQs with similarity > 0.3)
+                # This prevents returning irrelevant results
+                threshold = 0.3
+                filtered_faqs = [item for item in top_faqs if item["similarity"] >= threshold]
+                
+                if not filtered_faqs:
+                    logger.info(f"⚠️ No FAQs met similarity threshold ({threshold})")
+                    state["response"] = "I don't have an exact answer for that yet, but I can help you with features, pricing, or usage. How can I assist you?"
+                    return state
+                
+                faq_list = [item["faq"] for item in filtered_faqs]
+                logger.info(f"✅ Selected {len(faq_list)} FAQs above similarity threshold")
+                
+            except Exception as db_error:
+                logger.error(f"❌ Error retrieving FAQs from Supabase: {db_error}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                faq_list = []
+            
+            # If no FAQs found, return helpful fallback message
+            if not faq_list:
+                logger.info("No FAQ matches found, returning fallback message")
+                state["response"] = "I don't have an exact answer for that yet, but I can help you with features, pricing, or usage. How can I assist you?"
+                return state
+            
+            # Build context from retrieved FAQs
+            # Schema: id, faq_key, response, category
+            faq_context = ""
+            for idx, faq in enumerate(faq_list, 1):
+                faq_key = faq.get("faq_key", "")
+                response = faq.get("response", "")
+                category = faq.get("category", "")
+                
+                faq_context += f"\n\nFAQ {idx}:\n"
+                faq_context += f"Topic: {faq_key}\n"
+                if category:
+                    faq_context += f"Category: {category}\n"
+                faq_context += f"Response: {response}\n"
+            
+            # Generate response using LLM with FAQ context only (no business context)
+            
+            system_prompt = """You are Emily, an AI assistant designed to help users understand and use
+the product or service you are assisting with.
+
+You are NOT the company and must never speak as the company.
+
+IDENTITY & VOICE
+----------------
+• Emily is always the doer of the response.
+• Any action, offering, pricing, or plan described is done by the US.
+• Use first-person plural language such as "we", "our", or "us".
+• Speak as a neutral assistant explaining the business's offerings.
+
+GROUNDING & ACCURACY
+--------------------
+• Use ONLY the information explicitly provided in the context.
+• Do NOT rely on general knowledge or assumptions.
+• Do NOT invent pricing, plans, features, or capabilities.
+• If information is missing or unclear, say so clearly.
+
+
+RAG USAGE
+---------
+• Treat retrieved context as the single source of truth.
+• Rephrase or summarize the context without changing its meaning.
+• Do NOT mention internal systems, databases, or retrieval mechanisms.
+
+PRICING & PLANS
+---------------
+• Pricing details must come directly from retrieved context.
+• If pricing is not provided, state that the exact pricing is not available.
+• Never estimate, infer, or imply pricing.
+
+TONE & STYLE
+------------
+• Clear, professional, and concise
+• Helpful but not sales-driven
+• No emojis unless explicitly requested
+
+FALLBACK
+--------
+If the answer is not available in the provided context, respond honestly and
+offer help with related, supported information.
+
+."""
+
+            user_prompt = f"""Based on the following FAQ data, answer the user's question.
+
+FAQ Data:
+{faq_context}
+
+User Question: {user_query}
+
+Provide a helpful and accurate answer based on the FAQ data above."""
+
+            # Generate response
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+            
+            response = self.llm.invoke(messages)
+            answer = response.content.strip()
+            
+            logger.info(f"Generated FAQ response: {answer[:100]}...")
+            state["response"] = answer
+            
+        except Exception as e:
+            logger.error(f"Error in handle_faq: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Fallback response
+            state["response"] = "I don't have an exact answer for that yet, but I can help you with features, pricing, or usage. How can I assist you?"
         
         return state
     

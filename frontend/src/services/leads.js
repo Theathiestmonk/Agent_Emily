@@ -32,7 +32,6 @@ export const leadsAPI = {
     const queryParams = new URLSearchParams()
     if (params.status) queryParams.append('status', params.status)
     if (params.source_platform) queryParams.append('source_platform', params.source_platform)
-    if (params.search) queryParams.append('search', params.search)
     if (params.limit) queryParams.append('limit', params.limit)
     if (params.offset) queryParams.append('offset', params.offset)
     

@@ -1639,6 +1639,30 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
           console.error('Error clearing message cache:', e)
         }
       }
+      
+      // Automatically add Emily's greeting message after clearing
+      const businessName = profile?.business_name || ''
+      const greetingText = businessName 
+        ? `Hello! I'm Emily, ${businessName}'s AI marketing assistant. How can I help you today?`
+        : "Hello! I'm Emily, your AI marketing assistant. How can I help you today?"
+      
+      const greetingMessage = {
+        id: Date.now(),
+        type: 'bot',
+        content: greetingText,
+        timestamp: new Date().toISOString(),
+        isEmily: true
+      }
+      
+      // Add greeting after a short delay to ensure state is cleared first
+      setTimeout(() => {
+        setMessages([greetingMessage])
+        saveMessagesToCache([greetingMessage])
+        // Scroll to bottom to show the greeting
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+        }, 100)
+      }, 50)
     },
     startCall: () => {
       // Call already started via useEffect
