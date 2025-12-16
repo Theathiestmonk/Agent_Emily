@@ -218,7 +218,7 @@ async def google_auth(current_user: User = Depends(get_current_user)):
                     print(f"🔧 Development mode detected, using localhost:8000")
                 else:
                     api_base_url = 'https://agent-emily.onrender.com'
-            redirect_uri = f"{api_base_url}/connections/google/callback"
+            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
             print(f"⚠️  GOOGLE_REDIRECT_URI not set, using constructed URI: {redirect_uri}")
         
         # Validate redirect URI format - ensure it's a full URL
@@ -517,7 +517,7 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
                     api_base_url = 'http://localhost:8000'
                 else:
                     api_base_url = 'https://agent-emily.onrender.com'
-            redirect_uri = f"{api_base_url}/connections/google/callback"
+            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
             logger.info(f"GOOGLE_REDIRECT_URI not set in callback, using constructed URI: {redirect_uri}")
         
         # Validate redirect URI format
@@ -1132,7 +1132,7 @@ async def reconnect_google_account(current_user: User = Depends(get_current_user
                     api_base_url = 'http://localhost:8000'
                 else:
                     api_base_url = 'https://agent-emily.onrender.com'
-            redirect_uri = f"{api_base_url}/connections/google/callback"
+            redirect_uri = f"{api_base_url}/connections/auth/google/callback"
             logger.info(f"GOOGLE_REDIRECT_URI not set in reconnect, using constructed URI: {redirect_uri}")
         
         # Validate redirect URI format
@@ -1286,7 +1286,7 @@ async def debug_redirect_uri():
         "ENVIRONMENT": environment,
         "redirect_uri_length": len(redirect_uri) if redirect_uri else 0,
         "redirect_uri_repr": repr(redirect_uri) if redirect_uri else None,
-        "constructed_uri": f"{api_base_url}/connections/google/callback" if api_base_url else None
+        "constructed_uri": f"{api_base_url}/connections/auth/google/callback" if api_base_url else None
     }
 
 @router.get("/disconnect")

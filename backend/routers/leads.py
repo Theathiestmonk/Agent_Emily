@@ -160,6 +160,126 @@ class CreateLeadRequest(BaseModel):
     status: str = "new"
     form_data: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
+    follow_up_at: Optional[str] = None  # ISO format datetime string
+
+# Email scheduling helper functions
+def parse_follow_up_at(follow_up_at: Optional[str]) -> Optional[datetime]:
+    """Parse follow_up_at string to datetime object with UTC timezone"""
+    if not follow_up_at:
+        return None
+    
+    try:
+        # Try dateutil parser first (handles many formats)
+        try:
+            from dateutil import parser
+            parsed_date = parser.parse(follow_up_at)
+            if parsed_date.tzinfo is None:
+                parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+            return parsed_date.astimezone(timezone.utc)
+        except ImportError:
+            pass
+        except Exception:
+            pass
+        
+        # Fallback to ISO format parsing
+        if 'Z' in follow_up_at:
+            parsed_date = datetime.fromisoformat(follow_up_at.replace('Z', '+00:00'))
+        elif '+' in follow_up_at or follow_up_at.count('-') > 2:
+            parsed_date = datetime.fromisoformat(follow_up_at)
+        else:
+            # Try parsing as date only or date+time without timezone
+            parsed_date = datetime.fromisoformat(follow_up_at)
+            if parsed_date.tzinfo is None:
+                parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+        
+        if parsed_date.tzinfo is None:
+            parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+        
+        return parsed_date.astimezone(timezone.utc)
+    except Exception as e:
+        logger.warning(f"Failed to parse follow_up_at '{follow_up_at}': {e}")
+        return None
+
+def has_time_component(dt: datetime) -> bool:
+    """Check if datetime has meaningful time (not just midnight)"""
+    if dt is None:
+        return False
+    return dt.hour != 0 or dt.minute != 0 or dt.second != 0 or dt.microsecond != 0
+
+def should_send_email_immediately(follow_up_at: Optional[datetime], created_at: Optional[datetime] = None) -> bool:
+    """
+    Determine if email should be sent immediately based on follow_up_at date/time.
+    
+    Returns True if:
+    - follow_up_at is None (no follow_up_at provided)
+    - follow_up_at date matches today
+    - follow_up_at date+time matches current time (within 1 hour tolerance if in past)
+    
+    Returns False if follow_up_at is in the future (needs scheduling).
+    """
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    
+    # No follow_up_at: send immediately
+    if follow_up_at is None:
+        logger.info("No follow_up_at provided, sending email immediately")
+        return True
+    
+    # Ensure timezone-aware
+    if follow_up_at.tzinfo is None:
+        follow_up_at = follow_up_at.replace(tzinfo=timezone.utc)
+    follow_up_utc = follow_up_at.astimezone(timezone.utc)
+    follow_up_date = follow_up_utc.date()
+    
+    # Date matches today: send immediately
+    if follow_up_date == today:
+        # If has time component, check if time matches (within 1 hour if past)
+        if has_time_component(follow_up_utc):
+            time_diff = (follow_up_utc - now).total_seconds()
+            # Send if time matches or is in past (within 1 hour tolerance)
+            should_send = time_diff <= 3600  # 1 hour tolerance
+            logger.info(f"follow_up_at date matches today with time component. Time diff: {time_diff}s, sending: {should_send}")
+            return should_send
+        else:
+            # Only date, no time: send immediately
+            logger.info("follow_up_at date matches today (no time component), sending email immediately")
+            return True
+    
+    # Future date: schedule (return False)
+    if follow_up_date > today:
+        logger.info(f"follow_up_at is in the future ({follow_up_date}), will schedule email")
+        return False
+    
+    # Past date: send immediately (might be old data or timezone issue)
+    logger.info(f"follow_up_at is in the past ({follow_up_date}), sending email immediately")
+    return True
+
+def get_email_send_time(follow_up_at: Optional[datetime], created_at: Optional[datetime] = None) -> datetime:
+    """
+    Returns the exact datetime when email should be sent.
+    - If follow_up_at is None: return current time
+    - If follow_up_at has only date: return today with current time
+    - If follow_up_at has date+time: return that exact time (or current time if in past)
+    """
+    now = datetime.now(timezone.utc)
+    
+    if follow_up_at is None:
+        return now
+    
+    # Ensure timezone-aware
+    if follow_up_at.tzinfo is None:
+        follow_up_at = follow_up_at.replace(tzinfo=timezone.utc)
+    follow_up_utc = follow_up_at.astimezone(timezone.utc)
+    
+    # If has time component, use that time (or current time if in past)
+    if has_time_component(follow_up_utc):
+        # If the time is in the past, use current time
+        if follow_up_utc < now:
+            return now
+        return follow_up_utc
+    else:
+        # Only date, no time: use current time
+        return now
 
 # Initialize agent
 def get_lead_agent():
@@ -553,6 +673,15 @@ async def create_lead(
                 detail=f"Lead already exists with the same {', '.join(duplicate_info)}. Duplicate leads are not allowed."
             )
         
+        # Parse follow_up_at if provided
+        follow_up_at_dt = None
+        if request.follow_up_at:
+            follow_up_at_dt = parse_follow_up_at(request.follow_up_at)
+            if follow_up_at_dt:
+                logger.info(f"Parsed follow_up_at: {follow_up_at_dt.isoformat()}")
+            else:
+                logger.warning(f"Failed to parse follow_up_at: {request.follow_up_at}, continuing without it")
+        
         lead_data = {
             "user_id": current_user["id"],
             "name": request.name,
@@ -568,6 +697,10 @@ async def create_lead(
             }
         }
         
+        # Add follow_up_at to lead_data if parsed successfully
+        if follow_up_at_dt:
+            lead_data["follow_up_at"] = follow_up_at_dt.isoformat()
+        
         result = supabase_admin.table("leads").insert(lead_data).execute()
         
         if not result.data:
@@ -577,7 +710,18 @@ async def create_lead(
         lead_id = created_lead["id"]
         
         # Automatically send welcome email if lead has email address
+        # Check if email should be sent immediately based on follow_up_at
+        should_send_email = False
         if request.email and request.status == "new":
+            # Determine if email should be sent immediately
+            should_send_email = should_send_email_immediately(follow_up_at_dt)
+            
+            if should_send_email:
+                logger.info(f"Email will be sent immediately for lead {lead_id} (follow_up_at: {follow_up_at_dt.isoformat() if follow_up_at_dt else 'None'})")
+            else:
+                logger.info(f"Email will be scheduled for future for lead {lead_id} (follow_up_at: {follow_up_at_dt.isoformat() if follow_up_at_dt else 'None'})")
+        
+        if should_send_email:
             try:
                 # Get user profile for business context
                 profile = supabase_admin.table("profiles").select("*").eq("id", current_user["id"]).execute()
@@ -768,6 +912,12 @@ Return a JSON object with:
             except Exception as auto_email_error:
                 logger.error(f"Error in automatic email sending: {auto_email_error}")
                 # Don't fail lead creation if auto-email fails
+        else:
+            # Email not sent immediately - could be scheduled for future
+            if request.email and request.status == "new" and follow_up_at_dt:
+                logger.info(f"Email for lead {lead_id} will be scheduled for follow_up_at: {follow_up_at_dt.isoformat()}")
+                # TODO: Implement email scheduling for future dates
+                # For now, we log it but don't schedule (can be added in Phase 2)
         
         return created_lead
         
@@ -1129,9 +1279,36 @@ async def import_leads_csv(
                         lead_email = lead.get("email")
                         lead_name = lead.get("name", "there")
                         lead_status = lead.get("status", "new")
+                        lead_follow_up_at = lead.get("follow_up_at")
                         
-                        # Only send to leads with email and status "new"
+                        # Parse follow_up_at if present
+                        follow_up_at_dt = None
+                        if lead_follow_up_at:
+                            follow_up_at_dt = parse_follow_up_at(lead_follow_up_at)
+                        
+                        # Get created_at for date comparison
+                        created_at_dt = None
+                        lead_created_at = lead.get("created_at")
+                        if lead_created_at:
+                            try:
+                                created_at_dt = datetime.fromisoformat(lead_created_at.replace('Z', '+00:00'))
+                                if created_at_dt.tzinfo is None:
+                                    created_at_dt = created_at_dt.replace(tzinfo=timezone.utc)
+                            except Exception:
+                                pass
+                        
+                        # Determine if email should be sent immediately
+                        should_send_email = False
                         if lead_email and lead_status == "new":
+                            should_send_email = should_send_email_immediately(follow_up_at_dt, created_at_dt)
+                            
+                            if should_send_email:
+                                logger.info(f"CSV Import: Email will be sent immediately for lead {lead_id} (follow_up_at: {lead_follow_up_at})")
+                            else:
+                                logger.info(f"CSV Import: Email will be scheduled for future for lead {lead_id} (follow_up_at: {lead_follow_up_at})")
+                        
+                        # Only send to leads with email and status "new" and should_send_email is True
+                        if lead_email and lead_status == "new" and should_send_email:
                             try:
                                 # Generate personalized email for this specific lead
                                 email_subject = None
@@ -1264,6 +1441,12 @@ Return a JSON object with:
                                 logger.error(f"Error sending welcome email to lead {lead_id}: {email_send_error}")
                                 # Continue with other leads even if one fails
                                 continue
+                        else:
+                            # Email not sent immediately - could be scheduled for future
+                            if lead_email and lead_status == "new" and follow_up_at_dt:
+                                logger.info(f"CSV Import: Email for lead {lead_id} will be scheduled for follow_up_at: {follow_up_at_dt.isoformat()}")
+                                # TODO: Implement email scheduling for future dates
+                                # For now, we log it but don't schedule (can be added in Phase 2)
                     
                     if emails_sent > 0:
                         logger.info(f"Sent {emails_sent} welcome emails to imported leads")
@@ -1295,7 +1478,8 @@ Return a JSON object with:
 async def get_leads(
     status: Optional[str] = Query(None),
     source_platform: Optional[str] = Query(None),
-    limit: int = Query(50, le=100),
+    search: Optional[str] = Query(None),
+    limit: int = Query(50, le=1000),
     offset: int = Query(0, ge=0),
     current_user: dict = Depends(get_current_user)
 ):
@@ -1308,10 +1492,39 @@ async def get_leads(
         if source_platform:
             query = query.eq("source_platform", source_platform)
         
-        query = query.order("created_at", desc=True).limit(limit).offset(offset)
+        # Add search functionality - search across name, email, and phone_number
+        # This works for all leads regardless of source_platform
+        use_python_filter = False
+        if search and search.strip():
+            search_term = f"%{search.strip()}%"
+            try:
+                # Try using Supabase OR filter for server-side search
+                query = query.or_(f"name.ilike.{search_term},email.ilike.{search_term},phone_number.ilike.{search_term}")
+            except Exception as search_error:
+                # Fallback: filter in Python if Supabase query fails
+                logger.warning(f"Supabase OR query failed, will filter in Python: {search_error}")
+                use_python_filter = True
+        
+        # If using Python filter, fetch more leads first for filtering
+        if use_python_filter:
+            query = query.order("created_at", desc=True).limit(1000).offset(0)
+        else:
+            query = query.order("created_at", desc=True).limit(limit).offset(offset)
         
         result = query.execute()
         leads = result.data if result.data else []
+        
+        # Apply Python-side filtering if Supabase query didn't work
+        if use_python_filter and search and search.strip():
+            search_lower = search.strip().lower()
+            leads = [
+                lead for lead in leads
+                if (lead.get("name", "") and lead.get("name", "").lower().find(search_lower) >= 0) or
+                   (lead.get("email", "") and lead.get("email", "").lower().find(search_lower) >= 0) or
+                   (lead.get("phone_number", "") and lead.get("phone_number", "").lower().find(search_lower) >= 0)
+            ]
+            # Apply pagination after filtering
+            leads = leads[offset:offset + limit]
         
         # Get last remarks for all leads
         if leads:

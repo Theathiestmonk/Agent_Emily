@@ -27,13 +27,21 @@ import {
 // Get date range for filtering (moved outside component to prevent recreation)
 const getDateRange = (range) => {
   const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  // Create today at midnight in local timezone
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
   
   switch (range) {
     case 'today':
+      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+      console.log('Today date range:', {
+        start: today.toISOString(),
+        end: todayEnd.toISOString(),
+        startLocal: today.toLocaleString(),
+        endLocal: todayEnd.toLocaleString()
+      })
       return {
         start: today,
-        end: new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1)
+        end: todayEnd
       }
     case 'this_week': {
       const dayOfWeek = now.getDay()
@@ -85,6 +93,7 @@ const LeadsDashboard = () => {
   const [deletingBulk, setDeletingBulk] = useState(false)
   const leadsRef = useRef([])
   const lastFetchTimeRef = useRef(null)
+  const searchTimeoutRef = useRef(null)
 
   const fetchLeads = useCallback(async (showLoading = true) => {
     try {
@@ -97,11 +106,34 @@ const LeadsDashboard = () => {
       if (filterPlatform !== 'all') {
         params.source_platform = filterPlatform
       }
-      params.limit = 100
+      if (searchQuery && searchQuery.trim()) {
+        params.search = searchQuery.trim()
+      }
+      // Increase limit to ensure we get all leads, especially today's leads
+      params.limit = 1000
       params.offset = 0
 
       const response = await leadsAPI.getLeads(params)
       const fetchedLeads = response.data || []
+      
+      // Debug: Log fetched leads
+      console.log('Fetched leads:', fetchedLeads.length, 'leads')
+      if (fetchedLeads.length > 0) {
+        // Log all leads with their dates to find today's leads
+        console.log('All fetched leads with dates:')
+        fetchedLeads.forEach((lead, index) => {
+          const leadDate = new Date(lead.created_at)
+          const today = new Date()
+          const isToday = leadDate.toDateString() === today.toDateString()
+          console.log(`Lead ${index + 1}:`, {
+            name: lead.name,
+            created_at: lead.created_at,
+            localDate: leadDate.toLocaleString(),
+            dateString: leadDate.toDateString(),
+            isToday: isToday
+          })
+        })
+      }
 
       // Check for new leads using refs to avoid dependency issues
       const previousLeads = leadsRef.current
@@ -138,7 +170,7 @@ const LeadsDashboard = () => {
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [filterStatus, filterPlatform, showError, showInfo])
+  }, [filterStatus, filterPlatform, searchQuery, showError, showInfo])
 
   // Clear leads data on logout
   useEffect(() => {
@@ -166,6 +198,28 @@ const LeadsDashboard = () => {
       fetchLeads()
     }
   }, [user, filterStatus, filterPlatform, fetchLeads])
+
+  // Debounced search - refetch when search query changes (with delay)
+  useEffect(() => {
+    if (!user) return
+    
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+    
+    // Set new timeout for debounced search
+    searchTimeoutRef.current = setTimeout(() => {
+      fetchLeads(false) // Don't show loading spinner for search
+    }, 500) // 500ms debounce
+    
+    // Cleanup timeout on unmount or when searchQuery changes
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [searchQuery, user, fetchLeads])
 
   // Handle leadId from URL query parameter (for opening lead from chatbot link)
   useEffect(() => {
@@ -397,37 +451,119 @@ const LeadsDashboard = () => {
   }
 
   const filteredLeads = useMemo(() => {
-    return leads.filter(lead => {
-      // Status filter
-      if (filterStatus !== 'all' && lead.status !== filterStatus) {
+    if (!leads || leads.length === 0) {
+      console.log('No leads to filter')
+      return []
+    }
+    
+    console.log('Filtering leads:', {
+      totalLeads: leads.length,
+      filterDateRange,
+      filterStatus
+    })
+    
+    const filtered = leads.filter(lead => {
+      // Status filter (client-side for status column view)
+      if (filterStatus !== 'all' && lead.status?.toLowerCase() !== filterStatus.toLowerCase()) {
         return false
       }
       
-      // Date range filter
+      // Date range filter - handle timezone properly
       if (filterDateRange !== 'all') {
         const dateRange = getDateRange(filterDateRange)
         if (dateRange) {
+          if (!lead.created_at) {
+            return false
+          }
+          
           const leadDate = new Date(lead.created_at)
-          if (leadDate < dateRange.start || leadDate > dateRange.end) {
+          
+          // Check if date is valid
+          if (isNaN(leadDate.getTime())) {
+            console.warn('Invalid date for lead:', lead.id, lead.created_at)
+            return false
+          }
+          
+          // Convert lead date to local date string (YYYY-MM-DD) for comparison
+          // This handles UTC timestamps correctly by converting to local time first
+          const leadYear = leadDate.getFullYear()
+          const leadMonth = String(leadDate.getMonth() + 1).padStart(2, '0')
+          const leadDay = String(leadDate.getDate()).padStart(2, '0')
+          const leadDateStr = `${leadYear}-${leadMonth}-${leadDay}`
+          
+          // Convert range dates to local date strings
+          const startYear = dateRange.start.getFullYear()
+          const startMonth = String(dateRange.start.getMonth() + 1).padStart(2, '0')
+          const startDay = String(dateRange.start.getDate()).padStart(2, '0')
+          const startDateStr = `${startYear}-${startMonth}-${startDay}`
+          
+          const endYear = dateRange.end.getFullYear()
+          const endMonth = String(dateRange.end.getMonth() + 1).padStart(2, '0')
+          const endDay = String(dateRange.end.getDate()).padStart(2, '0')
+          const endDateStr = `${endYear}-${endMonth}-${endDay}`
+          
+          // Compare date strings (YYYY-MM-DD format compares correctly)
+          // For "today" filter, both start and end should be the same date
+          const isInRange = leadDateStr >= startDateStr && leadDateStr <= endDateStr
+          
+          // Debug logging for today filter - log ALL leads, not just failures
+          if (filterDateRange === 'today') {
+            console.log('Date filter check:', {
+              leadName: lead.name,
+              leadDateStr,
+              startDateStr,
+              endDateStr,
+              isInRange,
+              willShow: isInRange ? 'YES' : 'NO',
+              leadCreatedAt: lead.created_at,
+              comparison: `${leadDateStr} >= ${startDateStr} && ${leadDateStr} <= ${endDateStr}`
+            })
+          }
+          
+          if (!isInRange) {
             return false
           }
         }
       }
       
-      // Search query filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      const matchesName = lead.name?.toLowerCase().includes(query)
-      const matchesEmail = lead.email?.toLowerCase().includes(query)
-      const matchesPhone = lead.phone_number?.toLowerCase().includes(query)
-        if (!matchesName && !matchesEmail && !matchesPhone) {
-          return false
-        }
-    }
+      // Search is now handled by the backend, so we don't need client-side filtering
+      // The backend returns only matching leads when search query is provided
       
     return true
   })
-  }, [leads, filterStatus, filterDateRange, searchQuery])
+  
+    console.log('Filtered leads result:', {
+      before: leads.length,
+      after: filtered.length,
+      filterDateRange,
+      todayLeadsCount: filterDateRange === 'today' ? filtered.filter(l => {
+        if (!l.created_at) return false
+        const d = new Date(l.created_at)
+        return d.toDateString() === new Date().toDateString()
+      }).length : 'N/A'
+    })
+    
+    // Log first few filtered leads for debugging
+    if (filterDateRange === 'today' && filtered.length > 0) {
+      console.log('First 5 filtered leads:', filtered.slice(0, 5).map(l => ({
+        name: l.name,
+        status: l.status,
+        created_at: l.created_at,
+        date: new Date(l.created_at).toLocaleDateString()
+      })))
+      console.log('All filtered leads statuses:', filtered.map(l => ({ name: l.name, status: l.status })))
+    } else if (filterDateRange === 'today' && filtered.length === 0) {
+      console.log('No leads passed the today filter. Checking all leads dates:')
+      leads.slice(0, 10).forEach(l => {
+        if (l.created_at) {
+          const d = new Date(l.created_at)
+          console.log(`- ${l.name}: ${d.toLocaleDateString()} (${d.toDateString()})`)
+        }
+      })
+    }
+    
+    return filtered
+  }, [leads, filterStatus, filterDateRange])
 
   const dateRangeFilters = [
     { value: 'all', label: 'All Time' },
@@ -747,7 +883,19 @@ const LeadsDashboard = () => {
               {statusFilters
                 .filter(statusFilter => statusFilter.value !== 'all') // Exclude 'all' from column view
                 .map((statusFilter) => {
-                  const columnLeads = filteredLeads.filter(lead => lead.status === statusFilter.value)
+                  const columnLeads = filteredLeads.filter(lead => 
+                    lead.status?.toLowerCase() === statusFilter.value.toLowerCase()
+                  )
+                  
+                  // Debug logging for today filter
+                  if (filterDateRange === 'today' && columnLeads.length > 0) {
+                    console.log(`Status column "${statusFilter.label}":`, {
+                      status: statusFilter.value,
+                      count: columnLeads.length,
+                      leads: columnLeads.map(l => l.name)
+                    })
+                  }
+                  
                   const statusConfig = getStatusConfig(statusFilter.value)
                   const StatusIcon = statusConfig.icon
                   
