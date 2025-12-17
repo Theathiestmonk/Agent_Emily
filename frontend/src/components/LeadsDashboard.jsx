@@ -521,10 +521,10 @@ const LeadsDashboard = () => {
           }
           
           if (!isInRange) {
-            return false
+          return false
           }
         }
-      }
+    }
       
       // Search is now handled by the backend, so we don't need client-side filtering
       // The backend returns only matching leads when search query is provided

@@ -727,10 +727,10 @@ async def create_lead(
                 profile = supabase_admin.table("profiles").select("*").eq("id", current_user["id"]).execute()
                 profile_data = profile.data[0] if profile.data else {}
                 
-                business_name = profile_data.get("business_name", "our business")
-                business_description = profile_data.get("business_description", "")
-                brand_voice = profile_data.get("brand_voice", "professional")
-                brand_tone = profile_data.get("brand_tone", "friendly")
+                business_name = profile_data.get("business_name") or "our business"
+                business_description = profile_data.get("business_description") or ""
+                brand_voice = profile_data.get("brand_voice") or "professional"
+                brand_tone = profile_data.get("brand_tone") or "friendly"
                 
                 # Generate welcome email using LLM
                 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -787,19 +787,40 @@ Return a JSON object with:
                             request_metadata={"lead_id": str(lead_id)}
                         )
                     
+                    # Ensure lead_name is never None
+                    lead_name = request.name or "there"
+                    if business_name is None:
+                        business_name = "our business"
+                    
                     try:
                         email_data = json.loads(response.choices[0].message.content)
                         email_subject = email_data.get("subject", f"Thank you for contacting {business_name}")
-                        email_body = email_data.get("body", f"Thank you {request.name} for contacting {business_name}!")
+                        email_body = email_data.get("body", f"Thank you {lead_name} for contacting {business_name}!")
                     except json.JSONDecodeError:
                         content = response.choices[0].message.content
                         email_subject = f"Thank you for contacting {business_name}"
                         email_body = content
+                        # Replace any placeholders that might exist
+                        email_body = email_body.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                        email_subject = email_subject.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                    
+                    # Final safety check: ensure values are never None before any string operations
+                    if lead_name is None:
+                        lead_name = "there"
+                    if business_name is None:
+                        business_name = "our business"
+                    
+                    # Replace any remaining placeholders
+                    email_subject = email_subject.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                    email_body = email_body.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                    email_subject = email_subject.replace("{business_name}", business_name)
+                    email_body = email_body.replace("{business_name}", business_name)
                     
                     # Check for Google connection and send email
                     connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user["id"]).execute()
                     
                     if connection.data:
+                        logger.info(f"Manual Lead Creation: Google connection found for user {current_user['id']} ({current_user['email']}). Sending welcome email.")
                         try:
                             from routers.google_connections import send_gmail_message, User as GoogleUser
                             
@@ -905,10 +926,14 @@ Return a JSON object with:
                                     # Don't fail lead creation if chatbot message fails
                                 
                         except Exception as email_error:
+                            logger.error(f"Error sending welcome email to lead {lead_id} ({request.email}): {str(email_error)}")
+                            logger.error(f"Error type: {type(email_error).__name__}")
+                            import traceback
+                            logger.error(f"Traceback: {traceback.format_exc()}")
                             logger.error(f"Error sending welcome email: {email_error}")
                             # Don't fail lead creation if email fails
                     else:
-                        logger.info(f"No Google connection found, skipping automatic welcome email for lead {lead_id}")
+                        logger.warning(f"No active Google connection found for user {current_user['id']} ({current_user['email']}). Skipping automatic welcome email for lead {lead_id}. Please connect your Google account to enable email sending.")
             except Exception as auto_email_error:
                 logger.error(f"Error in automatic email sending: {auto_email_error}")
                 # Don't fail lead creation if auto-email fails
@@ -1243,14 +1268,17 @@ async def import_leads_csv(
                 connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user["id"]).execute()
                 
                 if connection.data:
+                    conn_data = connection.data[0]
+                    account_email = conn_data.get('account_email') or conn_data.get('email') or 'unknown'
+                    logger.info(f"CSV Import: Found Google connection for account: {account_email}")
                     # Get user profile for business context (once for all leads)
                     profile = supabase_admin.table("profiles").select("*").eq("id", current_user["id"]).execute()
                     profile_data = profile.data[0] if profile.data else {}
                     
-                    business_name = profile_data.get("business_name", "our business")
-                    business_description = profile_data.get("business_description", "")
-                    brand_voice = profile_data.get("brand_voice", "professional")
-                    brand_tone = profile_data.get("brand_tone", "friendly")
+                    business_name = profile_data.get("business_name") or "our business"
+                    business_description = profile_data.get("business_description") or ""
+                    brand_voice = profile_data.get("brand_voice") or "professional"
+                    brand_tone = profile_data.get("brand_tone") or "friendly"
                     
                     # Import Google connection functions
                     from routers.google_connections import send_gmail_message, User as GoogleUser
@@ -1271,13 +1299,15 @@ async def import_leads_csv(
                         created_at=created_at_str
                     )
                     
+                    logger.info(f"CSV Import: Google connection found for user {current_user['id']} ({current_user['email']}). Proceeding with email sending.")
+                    
                     # Send emails to each lead - generate personalized email for each
                     openai_api_key = os.getenv("OPENAI_API_KEY")
                     
                     for lead in created_leads:
                         lead_id = lead.get("id")
                         lead_email = lead.get("email")
-                        lead_name = lead.get("name", "there")
+                        lead_name = lead.get("name") or "there"
                         lead_status = lead.get("status", "new")
                         lead_follow_up_at = lead.get("follow_up_at")
                         
@@ -1306,9 +1336,15 @@ async def import_leads_csv(
                                 logger.info(f"CSV Import: Email will be sent immediately for lead {lead_id} (follow_up_at: {lead_follow_up_at})")
                             else:
                                 logger.info(f"CSV Import: Email will be scheduled for future for lead {lead_id} (follow_up_at: {lead_follow_up_at})")
+                        else:
+                            if not lead_email:
+                                logger.warning(f"CSV Import: Skipping email for lead {lead_id} - no email address")
+                            if lead_status != "new":
+                                logger.info(f"CSV Import: Skipping email for lead {lead_id} - status is '{lead_status}' (not 'new')")
                         
                         # Only send to leads with email and status "new" and should_send_email is True
                         if lead_email and lead_status == "new" and should_send_email:
+                            logger.info(f"CSV Import: Attempting to send email to lead {lead_id} ({lead_email})")
                             try:
                                 # Generate personalized email for this specific lead
                                 email_subject = None
@@ -1391,7 +1427,13 @@ Return a JSON object with:
                                     email_subject = f"Thank you for contacting {business_name}"
                                     email_body = f"<p>Dear {lead_name},</p><p>Thank you for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
                                 
-                                # Final safety check: replace any remaining placeholders
+                                # Final safety check: ensure values are never None before replace()
+                                if lead_name is None:
+                                    lead_name = "there"
+                                if business_name is None:
+                                    business_name = "our business"
+                                
+                                # Replace any remaining placeholders
                                 email_subject = email_subject.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
                                 email_body = email_body.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
                                 email_subject = email_subject.replace("{business_name}", business_name)
@@ -1438,9 +1480,20 @@ Return a JSON object with:
                                     logger.info(f"Welcome email sent to lead {lead_id} ({lead_email}) from CSV import")
                                     
                             except Exception as email_send_error:
-                                logger.error(f"Error sending welcome email to lead {lead_id}: {email_send_error}")
-                                # Continue with other leads even if one fails
-                                continue
+                                error_str = str(email_send_error).lower()
+                                
+                                # Check if this is an authentication/connection error
+                                if "unauthorized" in error_str or "connection has expired" in error_str or "reconnect" in error_str:
+                                    logger.error(f"Google account connection expired for user {current_user['id']}. Email not sent to lead {lead_id} ({lead_email}). User needs to reconnect Google account.")
+                                    # Don't continue trying to send more emails - connection is invalid
+                                    break
+                                else:
+                                    logger.error(f"Error sending welcome email to lead {lead_id} ({lead_email}): {str(email_send_error)}")
+                                    logger.error(f"Error type: {type(email_send_error).__name__}")
+                                    import traceback
+                                    logger.error(f"Traceback: {traceback.format_exc()}")
+                                    # Continue with other leads even if one fails
+                                    continue
                         else:
                             # Email not sent immediately - could be scheduled for future
                             if lead_email and lead_status == "new" and follow_up_at_dt:
@@ -1450,11 +1503,24 @@ Return a JSON object with:
                     
                     if emails_sent > 0:
                         logger.info(f"Sent {emails_sent} welcome emails to imported leads")
+                    else:
+                        logger.warning(f"CSV Import: No emails were sent. Check logs above for reasons (connection status, follow_up_at dates, lead status, etc.)")
                 else:
-                    logger.info("No Google connection found, skipping automatic welcome emails for CSV imported leads")
+                    logger.warning(f"No active Google connection found for user {current_user['id']} ({current_user['email']}). Skipping automatic welcome emails for CSV imported leads. Please connect your Google account to enable email sending.")
             except Exception as auto_email_error:
                 logger.error(f"Error in automatic email sending for CSV import: {auto_email_error}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 # Don't fail the import if email sending fails
+        
+        # Build detailed message
+        message_parts = [f"Successfully imported {len(created_leads)} out of {len(rows)} leads"]
+        if len(duplicates) > 0:
+            message_parts.append(f"{len(duplicates)} duplicate(s) skipped")
+        if emails_sent > 0:
+            message_parts.append(f"{emails_sent} welcome email(s) sent")
+        elif len(created_leads) > 0:
+            message_parts.append("No emails sent - check connection status and follow_up_at dates")
         
         return {
             "success": True,
@@ -1465,7 +1531,7 @@ Return a JSON object with:
             "emails_sent": emails_sent,
             "error_details": errors[:10],  # Limit error details to first 10
             "duplicate_details": duplicates[:10],  # Limit duplicate details to first 10
-            "message": f"Successfully imported {len(created_leads)} out of {len(rows)} leads. {len(duplicates)} duplicate(s) skipped. {emails_sent} welcome email(s) sent."
+            "message": ". ".join(message_parts) + "."
         }
         
     except HTTPException:

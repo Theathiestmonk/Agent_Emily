@@ -1035,6 +1035,26 @@ async def send_gmail_message(
         }
         
     except Exception as e:
+        error_str = str(e).lower()
+        
+        # Check if this is an unauthorized_client error (invalid refresh token)
+        if "unauthorized_client" in error_str or "refresh" in error_str and "unauthorized" in error_str:
+            account_email = conn.get('account_email') or conn.get('email') or 'your Google account'
+            # Mark connection as inactive
+            try:
+                supabase_admin.table('platform_connections').update({
+                    'is_active': False,
+                    'updated_at': datetime.now().isoformat()
+                }).eq('user_id', current_user.id).eq('platform', 'google').eq('id', conn.get('id')).execute()
+                print(f"⚠️  Marked Google connection as inactive for account {account_email} (user {current_user.id}) due to invalid refresh token")
+            except Exception as deactivate_error:
+                print(f"❌ Failed to deactivate connection: {str(deactivate_error)}")
+            
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Google account connection ({account_email}) has expired. Please disconnect and reconnect this Google account to continue sending emails."
+            )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to send email: {str(e)}"
