@@ -514,7 +514,7 @@ class WebsiteAnalyzerAgent:
             
             client = openai.AsyncOpenAI(api_key=self.openai_api_key)
             response = await client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=1000,
                 temperature=0.7
@@ -526,7 +526,7 @@ class WebsiteAnalyzerAgent:
                     await self.token_tracker.track_chat_completion_usage(
                         user_id=user_id,
                         feature_type="website_analysis",
-                        model_name="gpt-3.5-turbo",
+                        model_name="gpt-4o-mini",
                         response=response,
                         request_metadata={
                             "website_url": url,

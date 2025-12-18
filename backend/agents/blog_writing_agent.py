@@ -457,6 +457,13 @@ class BlogWritingAgent:
             Make the content engaging, informative, and valuable for the target audience. Use proper HTML formatting for the content.
             """
             
+            # Build the prompt using embedding context (like custom blog agent does)
+            prompt = build_embedding_prompt(
+                context=business_context,
+                task_description=task_description,
+                additional_requirements=f"WordPress Site: {site_name}, Business: {business_name}, Industry: {industry}"
+            )
+            
             # Generate content using OpenAI
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -574,13 +581,43 @@ class BlogWritingAgent:
         except Exception as e:
             logger.error(f"Error generating blog content: {e}")
             print(f"ERROR generating blog content: {e}")
-            # Check if it's an API quota error
-            error_str = str(e)
-            if "quota" in error_str.lower() or "429" in error_str or "insufficient_quota" in error_str:
+            print(f"ERROR type: {type(e).__name__}")
+            
+            # Check if it's an API quota error - be more specific
+            error_str = str(e).lower()
+            error_type = type(e).__name__
+            
+            # Check for OpenAI API errors specifically
+            is_quota_error = False
+            
+            # Check OpenAI error structure
+            if hasattr(e, 'status_code'):
+                if e.status_code == 429:
+                    is_quota_error = True
+                    print(f"OpenAI API returned 429 status code")
+            
+            # Check error message for quota-related terms (but be specific)
+            if not is_quota_error:
+                if ("insufficient_quota" in error_str or 
+                    "quota exceeded" in error_str or 
+                    "exceeded your current quota" in error_str or
+                    (error_str.count("quota") > 0 and "check your plan" in error_str)):
+                    is_quota_error = True
+            
+            # Check for rate limit errors (different from quota)
+            is_rate_limit = "rate limit" in error_str or "too many requests" in error_str
+            
+            if is_quota_error:
                 print("OPENAI API QUOTA EXCEEDED - Please check your billing details")
-                # Return a special error indicator
                 return "API_QUOTA_ERROR"
-            return None
+            elif is_rate_limit:
+                print("OPENAI API RATE LIMIT - Please try again in a moment")
+                # Don't treat rate limit as quota error - it's temporary
+                return None
+            else:
+                # Other errors - log and return None
+                print(f"Other error (not quota): {e}")
+                return None
 
     async def _save_blog(self, state: BlogWritingState) -> BlogWritingState:
         """Save blog posts to database"""

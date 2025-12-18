@@ -1377,7 +1377,7 @@ Return a JSON object with:
             )
             
             response = self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are an expert blog writer specializing in creating well-structured, professional blog content for business websites. Your content should be clean, organized, and ready for publication. Always return valid JSON only. Focus on creating structured HTML content with proper headings, paragraphs, and lists - avoid redundant titles or image references."},
                     {"role": "user", "content": prompt}
@@ -1392,7 +1392,7 @@ Return a JSON object with:
                 await self.token_tracker.track_chat_completion_usage(
                     user_id=user_id,
                     feature_type="custom_blog",
-                    model_name="gpt-4o",
+                    model_name="gpt-4o-mini",
                     response=response,
                     request_metadata={"action": "generate_content", "blog_topic": state.get("blog_topic")}
                 )
