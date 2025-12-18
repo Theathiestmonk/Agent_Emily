@@ -459,7 +459,7 @@ class BlogWritingAgent:
             
             # Generate content using OpenAI
             response = self.openai_client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are an expert blog writer and SEO specialist."},
                     {"role": "user", "content": prompt}
@@ -474,7 +474,7 @@ class BlogWritingAgent:
                 await self.token_tracker.track_chat_completion_usage(
                     user_id=user_id,
                     feature_type="blog_generation",
-                    model_name="gpt-4",
+                    model_name="gpt-4o-mini",
                     response=response,
                     request_metadata={
                         "wordpress_site_id": state.current_site,

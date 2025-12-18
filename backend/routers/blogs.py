@@ -1519,7 +1519,7 @@ Requirements:
         # Call OpenAI
         try:
             response = client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are an expert content analyst. Always return valid JSON only, no additional text."},
                     {"role": "user", "content": prompt}
@@ -1542,7 +1542,7 @@ Requirements:
                         token_tracker.track_chat_completion_usage(
                             user_id=current_user.id,
                             feature_type="blog_generation",
-                            model_name="gpt-4",
+                            model_name="gpt-4o-mini",
                             response=response,
                             request_metadata={"action": "generate_tags_categories"}
                         )
@@ -1705,7 +1705,7 @@ Requirements:
         # Call OpenAI
         try:
             response = client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are an expert content analyst. Always return valid JSON only, no additional text."},
                     {"role": "user", "content": prompt}
@@ -1728,7 +1728,7 @@ Requirements:
                         token_tracker.track_chat_completion_usage(
                             user_id=current_user.id,
                             feature_type="blog_generation",
-                            model_name="gpt-4",
+                            model_name="gpt-4o-mini",
                             response=response,
                             request_metadata={"action": "check_tags_categories_relevance"}
                         )
@@ -1934,7 +1934,7 @@ Return the edited HTML content:"""
         
         # Call OpenAI to edit the content
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": edit_prompt}
@@ -1964,7 +1964,7 @@ Return the edited HTML content:"""
                     token_tracker.track_chat_completion_usage(
                         user_id=current_user.id,
                         feature_type="content_ai_edit",
-                        model_name="gpt-4o",
+                        model_name="gpt-4o-mini",
                         response=response,
                         request_metadata={
                             "edit_type": request.edit_type,
@@ -2072,7 +2072,7 @@ Requirements:
         # Call OpenAI
         try:
             response = client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are an expert blog writer. Always return valid JSON only, no additional text."},
                     {"role": "user", "content": prompt}
@@ -2095,7 +2095,7 @@ Requirements:
                         token_tracker.track_chat_completion_usage(
                             user_id=current_user.id,
                             feature_type="blog_generation",
-                            model_name="gpt-4",
+                            model_name="gpt-4o-mini",
                             response=response,
                             request_metadata={"action": "generate_from_title", "title": request.title[:100] if request.title else None}
                         )

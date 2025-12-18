@@ -126,6 +126,10 @@ class CustomBlogAgent:
         self.supabase = supabase
         self.token_tracker = TokenUsageService(supabase_url, supabase_key) if supabase_url and supabase_key else None
     
+    def _get_timestamp(self) -> str:
+        """Get current timestamp without seconds (format: YYYY-MM-DDTHH:MM)"""
+        return datetime.now().strftime('%Y-%m-%dT%H:%M')
+    
     async def greet_user(self, state: CustomBlogState) -> CustomBlogState:
         """Welcome the user and initialize conversation"""
         try:
@@ -154,7 +158,7 @@ class CustomBlogAgent:
             welcome_message = {
                 "role": "assistant",
                 "content": "Hi! I'm Emily 👋 I'll help you create an amazing blog post. Let's start by selecting the type of blog you want to create:",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": self._get_timestamp(),
                 "options": [
                     {"value": "educational", "label": "📚 Educational"},
                     {"value": "practical guides", "label": "📖 Practical Guides"},
@@ -214,7 +218,7 @@ class CustomBlogAgent:
                 user_message = {
                     "role": "user",
                     "content": user_input,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": self._get_timestamp()
                 }
                 state["conversation_messages"].append(user_message)
             
@@ -233,7 +237,7 @@ class CustomBlogAgent:
             message = {
                 "role": "assistant",
                 "content": f"Great choice! {question}",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": self._get_timestamp()
             }
             state["conversation_messages"].append(message)
             
@@ -259,14 +263,14 @@ class CustomBlogAgent:
                 user_message = {
                     "role": "user",
                     "content": user_input,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": self._get_timestamp()
                 }
                 state["conversation_messages"].append(user_message)
             
             message = {
                 "role": "assistant",
                 "content": "Perfect! Now, would you like to provide up to 3 primary keywords for SEO? (This is optional)",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": self._get_timestamp(),
                 "options": [
                     {"value": "skip", "label": "⏭️ Skip (Use AI suggestions)"}
                 ]
@@ -301,14 +305,14 @@ class CustomBlogAgent:
                 user_message = {
                     "role": "user",
                     "content": "Skip",
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": self._get_timestamp()
                 }
                 state["conversation_messages"].append(user_message)
                 
                 message = {
                     "role": "assistant",
                     "content": f"Got it! I've suggested these keywords for you: {', '.join(keywords)}",
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": self._get_timestamp()
                 }
                 state["conversation_messages"].append(message)
             elif user_input_clean:
@@ -332,7 +336,7 @@ class CustomBlogAgent:
                     user_message = {
                         "role": "user",
                         "content": user_input,
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(user_message)
                     
@@ -340,7 +344,7 @@ class CustomBlogAgent:
                         message = {
                             "role": "assistant",
                             "content": f"Great! I'll use these keywords: {', '.join(keywords)}",
-                            "timestamp": datetime.now().isoformat()
+                            "timestamp": self._get_timestamp()
                         }
                         state["conversation_messages"].append(message)
                     else:
@@ -350,7 +354,7 @@ class CustomBlogAgent:
                     message = {
                         "role": "assistant",
                         "content": f"No problem! I've suggested these keywords for you: {', '.join(keywords)}",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(message)
             
@@ -358,7 +362,7 @@ class CustomBlogAgent:
             message = {
                 "role": "assistant",
                 "content": "What length would you like for your blog post?",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": self._get_timestamp(),
                 "options": [
                     {"value": "short", "label": "📝 Short (500-800 words)"},
                     {"value": "medium", "label": "📄 Medium (800-1200 words)"},
@@ -399,7 +403,7 @@ class CustomBlogAgent:
                 user_message = {
                     "role": "user",
                     "content": user_input,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": self._get_timestamp()
                 }
                 state["conversation_messages"].append(user_message)
             
@@ -407,7 +411,7 @@ class CustomBlogAgent:
             message = {
                 "role": "assistant",
                 "content": "Do you want to add an image to your blog post?",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": self._get_timestamp(),
                 "options": [
                     {"value": "yes", "label": "✅ Yes"},
                     {"value": "no", "label": "❌ No"}
@@ -434,7 +438,7 @@ class CustomBlogAgent:
                 user_message = {
                     "role": "user",
                     "content": user_input,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": self._get_timestamp()
                 }
                 state["conversation_messages"].append(user_message)
             
@@ -448,7 +452,7 @@ class CustomBlogAgent:
                     message = {
                         "role": "assistant",
                         "content": "Got it! I'll proceed without images. Now let me create an outline for your blog post...",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(message)
                     
@@ -464,7 +468,7 @@ class CustomBlogAgent:
                     message = {
                         "role": "assistant",
                         "content": f"Perfect! I've created an outline for your blog post:\n\n{outline}\n\nWould you like me to proceed with writing the blog based on this outline?",
-                        "timestamp": datetime.now().isoformat(),
+                        "timestamp": self._get_timestamp(),
                         "options": [
                             {"value": "yes", "label": "✅ Yes, proceed"},
                             {"value": "no", "label": "❌ No, let me revise"}
@@ -483,7 +487,7 @@ class CustomBlogAgent:
                     message = {
                         "role": "assistant",
                         "content": "Great! How would you like to add an image to your blog?",
-                        "timestamp": datetime.now().isoformat(),
+                        "timestamp": self._get_timestamp(),
                         "options": [
                             {"value": "generate", "label": "🎨 Generate image with AI"},
                             {"value": "upload", "label": "📤 Upload my own image"},
@@ -499,7 +503,7 @@ class CustomBlogAgent:
                     message = {
                         "role": "assistant",
                         "content": "Please choose 'Yes' or 'No'. Do you want to add an image to your blog post?",
-                        "timestamp": datetime.now().isoformat(),
+                        "timestamp": self._get_timestamp(),
                         "options": [
                             {"value": "yes", "label": "✅ Yes"},
                             {"value": "no", "label": "❌ No"}
@@ -538,7 +542,7 @@ class CustomBlogAgent:
                     message = {
                         "role": "assistant",
                         "content": "Great! I'm generating an image for your blog post. This may take a moment...",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(message)
                     return state
@@ -550,7 +554,7 @@ class CustomBlogAgent:
                     message = {
                         "role": "assistant",
                         "content": "Please upload your image below:",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(message)
                     return state
@@ -559,13 +563,13 @@ class CustomBlogAgent:
                     user_message = {
                         "role": "user",
                         "content": "I approve this image",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(user_message)
                     message = {
                         "role": "assistant",
                         "content": "Perfect! Image approved. Now let me create an outline for your blog post...",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(message)
                     # Continue to outline generation (don't return early)
@@ -575,13 +579,13 @@ class CustomBlogAgent:
                     user_message = {
                         "role": "user",
                         "content": "Regenerate image",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(user_message)
                     message = {
                         "role": "assistant",
                         "content": "No problem! I'll generate a new image for you. This may take a moment...",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(message)
                     # Stay in HANDLE_IMAGE step - frontend will call generate-image endpoint again
@@ -598,7 +602,7 @@ class CustomBlogAgent:
                         message = {
                             "role": "assistant",
                             "content": "No problem! I'll proceed without images. Now let me create an outline for your blog post...",
-                            "timestamp": datetime.now().isoformat()
+                            "timestamp": self._get_timestamp()
                         }
                         state["conversation_messages"].append(message)
                     # Add confirmation message if image was handled
@@ -606,13 +610,13 @@ class CustomBlogAgent:
                         user_message = {
                             "role": "user",
                             "content": "Image uploaded",
-                            "timestamp": datetime.now().isoformat()
+                            "timestamp": self._get_timestamp()
                         }
                         state["conversation_messages"].append(user_message)
                         message = {
                             "role": "assistant",
                             "content": "Perfect! Image uploaded successfully. Now let me create an outline for your blog post...",
-                            "timestamp": datetime.now().isoformat()
+                            "timestamp": self._get_timestamp()
                         }
                         state["conversation_messages"].append(message)
                     elif user_input_lower == "generated" and state.get("generated_image_url"):
@@ -626,7 +630,7 @@ class CustomBlogAgent:
                     user_message = {
                         "role": "user",
                         "content": user_input,
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(user_message)
                 
@@ -662,7 +666,7 @@ class CustomBlogAgent:
                 message = {
                     "role": "assistant",
                     "content": f"Perfect! I've created an outline for your blog post:\n\n{outline}\n\nWould you like me to proceed with writing the blog based on this outline?",
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": self._get_timestamp(),
                     "options": [
                         {"value": "yes", "label": "✅ Yes, proceed"},
                         {"value": "no", "label": "❌ No, let me revise"}
@@ -692,7 +696,7 @@ class CustomBlogAgent:
                     user_message = {
                         "role": "user",
                         "content": user_input,
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(user_message)
                     
@@ -703,7 +707,7 @@ class CustomBlogAgent:
                         message = {
                             "role": "assistant",
                             "content": "No problem! Let me regenerate the blog. Would you like to change the image option?",
-                            "timestamp": datetime.now().isoformat()
+                            "timestamp": self._get_timestamp()
                         }
                         state["conversation_messages"].append(message)
                         return state
@@ -725,7 +729,7 @@ class CustomBlogAgent:
                 user_message = {
                     "role": "user",
                     "content": user_input,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": self._get_timestamp()
                 }
                 state["conversation_messages"].append(user_message)
                 
@@ -735,7 +739,7 @@ class CustomBlogAgent:
                     message = {
                         "role": "assistant",
                         "content": "No problem! Let me regenerate the outline. Would you like to change the image option?",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(message)
                     return state
@@ -745,7 +749,7 @@ class CustomBlogAgent:
             message = {
                 "role": "assistant",
                 "content": "Great! I'm now writing your blog post. This may take a moment...",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": self._get_timestamp()
             }
             state["conversation_messages"].append(message)
             
@@ -769,7 +773,7 @@ class CustomBlogAgent:
             message = {
                 "role": "assistant",
                 "content": preview_content,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": self._get_timestamp(),
                 "image_url": featured_image if featured_image else None,
                 "options": [
                     {"value": "yes", "label": "✅ Yes, it looks great!"},
@@ -808,7 +812,7 @@ class CustomBlogAgent:
                 user_message = {
                     "role": "user",
                     "content": user_input,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": self._get_timestamp()
                 }
                 state["conversation_messages"].append(user_message)
                 
@@ -831,7 +835,7 @@ class CustomBlogAgent:
                     message = {
                         "role": "assistant",
                         "content": "Please select a date and time for scheduling:",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": self._get_timestamp()
                     }
                     state["conversation_messages"].append(message)
                     return state
@@ -857,10 +861,10 @@ class CustomBlogAgent:
                 message = {
                     "role": "assistant",
                     "content": "How would you like to proceed with this blog post?",
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": self._get_timestamp(),
                     "options": [
                         {"value": "publish", "label": "🚀 Publish Now"},
-                        {"value": "schedule", "label": "📅 Schedule for Later"},
+                        {"value": "schedule", "label": "�� Schedule for Later"},
                         {"value": "draft", "label": "💾 Save as Draft"}
                     ]
                 }
@@ -892,7 +896,7 @@ class CustomBlogAgent:
                 user_message = {
                     "role": "user",
                     "content": user_input,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": self._get_timestamp()
                 }
                 state["conversation_messages"].append(user_message)
                 
@@ -905,7 +909,7 @@ class CustomBlogAgent:
                 message = {
                     "role": "assistant",
                     "content": "How would you like to save this blog post?",
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": self._get_timestamp(),
                     "options": [
                         {"value": "publish", "label": "🚀 Publish Now"},
                         {"value": "draft", "label": "💾 Save as Draft"}
@@ -1111,13 +1115,13 @@ class CustomBlogAgent:
                 message = {
                     "role": "assistant",
                     "content": f"🎉 Success! Your blog post '{saved_blog['title']}' has been {status_text} and is now live on WordPress! You can find it in your blog dashboard!",
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": self._get_timestamp()
                 }
             else:
                 message = {
                     "role": "assistant",
                     "content": f"🎉 Success! Your blog post '{saved_blog['title']}' has been {status_text}. You can find it in your blog dashboard!",
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": self._get_timestamp()
                 }
             state["conversation_messages"].append(message)
             
