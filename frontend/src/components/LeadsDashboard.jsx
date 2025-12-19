@@ -7,11 +7,11 @@ import MobileNavigation from './MobileNavigation'
 import LeadCard from './LeadCard'
 import LeadDetailModal from './LeadDetailModal'
 import AddLeadModal from './AddLeadModal'
-import { 
-  Users, 
-  UserPlus, 
-  CheckCircle, 
-  MessageCircle, 
+import {
+  Users,
+  UserPlus,
+  CheckCircle,
+  MessageCircle,
   TrendingUp,
   Search,
   Filter,
@@ -28,7 +28,7 @@ import {
 const getDateRange = (range) => {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  
+
   switch (range) {
     case 'today':
       return {
@@ -75,7 +75,7 @@ const LeadsDashboard = () => {
   const [importingCSV, setImportingCSV] = useState(false)
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterPlatform, setFilterPlatform] = useState('all')
-  const [filterDateRange, setFilterDateRange] = useState('all')
+  const [filterDateRange, setFilterDateRange] = useState('today')
   const [searchQuery, setSearchQuery] = useState('')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState(null)
@@ -89,7 +89,7 @@ const LeadsDashboard = () => {
   const fetchLeads = useCallback(async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true)
-      
+
       const params = {}
       if (filterStatus !== 'all') {
         params.status = filterStatus
@@ -106,13 +106,13 @@ const LeadsDashboard = () => {
       // Check for new leads using refs to avoid dependency issues
       const previousLeads = leadsRef.current
       const previousFetchTime = lastFetchTimeRef.current
-      
+
       if (previousFetchTime && previousLeads.length > 0) {
         const newLeads = fetchedLeads.filter(newLead => {
           const newLeadTime = new Date(newLead.created_at)
           return newLeadTime > previousFetchTime && !previousLeads.find(l => l.id === newLead.id)
         })
-        
+
         if (newLeads.length > 0) {
           showInfo(
             'New Lead!',
@@ -131,7 +131,7 @@ const LeadsDashboard = () => {
       const now = new Date()
       setLastFetchTime(now)
       lastFetchTimeRef.current = now
-      
+
     } catch (error) {
       console.error('Error fetching leads:', error)
       showError('Error', 'Failed to fetch leads. Please try again.')
@@ -173,7 +173,7 @@ const LeadsDashboard = () => {
 
     const urlParams = new URLSearchParams(window.location.search)
     const leadId = urlParams.get('leadId')
-    
+
     if (leadId) {
       // Find the lead in the leads list
       const lead = leads.find(l => l.id === leadId)
@@ -205,13 +205,13 @@ const LeadsDashboard = () => {
   useEffect(() => {
     if (!user) return
 
-      const interval = setInterval(() => {
-        fetchLeads(false) // Don't show loading spinner for polling
-      }, 30000) // Poll every 30 seconds
+    const interval = setInterval(() => {
+      fetchLeads(false) // Don't show loading spinner for polling
+    }, 30000) // Poll every 30 seconds
 
-      setPollingInterval(interval)
+    setPollingInterval(interval)
 
-      return () => {
+    return () => {
       clearInterval(interval)
     }
   }, [user, fetchLeads])
@@ -291,7 +291,7 @@ const LeadsDashboard = () => {
       setDeletingBulk(true)
       const leadIdsArray = Array.from(selectedLeadIds)
       const result = await leadsAPI.bulkDeleteLeads(leadIdsArray)
-      
+
       if (result.data.success) {
         showSuccess(
           'Leads Deleted',
@@ -331,11 +331,11 @@ const LeadsDashboard = () => {
       setImportingCSV(true)
       const response = await leadsAPI.importLeadsCSV(file)
       const result = response.data || response
-      
+
       if (result.success) {
         const hasErrors = result.errors > 0
         const hasDuplicates = result.duplicates > 0
-        
+
         if (hasErrors && hasDuplicates) {
           showInfo(
             'Import Completed with Warnings',
@@ -369,7 +369,7 @@ const LeadsDashboard = () => {
         } else {
           showSuccess('Import Successful', `Successfully imported ${result.created} leads`)
         }
-        
+
         // Refresh leads list
         await fetchLeads(false)
       } else {
@@ -402,7 +402,7 @@ const LeadsDashboard = () => {
       if (filterStatus !== 'all' && lead.status !== filterStatus) {
         return false
       }
-      
+
       // Date range filter
       if (filterDateRange !== 'all') {
         const dateRange = getDateRange(filterDateRange)
@@ -413,28 +413,28 @@ const LeadsDashboard = () => {
           }
         }
       }
-      
+
       // Search query filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      const matchesName = lead.name?.toLowerCase().includes(query)
-      const matchesEmail = lead.email?.toLowerCase().includes(query)
-      const matchesPhone = lead.phone_number?.toLowerCase().includes(query)
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        const matchesName = lead.name?.toLowerCase().includes(query)
+        const matchesEmail = lead.email?.toLowerCase().includes(query)
+        const matchesPhone = lead.phone_number?.toLowerCase().includes(query)
         if (!matchesName && !matchesEmail && !matchesPhone) {
           return false
         }
-    }
-      
-    return true
-  })
+      }
+
+      return true
+    })
   }, [leads, filterStatus, filterDateRange, searchQuery])
 
   const dateRangeFilters = [
-    { value: 'all', label: 'All Time' },
     { value: 'today', label: 'Today' },
     { value: 'this_week', label: 'This Week' },
     { value: 'this_month', label: 'This Month' },
-    { value: 'last_month', label: 'Last Month' }
+    { value: 'last_month', label: 'Last Month' },
+    { value: 'all', label: 'All Time' }
   ]
 
   const statusFilters = [
@@ -523,9 +523,9 @@ const LeadsDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <SideNavbar />
-      <MobileNavigation 
-        setShowCustomContentChatbot={() => {}}
-        handleGenerateContent={() => {}}
+      <MobileNavigation
+        setShowCustomContentChatbot={() => { }}
+        handleGenerateContent={() => { }}
         generating={false}
         fetchingFreshData={false}
       />
@@ -541,17 +541,16 @@ const LeadsDashboard = () => {
                   <button
                     key={filter.value}
                     onClick={() => setFilterDateRange(filter.value)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                      filterDateRange === filter.value
-                        ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${filterDateRange === filter.value
+                      ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                      }`}
                   >
-                      {filter.label}
+                    {filter.label}
                   </button>
                 ))}
               </div>
-              
+
               {/* Search - Inline with Filter */}
               <div className="flex-1 max-w-xs relative filter-dropdown-container">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -564,11 +563,10 @@ const LeadsDashboard = () => {
                 />
                 <button
                   onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                  className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-1 rounded transition-colors ${
-                    filterPlatform !== 'all' 
-                      ? 'text-blue-600' 
-                      : 'text-gray-400 hover:text-gray-600'
-                  }`}
+                  className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-1 rounded transition-colors ${filterPlatform !== 'all'
+                    ? 'text-blue-600'
+                    : 'text-gray-400 hover:text-gray-600'
+                    }`}
                 >
                   <Filter className="w-4 h-4" />
                 </button>
@@ -579,9 +577,8 @@ const LeadsDashboard = () => {
                         setFilterPlatform('all')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg ${
-                        filterPlatform === 'all' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
-                      }`}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg ${filterPlatform === 'all' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                        }`}
                     >
                       All Platforms
                     </button>
@@ -590,9 +587,8 @@ const LeadsDashboard = () => {
                         setFilterPlatform('facebook')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
-                        filterPlatform === 'facebook' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
-                      }`}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'facebook' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                        }`}
                     >
                       Facebook
                     </button>
@@ -601,9 +597,8 @@ const LeadsDashboard = () => {
                         setFilterPlatform('instagram')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
-                        filterPlatform === 'instagram' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
-                      }`}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'instagram' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                        }`}
                     >
                       Instagram
                     </button>
@@ -612,9 +607,8 @@ const LeadsDashboard = () => {
                         setFilterPlatform('walk_ins')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
-                        filterPlatform === 'walk_ins' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
-                      }`}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'walk_ins' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                        }`}
                     >
                       Walk Ins
                     </button>
@@ -623,9 +617,8 @@ const LeadsDashboard = () => {
                         setFilterPlatform('referral')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
-                        filterPlatform === 'referral' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
-                      }`}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'referral' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                        }`}
                     >
                       Referral
                     </button>
@@ -634,9 +627,8 @@ const LeadsDashboard = () => {
                         setFilterPlatform('email')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
-                        filterPlatform === 'email' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
-                      }`}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'email' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                        }`}
                     >
                       Email
                     </button>
@@ -645,9 +637,8 @@ const LeadsDashboard = () => {
                         setFilterPlatform('website')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
-                        filterPlatform === 'website' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
-                      }`}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'website' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                        }`}
                     >
                       Website
                     </button>
@@ -656,9 +647,8 @@ const LeadsDashboard = () => {
                         setFilterPlatform('phone_call')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 last:rounded-b-lg ${
-                        filterPlatform === 'phone_call' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
-                      }`}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 last:rounded-b-lg ${filterPlatform === 'phone_call' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                        }`}
                     >
                       Phone Call
                     </button>
@@ -750,7 +740,7 @@ const LeadsDashboard = () => {
                   const columnLeads = filteredLeads.filter(lead => lead.status === statusFilter.value)
                   const statusConfig = getStatusConfig(statusFilter.value)
                   const StatusIcon = statusConfig.icon
-                  
+
                   return (
                     <div key={statusFilter.value} className="flex-1 min-w-0">
                       {/* Column Header */}
@@ -767,7 +757,7 @@ const LeadsDashboard = () => {
                       </div>
                       {/* Line after column title */}
                       <div className={`mb-2 border-b ${statusConfig.borderColor}`}></div>
-                      
+
                       {/* Column Cards */}
                       <div className="space-y-1.5 max-h-[calc(100vh-180px)] overflow-y-auto pb-4 scrollbar-hide">
                         {columnLeads.length === 0 ? (
