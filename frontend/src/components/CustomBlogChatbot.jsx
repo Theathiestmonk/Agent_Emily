@@ -9,12 +9,12 @@ const API_BASE_URL = (() => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL.replace(/\/+$/, '') // Remove all trailing slashes
   }
-  
+
   // Fallback to production URL
   if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
     return 'https://agent-emily.onrender.com'
   }
-  
+
   // Local development fallback
   return (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 })()
@@ -36,7 +36,7 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
   const [generatingImage, setGeneratingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
   const [selectedImageFile, setSelectedImageFile] = useState(null);
-  
+
   const messagesEndRef = useRef(null);
   const dateInputRef = useRef(null);
   const timeInputRef = useRef(null);
@@ -77,7 +77,7 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
       if (!token) {
         throw new Error('No authentication token available');
       }
-      
+
       const response = await fetch(`${API_BASE_URL}/custom-blog/start`, {
         method: 'POST',
         headers: {
@@ -98,7 +98,7 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
       setCurrentStep(data.current_step);
       setProgress(data.progress_percentage);
       setState(data.state || {});
-      
+
       // Add the greeting message
       setMessages([data.message]);
     } catch (error) {
@@ -128,7 +128,7 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
       }
       setImagePreview(null);
       setSelectedImageFile(null);
-      
+
       // Start a new conversation
       await startConversation();
     } catch (error) {
@@ -161,7 +161,7 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
       if (!token) {
         throw new Error('No authentication token available');
       }
-      
+
       const response = await fetch(`${API_BASE_URL}/custom-blog/input`, {
         method: 'POST',
         headers: {
@@ -180,10 +180,10 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
       }
 
       const data = await response.json();
-      
+
       // Add assistant response
       addMessage('assistant', data.message.content, data.message);
-      
+
       setCurrentStep(data.current_step);
       setProgress(data.progress_percentage);
       setState(data.state || {});
@@ -213,10 +213,10 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
 
   const handleOptionClick = (value, label) => {
     setInputValue(label);
-    
+
     // Handle image generation option
     if (value === 'generate' && currentStep === 'handle_image') {
-      handleGenerateImage();
+      handleGenerateImage(label);
     } else if (value === 'upload' && currentStep === 'handle_image') {
       // Send "upload" to backend, which will show upload UI
       sendMessage(value);
@@ -263,13 +263,13 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
         alert('Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.');
         return;
       }
-      
+
       // Validate file size (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
         alert('File size too large. Maximum size is 10MB.');
         return;
       }
-      
+
       setSelectedImageFile(file);
       const previewUrl = URL.createObjectURL(file);
       setImagePreview(previewUrl);
@@ -306,10 +306,10 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
       }
 
       const data = await response.json();
-      
+
       // Add assistant response
       addMessage('assistant', data.message.content, data.message);
-      
+
       setCurrentStep(data.current_step);
       setProgress(data.progress_percentage);
       setState(data.state || {});
@@ -329,7 +329,16 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
     }
   };
 
-  const handleGenerateImage = async () => {
+  const handleGenerateImage = async (label) => {
+    // Add user message for immediate feedback
+    if (label) {
+      addMessage('user', label);
+      setInputValue('');
+    }
+
+    // Show generating status
+    addMessage('assistant', 'Generating...');
+
     try {
       setGeneratingImage(true);
       const token = await getAuthToken();
@@ -350,10 +359,21 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
       }
 
       const data = await response.json();
-      
+
+      // Filter out the 'Generating...' status message
+      setMessages(prev => prev.filter(msg => msg.content !== 'Generating...'));
+
+      // Suppress the redundant assistant text as requested by user
+      if (data.message && data.message.content && (
+        data.message.content.includes("Great! I've generated an image") ||
+        data.message.content.includes("Are you satisfied with this image?")
+      )) {
+        data.message.content = '';
+      }
+
       // Add assistant response
       addMessage('assistant', data.message.content, data.message);
-      
+
       setCurrentStep(data.current_step);
       setProgress(data.progress_percentage);
       setState(data.state || {});
@@ -461,28 +481,34 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[80%] rounded-2xl px-6 py-4 shadow-lg ${
-                  message.role === 'user'
-                    ? 'bg-gradient-to-br from-pink-400 to-purple-500 text-white'
-                    : 'bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200'
-                }`}
+                className={`max-w-[80%] rounded-2xl px-6 py-4 shadow-lg ${message.role === 'user'
+                  ? 'bg-gradient-to-br from-pink-400 to-purple-500 text-white'
+                  : 'bg-gradient-to-br from-blue-50 to-purple-50 text-gray-800 border border-purple-200'
+                  }`}
               >
                 {/* Show featured image if available in blog preview - but not during image approval step */}
-                {message.image_url && currentStep === 'confirm_outline' && 
-                 !(message.options && message.options.some(opt => ['approve', 'regenerate', 'skip'].includes(opt.value))) && (
-                  <div className="mt-3 mb-3">
-                    <img
-                      src={message.image_url}
-                      alt="Blog featured image"
-                      className="w-full max-w-md h-64 object-cover rounded-lg border border-purple-200 shadow-lg mx-auto"
-                    />
-                  </div>
-                )}
-                
+                {message.image_url && currentStep === 'confirm_outline' &&
+                  !(message.options && message.options.some(opt => ['approve', 'regenerate', 'skip'].includes(opt.value))) && (
+                    <div className="mt-3 mb-3">
+                      <img
+                        src={message.image_url}
+                        alt="Blog featured image"
+                        className="w-full max-w-md h-64 object-cover rounded-lg border border-purple-200 shadow-lg mx-auto"
+                      />
+                    </div>
+                  )}
+
                 {/* Render content - check if it contains HTML tags */}
-                {message.content && (message.content.includes('<p>') || message.content.includes('<div>') || message.content.includes('<h1>') || message.content.includes('<h2>') || message.content.includes('<ul>') || message.content.includes('<ol>')) ? (
+                {message.content === 'Generating...' ? (
+                  <div className="flex items-center space-x-3 py-1">
+                    <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center">
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    </div>
+                    <span className="text-sm text-purple-700 font-medium">Generating...</span>
+                  </div>
+                ) : message.content && (message.content.includes('<p>') || message.content.includes('<div>') || message.content.includes('<h1>') || message.content.includes('<h2>') || message.content.includes('<ul>') || message.content.includes('<ol>')) ? (
                   // Render HTML content
-                  <div 
+                  <div
                     className={`text-sm prose prose-sm max-w-none ${message.role === 'user' ? 'prose-invert' : ''}`}
                     dangerouslySetInnerHTML={{ __html: message.content }}
                     style={{
@@ -494,66 +520,75 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
                   <div className={`text-sm prose prose-sm max-w-none ${message.role === 'user' ? 'prose-invert' : ''}`}>
                     <ReactMarkdown
                       components={{
-                        h1: ({children}) => <h1 className={`text-lg font-bold mb-3 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h1>,
-                        h2: ({children}) => <h2 className={`text-base font-bold mb-2 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h2>,
-                        h3: ({children}) => <h3 className={`text-sm font-bold mb-2 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h3>,
-                        p: ({children}) => <p className={`mb-3 leading-relaxed ${message.role === 'user' ? 'text-white' : 'text-gray-700'}`}>{children}</p>,
-                        strong: ({children}) => <strong className={`font-semibold ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</strong>,
-                        em: ({children}) => <em className={`italic ${message.role === 'user' ? 'text-white' : 'text-gray-600'}`}>{children}</em>,
-                        ul: ({children}) => <ul className={`list-disc list-inside mb-3 space-y-1 ${message.role === 'user' ? 'text-white' : ''}`}>{children}</ul>,
-                        li: ({children}) => <li className={message.role === 'user' ? 'text-white' : 'text-gray-700'}>{children}</li>,
+                        h1: ({ children }) => <h1 className={`text-lg font-bold mb-3 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h1>,
+                        h2: ({ children }) => <h2 className={`text-base font-bold mb-2 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h2>,
+                        h3: ({ children }) => <h3 className={`text-sm font-bold mb-2 ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</h3>,
+                        p: ({ children }) => <p className={`mb-3 leading-relaxed ${message.role === 'user' ? 'text-white' : 'text-gray-700'}`}>{children}</p>,
+                        strong: ({ children }) => <strong className={`font-semibold ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{children}</strong>,
+                        em: ({ children }) => <em className={`italic ${message.role === 'user' ? 'text-white' : 'text-gray-600'}`}>{children}</em>,
+                        ul: ({ children }) => <ul className={`list-disc list-inside mb-3 space-y-1 ${message.role === 'user' ? 'text-white' : ''}`}>{children}</ul>,
+                        li: ({ children }) => <li className={message.role === 'user' ? 'text-white' : 'text-gray-700'}>{children}</li>,
                         hr: () => <hr className={`my-4 ${message.role === 'user' ? 'border-white/30' : 'border-gray-300'}`} />,
-                        code: ({children}) => <code className={`px-1 py-0.5 rounded text-xs font-mono ${message.role === 'user' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-800'}`}>{children}</code>,
-                        img: ({src, alt}) => (
-                          <img 
-                            src={src} 
-                            alt={alt || 'Image'} 
-                            className="w-full max-w-md h-64 object-cover rounded-lg border border-purple-200 shadow-lg my-4 mx-auto"
-                          />
-                        ),
+                        code: ({ children }) => <code className={`px-1 py-0.5 rounded text-xs font-mono ${message.role === 'user' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-800'}`}>{children}</code>,
+                        img: ({ src, alt }) => {
+                          // Don't show image in markdown if it's already shown in the approval UI
+                          if (src === message.image_url &&
+                            currentStep === 'handle_image' &&
+                            message.options &&
+                            message.options.some(opt => ['approve', 'regenerate', 'skip'].includes(opt.value))) {
+                            return null;
+                          }
+                          return (
+                            <img
+                              src={src}
+                              alt={alt || 'Image'}
+                              className="w-full max-w-md h-64 object-cover rounded-lg border border-purple-200 shadow-lg my-4 mx-auto"
+                            />
+                          );
+                        },
                       }}
                     >
                       {message.content}
                     </ReactMarkdown>
                   </div>
                 )}
-                
+
                 {/* Keywords Input (3 fields) - Only show for the message that asks for keywords */}
-                {message.role === 'assistant' && 
-                 currentStep === 'ask_keywords' && 
-                 message.content && 
-                 message.content.includes('keywords for SEO') && 
-                 messages.indexOf(message) === messages.length - 1 && (
-                  <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
-                    <div className="space-y-3">
-                      <div className="text-sm font-bold text-purple-800 mb-3">Enter up to 3 SEO keywords (optional):</div>
-                      <div className="text-xs text-purple-600 mb-2">These keywords will be naturally integrated into your blog content for SEO purposes.</div>
-                      {[0, 1, 2].map((index) => (
-                        <input
-                          key={index}
-                          type="text"
-                          value={keywords[index] || ''}
-                          onChange={(e) => {
-                            const newKeywords = [...keywords];
-                            newKeywords[index] = e.target.value;
-                            setKeywords(newKeywords);
-                          }}
-                          placeholder={`SEO Keyword ${index + 1} (optional)`}
-                          className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 text-sm bg-white shadow-sm"
-                        />
-                      ))}
-                      <button
-                        onClick={handleKeywordsSubmit}
-                        className="w-full px-6 py-3 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-xl hover:from-pink-500 hover:to-purple-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl mt-2"
-                      >
-                        {keywords.filter(k => k.trim()).length > 0 ? 'Submit Keywords' : 'Skip (Use AI Suggestions)'}
-                      </button>
+                {message.role === 'assistant' &&
+                  currentStep === 'ask_keywords' &&
+                  message.content &&
+                  message.content.includes('keywords for SEO') &&
+                  messages.indexOf(message) === messages.length - 1 && (
+                    <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
+                      <div className="space-y-3">
+                        <div className="text-sm font-bold text-purple-800 mb-3">Enter up to 3 SEO keywords (optional):</div>
+                        <div className="text-xs text-purple-600 mb-2">These keywords will be naturally integrated into your blog content for SEO purposes.</div>
+                        {[0, 1, 2].map((index) => (
+                          <input
+                            key={index}
+                            type="text"
+                            value={keywords[index] || ''}
+                            onChange={(e) => {
+                              const newKeywords = [...keywords];
+                              newKeywords[index] = e.target.value;
+                              setKeywords(newKeywords);
+                            }}
+                            placeholder={`SEO Keyword ${index + 1} (optional)`}
+                            className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 text-sm bg-white shadow-sm"
+                          />
+                        ))}
+                        <button
+                          onClick={handleKeywordsSubmit}
+                          className="w-full px-6 py-3 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-xl hover:from-pink-500 hover:to-purple-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl mt-2"
+                        >
+                          {keywords.filter(k => k.trim()).length > 0 ? 'Submit Keywords' : 'Skip (Use AI Suggestions)'}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* Image Upload/Generate UI - Show when step is handle_image */}
-                {message.role === 'assistant' && currentStep === 'handle_image' && (
+                {message.role === 'assistant' && currentStep === 'handle_image' && message.content !== 'Generating...' && (
                   <div className="mt-4 p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
                     <div className="space-y-4">
                       {/* Show options if message has image options (generate/upload/skip/approve/regenerate) */}
@@ -662,56 +697,56 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
                 )}
 
                 {/* Schedule Options - Show for ask_schedule step */}
-                {message.role === 'assistant' && 
-                 currentStep === 'ask_schedule' && 
-                 messages.indexOf(message) === messages.length - 1 && (
-                  <div className="mt-4">
+                {message.role === 'assistant' &&
+                  currentStep === 'ask_schedule' &&
+                  messages.indexOf(message) === messages.length - 1 && (
+                    <div className="mt-4">
                       {message.content && message.content.includes('select a date and time') ? (
-                      // Show date/time inputs for scheduling
-                      <div className="p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
-                        <div className="text-sm font-bold text-purple-800 mb-3">Select Date and Time:</div>
-                        <div className="space-y-3">
-                          <div className="flex gap-3">
-                            <input
-                              type="date"
-                              ref={dateInputRef}
-                              value={scheduleDate}
-                              onChange={(e) => setScheduleDate(e.target.value)}
-                              className="flex-1 px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 text-sm bg-white shadow-sm"
-                            />
-                            <input
-                              type="time"
-                              ref={timeInputRef}
-                              value={scheduleTime}
-                              onChange={(e) => setScheduleTime(e.target.value)}
-                              className="flex-1 px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 text-sm bg-white shadow-sm"
-                            />
-                          </div>
-                          <button
-                            onClick={() => handleScheduleSubmit('schedule')}
-                            disabled={!scheduleDate || !scheduleTime}
-                            className="w-full px-6 py-3 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-xl hover:from-pink-500 hover:to-purple-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            📅 Schedule Post
-                          </button>
-                        </div>
-                      </div>
-                    ) : message.options && message.options.length > 0 ? (
-                      // Show the three options (Publish, Schedule, Draft)
-                      <div className="grid grid-cols-1 gap-3">
-                        {message.options.map((option, index) => (
-                          <button
-                            key={index}
-                            onClick={() => handleOptionClick(option.value, option.label)}
-                            className="w-full px-6 py-3 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-xl hover:from-pink-500 hover:to-purple-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl text-left"
-                          >
-                            {option.label}
-                          </button>
-                        ))}
+                        // Show date/time inputs for scheduling
+                        <div className="p-5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-purple-200 shadow-sm">
+                          <div className="text-sm font-bold text-purple-800 mb-3">Select Date and Time:</div>
+                          <div className="space-y-3">
+                            <div className="flex gap-3">
+                              <input
+                                type="date"
+                                ref={dateInputRef}
+                                value={scheduleDate}
+                                onChange={(e) => setScheduleDate(e.target.value)}
+                                className="flex-1 px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 text-sm bg-white shadow-sm"
+                              />
+                              <input
+                                type="time"
+                                ref={timeInputRef}
+                                value={scheduleTime}
+                                onChange={(e) => setScheduleTime(e.target.value)}
+                                className="flex-1 px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 text-sm bg-white shadow-sm"
+                              />
                             </div>
-                    ) : null}
-                  </div>
-                )}
+                            <button
+                              onClick={() => handleScheduleSubmit('schedule')}
+                              disabled={!scheduleDate || !scheduleTime}
+                              className="w-full px-6 py-3 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-xl hover:from-pink-500 hover:to-purple-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              📅 Schedule Post
+                            </button>
+                          </div>
+                        </div>
+                      ) : message.options && message.options.length > 0 ? (
+                        // Show the three options (Publish, Schedule, Draft)
+                        <div className="grid grid-cols-1 gap-3">
+                          {message.options.map((option, index) => (
+                            <button
+                              key={index}
+                              onClick={() => handleOptionClick(option.value, option.label)}
+                              className="w-full px-6 py-3 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-xl hover:from-pink-500 hover:to-purple-600 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl text-left"
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
 
                 {/* Options - Exclude steps that have custom UI */}
                 {message.role === 'assistant' && message.options && message.options.length > 0 && currentStep !== 'ask_keywords' && currentStep !== 'ask_schedule' && currentStep !== 'handle_image' && (
@@ -729,19 +764,19 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
                     </div>
                   </div>
                 )}
-                
+
                 {message.timestamp && (
                   <p className="text-xs opacity-70 mt-1">
-                    {new Date(message.timestamp).toLocaleTimeString([], { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
+                    {new Date(message.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
                     })}
                   </p>
                 )}
               </div>
             </div>
           ))}
-          
+
           {isLoading && (
             <div className="flex justify-start">
               <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl px-6 py-4 flex items-center space-x-3 border border-purple-200 shadow-lg">
@@ -749,15 +784,15 @@ const CustomBlogChatbot = ({ isOpen, onClose, onBlogCreated }) => {
                   <Loader2 className="w-4 h-4 animate-spin text-white" />
                 </div>
                 <span className="text-sm text-purple-700 font-medium">
-                  {currentStep === 'generate_blog' 
-                    ? 'Emily is writing your blog...' 
+                  {currentStep === 'generate_blog'
+                    ? 'Emily is writing your blog...'
                     : 'Emily is thinking...'
                   }
                 </span>
               </div>
             </div>
           )}
-          
+
           <div ref={messagesEndRef} />
         </div>
 
