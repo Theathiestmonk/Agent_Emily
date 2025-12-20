@@ -220,6 +220,11 @@ const adminAPI = {
     return response.data;
   },
 
+  async runFaqEmbeddings() {
+    const response = await api.post('/admin/faq-embeddings/run');
+    return response.data;
+  },
+
   /**
    * Get all model pricing configurations
    */

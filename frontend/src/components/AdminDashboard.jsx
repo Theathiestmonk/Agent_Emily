@@ -16,7 +16,8 @@ import {
   Calendar,
   Search,
   X,
-  ChevronDown
+  ChevronDown,
+  Play
 } from 'lucide-react'
 
 const AdminDashboard = () => {
@@ -31,6 +32,7 @@ const AdminDashboard = () => {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
+  const [runEmbeddingLoading, setRunEmbeddingLoading] = useState(false)
   
   // Calculate default dates (last 7 days)
   const getDefaultDates = () => {
@@ -269,6 +271,20 @@ const AdminDashboard = () => {
     }
   }
 
+  const handleRunFaqEmbeddings = async () => {
+    try {
+      setRunEmbeddingLoading(true)
+      const result = await adminAPI.runFaqEmbeddings()
+      const processed = result?.processed ?? 0
+      showSuccess(`FAQ embeddings processed: ${processed}`)
+    } catch (error) {
+      console.error('Failed to run FAQ embeddings:', error)
+      showError('Failed to run FAQ embeddings')
+    } finally {
+      setRunEmbeddingLoading(false)
+    }
+  }
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -386,6 +402,14 @@ const AdminDashboard = () => {
                 >
                   <RefreshCw className="w-4 h-4" />
                   Refresh
+                </button>
+                <button
+                  onClick={handleRunFaqEmbeddings}
+                  disabled={runEmbeddingLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors text-sm"
+                >
+                  <Play className="w-4 h-4" />
+                  {runEmbeddingLoading ? 'Running FAQ embeddings...' : 'Run FAQ embeddings'}
                 </button>
                 
                 {/* Unified Download Dropdown */}
