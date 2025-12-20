@@ -5,32 +5,36 @@ This guide explains how to set up a cron job to automatically process profile em
 ## How It Works
 
 1. **Database Trigger**: When a profile is inserted or updated, the trigger automatically sets `embedding_needs_update = true`
-2. **Cron Job**: Runs periodically to find and process profiles with `embedding_needs_update = true`
-3. **Worker**: Generates embeddings and updates the database
+   - `faq_responses` now mirrors the profile table: [`database/add_faq_embedding.sql`](database/add_faq_embedding.sql) adds flag/timestamp columns and [`database/create_faq_embedding_trigger.sql`](database/create_faq_embedding_trigger.sql) marks every FAQ row as needing an embedding.
+2. **Cron Job**: Runs periodically to find and process rows with `embedding_needs_update = true`
+3. **Worker**: Generates embeddings and updates the database (`profile_embedding` or `embedding_faq`)
 
 ## Setup Options
 
 ### Option 1: Python Script (Recommended)
 
-Use the Python script that handles logging and error handling:
+Use the Python script that handles logging and error handling; it accepts `--target profiles` (default) or `--target faqs`:
 
 ```bash
 # Make the script executable
 chmod +x backend/scripts/run_embedding_worker.py
 ```
 
-**Cron Configuration** (runs every 5 minutes):
+**Cron Configuration** (profiles, every 5 minutes):
+
 ```bash
 # Edit crontab
 crontab -e
 
 # Add this line (adjust path to your project)
-*/5 * * * * cd /path/to/Agent_Emily/backend && /path/to/venv/bin/python scripts/run_embedding_worker.py >> logs/embedding_worker_cron.log 2>&1
+*/5 * * * * cd /path/to/Agent_Emily/backend && /path/to/venv/bin/python scripts/run_embedding_worker.py --target profiles >> logs/embedding_worker_cron.log 2>&1
 ```
 
-**Cron Configuration** (runs every minute for faster processing):
+**Cron Configuration** (faqs, every 15 minutes):
+
 ```bash
-* * * * * cd /path/to/Agent_Emily/backend && /path/to/venv/bin/python scripts/run_embedding_worker.py >> logs/embedding_worker_cron.log 2>&1
+# Add this line for FAQs
+*/15 * * * * cd /path/to/Agent_Emily/backend && /path/to/venv/bin/python scripts/run_embedding_worker.py --target faqs >> logs/faq_embedding_worker_cron.log 2>&1
 ```
 
 ### Option 2: Bash Script
@@ -91,6 +95,35 @@ python backend/services/embedding_worker.py
    ```bash
    python backend/scripts/run_embedding_worker.py
    ```
+
+## FAQ Embedding verification
+
+1. **Trigger health**: Run a quick SQL query in Supabase to ensure the trigger is setting `embedding_needs_update = true` on new or updated rows.
+
+   ```sql
+   SELECT id, faq_key, embedding_needs_update
+   FROM public.faq_responses
+   ORDER BY updated_at DESC
+   LIMIT 5;
+   ```
+
+2. **Worker logs**: Tail `logs/faq_embedding_worker_cron.log` or `logs/embedding_worker_cron.log` (depending on which target you run) to confirm the script processed FAQ rows and set `embedding_faq`.
+
+3. **Embeddings exist**: After the worker runs, verify `embedding_faq` and `embedding_updated_at` are no longer null for the processed FAQ row:
+
+   ```sql
+   SELECT faq_key, embedding_faq IS NOT NULL AS has_vector, embedding_updated_at
+   FROM public.faq_responses
+   WHERE faq_key = '<your key>';
+   ```
+
+## FAQ Embedding Automation
+
+1. Apply [`database/add_faq_embedding.sql`](database/add_faq_embedding.sql) and [`database/create_faq_embedding_trigger.sql`](database/create_faq_embedding_trigger.sql) so the `faq_responses` table stores `embedding_needs_update`/`embedding_updated_at` and a trigger marks the flag on INSERT/UPDATE.
+2. Run `python backend/services/embedding_worker.py --target faqs --once` or `TARGET=faqs python backend/scripts/run_embedding_worker.py` to manually generate FAQ embeddings from the queue.
+3. The scheduler at [`backend/scheduler/embedding_worker_scheduler.py`](backend/scheduler/embedding_worker_scheduler.py) now runs `process_faq_embeddings` every 5 minutes while continuing to process profile embeddings every 3 hours.
+4. Look for log entries like `Processed X faqs rows this run` in `logs/embedding_worker.log` or your cron log to confirm the flow is working.
+5. To test the trigger: insert or update a FAQ row, verify `embedding_needs_update` becomes `true`, then wait <5 minutes (or run the worker manually) and confirm `embedding_faq`/`embedding_updated_at` are set.
 
 ## Production Deployment
 

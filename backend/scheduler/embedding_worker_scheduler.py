@@ -1,16 +1,89 @@
-"""
-Embedding Worker Scheduler
-Automatically processes profile embeddings every 3 hours
-Uses APScheduler to run the embedding worker periodically
-"""
+"""Embedding Worker Scheduler
+Automatically processes profile and FAQ embeddings via APScheduler."""
 
 import logging
-import os
 from typing import Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from services.embedding_service import EmbeddingService
-from supabase import create_client, Client
+
+from services.embedding_worker import EmbeddingWorker
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize scheduler handle
+scheduler: Optional[AsyncIOScheduler] = None
+
+
+async def process_embeddings(target: str):
+    """Process rows that need embeddings generated for the given target."""
+    try:
+        worker = EmbeddingWorker(batch_size=20, poll_interval=60, target=target)
+        processed = worker.run_once()
+        if processed:
+            logger.info("Processed %d %s rows for embeddings", processed, target)
+        else:
+            logger.debug("No %s rows require embedding updates", target)
+    except Exception as e:
+        logger.error("Error processing %s embeddings: %s", target, e, exc_info=True)
+
+
+async def start_embedding_worker_scheduler():
+    """Start the embedding worker scheduler."""
+    global scheduler
+
+    if scheduler and scheduler.running:
+        logger.warning("Embedding worker scheduler is already running")
+        return
+
+    try:
+        scheduler = AsyncIOScheduler()
+
+        scheduler.add_job(
+            process_embeddings,
+            trigger=IntervalTrigger(hours=3),
+            args=["profiles"],
+            id="process_profile_embeddings",
+            name="Process Profile Embeddings",
+            replace_existing=True,
+        )
+
+        scheduler.add_job(
+            process_embeddings,
+            trigger=IntervalTrigger(minutes=15),
+            args=["faqs"],
+            id="process_faq_embeddings",
+            name="Process FAQ Embeddings",
+            replace_existing=True,
+        )
+
+        scheduler.start()
+        logger.info("Embedding worker scheduler started - profiles every 3h, FAQs every 15m")
+
+    except Exception as e:
+        logger.error("Failed to start embedding worker scheduler: %s", e)
+        raise
+
+
+async def stop_embedding_worker_scheduler():
+    """Stop the embedding worker scheduler."""
+    global scheduler
+
+    if scheduler and scheduler.running:
+        scheduler.shutdown()
+        logger.info("Embedding worker scheduler stopped")
+    else:
+        logger.warning("Embedding worker scheduler is not running")
+"""Embedding Worker Scheduler
+Automatically processes profile and FAQ embeddings via APScheduler"""
+
+import logging
+from typing import Optional
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+
+from services.embedding_worker import EmbeddingWorker
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -19,9 +92,194 @@ logger = logging.getLogger(__name__)
 # Initialize scheduler
 scheduler: Optional[AsyncIOScheduler] = None
 
-# Initialize embedding service and supabase client
-embedding_service: Optional[EmbeddingService] = None
-supabase: Optional[Client] = None
+
+async def process_embeddings(target: str):
+    """Process rows that need embeddings generated for the given target"""
+    try:
+        worker = EmbeddingWorker(batch_size=20, poll_interval=60, target=target)
+        processed = worker.run_once()
+        if processed:
+            logger.info("Processed %d %s rows for embeddings", processed, target)
+        else:
+            logger.debug("No %s rows require embedding updates", target)
+    except Exception as e:
+        logger.error("Error processing %s embeddings: %s", target, e, exc_info=True)
+
+
+async def start_embedding_worker_scheduler():
+    """Start the embedding worker scheduler"""
+    global scheduler
+    
+    if scheduler and scheduler.running:
+        logger.warning("Embedding worker scheduler is already running")
+        return
+    
+    try:
+        scheduler = AsyncIOScheduler()
+        
+        scheduler.add_job(
+            process_embeddings,
+            trigger=IntervalTrigger(hours=3),
+            args=["profiles"],
+            id='process_profile_embeddings',
+            name='Process Profile Embeddings',
+            replace_existing=True
+        )
+        
+        scheduler.add_job(
+            process_embeddings,
+            trigger=IntervalTrigger(minutes=15),
+            args=["faqs"],
+            id='process_faq_embeddings',
+            name='Process FAQ Embeddings',
+            replace_existing=True
+        )
+        
+        scheduler.start()
+        logger.info("Embedding worker scheduler started - profiles run every 3h, faqs run every 15m")
+        
+    except Exception as e:
+        logger.error(f"Failed to start embedding worker scheduler: {e}")
+        raise
+
+
+async def stop_embedding_worker_scheduler():
+    """Stop the embedding worker scheduler"""
+    global scheduler
+    
+    if scheduler and scheduler.running:
+        scheduler.shutdown()
+        logger.info("Embedding worker scheduler stopped")
+    else:
+        logger.warning("Embedding worker scheduler is not running")
+"""Embedding Worker Scheduler
+Automatically processes profile and FAQ embeddings.
+Uses APScheduler to run the embedding worker periodically.
+"""
+
+import logging
+from typing import Optional, Literal
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from services.embedding_worker import EmbeddingWorker
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize scheduler
+scheduler: Optional[AsyncIOScheduler] = None
+
+WORKER_SETTINGS = {
+    "profiles": {"batch_size": 20, "poll_interval": 60},
+    "faqs": {"batch_size": 20, "poll_interval": 60},
+}
+
+_workers: dict[Literal["profiles", "faqs"], EmbeddingWorker] = {}
+
+
+def _get_worker(target: Literal["profiles", "faqs"]) -> EmbeddingWorker:
+    if target not in _workers:
+        settings = WORKER_SETTINGS[target]
+        _workers[target] = EmbeddingWorker(
+            batch_size=settings["batch_size"],
+            poll_interval=settings["poll_interval"],
+            target=target,
+        )
+    return _workers[target]
+
+
+async def process_embeddings(target: Literal["profiles", "faqs"]) -> None:
+    """Process embeddings for the given target."""
+    worker = _get_worker(target)
+    processed = worker.process_batch()
+    if processed:
+        logger.info("Processed %d %s rows this run", processed, target)
+    else:
+        logger.debug("No %s rows processed this run", target)
+
+
+async def start_embedding_worker_scheduler() -> None:
+    """Start the embedding worker scheduler."""
+    global scheduler
+
+    if scheduler and scheduler.running:
+        logger.warning("Embedding worker scheduler is already running")
+        return
+
+    try:
+        scheduler = AsyncIOScheduler()
+
+        scheduler.add_job(
+            process_embeddings,
+            trigger=IntervalTrigger(hours=3),
+            args=["profiles"],
+            id="process_profile_embeddings",
+            name="Process Profile Embeddings",
+            replace_existing=True,
+        )
+
+        scheduler.add_job(
+            process_embeddings,
+            trigger=IntervalTrigger(minutes=5),
+            args=["faqs"],
+            id="process_faq_embeddings",
+            name="Process FAQ Embeddings",
+            replace_existing=True,
+        )
+
+        scheduler.start()
+        logger.info("Embedding worker scheduler started")
+
+    except Exception as e:
+        logger.error("Failed to start embedding worker scheduler: %s", e)
+        raise
+
+
+async def stop_embedding_worker_scheduler() -> None:
+    """Stop the embedding worker scheduler."""
+    global scheduler
+
+    if scheduler and scheduler.running:
+        scheduler.shutdown()
+        logger.info("Embedding worker scheduler stopped")
+    else:
+        logger.warning("Embedding worker scheduler is not running")
+"""
+Embedding Worker Scheduler
+Automatically processes profile and FAQ embeddings.
+Uses APScheduler to run the embedding worker periodically.
+"""
+
+import logging
+from typing import Optional, Literal
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from services.embedding_worker import EmbeddingWorker
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize scheduler
+scheduler: Optional[AsyncIOScheduler] = None
+
+WORKER_SETTINGS = {
+    "profiles": {"batch_size": 20, "poll_interval": 60},
+    "faqs": {"batch_size": 20, "poll_interval": 60},
+}
+
+_workers: dict[Literal["profiles", "faqs"], EmbeddingWorker] = {}
+
+def _get_worker(target: Literal["profiles", "faqs"]) -> EmbeddingWorker:
+    if target not in _workers:
+        settings = WORKER_SETTINGS[target]
+        _workers[target] = EmbeddingWorker(
+            batch_size=settings["batch_size"],
+            poll_interval=settings["poll_interval"],
+            target=target,
+        )
+    return _workers[target]
 
 
 async def process_embeddings():

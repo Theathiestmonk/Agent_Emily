@@ -1,6 +1,6 @@
 """
 Background Embedding Worker Service
-Processes profiles that need embeddings generated or updated
+Processes profiles or FAQ entries that need embeddings generated or updated
 Can run as a separate process or scheduled task
 """
 
@@ -8,7 +8,7 @@ import os
 import sys
 import time
 import logging
-from typing import Optional
+from typing import Optional, Literal
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -29,15 +29,35 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingWorker:
-    """Background worker to process profile embeddings"""
+    """Background worker to process embeddings for profiles or FAQs"""
     
-    def __init__(self, batch_size: int = 10, poll_interval: int = 60):
+    TARGET_CONFIG = {
+        "profiles": {
+            "table_name": "profiles",
+            "embedding_column": "profile_embedding",
+            "flag_column": "embedding_needs_update",
+            "timestamp_column": "embedding_updated_at",
+            "embed_from_text": False,
+            "text_column": None,
+        },
+        "faqs": {
+            "table_name": "faq_responses",
+            "embedding_column": "embedding_faq",
+            "flag_column": "embedding_needs_update",
+            "timestamp_column": "embedding_updated_at",
+            "embed_from_text": True,
+            "text_column": "response",
+        },
+    }
+
+    def __init__(self, *, batch_size: int = 10, poll_interval: int = 60, target: Literal["profiles", "faqs"] = "profiles"):
         """
         Initialize the embedding worker
         
         Args:
-            batch_size: Number of profiles to process in each batch
+            batch_size: Number of rows to process in each batch
             poll_interval: Seconds to wait between polling cycles
+            target: Which table to process; either `profiles` or `faqs`
         """
         supabase_url = os.getenv("SUPABASE_URL")
         supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
@@ -50,97 +70,142 @@ class EmbeddingWorker:
         self.batch_size = batch_size
         self.poll_interval = poll_interval
         self.running = False
+        self.target = target
+
+        config = self.TARGET_CONFIG.get(target)
+        if not config:
+            raise ValueError(f"Unknown embedding target '{target}'")
+
+        self.table_name = config["table_name"]
+        self.embedding_column = config["embedding_column"]
+        self.flag_column = config["flag_column"]
+        self.timestamp_column = config["timestamp_column"]
+        self.embed_from_text = config["embed_from_text"]
+        self.text_column = config["text_column"]
         
-        logger.info(f"EmbeddingWorker initialized with batch_size={batch_size}, poll_interval={poll_interval}s")
+        logger.info(
+            "EmbeddingWorker initialized target=%s batch_size=%d poll_interval=%ds",
+            target,
+            batch_size,
+            poll_interval,
+        )
     
+    def _generate_embedding(self, record: dict) -> list[float]:
+        if self.embed_from_text:
+            text_value = (record.get(self.text_column) or "").strip()
+            if not text_value:
+                logger.warning("Empty %s text for record %s", self.text_column, record.get("id", "unknown"))
+            return self.embedding_service.generate_embedding_from_text(text_value)
+        return self.embedding_service.generate_embedding(record)
+
+    def _query_for_batch(self):
+        try:
+            return (
+                self.supabase.table(self.table_name)
+                .select("*")
+                .eq(self.flag_column, True)
+                .limit(self.batch_size)
+                .execute()
+            )
+        except Exception as e:
+            if self.flag_column in str(e) or "PGRST204" in str(e):
+                logger.warning(
+                    "Column '%s' not available on table '%s'. Falling back to rows missing '%s'.",
+                    self.flag_column,
+                    self.table_name,
+                    self.embedding_column,
+                )
+                return (
+                    self.supabase.table(self.table_name)
+                    .select("*")
+                    .is_(self.embedding_column, "null")
+                    .limit(self.batch_size)
+                    .execute()
+                )
+            raise
+
     def process_batch(self) -> int:
         """
-        Process a batch of profiles that need embeddings
+        Process a batch of rows that need embeddings
         
         Returns:
-            Number of profiles processed
+            Number of rows processed
         """
         try:
-            # Get profiles that need embedding updates
-            # First check if the column exists by trying to query it
-            try:
-                response = self.supabase.table("profiles")\
-                    .select("*")\
-                    .eq("embedding_needs_update", True)\
-                    .limit(self.batch_size)\
-                    .execute()
-            except Exception as e:
-                if "embedding_needs_update" in str(e) or "PGRST204" in str(e):
-                    logger.warning("Column 'embedding_needs_update' doesn't exist. Run database migration: database/add_profile_embedding.sql")
-                    # Fallback: get all profiles without embedding
-                    response = self.supabase.table("profiles")\
-                        .select("*")\
-                        .is_("profile_embedding", "null")\
-                        .limit(self.batch_size)\
-                        .execute()
-                else:
-                    raise
-            
+            response = self._query_for_batch()
             if not response.data:
                 return 0
-            
+
             processed_count = 0
             error_count = 0
-            
-            for profile in response.data:
+
+            for record in response.data:
                 try:
-                    user_id = profile.get('id')
-                    if not user_id:
-                        logger.warning("Profile missing id, skipping")
+                    record_id = record.get("id")
+                    if not record_id:
+                        logger.warning("Record missing id on table '%s', skipping", self.table_name)
                         continue
-                    
-                    logger.info(f"Processing embedding for user {user_id}")
-                    
-                    # Generate embedding
-                    embedding = self.embedding_service.generate_embedding(profile)
-                    
-                    # Update profile with embedding
+
+                    logger.info("Processing embedding for [%s] %s", self.target, record_id)
+                    embedding = self._generate_embedding(record)
+
                     update_data = {
-                        "profile_embedding": embedding
+                        self.embedding_column: embedding
                     }
-                    
-                    # Try to include additional columns if they exist
+
                     try:
-                        # Test if columns exist
-                        test_response = self.supabase.table("profiles")\
-                            .select("embedding_needs_update, embedding_updated_at")\
-                            .eq("id", user_id)\
-                            .limit(1)\
+                        test_response = (
+                            self.supabase.table(self.table_name)
+                            .select(f"{self.flag_column},{self.timestamp_column}")
+                            .eq("id", record_id)
+                            .limit(1)
                             .execute()
-                        # If we get here, columns exist
-                        update_data["embedding_needs_update"] = False
-                        update_data["embedding_updated_at"] = "now()"
+                        )
+                        update_data[self.flag_column] = False
+                        update_data[self.timestamp_column] = "now()"
                     except Exception:
-                        # Columns don't exist, just update profile_embedding
+                        # Missing columns; fallback
                         pass
-                    
-                    update_response = self.supabase.table("profiles")\
-                        .update(update_data)\
-                        .eq("id", user_id)\
+
+                    update_response = (
+                        self.supabase.table(self.table_name)
+                        .update(update_data)
+                        .eq("id", record_id)
                         .execute()
-                    
+                    )
+
                     if update_response.data:
                         processed_count += 1
-                        logger.info(f"Successfully generated embedding for user {user_id} ({processed_count}/{len(response.data)})")
+                        logger.info(
+                            "Successfully generated embedding for %s %s (%s/%s)",
+                            self.target,
+                            record_id,
+                            processed_count,
+                            len(response.data),
+                        )
                     else:
                         error_count += 1
-                        logger.error(f"Failed to update profile for user {user_id}")
-                        
+                        logger.error("Failed to update %s %s", self.target, record_id)
                 except Exception as e:
                     error_count += 1
-                    logger.error(f"Error processing profile {profile.get('id', 'unknown')}: {e}")
-                    # Continue processing other profiles even if one fails
-            
-            logger.info(f"Batch processing complete: {processed_count} processed, {error_count} errors")
+                    logger.error(
+                        "Error processing %s %s: %s",
+                        self.target,
+                        record.get("id", "unknown"),
+                        e,
+                    )
+                    continue
+
+            logger.info(
+                "Batch processing complete for %s: %d processed, %d errors",
+                self.target,
+                processed_count,
+                error_count,
+            )
             return processed_count
-            
+
         except Exception as e:
-            logger.error(f"Error in process_batch: {e}")
+            logger.error("Error in process_batch for %s: %s", self.target, e)
             return 0
     
     def run_once(self) -> int:
@@ -164,9 +229,18 @@ class EmbeddingWorker:
                 processed = self.process_batch()
                 
                 if processed == 0:
-                    logger.debug(f"No profiles to process, waiting {self.poll_interval}s...")
+                    logger.debug(
+                        "No %s rows to process, waiting %ds...",
+                        self.target,
+                        self.poll_interval,
+                    )
                 else:
-                    logger.info(f"Processed {processed} profiles, waiting {self.poll_interval}s...")
+                    logger.info(
+                        "Processed %s %d rows, waiting %ds...",
+                        self.target,
+                        processed,
+                        self.poll_interval,
+                    )
                 
                 # Wait for poll interval
                 time.sleep(self.poll_interval)
@@ -189,23 +263,26 @@ def main():
     """Main entry point for running the worker as a standalone script"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='Profile Embedding Worker')
-    parser.add_argument('--batch-size', type=int, default=10, help='Number of profiles to process per batch')
+    parser = argparse.ArgumentParser(description='Embedding Worker (profiles or FAQs)')
+    parser.add_argument('--batch-size', type=int, default=10, help='Number of rows to process per batch')
     parser.add_argument('--poll-interval', type=int, default=60, help='Seconds between polling cycles')
+    parser.add_argument('--target', choices=['profiles', 'faqs'], default='profiles', help='Which table to generate embeddings for')
     parser.add_argument('--once', action='store_true', help='Run once and exit (default: continuous)')
     
     args = parser.parse_args()
     
     worker = EmbeddingWorker(
         batch_size=args.batch_size,
-        poll_interval=args.poll_interval
+        poll_interval=args.poll_interval,
+        target=args.target,
     )
     
     if args.once:
-        logger.info("Running worker once...")
+        logger.info("Running worker once for %s...", args.target)
         processed = worker.run_once()
-        logger.info(f"Processed {processed} profiles")
+        logger.info("Processed %s rows: %d", args.target, processed)
     else:
+        logger.info("Starting continuous worker for %s", args.target)
         worker.run_continuous()
 
 

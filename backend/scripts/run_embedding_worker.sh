@@ -17,7 +17,8 @@ elif [ -d "../venv" ]; then
 fi
 
 # Run the embedding worker once
-python services/embedding_worker.py --once
+TARGET="${TARGET:-profiles}"
+python services/embedding_worker.py --once --target "$TARGET"
 
 # Deactivate virtual environment if it was activated
 if [ -n "$VIRTUAL_ENV" ]; then

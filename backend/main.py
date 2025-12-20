@@ -13,6 +13,10 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from scheduler.post_publisher import start_post_publisher, stop_post_publisher
 from scheduler.daily_messages_scheduler import start_daily_messages_scheduler, stop_daily_messages_scheduler
+
+# Load environment variables before importing routers that depend on them
+load_dotenv()
+
 from routers.connections import router as connections_router
 from routers.content import router as content_router
 from routers.social_media import router as social_media_router
@@ -35,9 +39,7 @@ from routers.contact import router as contact_router
 from routers.whatsapp import router as whatsapp_router
 from routers.content_from_drive import router as content_from_drive_router
 from routers.admin import router as admin_router
-
-# Load environment variables
-load_dotenv()
+from routers.faq_embeddings import router as faq_embeddings_router
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -117,6 +119,7 @@ app.include_router(contact_router)
 app.include_router(whatsapp_router)
 app.include_router(content_from_drive_router)
 app.include_router(admin_router)
+app.include_router(faq_embeddings_router)
 
 # Health check endpoint
 @app.get("/health")
