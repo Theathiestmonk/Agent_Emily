@@ -474,7 +474,7 @@ function EmilyDashboard() {
   }, [filterDropdownOpen])
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="h-screen md:min-h-screen bg-white overflow-hidden md:overflow-auto">
       {/* Mobile Navigation */}
       <MobileNavigation 
         setShowCustomContentChatbot={() => {}} // Dashboard doesn't have these functions
@@ -494,7 +494,7 @@ function EmilyDashboard() {
       <SideNavbar />
       
       {/* Main Content */}
-      <div className="md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden pt-16 md:pt-0">
+      <div className="md:ml-48 xl:ml-64 flex flex-col h-screen md:h-screen overflow-hidden pt-16 md:pt-0" style={{ height: 'calc(100vh - 4rem)' }}>
         {/* Header */}
         <div className="hidden md:block bg-white shadow-sm border-b z-30 flex-shrink-0">
           <div className="px-4 lg:px-6 py-3 lg:py-4">
@@ -619,7 +619,7 @@ function EmilyDashboard() {
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex items-start bg-gray-50" style={{ minHeight: 0, overflow: 'hidden' }}>
+        <div className="flex-1 flex items-start bg-gray-50 h-full" style={{ minHeight: 0, overflow: 'hidden' }}>
             <div className="w-full h-full flex gap-2">
                 {/* Main Chat Area */}
               <div className="flex-1 h-full">
