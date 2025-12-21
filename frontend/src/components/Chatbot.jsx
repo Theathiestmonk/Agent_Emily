@@ -1690,7 +1690,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   return (
     <div className="flex flex-col bg-white" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Messages */}
-      <div className="flex-1 p-4 space-y-4 messages-container" style={{ overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+      <div className="flex-1 p-4 space-y-4 messages-container relative" style={{ overflowY: 'auto', overflowX: 'hidden', minHeight: 0, paddingBottom: '100px' }}>
         {messages
           .filter(message => {
             if (messageFilter === 'all') return true
@@ -2479,10 +2479,8 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input - Fixed at bottom */}
-      <div className="bg-transparent px-4 border-t border-white/20 z-10" style={{ 
-        flexShrink: 0,
-        flexGrow: 0,
+      {/* Input - Sticky at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 bg-transparent px-4 border-t border-white/20 z-10" style={{
         paddingTop: '12px',
         paddingBottom: '12px'
       }}>
