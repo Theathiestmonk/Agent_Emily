@@ -2480,7 +2480,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       </div>
 
       {/* Input - Sticky at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 bg-transparent md:px-4 px-3 border-t border-white/20 z-10" style={{
+      <div className="absolute bottom-0 left-0 right-0 bg-white md:px-4 px-3 border-t border-white/20 z-10" style={{
         paddingTop: '12px',
         paddingBottom: '12px'
       }}>
