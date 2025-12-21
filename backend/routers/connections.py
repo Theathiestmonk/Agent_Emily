@@ -10,8 +10,10 @@ import base64
 import time
 import traceback
 import json
+from decimal import Decimal
 from cryptography.fernet import Fernet
 import requests
+import httpx
 from supabase import create_client, Client
 
 from dotenv import load_dotenv
@@ -881,8 +883,29 @@ async def handle_oauth_callback(
             existing_connection = supabase_admin.table("platform_connections").select("id").eq("user_id", user_id).eq("platform", platform).eq("page_id", account_info.get('page_id')).execute()
 
             connection_id = existing_connection.data[0]["id"] if existing_connection.data else "unknown"
-        
-        
+        try:
+            record_platform_metrics(
+                user_id=user_id,
+                platform=platform,
+                page_id=connection_data.get("page_id"),
+                page_name=connection_data.get("page_name", ""),
+                access_token=page_access_token
+            )
+        except Exception as metric_error:
+            print(f"⚠️ Could not record platform metrics for {platform}: {metric_error}")
+
+        if platform == 'facebook' and account_info.get('instagram_id'):
+            try:
+                record_platform_metrics(
+                    user_id=user_id,
+                    platform="instagram",
+                    page_id=account_info.get('instagram_id'),
+                    page_name=account_info.get('username', ''),
+                    access_token=page_access_token
+                )
+            except Exception as metric_error:
+                print(f"⚠️ Could not record Instagram metrics: {metric_error}")
+
         
         # Return HTML page that redirects back to frontend
 
@@ -1455,6 +1478,43 @@ def generate_pkce_params():
     
     return code_verifier, code_challenge
 
+META_OAUTH_SCOPES = [
+    "pages_manage_metadata",
+    "pages_messaging",
+    "pages_public_metadata_access",
+    "pages_public_content_access",
+    "whatsapp_business_manage_events",
+    "instagram_manage_upcoming_events",
+    "instagram_branded_content_ads_brand",
+    "instagram_manage_events",
+    "meta_oembed_read",
+    "instagram_business_manage_messages",
+    "instagram_business_manage_comments",
+    "whatsapp_business_messaging",
+    "pages_manage_engagement",
+    "instagram_manage_comments",
+    "instagram_manage_messages",
+    "instagram_public_content_access",
+    "ads_management_standard_access",
+    "pages_read_engagement",
+    "pages_show_list",
+    "instagram_basic",
+    "ads_management",
+    "ads_read",
+    "instagram_content_publish",
+    "business_management",
+    "pages_manage_posts",
+    "read_insights",
+    "whatsapp_business_management",
+    "instagram_business_manage_insights",
+    "instagram_business_content_publish",
+    "pages_manage_ads",
+    "instagram_manage_insights",
+    "leads_retrieval",
+    "page_events",
+]
+
+
 def generate_oauth_url(platform: str, state: str) -> str:
 
     """Generate OAuth URL for platform"""
@@ -1573,9 +1633,10 @@ def generate_oauth_url(platform: str, state: str) -> str:
 
         # Get Facebook Login for Business config_id from environment
         facebook_config_id = os.getenv('FACEBOOK_CONFIG_ID')
+        scope_string = ",".join(META_OAUTH_SCOPES)
         
         # Build OAuth URL with config_id if available
-        oauth_url = f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,ads_read,ads_management,business_management"
+        oauth_url = f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope={scope_string}"
         
         if facebook_config_id:
             oauth_url += f"&config_id={facebook_config_id}"
@@ -1590,18 +1651,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # Use Instagram redirect URI for Instagram OAuth
         instagram_redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/instagram/callback"
         
-        # Instagram for Business requires specific scopes
-        # Based on Facebook's official documentation and Zapier's implementation
-        instagram_scopes = [
-            "pages_show_list",           # List Facebook Pages
-            "pages_read_engagement",     # Read page engagement data
-            "instagram_basic",           # Basic Instagram account info
-            "instagram_content_publish", # Publish to Instagram
-            "pages_manage_posts",        # Manage page posts
-            "business_management"        # Business management
-        ]
-        
-        scope_string = ",".join(instagram_scopes)
+        scope_string = ",".join(META_OAUTH_SCOPES)
         
         return f"{base_url}?client_id={client_id}&redirect_uri={instagram_redirect_uri}&state={state}&scope={scope_string}"
 
@@ -1659,6 +1709,106 @@ def generate_oauth_url(platform: str, state: str) -> str:
     
     return ""
 
+
+
+META_INSIGHTS_METRICS = [
+    "page_impressions",
+    "page_engaged_users",
+    "page_posts_impressions",
+    "page_posts_impressions_organic",
+    "page_posts_impressions_paid",
+    "page_post_engagements",
+    "page_negative_feedback",
+]
+
+
+def record_platform_metrics(user_id: str, platform: str, page_id: str, page_name: str, access_token: str):
+    """Fetch analytics via Graph API and store them after a connection completes."""
+    if not page_id or not access_token:
+        print(f"⚠️ Missing page_id/access_token for metrics (user={user_id}, platform={platform})")
+        return
+
+    metrics = fetch_page_metrics(page_id, access_token)
+    if not metrics:
+        print(f"⚠️ No insights returned for page {page_id}")
+        return
+
+    today = datetime.utcnow().date()
+    for metric_name, metric_value in metrics.items():
+        try:
+            store_analytics_snapshot(
+                user_id=user_id,
+                platform=platform,
+                source="social_media",
+                metric=metric_name,
+                value=Decimal(metric_value),
+                date=today,
+                metadata={"page_name": page_name},
+            )
+        except Exception as err:
+            print(f"❌ Failed to store metric {metric_name} for {page_id}: {err}")
+
+
+def fetch_page_metrics(page_id: str, access_token: str) -> dict:
+    """Query the Facebook Graph API for the required insights."""
+    url = f"https://graph.facebook.com/v18.0/{page_id}/insights"
+    params = {
+        "metric": ",".join(META_INSIGHTS_METRICS),
+        "period": "day",
+        "access_token": access_token,
+    }
+
+    try:
+        response = httpx.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json().get("data", [])
+
+        insights = {}
+        for entry in data:
+            name = entry.get("name")
+            values = entry.get("values", [])
+            if not name or not values:
+                continue
+
+            latest = values[-1]
+            insights[name] = latest.get("value", 0)
+
+        return insights
+    except Exception as exc:
+        print(f"❌ Error fetching insights for page {page_id}: {exc}")
+        return {}
+
+
+def store_analytics_snapshot(
+    user_id: str,
+    platform: str,
+    source: str,
+    metric: str,
+    value: Decimal,
+    date: datetime.date,
+    metadata: dict = None,
+    post_id: str = None,
+):
+    """Insert or update a single row in analytics_snapshots."""
+    payload = {
+        "user_id": user_id,
+        "platform": platform,
+        "source": source,
+        "metric": metric,
+        "value": float(value),
+        "date": date.isoformat(),
+        "metadata": metadata or {},
+        "post_id": post_id,
+    }
+
+    try:
+        supabase_admin.table("analytics_snapshots").upsert(
+            payload,
+            on_conflict="analytics_snapshots_user_platform_metric_date_post"
+        ).execute()
+        print(f"✅ Stored analytics snapshot {metric} for user {user_id}")
+    except Exception as exc:
+        print(f"❌ Could not save analytics snapshot {metric}: {exc}")
 
 
 def exchange_code_for_tokens(platform: str, code: str, state: str = None) -> dict:

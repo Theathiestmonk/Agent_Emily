@@ -15,6 +15,42 @@ import asyncio
 
 router = APIRouter(prefix="/api/social-media", tags=["social-media-connections"])
 
+META_OAUTH_SCOPES = [
+    "pages_manage_metadata",
+    "pages_messaging",
+    "pages_public_metadata_access",
+    "pages_public_content_access",
+    "whatsapp_business_manage_events",
+    "instagram_manage_upcoming_events",
+    "instagram_branded_content_ads_brand",
+    "instagram_manage_events",
+    "meta_oembed_read",
+    "instagram_business_manage_messages",
+    "instagram_business_manage_comments",
+    "whatsapp_business_messaging",
+    "pages_manage_engagement",
+    "instagram_manage_comments",
+    "instagram_manage_messages",
+    "instagram_public_content_access",
+    "ads_management_standard_access",
+    "pages_read_engagement",
+    "pages_show_list",
+    "instagram_basic",
+    "ads_management",
+    "ads_read",
+    "instagram_content_publish",
+    "business_management",
+    "pages_manage_posts",
+    "read_insights",
+    "whatsapp_business_management",
+    "instagram_business_manage_insights",
+    "instagram_business_content_publish",
+    "pages_manage_ads",
+    "instagram_manage_insights",
+    "leads_retrieval",
+    "page_events",
+]
+
 # Initialize Supabase client
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_ANON_KEY")
@@ -191,6 +227,7 @@ def extract_user_id_from_jwt(authorization: str) -> str:
 
 async def validate_and_get_account_info(platform: str, access_token: str) -> Dict[str, Any]:
     """Validate access token and get account information"""
+    print(f"Expected Meta OAuth scopes for token connections: {', '.join(META_OAUTH_SCOPES)}")
     try:
         if platform == "instagram":
             # Instagram Basic Display API validation
@@ -311,6 +348,7 @@ async def connect_with_token(
         # Add debugging
         print(f"Connecting {connection.platform} for user {user_id}")
         print(f"Token preview: {connection.access_token[:20]}...")
+        print(f"Requesting Meta scopes: {', '.join(META_OAUTH_SCOPES)}")
         
         # Validate access token and get account info
         account_info = await validate_and_get_account_info(connection.platform, connection.access_token)
