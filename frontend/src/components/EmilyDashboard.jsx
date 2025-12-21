@@ -494,7 +494,7 @@ function EmilyDashboard() {
       <SideNavbar />
       
       {/* Main Content */}
-      <div className="md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden">
+      <div className="md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden pt-16 md:pt-0">
         {/* Header */}
         <div className="hidden md:block bg-white shadow-sm border-b z-30 flex-shrink-0">
           <div className="px-4 lg:px-6 py-3 lg:py-4">
