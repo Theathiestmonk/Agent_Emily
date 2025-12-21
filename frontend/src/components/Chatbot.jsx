@@ -1690,7 +1690,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   return (
     <div className="flex flex-col bg-white" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Messages */}
-      <div className="flex-1 p-4 space-y-4 messages-container relative" style={{ overflowY: 'auto', overflowX: 'hidden', minHeight: 0, paddingBottom: '100px' }}>
+      <div className="flex-1 md:p-4 px-3 py-0 space-y-4 messages-container relative" style={{ overflowY: 'auto', overflowX: 'hidden', minHeight: 0, paddingBottom: '100px' }}>
         {messages
           .filter(message => {
             if (messageFilter === 'all') return true
@@ -1705,8 +1705,8 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
             className={`flex flex-col ${message.type === 'user' ? 'items-end' : 'items-start'} w-full px-4 ${message.isNew ? 'animate-slide-in' : ''}`}
           >
             <div className={`flex items-start gap-2 ${message.type === 'user' ? 'justify-end flex-row-reverse ml-auto' : 'justify-start'} max-w-[85%]`}>
-              {/* Icon */}
-              <div className={`flex-shrink-0 ${message.type === 'user' ? 'order-2' : ''}`}>
+              {/* Icon - Hidden on mobile */}
+              <div className={`flex-shrink-0 hidden md:block ${message.type === 'user' ? 'order-2' : ''}`}>
                 {message.type === 'user' ? (
                   profile?.logo_url ? (
                     <div className="w-5 h-5 md:w-8 md:h-8 rounded-full overflow-hidden backdrop-blur-md bg-pink-500/80 border border-pink-400/30">
@@ -2480,7 +2480,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
       </div>
 
       {/* Input - Sticky at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 bg-transparent px-4 border-t border-white/20 z-10" style={{
+      <div className="absolute bottom-0 left-0 right-0 bg-transparent md:px-4 px-3 border-t border-white/20 z-10" style={{
         paddingTop: '12px',
         paddingBottom: '12px'
       }}>
