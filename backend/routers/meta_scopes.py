@@ -13,44 +13,29 @@ from typing import List
 
 
 BASE_META_OAUTH_SCOPES: List[str] = [
+    "pages_show_list",
+    "pages_read_engagement",
     "pages_manage_metadata",
-    "pages_messaging",
+    "pages_manage_posts",
     "pages_manage_engagement",
+    "pages_manage_ads",
+    "pages_messaging",
+    "leads_retrieval",
+    "read_insights",
+    "instagram_basic",
     "instagram_manage_comments",
     "instagram_manage_messages",
-    "instagram_public_content_access",
-    "ads_management_standard_access",
-    "pages_read_engagement",
-    "pages_show_list",
-    "instagram_basic",
+    "instagram_content_publish",
+    "instagram_manage_insights",
+    "whatsapp_business_management",
+    "whatsapp_business_messaging",
     "ads_management",
     "ads_read",
-    "instagram_content_publish",
     "business_management",
-    "pages_manage_posts",
-    "read_insights",
-    "whatsapp_business_management",
-    "instagram_business_manage_insights",
-    "instagram_business_content_publish",
-    "pages_manage_ads",
-    "instagram_manage_insights",
-    "leads_retrieval",
-    "page_events",
+    "meta_oembed_read",
 ]
 
-OPTIONAL_META_OAUTH_SCOPES: List[str] = [
-    "pages_public_metadata_access",
-    "pages_public_content_access",
-    "whatsapp_business_manage_events",
-    "instagram_manage_upcoming_events",
-    "instagram_branded_content_ads_brand",
-    "instagram_manage_events",
-    "meta_oembed_read",
-    "instagram_business_manage_messages",
-    "instagram_business_manage_comments",
-    "whatsapp_business_messaging",
-    "page_mentions",
-]
+OPTIONAL_META_OAUTH_SCOPES: List[str] = []
 
 
 def _include_optional_scopes() -> bool:
