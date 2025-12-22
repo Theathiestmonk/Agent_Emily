@@ -8,6 +8,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
+import calendar
 import logging
 import os
 import hmac
@@ -160,7 +161,92 @@ class CreateLeadRequest(BaseModel):
     status: str = "new"
     form_data: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
+    follow_up_at: Optional[str] = None
 
+# Email scheduling helper functions
+def parse_follow_up_at(follow_up_at: Optional[str]) -> Optional[datetime]:
+    """Parse follow_up_at string to a timezone-aware datetime"""
+    if not follow_up_at:
+        return None
+
+    try:
+        parsed_date = None
+        try:
+            from dateutil import parser
+            parsed_date = parser.parse(follow_up_at)
+        except ImportError:
+            logger.debug("dateutil not installed, falling back to datetime.fromisoformat")
+        except Exception as parse_exc:
+            logger.debug(f"dateutil parser failed: {parse_exc}")
+
+        if not parsed_date:
+            if 'Z' in follow_up_at:
+                parsed_date = datetime.fromisoformat(follow_up_at.replace('Z', '+00:00'))
+            elif '+' in follow_up_at or follow_up_at.count('-') > 2:
+                parsed_date = datetime.fromisoformat(follow_up_at)
+            else:
+                parsed_date = datetime.fromisoformat(follow_up_at)
+
+        if parsed_date.tzinfo is None:
+            parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+
+        return parsed_date.astimezone(timezone.utc)
+    except Exception as e:
+        logger.warning(f"Failed to parse follow_up_at '{follow_up_at}': {e}")
+        return None
+
+def has_time_component(dt: datetime) -> bool:
+    """Return True if datetime has a meaningful time component"""
+    if dt is None:
+        return False
+    return any([dt.hour, dt.minute, dt.second, dt.microsecond])
+
+def should_send_email_immediately(follow_up_at: Optional[datetime], created_at: Optional[datetime] = None) -> bool:
+    """
+    Decide whether to send email immediately.
+    - send immediately if follow_up_at is None or in the past or today
+    - schedule if follow_up_at is in the future
+    """
+    now = datetime.now(timezone.utc)
+    if follow_up_at is None:
+        logger.info("No follow_up_at provided, send email immediately")
+        return True
+
+    if follow_up_at.tzinfo is None:
+        follow_up_at = follow_up_at.replace(tzinfo=timezone.utc)
+    follow_up_at_utc = follow_up_at.astimezone(timezone.utc)
+    follow_up_date = follow_up_at_utc.date()
+
+    if follow_up_date == now.date():
+        if has_time_component(follow_up_at_utc):
+            time_diff = (follow_up_at_utc - now).total_seconds()
+            send_now = time_diff <= 3600
+            logger.info(f"follow_up_at {follow_up_at_utc.isoformat()} is today, send now: {send_now}")
+            return send_now
+        logger.info("follow_up_at is today with no time component, send now")
+        return True
+
+    if follow_up_date > now.date():
+        logger.info(f"follow_up_at {follow_up_at_utc.isoformat()} is in the future, schedule later")
+        return False
+
+    logger.info("follow_up_at is in the past, send now")
+    return True
+
+def get_email_send_time(follow_up_at: Optional[datetime], created_at: Optional[datetime] = None) -> datetime:
+    """Return the datetime the email should be sent."""
+    now = datetime.now(timezone.utc)
+    if not follow_up_at:
+        return now
+
+    if follow_up_at.tzinfo is None:
+        follow_up_at = follow_up_at.replace(tzinfo=timezone.utc)
+    follow_up_at_utc = follow_up_at.astimezone(timezone.utc)
+
+    if has_time_component(follow_up_at_utc) and follow_up_at_utc > now:
+        return follow_up_at_utc
+
+    return now
 # Initialize agent
 def get_lead_agent():
     """Get initialized lead management agent"""
@@ -553,6 +639,14 @@ async def create_lead(
                 detail=f"Lead already exists with the same {', '.join(duplicate_info)}. Duplicate leads are not allowed."
             )
         
+        follow_up_at_dt = None
+        if request.follow_up_at:
+            follow_up_at_dt = parse_follow_up_at(request.follow_up_at)
+            if follow_up_at_dt:
+                logger.info(f"Parsed follow_up_at: {follow_up_at_dt.isoformat()}")
+            else:
+                logger.warning(f"Failed to parse follow_up_at: {request.follow_up_at}, continuing without it")
+
         lead_data = {
             "user_id": current_user["id"],
             "name": request.name,
@@ -568,6 +662,9 @@ async def create_lead(
             }
         }
         
+        if follow_up_at_dt:
+            lead_data["follow_up_at"] = follow_up_at_dt.isoformat()
+
         result = supabase_admin.table("leads").insert(lead_data).execute()
         
         if not result.data:
@@ -576,20 +673,32 @@ async def create_lead(
         created_lead = result.data[0]
         lead_id = created_lead["id"]
         
-        # Automatically send welcome email if lead has email address
+        should_send_email = False
         if request.email and request.status == "new":
+            should_send_email = should_send_email_immediately(follow_up_at_dt)
+            if should_send_email:
+                logger.info(f"Email will be sent immediately for lead {lead_id} (follow_up_at: {follow_up_at_dt.isoformat() if follow_up_at_dt else 'None'})")
+            else:
+                logger.info(f"Email will be scheduled for future for lead {lead_id} (follow_up_at: {follow_up_at_dt.isoformat() if follow_up_at_dt else 'None'})")
+
+        if should_send_email:
             try:
-                # Get user profile for business context
                 profile = supabase_admin.table("profiles").select("*").eq("id", current_user["id"]).execute()
                 profile_data = profile.data[0] if profile.data else {}
                 
-                business_name = profile_data.get("business_name", "our business")
-                business_description = profile_data.get("business_description", "")
-                brand_voice = profile_data.get("brand_voice", "professional")
-                brand_tone = profile_data.get("brand_tone", "friendly")
+                business_name = profile_data.get("business_name") or "our business"
+                business_description = profile_data.get("business_description") or ""
+                brand_voice = profile_data.get("brand_voice") or "professional"
+                brand_tone = profile_data.get("brand_tone") or "friendly"
                 
-                # Generate welcome email using LLM
+                lead_name = request.name or "there"
+                default_subject = f"Thank you for contacting {business_name}"
+                default_body = f"<p>Thank you {lead_name} for contacting {business_name}! We appreciate your interest.</p>"
+                
                 openai_api_key = os.getenv("OPENAI_API_KEY")
+                email_subject = default_subject
+                email_body = default_body
+
                 if openai_api_key:
                     openai_client = openai.OpenAI(api_key=openai_api_key)
                     
@@ -631,7 +740,6 @@ Return a JSON object with:
                         max_tokens=600
                     )
                     
-                    # Track token usage
                     from services.token_usage_service import TokenUsageService
                     if supabase_url and supabase_service_key:
                         token_tracker = TokenUsageService(supabase_url, supabase_service_key)
@@ -642,129 +750,116 @@ Return a JSON object with:
                             response=response,
                             request_metadata={"lead_id": str(lead_id)}
                         )
-                    
+
                     try:
                         email_data = json.loads(response.choices[0].message.content)
-                        email_subject = email_data.get("subject", f"Thank you for contacting {business_name}")
-                        email_body = email_data.get("body", f"Thank you {request.name} for contacting {business_name}!")
+                        email_subject = email_data.get("subject", default_subject)
+                        email_body = email_data.get("body", default_body)
                     except json.JSONDecodeError:
-                        content = response.choices[0].message.content
-                        email_subject = f"Thank you for contacting {business_name}"
-                        email_body = content
-                    
-                    # Check for Google connection and send email
-                    connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user["id"]).execute()
-                    
-                    if connection.data:
-                        try:
-                            from routers.google_connections import send_gmail_message, User as GoogleUser
+                        content = response.choices[0].message.content or ""
+                        email_subject = default_subject
+                        email_body = content or default_body
+
+                email_subject = str(email_subject or default_subject)
+                email_body = str(email_body or default_body)
+                email_subject = email_subject.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                email_body = email_body.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                email_subject = email_subject.replace("{business_name}", business_name)
+                email_body = email_body.replace("{business_name}", business_name)
+                
+                connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user["id"]).execute()
+                
+                if connection.data:
+                    try:
+                        from routers.google_connections import send_gmail_message, User as GoogleUser
+                        
+                        created_at_value = current_user.get("created_at", "")
+                        if created_at_value and hasattr(created_at_value, 'isoformat'):
+                            created_at_str = created_at_value.isoformat()
+                        elif created_at_value:
+                            created_at_str = str(created_at_value)
+                        else:
+                            created_at_str = ""
+                        
+                        google_user = GoogleUser(
+                            id=current_user["id"],
+                            email=current_user["email"],
+                            name=current_user["name"],
+                            created_at=created_at_str
+                        )
+                        
+                        email_result = await send_gmail_message(
+                            to=request.email,
+                            subject=email_subject,
+                            body=email_body,
+                            current_user=google_user
+                        )
+                        
+                        if email_result.get("success"):
+                            supabase_admin.table("lead_conversations").insert({
+                                "lead_id": lead_id,
+                                "message_type": "email",
+                                "content": email_body,
+                                "sender": "agent",
+                                "direction": "outbound",
+                                "message_id": email_result.get("message_id"),
+                                "status": "sent"
+                            }).execute()
                             
-                            # Create User object for send_gmail_message
-                            created_at_value = current_user.get("created_at", "")
-                            if created_at_value and hasattr(created_at_value, 'isoformat'):
-                                created_at_str = created_at_value.isoformat()
-                            elif created_at_value:
-                                created_at_str = str(created_at_value)
-                            else:
-                                created_at_str = ""
+                            supabase_admin.table("leads").update({
+                                "status": "contacted",
+                                "updated_at": datetime.now().isoformat()
+                            }).eq("id", lead_id).execute()
                             
-                            google_user = GoogleUser(
-                                id=current_user["id"],
-                                email=current_user["email"],
-                                name=current_user["name"],
-                                created_at=created_at_str
-                            )
+                            supabase_admin.table("lead_status_history").insert({
+                                "lead_id": lead_id,
+                                "old_status": "new",
+                                "new_status": "contacted",
+                                "changed_by": "system",
+                                "reason": "Automatic welcome email sent"
+                            }).execute()
                             
-                            # Send email
-                            email_result = await send_gmail_message(
-                                to=request.email,
-                                subject=email_subject,
-                                body=email_body,
-                                current_user=google_user
-                            )
-                            
-                            if email_result.get("success"):
-                                # Store conversation
-                                supabase_admin.table("lead_conversations").insert({
-                                    "lead_id": lead_id,
-                                    "message_type": "email",
-                                    "content": email_body,
-                                    "sender": "agent",
-                                    "direction": "outbound",
-                                    "message_id": email_result.get("message_id"),
-                                    "status": "sent"
-                                }).execute()
+                            logger.info(f"Welcome email sent to lead {lead_id} and status updated to contacted")
                                 
-                                # Update status to "contacted"
-                                supabase_admin.table("leads").update({
-                                    "status": "contacted",
-                                    "updated_at": datetime.now().isoformat()
-                                }).eq("id", lead_id).execute()
+                            try:
+                                business_name_for_bot = profile_data.get("business_name", "your business")
+                                user_timezone_str = profile_data.get("timezone", "UTC")
+                                now_utc = datetime.now(timezone.utc)
                                 
-                                # Create status history entry
-                                supabase_admin.table("lead_status_history").insert({
-                                    "lead_id": lead_id,
-                                    "old_status": "new",
-                                    "new_status": "contacted",
-                                    "changed_by": "system",
-                                    "reason": "Automatic welcome email sent"
-                                }).execute()
-                                
-                                logger.info(f"Welcome email sent to lead {lead_id} and status updated to contacted")
-                                
-                                # Create chatbot message from Chase
                                 try:
-                                    # Get business name from profile
-                                    business_name = profile_data.get("business_name", "your business")
-                                    
-                                    # Get user's timezone from profile, default to UTC
-                                    user_timezone_str = profile_data.get("timezone", "UTC")
-                                    
-                                    # Format date and time in user's timezone
-                                    now_utc = datetime.now(timezone.utc)
-                                    
-                                    # Convert to user's timezone for display
-                                    try:
-                                        import pytz
-                                        user_tz = pytz.timezone(user_timezone_str)
-                                        now_user_tz = now_utc.astimezone(user_tz)
-                                        date_time_str = now_user_tz.strftime("%B %d, %Y at %I:%M %p")
-                                    except Exception:
-                                        # If timezone conversion fails, use UTC
-                                        date_time_str = now_utc.strftime("%B %d, %Y at %I:%M %p")
-                                    
-                                    # Create message content
-                                    message_content = f"Dear {business_name}, you just received a new lead: **{request.name}** on {date_time_str}.\n\nI have contacted the lead and sent an Email for now."
-                                    
-                                    # Create chatbot conversation message
-                                    # Use UTC timezone to match database storage
-                                    chatbot_message_data = {
-                                        "user_id": current_user["id"],
-                                        "message_type": "bot",
-                                        "content": message_content,
-                                        "intent": "lead_notification",
-                                        "created_at": now_utc.isoformat(),
-                                        "metadata": {
-                                            "sender": "chase",
-                                            "lead_id": lead_id,
-                                            "lead_name": request.name,
-                                            "email_content": email_body,
-                                            "email_subject": email_subject,
-                                            "notification_type": "new_lead_email_sent"
-                                        }
-                                    }
-                                    
-                                    supabase_admin.table("chatbot_conversations").insert(chatbot_message_data).execute()
-                                    logger.info(f"Created Chase notification message for lead {lead_id}")
-                                except Exception as chatbot_msg_error:
-                                    logger.error(f"Error creating chatbot message: {chatbot_msg_error}")
-                                    # Don't fail lead creation if chatbot message fails
+                                    import pytz
+                                    user_tz = pytz.timezone(user_timezone_str)
+                                    now_user_tz = now_utc.astimezone(user_tz)
+                                    date_time_str = now_user_tz.strftime("%B %d, %Y at %I:%M %p")
+                                except Exception:
+                                    date_time_str = now_utc.strftime("%B %d, %Y at %I:%M %p")
                                 
-                        except Exception as email_error:
-                            logger.error(f"Error sending welcome email: {email_error}")
-                            # Don't fail lead creation if email fails
-                    else:
-                        logger.info(f"No Google connection found, skipping automatic welcome email for lead {lead_id}")
+                                message_content = f"Dear {business_name_for_bot}, you just received a new lead: **{request.name}** on {date_time_str}.\n\nI have contacted the lead and sent an Email for now."
+                                chatbot_message_data = {
+                                    "user_id": current_user["id"],
+                                    "message_type": "bot",
+                                    "content": message_content,
+                                    "intent": "lead_notification",
+                                    "created_at": now_utc.isoformat(),
+                                    "metadata": {
+                                        "sender": "chase",
+                                        "lead_id": lead_id,
+                                        "lead_name": request.name,
+                                        "email_content": email_body,
+                                        "email_subject": email_subject,
+                                        "notification_type": "new_lead_email_sent"
+                                    }
+                                }
+                                
+                                supabase_admin.table("chatbot_conversations").insert(chatbot_message_data).execute()
+                                logger.info(f"Created Chase notification message for lead {lead_id}")
+                            except Exception as chatbot_msg_error:
+                                logger.error(f"Error creating chatbot message: {chatbot_msg_error}")
+                    except Exception as email_error:
+                        logger.error(f"Error sending welcome email: {email_error}")
+                        # Don't fail lead creation if email fails
+                else:
+                    logger.info(f"No Google connection found, skipping automatic welcome email for lead {lead_id}")
             except Exception as auto_email_error:
                 logger.error(f"Error in automatic email sending: {auto_email_error}")
                 # Don't fail lead creation if auto-email fails
@@ -1097,10 +1192,10 @@ async def import_leads_csv(
                     profile = supabase_admin.table("profiles").select("*").eq("id", current_user["id"]).execute()
                     profile_data = profile.data[0] if profile.data else {}
                     
-                    business_name = profile_data.get("business_name", "our business")
-                    business_description = profile_data.get("business_description", "")
-                    brand_voice = profile_data.get("brand_voice", "professional")
-                    brand_tone = profile_data.get("brand_tone", "friendly")
+                    business_name = profile_data.get("business_name") or "our business"
+                    business_description = profile_data.get("business_description") or ""
+                    brand_voice = profile_data.get("brand_voice") or "professional"
+                    brand_tone = profile_data.get("brand_tone") or "friendly"
                     
                     # Import Google connection functions
                     from routers.google_connections import send_gmail_message, User as GoogleUser
@@ -1127,7 +1222,7 @@ async def import_leads_csv(
                     for lead in created_leads:
                         lead_id = lead.get("id")
                         lead_email = lead.get("email")
-                        lead_name = lead.get("name", "there")
+                        lead_name = lead.get("name") or "there"
                         lead_status = lead.get("status", "new")
                         
                         # Only send to leads with email and status "new"
@@ -1197,13 +1292,15 @@ Return a JSON object with:
                                             email_data = json.loads(response.choices[0].message.content)
                                             email_subject = email_data.get("subject", f"Thank you for contacting {business_name}")
                                             email_body = email_data.get("body", f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>")
+                                            email_subject = str(email_subject or f"Thank you for contacting {business_name}")
+                                            email_body = str(email_body or f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>")
                                         except json.JSONDecodeError:
-                                            content = response.choices[0].message.content
-                                            email_subject = f"Thank you for contacting {business_name}"
-                                            email_body = content
+                                            content = response.choices[0].message.content or ""
+                                            email_subject = email_subject or f"Thank you for contacting {business_name}"
+                                            email_body = content or f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
                                             # Fallback: replace any placeholders that might exist
-                                            email_body = email_body.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
-                                            email_subject = email_subject.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                                            email_body = str(email_body).replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+                                            email_subject = str(email_subject).replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
                                     except Exception as email_gen_error:
                                         logger.error(f"Error generating email for lead {lead_id}: {email_gen_error}")
                                         # Fallback email
@@ -1214,7 +1311,9 @@ Return a JSON object with:
                                     email_subject = f"Thank you for contacting {business_name}"
                                     email_body = f"<p>Dear {lead_name},</p><p>Thank you for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
                                 
-                                # Final safety check: replace any remaining placeholders
+                                # Final safety check: ensure default strings exist before replacements
+                                email_subject = str(email_subject or f"Thank you for contacting {business_name}")
+                                email_body = str(email_body or f"<p>Dear {lead_name}, thank you for contacting {business_name}!</p>")
                                 email_subject = email_subject.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
                                 email_body = email_body.replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
                                 email_subject = email_subject.replace("{business_name}", business_name)
@@ -1819,10 +1918,10 @@ async def generate_email(
         profile_data = profile.data[0] if profile.data else {}
         
         # Prepare business context
-        business_name = profile_data.get("business_name", "our business")
-        business_description = profile_data.get("business_description", "")
-        brand_voice = profile_data.get("brand_voice", "professional")
-        brand_tone = profile_data.get("brand_tone", "friendly")
+        business_name = profile_data.get("business_name") or "our business"
+        business_description = profile_data.get("business_description") or ""
+        brand_voice = profile_data.get("brand_voice") or "professional"
+        brand_tone = profile_data.get("brand_tone") or "friendly"
         
         # Prepare lead context
         lead_name = lead_data.get("name", "there")

@@ -32,7 +32,6 @@ BASE_META_OAUTH_SCOPES: List[str] = [
     "ads_management",
     "ads_read",
     "business_management",
-    "meta_oembed_read",
 ]
 
 OPTIONAL_META_OAUTH_SCOPES: List[str] = []
