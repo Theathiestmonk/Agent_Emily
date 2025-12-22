@@ -1099,7 +1099,7 @@ const Chatbot = React.forwardRef(({ profile, isCallActive = false, callStatus = 
   const getAuthToken = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     return session?.access_token
-  }
+}
 
   const handleFileUpload = async (file) => {
     if (!file) return

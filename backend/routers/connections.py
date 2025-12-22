@@ -1600,7 +1600,8 @@ def generate_oauth_url(platform: str, state: str) -> str:
         scope_string = get_meta_scope_string()
         
         # Build OAuth URL with config_id if available
-        oauth_url = f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope={scope_string}"
+        # Updated scopes to include read_insights for comprehensive analytics access
+        oauth_url = f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=pages_manage_posts,pages_read_engagement,pages_show_list,ads_read,ads_management,business_management,read_insights"
         
         if facebook_config_id:
             oauth_url += f"&config_id={facebook_config_id}"
@@ -1615,7 +1616,19 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # Use Instagram redirect URI for Instagram OAuth
         instagram_redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/instagram/callback"
         
-        scope_string = get_meta_scope_string()
+        # Instagram for Business requires specific scopes
+        # Based on Facebook's official documentation and Zapier's implementation
+        instagram_scopes = [
+            "pages_show_list",           # List Facebook Pages
+            "pages_read_engagement",     # Read page engagement data
+            "instagram_basic",           # Basic Instagram account info
+            "instagram_content_publish", # Publish to Instagram
+            "pages_manage_posts",        # Manage page posts
+            "business_management",       # Business management
+            "instagram_manage_insights"  # Read Instagram insights and analytics
+        ]
+        
+        scope_string = ",".join(instagram_scopes)
         
         return f"{base_url}?client_id={client_id}&redirect_uri={instagram_redirect_uri}&state={state}&scope={scope_string}"
 
@@ -4749,9 +4762,9 @@ async def test_instagram_pages(
 
         
         
-        # Test with more comprehensive scopes
+        # Test with more comprehensive scopes (including insights)
 
-        test_oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri=https://agent-emily.onrender.com/connections/auth/instagram/callback&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts"
+        test_oauth_url = f"https://www.facebook.com/v18.0/dialog/oauth?client_id={facebook_app_id}&redirect_uri=https://agent-emily.onrender.com/connections/auth/instagram/callback&state={state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,pages_manage_posts,instagram_manage_insights"
 
         
         
