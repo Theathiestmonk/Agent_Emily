@@ -1686,11 +1686,38 @@ META_INSIGHTS_METRICS = [
 ]
 
 
+def log_debug_token(access_token: str, platform: str, page_id: str):
+    """Log the scopes and metadata of a Facebook access token."""
+    app_id = os.getenv("FACEBOOK_CLIENT_ID")
+    app_secret = os.getenv("FACEBOOK_CLIENT_SECRET")
+
+    if not app_id or not app_secret:
+        print("⚠️ Cannot debug Facebook token because FACEBOOK_CLIENT_ID or CLIENT_SECRET is missing.")
+        return
+
+    app_token = f"{app_id}|{app_secret}"
+    debug_url = "https://graph.facebook.com/debug_token"
+    params = {
+        "input_token": access_token,
+        "access_token": app_token
+    }
+
+    try:
+        response = httpx.get(debug_url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json().get("data", {})
+        print(f"🔍 Token debug for {platform}/{page_id}: scopes={data.get('scopes')}, is_valid={data.get('is_valid')}, expires_at={data.get('expires_at')}, user_id={data.get('user_id')}, app_id={data.get('app_id')}")
+    except Exception as exc:
+        print(f"❌ Failed to debug token for {platform}/{page_id}: {exc}")
+
+
 def record_platform_metrics(user_id: str, platform: str, page_id: str, page_name: str, access_token: str):
     """Fetch analytics via Graph API and store them after a connection completes."""
     if not page_id or not access_token:
         print(f"⚠️ Missing page_id/access_token for metrics (user={user_id}, platform={platform})")
         return
+
+    log_debug_token(access_token, platform, page_id)
 
     metrics = fetch_page_metrics(page_id, access_token)
     if not metrics:
