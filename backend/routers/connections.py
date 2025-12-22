@@ -17,6 +17,7 @@ import httpx
 from supabase import create_client, Client
 
 from dotenv import load_dotenv
+from .meta_scopes import get_meta_oauth_scopes, get_meta_scope_string
 
 
 
@@ -1478,43 +1479,6 @@ def generate_pkce_params():
     
     return code_verifier, code_challenge
 
-META_OAUTH_SCOPES = [
-    "pages_manage_metadata",
-    "pages_messaging",
-    "pages_public_metadata_access",
-    "pages_public_content_access",
-    "whatsapp_business_manage_events",
-    "instagram_manage_upcoming_events",
-    "instagram_branded_content_ads_brand",
-    "instagram_manage_events",
-    "meta_oembed_read",
-    "instagram_business_manage_messages",
-    "instagram_business_manage_comments",
-    "whatsapp_business_messaging",
-    "pages_manage_engagement",
-    "instagram_manage_comments",
-    "instagram_manage_messages",
-    "instagram_public_content_access",
-    "ads_management_standard_access",
-    "pages_read_engagement",
-    "pages_show_list",
-    "instagram_basic",
-    "ads_management",
-    "ads_read",
-    "instagram_content_publish",
-    "business_management",
-    "pages_manage_posts",
-    "read_insights",
-    "whatsapp_business_management",
-    "instagram_business_manage_insights",
-    "instagram_business_content_publish",
-    "pages_manage_ads",
-    "instagram_manage_insights",
-    "leads_retrieval",
-    "page_events",
-]
-
-
 def generate_oauth_url(platform: str, state: str) -> str:
 
     """Generate OAuth URL for platform"""
@@ -1633,7 +1597,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
 
         # Get Facebook Login for Business config_id from environment
         facebook_config_id = os.getenv('FACEBOOK_CONFIG_ID')
-        scope_string = ",".join(META_OAUTH_SCOPES)
+        scope_string = get_meta_scope_string()
         
         # Build OAuth URL with config_id if available
         oauth_url = f"{base_url}?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope={scope_string}"
@@ -1651,7 +1615,7 @@ def generate_oauth_url(platform: str, state: str) -> str:
         # Use Instagram redirect URI for Instagram OAuth
         instagram_redirect_uri = f"{os.getenv('API_BASE_URL', '').rstrip('/')}/connections/auth/instagram/callback"
         
-        scope_string = ",".join(META_OAUTH_SCOPES)
+        scope_string = get_meta_scope_string()
         
         return f"{base_url}?client_id={client_id}&redirect_uri={instagram_redirect_uri}&state={state}&scope={scope_string}"
 
