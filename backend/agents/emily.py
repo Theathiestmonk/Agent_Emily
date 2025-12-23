@@ -1116,12 +1116,14 @@ class IntentBasedChatbot:
             logger.info(f"Preserving existing valid insight_type: {existing_insight_type}")
         else:
             # Normalize from extracted value
-            # CRITICAL: Do NOT default to "analytics" - return None if unclear
-            # This will trigger missing fields check to ask user for clarification
+            # Default to "insight" for post-level analytics if not specified
             normalized_insight_type = self._normalize_insight_type(insight_type)
             if normalized_insight_type:
                 normalized["insight_type"] = normalized_insight_type
-            # If None, don't set it - let missing fields check handle it
+            elif analytics_dict.get("analytics_level") == "post":
+                # Default to "insight" for post-level queries
+                normalized["insight_type"] = "insight"
+            # If None and not post-level, don't set it - let missing fields check handle it
         
         # 2. Normalize source (FIX 3: platform implies source, FIX 6: preserve if valid)
         existing_source = analytics_dict.get("source")
@@ -1293,21 +1295,68 @@ class IntentBasedChatbot:
         missing.sort(key=lambda x: x.get("priority", 999))
         return missing
     
+    def _llm_classify_analytics_vs_insight(self, user_query: str) -> Optional[str]:
+        """
+        Use LLM to accurately classify analytics vs insight intent.
+        
+        This provides better accuracy than keyword matching for ambiguous queries.
+        """
+        try:
+            classification_prompt = f"""You are an expert at classifying user queries for analytics systems.
+
+Your task: Classify the user query as either "analytics" or "insight".
+
+ANALYTICS means:
+- User wants HISTORICAL data with TIME PERIODS (e.g., "last 7 days", "last month")
+- User wants COMPARISONS or TRENDS over time (e.g., "compare", "growth", "trend")
+- User wants AGGREGATED data from past periods (e.g., "how many likes in last week")
+- User explicitly says "analytics", "analysis", "historical data"
+- Examples: "last 7 days analytics", "compare last month", "growth trend", "historical performance"
+
+INSIGHT means:
+- User wants CURRENT/LIVE status (e.g., "current", "right now", "latest")
+- User wants REAL-TIME data (e.g., "live", "real-time", "how is my post performing now")
+- User asks about PRESENT state without time periods (e.g., "how is my Instagram doing?")
+- User asks "how did my post perform?" (singular, present-focused)
+- Examples: "current status", "latest post performance", "how is my Instagram doing?", "right now how many likes"
+
+CRITICAL RULES:
+1. If query mentions TIME PERIODS (last 7 days, last month, etc.) → ANALYTICS
+2. If query mentions COMPARISON or GROWTH → ANALYTICS
+3. If query asks about CURRENT/LIVE status without time periods → INSIGHT
+4. If query asks "how did X perform?" (singular, present-focused) → INSIGHT
+5. If query asks "how many X in last Y days?" → ANALYTICS
+
+User Query: "{user_query}"
+
+Respond with ONLY one word: "analytics" or "insight"
+Do not include any explanation or additional text."""
+
+            response = self.llm.invoke([HumanMessage(content=classification_prompt)])
+            classified = response.content.strip().lower()
+            
+            # Validate response
+            if classified in ["analytics", "insight"]:
+                return classified
+            else:
+                logger.warning(f"LLM returned invalid classification: {classified}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error in LLM classification: {e}")
+            return None
+
     def _detect_analytics_vs_insight(self, user_query: str) -> Optional[str]:
         """
-        PHASE 4: Detect if user wants analytics or insight.
+        PHASE 4: Detect if user wants analytics or insight using LLM + keyword fallback.
         
         ANALYTICS (Historical + Comparative from Supabase Cache):
-        - English: "analytics", "show data", "last 7 days", "historical", "compare", "trend"
-        - Hindi: "analytics dikha", "data de", "pichle 7 din", "compare", "trend"
-        - Focus: Historical data with period comparison from Supabase cache
-        - Examples: "mere last 7 din me kitne likes aaye?", "last week ka analytics dikha"
+        - Historical data with period comparison from Supabase cache
+        - Examples: "last 7 days", "compare", "trend", "growth", "historical data"
         
         INSIGHT (Live/Latest from Platform API):
-        - English: "current", "latest", "right now", "live", "real-time", "today", "kaisa chal raha"
-        - Hindi: "abhi", "latest", "real-time", "aaj ka", "current", "kaisa hai"
-        - Focus: Fresh data fetched directly from platform API (real-time status)
-        - Examples: "abhi kitne likes hai?", "current status kya hai?", "instagram kaisa chal raha hai?"
+        - Fresh data fetched directly from platform API (real-time status)
+        - Examples: "current", "latest", "right now", "live", "how is my post performing"
         
         Args:
             user_query: User's query string
@@ -1320,6 +1369,16 @@ class IntentBasedChatbot:
         
         query_lower = user_query.lower().strip()
         
+        # First, try LLM-based classification for better accuracy
+        try:
+            llm_result = self._llm_classify_analytics_vs_insight(user_query)
+            if llm_result:
+                logger.info(f"🤖 LLM classified insight_type: {llm_result}")
+                return llm_result
+        except Exception as e:
+            logger.warning(f"LLM classification failed: {e}, falling back to keyword detection")
+        
+        # Fallback to keyword-based detection
         # STRONG ANALYTICS indicators (high weight)
         strong_analytics_patterns = [
             # Time period patterns (STRONGEST indicators)
@@ -1672,7 +1731,7 @@ class IntentBasedChatbot:
             from agents.tools.Orion_Analytics_query import analyze_post_performance
             
             user_id = state.get("user_id")
-            num_posts = analytics_dict.get("num_posts", 5)
+            num_posts = analytics_dict.get("num_posts", 1)  # Default to 1 post
             
             # Get platform (required)
             platform_list = analytics_dict.get("platform", [])
@@ -1687,10 +1746,15 @@ class IntentBasedChatbot:
             # Use first platform
             platform = platform_list[0]
             
-            logger.info(f"📊 Executing post-comparison analysis: platform={platform}, num_posts={num_posts}")
+            # Get metrics from analytics_dict (use requested metrics only)
+            metrics = analytics_dict.get("metrics", [])
+            if not isinstance(metrics, list):
+                metrics = [metrics] if metrics else []
             
-            # Call Orion's post-comparison function
-            result = analyze_post_performance(user_id, platform, num_posts)
+            logger.info(f"📊 Executing post-comparison analysis: platform={platform}, num_posts={num_posts}, metrics={metrics}")
+            
+            # Call Orion's post-comparison function with metrics
+            result = analyze_post_performance(user_id, platform, num_posts, metrics=metrics if metrics else None)
             
             # Check for errors
             if not result or result.get("type") != "post_comparison":
@@ -1722,92 +1786,76 @@ class IntentBasedChatbot:
     ) -> str:
         """
         Converts Orion's structured post-comparison output into a
-        number-backed, analytical, human-friendly explanation.
+        STRICT, data-driven response with NO fabricated analytics.
         """
         try:
             posts = result.get("posts", [])
-            confidence = result.get("confidence", "low")
-
-            num_found = len(posts)
+            summary = result.get("summary", {})
+            num_found = summary.get("num_posts_found", len(posts))
+            num_requested = summary.get("num_posts_requested", num_posts)
+            
             response = []
 
             # ---------- HEADER ----------
-            response.append(f"**{platform.title()} – Recent Posts Analysis**")
-
-            if num_found < num_posts:
-                response.append(
-                    f"Only **{num_found} post{'s' if num_found != 1 else ''}** found "
-                    f"(requested {num_posts}). Insights below are **directional**, not conclusive."
-                )
-
-            # ---------- POST-WISE NUMBERS ----------
-            engagements = []
-            response.append("\n**Post-wise performance breakdown:**")
-
-            for i, post in enumerate(posts[:min(num_posts, 7)], 1):
-                metrics = post.get("metrics", {})
-
-                likes = metrics.get("likes") or 0
-                comments = metrics.get("comments") or 0
-                shares = metrics.get("shares") or 0
-                views = metrics.get("views") or 0
-
-                total_engagement = likes + comments + shares
-                engagements.append(total_engagement)
-
-                response.append(
-                    f"• **Post {i}** → "
-                    f"{likes} likes, {comments} comments"
-                    + (f", {shares} shares" if shares else "")
-                    + (f", {views} views" if views else "")
-                    + f" → **{total_engagement} total interactions**"
-                )
-
-            # ---------- NUMERIC COMPARISON ----------
-            if len(engagements) >= 2:
-                best = max(engagements)
-                worst = min(engagements)
-
-                response.append("\n**Performance comparison:**")
-
-                if worst > 0:
-                    ratio = round(best / worst, 1)
-                    response.append(
-                        f"• The best-performing post received approximately "
-                        f"**{ratio}× more interactions** than the lowest-performing post."
-                    )
-                else:
-                    response.append(
-                        "• One post attracted nearly all engagement, while another received almost none."
-                    )
-
-            # ---------- INTERPRETATION ----------
-            response.append("\n**What this indicates:**")
-            if num_found < 3:
-                response.append(
-                    "• With very limited data, engagement appears uneven across posts. "
-                    "This usually points to content or format differences rather than audience fatigue."
-                )
+            if num_found == 1:
+                response.append(f"**{platform.title()} – Last Post Performance**")
             else:
-                response.append(
-                    "• Some posts are consistently driving more engagement than others."
-                )
+                response.append(f"**{platform.title()} – Last {num_requested} Posts Performance**")
 
-            # ---------- ACTIONS ----------
-            response.append("\n**What you should do next:**")
-            if num_found < 3:
-                response.append("• Publish 3–5 more posts to unlock stronger patterns")
-            response.append("• Replicate the structure or idea of the highest-performing post")
-            response.append("• Avoid repeating formats that received little to no interaction")
+            # ---------- POST COUNT CLARITY ----------
+            if num_found < num_requested:
+                response.append(f"\nPosts Found: {num_found} (requested {num_requested})")
 
-            # ---------- CONFIDENCE ----------
-            confidence_msg = {
-                "high": f"High confidence (based on {num_found} posts)",
-                "medium": f"Medium confidence (based on {num_found} posts)",
-                "low": f"Low confidence (only {num_found} post{'s' if num_found != 1 else ''} available)"
-            }.get(confidence, "Confidence unknown")
+            # ---------- METRICS ANALYZED (from actual data) ----------
+            if posts:
+                # Extract metrics from first post
+                first_post_metrics = posts[0].get("metrics", {})
+                if not first_post_metrics:
+                    # Check direct keys
+                    excluded = ["post_id", "caption", "permalink", "timestamp", "label", "score", "ratio_vs_avg", "metadata"]
+                    first_post_metrics = {k: v for k, v in posts[0].items() if k not in excluded and isinstance(v, (int, float))}
+                
+                metrics_list = list(first_post_metrics.keys())
+                if metrics_list:
+                    response.append(f"\nMetrics Analyzed: {', '.join(metrics_list)}")
 
-            response.append(f"\n*{confidence_msg}*")
+            # ---------- POST-WISE BREAKDOWN (STRICT: Only real metrics) ----------
+            if num_found == 1:
+                response.append("\n--- Post Metrics ---")
+            else:
+                response.append("\n--- Post-wise Breakdown ---")
+
+            for i, post in enumerate(posts[:num_requested], 1):
+                post_metrics = post.get("metrics", {})
+                if not post_metrics:
+                    excluded = ["post_id", "caption", "permalink", "timestamp", "label", "score", "ratio_vs_avg", "metadata"]
+                    post_metrics = {k: v for k, v in post.items() if k not in excluded and isinstance(v, (int, float))}
+                
+                if num_found > 1:
+                    response.append(f"\nPost {i}:")
+                
+                # Show only actual metrics (no fabricated scores)
+                for metric, value in post_metrics.items():
+                    if isinstance(value, (int, float)):
+                        response.append(f"  {metric.title()}: {value:,}")
+
+            # ---------- NOTE (ONLY if relevant) ----------
+            response.append("\n\nNote:")
+            if num_found < num_requested:
+                response.append(f"• Only {num_found} post{'s' if num_found != 1 else ''} available (requested {num_requested})")
+            
+            if num_found < 2:
+                response.append("• This is a live snapshot of your most recent post")
+                response.append("• Comparative analysis requires multiple posts")
+            elif num_found < 3:
+                response.append("• No ranking or averages were generated due to insufficient data")
+            
+            # Only show comparison if we have enough data
+            comparison = result.get("comparison")
+            if comparison and num_found >= 2:
+                ratio = comparison.get("best_vs_worst_ratio")
+                if ratio and ratio > 1:
+                    response.append(f"• Top post received {ratio:.1f}x more engagement than lowest post")
 
             return "\n".join(response)
 
@@ -3145,17 +3193,81 @@ Return ONLY valid JSON matching the IntentPayload structure. No explanations, no
                     if not isinstance(blog_metrics, list): blog_metrics = [blog_metrics] if blog_metrics else []
                     metrics = list(set(metrics + blog_metrics))
                 
+                # ===================================================================
+                # DETERMINISTIC POST SELECTOR INFERENCE (STRICT ORDER)
+                # ===================================================================
+                user_query = state.get("current_query", "").lower()
+                post_selector = None
+                post_id = None
+                recent_n = None
+                
+                # Post selector inference (DO NOT use LLM guessing here)
+                if "last post" in user_query or "latest post" in user_query or "recent post" in user_query or "my post" in user_query:
+                    post_selector = "latest"
+                elif "top post" in user_query or "best post" in user_query or "highest performing" in user_query:
+                    post_selector = "top"
+                elif re.search(r'last\s+(\d+)\s+posts', user_query):
+                    match = re.search(r'last\s+(\d+)\s+posts', user_query)
+                    post_selector = "recent_n"
+                    recent_n = int(match.group(1))
+                elif analytics_dict.get("post_id"):
+                    post_selector = "specific_id"
+                    post_id = analytics_dict.get("post_id")
+                
+                # ===================================================================
+                # ANALYTICS LEVEL LOCKING
+                # ===================================================================
+                analytics_level = analytics_dict.get("analytics_level", "post")
+                if any(word in user_query for word in ["post", "reel", "video"]):
+                    analytics_level = "post"
+                else:
+                    analytics_level = "account"
+                
+                # ===================================================================
+                # INTENT LOCK (Insight vs Analytics) - Use LLM for better accuracy
+                # ===================================================================
+                intent = analytics_dict.get("insight_type")
+                if not intent:
+                    # Use LLM classification for better accuracy
+                    intent = self._detect_analytics_vs_insight(user_query)
+                    if not intent:
+                        # Fallback: Default to insight for post-level, analytics for account-level
+                        intent = "insight" if analytics_level == "post" else "analytics"
+                else:
+                    # Use existing intent but validate
+                    if intent not in ["analytics", "insight"]:
+                        # Re-classify if invalid
+                        intent = self._detect_analytics_vs_insight(user_query) or "insight"
+                
+                # ===================================================================
+                # METRICS ARE MANDATORY
+                # ===================================================================
+                if not metrics or len(metrics) == 0:
+                    if analytics_level == "post" and platforms:
+                        # Use platform-specific post metrics
+                        platform = platforms[0] if isinstance(platforms, list) else platforms
+                        if platform in self.PLATFORM_POST_METRICS:
+                            metrics = self.PLATFORM_POST_METRICS[platform]
+                        else:
+                            metrics = ["likes", "comments", "engagement"]
+                    else:
+                        # Default account metrics
+                        metrics = ["reach", "impressions", "engagement"]
+                
                 # Construct State Object
                 analytics_state = AnalyticsState(
-                    intent=analytics_dict.get("insight_type"),
+                    intent=intent,
                     source=analytics_dict.get("source"),
                     platforms=platforms,
                     metrics=metrics,
-                    analytics_level=analytics_dict.get("analytics_level", "post"),
+                    analytics_level=analytics_level,
                     user_id=user_id,
                     date_range=analytics_dict.get("date_range"),
                     top_n=analytics_dict.get("top_n"),
-                    sort_order=analytics_dict.get("sort_order")
+                    sort_order=analytics_dict.get("sort_order"),
+                    post_selector=post_selector,
+                    post_id=post_id,
+                    recent_n=recent_n
                 )
                 
                 logger.info(f"🚀 Routing to Orion with State: {analytics_state.model_dump_json()}")
@@ -3432,113 +3544,77 @@ Return ONLY valid JSON matching the IntentPayload structure. No explanations, no
                 else:
                     response.append("[High Confidence] Analysis based on sufficient data - insights are reliable.\n")
                 
-                # ---------- EXECUTIVE SUMMARY ----------
+                # ---------- HEADER WITH POST COUNT ----------
                 summary = p_data.get("summary", {})
-                avg_score = summary.get("avg_score", 0)
-                response.append(f"Posts Analyzed: {num_found}")
-                response.append(f"Average Performance Score: {avg_score:.2f}/1.00\n")
+                num_requested = summary.get("num_posts_requested", num_found)
                 
-                # ---------- POST RANKINGS ----------
-                response.append("--- Post Rankings ---\n")
-                for i, post in enumerate(posts[:7], 1):
-                    caption = post.get("caption", "No caption")
-                    label = post.get("label", "Average")
-                    
-                    # Clean performance indicator
-                    performance_tag = ""
-                    if label == "Best":
-                        performance_tag = "[Top Performer]"
-                    elif label == "Good":
-                        performance_tag = "[Above Average]"
-                    elif label == "Poor":
-                        performance_tag = "[Needs Improvement]"
-                    else:
-                        performance_tag = "[Average]"
-                    
-                    # Dynamic metric display: only show metrics found in the post object
-                    # We skip metadata keys like post_id, caption, permalink, timestamp, label, score
-                    excluded_keys = ["post_id", "caption", "permalink", "timestamp", "label", "score", "ratio_vs_avg", "metrics_used", "latest_date", "metadata"]
-                    metric_info = []
-                    
-                    # Priority order for display if multiple found
-                    priority = ["engagement", "likes", "comments", "shares", "reach", "impressions"]
-                    
-                    # Get actual metrics present in post
-                    found_metrics = [k for k in post.keys() if k not in excluded_keys]
-                    # Sort by priority
-                    found_metrics.sort(key=lambda x: priority.index(x) if x in priority else 99)
-                    
-                    for k in found_metrics:
-                        v = post[k]
-                        if isinstance(v, (int, float)):
-                            metric_info.append(f"{v:,} {k.replace('_', ' ')}")
-                    
-                    metric_str = " | ".join(metric_info) if metric_info else "Data fetched"
-                    
-                    response.append(
-                        f"{i}. {caption[:40]}{'...' if len(caption) > 40 else ''}\n"
-                        f"   {metric_str} {performance_tag}"
-                    )
-                
-                # ---------- PERFORMANCE INSIGHTS ----------
-                if confidence != "low" and len(posts) >= 2:
-                    response.append("\n--- Performance Insights ---\n")
-                    
-                    comparison = p_data.get("comparison", {})
-                    ratio = comparison.get("best_vs_worst_ratio")
-                    
-                    if ratio and ratio > 1:
-                        response.append(f"Performance Spread: Your top post received {ratio:.1f}x more engagement than your lowest post.")
-                        if ratio >= 3:
-                            response.append("This indicates significant audience preference for certain content types.")
-                        elif ratio >= 2:
-                            response.append("This shows moderate variation in content performance.")
-                        else:
-                            response.append("Your posts perform relatively consistently.")
-                
-                # ---------- KEY FACTORS ----------
-                reasons = p_data.get("reasons", [])
-                if reasons:
-                    response.append("\n--- Success Factors Identified ---\n")
-                    for idx, reason in enumerate(reasons, 1):
-                        evidence = reason.get("evidence", {})
-                        if isinstance(evidence, dict):
-                            feat_name = evidence.get("feature_name", "Content")
-                            best = evidence.get("best_category")
-                            worst = evidence.get("worst_category")
-                            ratio = evidence.get("ratio", 1.0)
-                            
-                            if best and worst and ratio >= 1.5:
-                                response.append(
-                                    f"{idx}. {feat_name}: '{best}' outperforms '{worst}' by {ratio:.1f}x"
-                                )
-                            elif ratio >= 1.5:
-                                response.append(
-                                    f"{idx}. {feat_name}: Posts with this feature perform {ratio:.1f}x better"
-                                )
-                
-                # ---------- RECOMMENDATIONS ----------
-                response.append("\n--- What To Do Next ---\n")
-                if confidence == "low":
-                    response.append("1. Create at least 3-5 more posts to establish clearer patterns")
-                    response.append("2. Try different content formats to see what resonates")
+                if num_found < num_requested:
+                    response.append(f"Posts Found: {num_found} (requested {num_requested})\n")
                 else:
-                    # Identify top post characteristics
-                    if posts:
-                        top_post = posts[0]
-                        response.append(f"1. Study your top post (Post #{posts.index(top_post) + 1}) and identify what made it successful")
-                    
-                    response.append("2. Replicate the format and style of your best-performing content")
-                    
-                    if reasons:
-                        response.append("3. Focus on the success factors identified above in your next posts")
-                    
-                    # Add specific tactical advice
-                    bottom_posts = [p for p in posts if p.get("label") == "Poor"]
-                    if bottom_posts:
-                        response.append("4. Avoid repeating the format of posts that received minimal engagement")
+                    response.append(f"Posts Analyzed: {num_found}\n")
                 
-                response.append("\n" + "=" * 50 + "\n")
+                # Only show rankings if multiple posts exist
+                if num_found < 2:
+                    response.append("--- Post Metrics ---\n")
+                else:
+                    response.append("--- Post-wise Breakdown ---\n")
+                # Show metrics for each post (STRICT: Only show requested metrics)
+                requested_metrics = state.metrics if state else []
+                
+                for i, post in enumerate(posts[:num_requested], 1):
+                    # Get metrics from post (check both direct keys and nested metrics dict)
+                    post_metrics = post.get("metrics", {})
+                    if not post_metrics:
+                        # If no nested metrics, check direct keys
+                        excluded_keys = ["post_id", "caption", "permalink", "timestamp", "label", "score", "ratio_vs_avg", "metrics_used", "latest_date", "metadata"]
+                        post_metrics = {k: v for k, v in post.items() if k not in excluded_keys and isinstance(v, (int, float))}
+                    
+                    # Build metric display (only show requested metrics or all if none specified)
+                    metric_info = []
+                    if requested_metrics:
+                        for metric in requested_metrics:
+                            if metric in post_metrics:
+                                value = post_metrics[metric]
+                                metric_info.append(f"{metric.title()}: {value:,}")
+                    else:
+                        # Show all available metrics
+                        for metric, value in post_metrics.items():
+                            if isinstance(value, (int, float)):
+                                metric_info.append(f"{metric.title()}: {value:,}")
+                    
+                    if not metric_info:
+                        metric_info = ["No metrics available"]
+                    
+                    # Format post display
+                    if num_found > 1:
+                        response.append(f"Post {i}:")
+                    
+                    for metric_line in metric_info:
+                        response.append(f"  {metric_line}")
+                    
+                    response.append("")  # Empty line between posts
+                
+                # ---------- NOTES (ONLY if relevant) ----------
+                response.append("\nNote:")
+                
+                if num_found < num_requested:
+                    response.append(f"• Only {num_found} post{'s' if num_found != 1 else ''} available (requested {num_requested})")
+                
+                if num_found < 2:
+                    response.append("• This is a live snapshot of your most recent post")
+                    response.append("• Comparative analysis requires multiple posts")
+                elif num_found < 3:
+                    response.append("• Limited data available - insights are preliminary")
+                    response.append("• No ranking or averages generated due to insufficient data")
+                else:
+                    # Only show comparison if we have enough data
+                    comparison = p_data.get("comparison")
+                    if comparison:
+                        ratio = comparison.get("best_vs_worst_ratio")
+                        if ratio and ratio > 1:
+                            response.append(f"• Top post received {ratio:.1f}x more engagement than lowest post")
+                
+                response.append("")
 
             return "\n".join(response).strip() or "Unable to generate analysis - insufficient post data available."
             

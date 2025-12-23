@@ -348,7 +348,101 @@ def _handle_social_media_analytics(state: AnalyticsState, user_id: str) -> Dict[
 
 def _handle_post_level_analytics(state: AnalyticsState, user_id: str) -> Dict[str, Any]:
     """
-    Handle POST-LEVEL analytics: Fetch, sort, and rank individual posts.
+    Handle POST-LEVEL analytics: Route based on post_selector (deterministic).
+    """
+    try:
+        selector = state.post_selector
+        
+        # Route based on post_selector (STRICT ROUTING - NO DEFAULT RANKING)
+        if selector == "latest":
+            return _handle_latest_post_insight(state, user_id)
+        elif selector == "top":
+            return _handle_top_posts(state, user_id)
+        elif selector == "recent_n":
+            return _handle_recent_n_posts(state, user_id)
+        elif selector == "specific_id":
+            return _handle_specific_post(state, user_id)
+        else:
+            # Fallback: If no selector specified, default to latest (most common case)
+            logger.warning(f"⚠️ No post_selector specified, defaulting to 'latest'")
+            return _handle_latest_post_insight(state, user_id)
+        
+    except Exception as e:
+        logger.error(f"Error in _handle_post_level_analytics: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": f"I couldn't fetch post data due to an error ({str(e)})."
+        }
+
+
+
+
+
+def _handle_latest_post_insight(state: AnalyticsState, user_id: str) -> Dict[str, Any]:
+    """
+    Handle LATEST POST insight: Fetch most recent post only (NO RANKING).
+    """
+    try:
+        platforms = state.platforms
+        metrics = state.metrics or ["likes", "comments", "engagement"]
+        
+        if not platforms:
+            return {"success": False, "error": "No platforms specified."}
+        
+        platform = platforms[0] if isinstance(platforms, list) else platforms
+        platform_str = str(platform).strip().lower()
+        
+        # Get platform connection
+        connection = get_platform_connection(user_id, platform_str)
+        if not connection:
+            return {"success": False, "error": f"No connection found for {platform_str}."}
+        
+        # Fetch latest post only (limit=1, NO SORTING)
+        posts = None
+        if platform_str == "instagram":
+            posts = fetch_instagram_posts(connection, metrics, limit=1)
+        elif platform_str == "facebook":
+            posts = fetch_facebook_posts(connection, metrics, limit=1)
+        else:
+            return {"success": False, "error": f"Platform {platform_str} not supported for latest post."}
+        
+        if not posts or len(posts) == 0:
+            return {"success": False, "error": "No posts found."}
+        
+        # Return latest post with metrics (numbers first)
+        latest_post = posts[0]
+        post_metrics = {}
+        for metric in metrics:
+            if metric in latest_post:
+                post_metrics[metric] = latest_post[metric]
+            elif metric == "engagement":
+                # Calculate engagement if not present
+                post_metrics["engagement"] = (latest_post.get("likes", 0) or 0) + (latest_post.get("comments", 0) or 0)
+        
+        return {
+            "success": True,
+            "type": "latest_post",
+            "data": {
+                platform_str: {
+                    "post_id": latest_post.get("post_id"),
+                    "caption": latest_post.get("caption", "")[:100] if latest_post.get("caption") else "",
+                    "permalink": latest_post.get("permalink", ""),
+                    "timestamp": latest_post.get("timestamp", ""),
+                    "metrics": post_metrics  # Numbers first
+                }
+            },
+            "confidence": "LOW",
+            "note": "Live snapshot of most recent post"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in _handle_latest_post_insight: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+def _handle_top_posts(state: AnalyticsState, user_id: str) -> Dict[str, Any]:
+    """
+    Handle TOP POSTS: Explicit ranking by metrics (ONLY when explicitly requested).
     """
     try:
         metrics = state.metrics or ["likes", "comments", "engagement"]
@@ -356,10 +450,11 @@ def _handle_post_level_analytics(state: AnalyticsState, user_id: str) -> Dict[st
         sort_order = state.sort_order or "desc"
         platforms = state.platforms
         
-        logger.info(f"🔍 Post Analysis for {platforms}, top_n={top_n}, sort={sort_order}")
+        logger.info(f"🔍 Top Posts Analysis for {platforms}, top_n={top_n}, sort={sort_order}")
         
         if not platforms:
-            return {"success": False, "message": "No platforms specified for post analysis."}
+            return {"success": False, "error": "No platforms specified for post analysis."}
+        
         # Determine primary metric for sorting
         primary_metric = metrics[0] if metrics else "engagement"
         logger.info(f"🎯 Sorting posts by: {primary_metric} (order: {sort_order})")
@@ -396,7 +491,7 @@ def _handle_post_level_analytics(state: AnalyticsState, user_id: str) -> Dict[st
                 platforms_without_data.append(platform_str)
                 continue
             
-            # Sort posts by primary metric
+            # Sort posts by primary metric (EXPLICIT RANKING)
             reverse_sort = (sort_order == "desc")
             sorted_posts = sorted(
                 posts,
@@ -421,25 +516,154 @@ def _handle_post_level_analytics(state: AnalyticsState, user_id: str) -> Dict[st
         if not all_ranked_posts:
             return {
                 "success": False,
-                "error": "No posts found with sufficient data to determine ranking. Please ensure your platforms have published posts."
+                "error": "No posts found with sufficient data to determine ranking."
             }
         
-        # Build response
-        # Return keyed by platform so Emily can iterate
         return {
             "success": True,
+            "type": "top_posts",
             "data": all_ranked_posts
         }
         
     except Exception as e:
-        logger.error(f"Error in _handle_post_level_analytics: {e}", exc_info=True)
+        logger.error(f"Error in _handle_top_posts: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+def _handle_recent_n_posts(state: AnalyticsState, user_id: str) -> Dict[str, Any]:
+    """
+    Handle RECENT N POSTS: Chronological order (NO RANKING, NO SORTING).
+    """
+    try:
+        platforms = state.platforms
+        metrics = state.metrics or ["likes", "comments", "engagement"]
+        recent_n = state.recent_n or 5
+        
+        logger.info(f"🔍 Recent {recent_n} Posts Analysis for {platforms}")
+        
+        if not platforms:
+            return {"success": False, "error": "No platforms specified."}
+        
+        all_posts = {}
+        
+        for platform in platforms:
+            platform_str = str(platform).strip().lower()
+            if not platform_str:
+                continue
+            
+            # Get platform connection
+            connection = get_platform_connection(user_id, platform_str)
+            if not connection:
+                logger.warning(f"❌ No connection for {platform_str}")
+                continue
+            
+            # Fetch posts (DO NOT SORT, DO NOT RANK - chronological order)
+            posts = None
+            if platform_str == "instagram":
+                posts = fetch_instagram_posts(connection, metrics, limit=recent_n)
+            elif platform_str == "facebook":
+                posts = fetch_facebook_posts(connection, metrics, limit=recent_n)
+            else:
+                logger.warning(f"⚠️ Platform {platform_str} not supported")
+                continue
+            
+            if not posts or len(posts) == 0:
+                logger.warning(f"❌ No posts found for {platform_str}")
+                continue
+            
+            # Return posts in chronological order (as fetched, NO SORTING)
+            all_posts[platform_str] = {
+                "posts": posts[:recent_n],
+                "total_posts": len(posts)
+            }
+        
+        if not all_posts:
+            return {"success": False, "error": "No posts found."}
+        
         return {
-            "success": False,
-            "error": f"I couldn't fetch post rankings due to an error ({str(e)}). Please ensuring your platforms have recent posts."
+            "success": True,
+            "type": "recent_n_posts",
+            "data": all_posts
         }
+        
+    except Exception as e:
+        logger.error(f"Error in _handle_recent_n_posts: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
 
-
+def _handle_specific_post(state: AnalyticsState, user_id: str) -> Dict[str, Any]:
+    """
+    Handle SPECIFIC POST: Fetch by post_id only.
+    """
+    try:
+        platforms = state.platforms
+        metrics = state.metrics or ["likes", "comments", "engagement"]
+        post_id = state.post_id
+        
+        if not post_id:
+            return {"success": False, "error": "No post_id specified."}
+        
+        if not platforms:
+            return {"success": False, "error": "No platforms specified."}
+        
+        platform = platforms[0] if isinstance(platforms, list) else platforms
+        platform_str = str(platform).strip().lower()
+        
+        # Get platform connection
+        connection = get_platform_connection(user_id, platform_str)
+        if not connection:
+            return {"success": False, "error": f"No connection found for {platform_str}."}
+        
+        # Fetch specific post by ID
+        # Note: This requires platform-specific implementation
+        # For now, fetch all posts and filter by post_id
+        posts = None
+        if platform_str == "instagram":
+            posts = fetch_instagram_posts(connection, metrics, limit=100)
+        elif platform_str == "facebook":
+            posts = fetch_facebook_posts(connection, metrics, limit=100)
+        else:
+            return {"success": False, "error": f"Platform {platform_str} not supported."}
+        
+        if not posts:
+            return {"success": False, "error": "No posts found."}
+        
+        # Find post by ID
+        specific_post = None
+        for post in posts:
+            if post.get("post_id") == post_id:
+                specific_post = post
+                break
+        
+        if not specific_post:
+            return {"success": False, "error": f"Post with ID {post_id} not found."}
+        
+        # Return specific post with metrics (numbers first)
+        post_metrics = {}
+        for metric in metrics:
+            if metric in specific_post:
+                post_metrics[metric] = specific_post[metric]
+            elif metric == "engagement":
+                # Calculate engagement if not present
+                post_metrics["engagement"] = (specific_post.get("likes", 0) or 0) + (specific_post.get("comments", 0) or 0)
+        
+        return {
+            "success": True,
+            "type": "specific_post",
+            "data": {
+                platform_str: {
+                    "post_id": specific_post.get("post_id"),
+                    "caption": specific_post.get("caption", "")[:100] if specific_post.get("caption") else "",
+                    "permalink": specific_post.get("permalink", ""),
+                    "timestamp": specific_post.get("timestamp", ""),
+                    "metrics": post_metrics  # Numbers first
+                }
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in _handle_specific_post: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
 
 def _handle_account_analytics(state: AnalyticsState, user_id: str) -> Dict[str, Any]:
@@ -2263,22 +2487,44 @@ def fetch_instagram_posts(
         
         # Fetch media (posts)
         media_url = f"https://graph.facebook.com/v18.0/{instagram_account_id}/media"
-        # Include insights for reach/impressions as requested for sorting
-        media_fields = "id,caption,media_type,permalink,timestamp,like_count,comments_count,insights.metric(impressions,reach)"
+        # Try with insights first (requires instagram_manage_insights permission)
+        # If that fails, fallback to basic fields without insights
+        media_fields_with_insights = "id,caption,media_type,permalink,timestamp,like_count,comments_count,insights.metric(impressions,reach)"
+        media_fields_basic = "id,caption,media_type,permalink,timestamp,like_count,comments_count"
         
+        # Try with insights first
         media_resp = requests.get(
             media_url,
             params={
                 "access_token": access_token,
-                "fields": media_fields,
+                "fields": media_fields_with_insights,
                 "limit": limit
             },
             timeout=15
         )
         
+        # If insights request fails due to permissions, fallback to basic fields
         if media_resp.status_code != 200:
-            logger.error(f"❌ Instagram API error: {media_resp.status_code} - {media_resp.text}")
-            return None
+            error_data = media_resp.json() if media_resp.text else {}
+            error_code = error_data.get("error", {}).get("code", 0)
+            
+            # Check if it's a permissions error (code 10 = OAuthException)
+            if error_code == 10:
+                logger.warning(f"⚠️ Instagram insights permission not available, falling back to basic fields")
+                # Retry with basic fields only
+                media_resp = requests.get(
+                    media_url,
+                    params={
+                        "access_token": access_token,
+                        "fields": media_fields_basic,
+                        "limit": limit
+                    },
+                    timeout=15
+                )
+            
+            if media_resp.status_code != 200:
+                logger.error(f"❌ Instagram API error: {media_resp.status_code} - {media_resp.text}")
+                return None
         
         media_data = media_resp.json()
         posts = []
@@ -2350,22 +2596,43 @@ def fetch_facebook_posts(
         
         # Fetch posts
         posts_url = f"https://graph.facebook.com/v18.0/{page_id}/posts"
-        # Include insights for reach/impressions
-        posts_fields = "id,message,created_time,permalink_url,shares,reactions.summary(true),comments.summary(true),insights.metric(post_impressions,post_engaged_users)"
+        # Try with insights first (requires read_insights permission)
+        posts_fields_with_insights = "id,message,created_time,permalink_url,shares,reactions.summary(true),comments.summary(true),insights.metric(post_impressions,post_engaged_users)"
+        posts_fields_basic = "id,message,created_time,permalink_url,shares,reactions.summary(true),comments.summary(true)"
         
+        # Try with insights first
         posts_resp = requests.get(
             posts_url,
             params={
                 "access_token": access_token,
-                "fields": posts_fields,
+                "fields": posts_fields_with_insights,
                 "limit": limit
             },
             timeout=15
         )
         
+        # If insights request fails, fallback to basic fields
         if posts_resp.status_code != 200:
-            logger.error(f"❌ Facebook API error: {posts_resp.status_code} - {posts_resp.text}")
-            return None
+            error_data = posts_resp.json() if posts_resp.text else {}
+            error_code = error_data.get("error", {}).get("code", 0)
+            
+            # Check if it's a permissions or invalid metric error (code 100 or 10)
+            if error_code in [10, 100]:
+                logger.warning(f"⚠️ Facebook insights permission/metric not available, falling back to basic fields")
+                # Retry with basic fields only
+                posts_resp = requests.get(
+                    posts_url,
+                    params={
+                        "access_token": access_token,
+                        "fields": posts_fields_basic,
+                        "limit": limit
+                    },
+                    timeout=15
+                )
+            
+            if posts_resp.status_code != 200:
+                logger.error(f"❌ Facebook API error: {posts_resp.status_code} - {posts_resp.text}")
+                return None
         
         posts_data = posts_resp.json()
         posts = []
@@ -2438,7 +2705,8 @@ def fetch_facebook_posts(
 def analyze_post_performance(
     user_id: str,
     platform: str,
-    num_posts: int = 5
+    num_posts: int = 1,
+    metrics: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     PART 1-7: Complete post-performance comparison system.
@@ -2476,44 +2744,97 @@ def analyze_post_performance(
         # ===================================================================
         # PART 1: DATA SELECTION
         # ===================================================================
-        # Fetch last N unique post_ids ordered by most recent activity
+        # CRITICAL: Post-level analytics/insights MUST always fetch LIVE data from API
+        # Do NOT use cached data - post-level queries need real-time post metrics
         
-        # Step 1: Get unique post_ids with their most recent date
-        result = supabase.table("analytics_snapshots").select(
-            "post_id, date, metric, value, metadata"
-        ).eq(
-            "user_id", user_id
-        ).eq(
-            "platform", platform.lower()
-        ).eq(
-            "source", "social_media"
-        ).not_.is_(
-            "post_id", "null"
-        ).order(
-            "date", desc=True
-        ).execute()
+        logger.info(f"   Fetching live post data from API for post-level analysis...")
+        connection = get_platform_connection(user_id, platform.lower())
+        if not connection:
+            return _error_response("No connection found for platform", "low")
         
-        if not result.data:
-            return _error_response("No post data found", "low")
+        # Default to 1 post if num_posts not specified
+        fetch_limit = num_posts if num_posts and num_posts > 0 else 1
         
-        logger.info(f"   Found {len(result.data)} snapshot records with post_ids")
+        # Use requested metrics, or default to common metrics if not specified
+        if not metrics or len(metrics) == 0:
+            if platform.lower() == "instagram":
+                metrics = ["likes", "comments", "shares", "engagement"]
+            elif platform.lower() == "facebook":
+                metrics = ["likes", "comments", "shares"]
+            else:
+                metrics = ["likes", "comments", "shares"]
         
-        # Step 2: Group by post_id and aggregate metrics
-        posts_data = _aggregate_post_metrics(result.data, num_posts)
+        # Fetch live posts from API with only requested metrics
+        if platform.lower() == "instagram":
+            api_posts = fetch_instagram_posts(connection, metrics, limit=fetch_limit)
+        elif platform.lower() == "facebook":
+            api_posts = fetch_facebook_posts(connection, metrics, limit=fetch_limit)
+        else:
+            return _error_response(f"Live data fetching not supported for {platform}", "low")
         
-        if not posts_data:
-            return _error_response("Could not aggregate post metrics", "low")
+        if not api_posts or len(api_posts) == 0:
+            return _error_response("No posts found from API", "low")
+        
+        # Convert API format to internal format expected by _calculate_performance_scores
+        posts_data = []
+        for post in api_posts[:num_posts]:
+            # Extract metadata if available
+            metadata = {}
+            if post.get("caption"):
+                metadata["caption"] = post.get("caption")
+            timestamp = post.get("timestamp", "")
+            if timestamp:
+                metadata["posted_at"] = timestamp
+            
+            # Use timestamp as latest_date (required by _calculate_performance_scores)
+            latest_date = timestamp if timestamp else datetime.now().isoformat()
+            
+            posts_data.append({
+                "post_id": post.get("post_id"),
+                "metrics": {
+                    "engagement": post.get("engagement", 0),
+                    "likes": post.get("likes", 0),
+                    "comments": post.get("comments", 0),
+                    "shares": post.get("shares", 0),
+                    "reach": post.get("reach", 0) or post.get("impressions", 0)
+                },
+                "metadata": metadata,
+                "latest_date": latest_date  # Required by _calculate_performance_scores
+            })
+        
+        logger.info(f"   Fetched {len(posts_data)} posts from API")
         
         num_posts_found = len(posts_data)
         logger.info(f"   Aggregated data for {num_posts_found} unique posts")
         
         # ===================================================================
-        # PART 2: PERFORMANCE SCORE CALCULATION
+        # CRITICAL: Only calculate scores/comparisons if multiple posts exist
+        # ===================================================================
+        if num_posts_found < 2:
+            # Single post: Return raw metrics only, NO scores/averages
+            single_post = posts_data[0]
+            return {
+                "type": "post_comparison",
+                "posts": [{
+                    "post_id": single_post.get("post_id", "latest"),
+                    "metrics": single_post.get("metrics", {}),
+                    "metadata": single_post.get("metadata", {})
+                }],
+                "num_posts_found": num_posts_found,
+                "num_posts_requested": num_posts,
+                "comparison": None,  # No comparison for single post
+                "reasons": [],  # No reasons for single post
+                "confidence": "low"
+            }
+        
+        # Multiple posts: Calculate comparisons (but only if >= 2 posts)
+        # ===================================================================
+        # PART 2: PERFORMANCE SCORE CALCULATION (ONLY for multiple posts)
         # ===================================================================
         posts_with_scores = _calculate_performance_scores(posts_data)
         
         # ===================================================================
-        # PART 3: AVERAGE & COMPARISON
+        # PART 3: AVERAGE & COMPARISON (ONLY for multiple posts)
         # ===================================================================
         avg_score = sum(p["score"] for p in posts_with_scores) / len(posts_with_scores)
         
@@ -2524,7 +2845,7 @@ def analyze_post_performance(
         logger.info(f"   Average score: {avg_score:.2f}")
         
         # ===================================================================
-        # PART 4: LABEL ASSIGNMENT
+        # PART 4: LABEL ASSIGNMENT (ONLY for multiple posts)
         # ===================================================================
         posts_with_labels = _assign_labels(posts_with_scores)
         
@@ -2532,9 +2853,12 @@ def analyze_post_performance(
         posts_with_labels.sort(key=lambda x: x["score"], reverse=True)
         
         # ===================================================================
-        # PART 5: REASON DETECTION
+        # PART 5: REASON DETECTION (ONLY if >= 3 posts)
         # ===================================================================
-        reasons = _detect_patterns(posts_data, num_posts_found)
+        reasons = []
+        if num_posts_found >= 3:
+            # Pass posts_with_scores (which has scores) instead of posts_data (raw)
+            reasons = _detect_patterns(posts_with_scores, num_posts_found)
         
         # ===================================================================
         # PART 6: CONFIDENCE SCORING
@@ -2549,13 +2873,12 @@ def analyze_post_performance(
         best_post = posts_with_labels[0]
         worst_post = posts_with_labels[-1]
         
-        # Build return object (STRICT CONTRACT)
+        # Build return object (STRICT CONTRACT - NO FABRICATED SCORES)
         return {
             "type": "post_comparison",
             "summary": {
                 "num_posts_found": num_posts_found,
-                "avg_score": round(avg_score, 2),
-                "performance_label": worst_post["label"] if best_post["label"] == worst_post["label"] else "mixed"
+                "num_posts_requested": num_posts
             },
             "posts": posts_with_labels,
             "comparison": {
@@ -2563,12 +2886,11 @@ def analyze_post_performance(
                 "worst_post_id": worst_post.get("post_id"),
                 "best_vs_worst_ratio": round(best_post["score"] / worst_post["score"], 2) if worst_post["score"] > 0 else None,
                 "best_vs_avg_ratio": best_post.get("ratio_vs_avg")
-            },
-            "reasons": reasons,
+            } if num_posts_found >= 2 else None,
+            "reasons": reasons if num_posts_found >= 3 else [],
             "confidence": confidence,
             "metadata": {
                 "total_posts_analyzed": num_posts_found,
-                "avg_score": round(avg_score, 2),
                 "platform": platform
             }
         }
@@ -2738,7 +3060,7 @@ def _calculate_performance_scores(posts: List[Dict]) -> List[Dict]:
             },
             "metrics_used": metrics_used,
             "metadata": post["metadata"],
-            "latest_date": post["latest_date"]
+            "latest_date": post.get("latest_date", "")  # Use get() to avoid KeyError
         })
     
     return scored_posts

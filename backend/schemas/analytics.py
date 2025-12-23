@@ -22,6 +22,11 @@ class AnalyticsState(BaseModel):
     top_n: Optional[int] = None
     sort_order: Optional[Literal["asc", "desc"]] = None
     
+    # Post selector (NEW: Deterministic post selection)
+    post_selector: Optional[Literal["latest", "top", "recent_n", "specific_id"]] = None
+    post_id: Optional[str] = None
+    recent_n: Optional[int] = None
+    
     # Blog insight specific
     url: Optional[str] = None
     
