@@ -384,7 +384,7 @@ MANDATORY: The logo must be placed as a transparent overlay with absolutely no b
                 # Create a mock response object for tracking (Gemini doesn't provide usage)
                 class MockGeminiResponse:
                     def __init__(self):
-                        self.id = getattr(response, 'model_name', self.gemini_image_model)
+                        self.id = getattr(response, 'model_name', 'gemini-2.5-flash-image-preview')
                         self.data = [{"url": "gemini_generated"}]
                         self.usage = None
                 
@@ -468,7 +468,7 @@ Generate a high-quality edited image that follows the instructions while maintai
                 # Create a mock response object for tracking (Gemini doesn't provide usage)
                 class MockGeminiResponse:
                     def __init__(self):
-                        self.id = getattr(response, 'model_name', self.gemini_image_model)
+                        self.id = getattr(response, 'model_name', 'gemini-2.5-flash-image-preview')
                         self.data = [{"url": "gemini_generated"}]
                         self.usage = None
                 
