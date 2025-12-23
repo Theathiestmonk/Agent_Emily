@@ -731,7 +731,7 @@ def get_latest_video_post_from_db(user_id: str) -> Optional[Dict[str, Any]]:
 def get_blog_insights_from_db(user_id: str, metrics: List[str], date_range: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Fetch blog analytics (placeholder - implement when blog analytics API is available).
-    
+
     Returns:
         Dict with blog insights or None
     """
@@ -740,8 +740,463 @@ def get_blog_insights_from_db(user_id: str, metrics: List[str], date_range: Opti
         # This could query WordPress API, Medium API, or custom blog analytics
         logger.info("Blog insights fetching - requires blog analytics API implementation")
         return None
-        
+
     except Exception as e:
         logger.error(f"Error fetching blog insights: {e}")
         return None
 
+
+# ============================================================================
+# ANALYTICS SNAPSHOTS - Historical Data Querying
+# ============================================================================
+
+def get_analytics_snapshots(
+    user_id: str,
+    platform: Optional[str] = None,
+    metric: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    source: str = "social_media",
+    limit: int = 1000
+) -> List[Dict[str, Any]]:
+    """
+    Query stored analytics snapshots from the database.
+
+    Args:
+        user_id: User ID to query snapshots for
+        platform: Optional platform filter (instagram, facebook, etc.)
+        metric: Optional metric filter (impressions, reach, etc.)
+        date_from: Optional start date (YYYY-MM-DD)
+        date_to: Optional end date (YYYY-MM-DD)
+        source: Source filter (social_media or blog)
+        limit: Maximum number of records to return
+
+    Returns:
+        List of analytics snapshot records
+    """
+    try:
+        if not supabase:
+            logger.error("Supabase client not initialized")
+            return []
+
+        # Build query
+        query = supabase.table("analytics_snapshots").select("*").eq(
+            "user_id", user_id
+        ).eq("source", source)
+
+        # Apply filters
+        if platform:
+            query = query.eq("platform", platform.lower())
+        if metric:
+            query = query.eq("metric", metric)
+        if date_from:
+            query = query.gte("date", date_from)
+        if date_to:
+            query = query.lte("date", date_to)
+
+        # Execute query with ordering and limit
+        result = query.order("date", desc=True).order("platform").order("metric").limit(limit).execute()
+
+        logger.info(f"📊 Queried {len(result.data)} analytics snapshots for user {user_id}")
+        return result.data or []
+
+    except Exception as e:
+        logger.error(f"Error querying analytics snapshots: {e}")
+        return []
+
+
+def get_latest_analytics_snapshot(
+    user_id: str,
+    platform: str,
+    metric: str,
+    source: str = "social_media"
+) -> Optional[Dict[str, Any]]:
+    """
+    Get the most recent analytics snapshot for a specific metric.
+
+    Args:
+        user_id: User ID
+        platform: Platform name
+        metric: Metric name
+        source: Source type (social_media or blog)
+
+    Returns:
+        Latest snapshot record or None
+    """
+    try:
+        if not supabase:
+            logger.error("Supabase client not initialized")
+            return None
+
+        result = supabase.table("analytics_snapshots").select("*").eq(
+            "user_id", user_id
+        ).eq("platform", platform.lower()).eq(
+            "metric", metric
+        ).eq("source", source).order("date", desc=True).limit(1).execute()
+
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting latest analytics snapshot: {e}")
+        return None
+
+
+def get_analytics_summary(
+    user_id: str,
+    platform: Optional[str] = None,
+    days_back: int = 30
+) -> Dict[str, Any]:
+    """
+    Get a summary of analytics data for a user.
+
+    Args:
+        user_id: User ID
+        platform: Optional platform filter
+        days_back: Number of days to look back
+
+    Returns:
+        Summary dictionary with platform metrics and date ranges
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        if not supabase:
+            logger.error("Supabase client not initialized")
+            return {"error": "Database not available"}
+
+        # Calculate date range
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=days_back)
+
+        # Query snapshots
+        snapshots = get_analytics_snapshots(
+            user_id=user_id,
+            platform=platform,
+            date_from=start_date.isoformat(),
+            date_to=end_date.isoformat(),
+            limit=5000  # Higher limit for summary
+        )
+
+        if not snapshots:
+            return {
+                "user_id": user_id,
+                "platform": platform,
+                "date_range": f"{start_date} to {end_date}",
+                "total_snapshots": 0,
+                "platforms": [],
+                "metrics": [],
+                "data": {}
+            }
+
+        # Analyze the data
+        platforms = set()
+        metrics = set()
+        platform_data = {}
+
+        for snapshot in snapshots:
+            platform_name = snapshot["platform"]
+            metric_name = snapshot["metric"]
+            date = snapshot["date"]
+            value = snapshot["value"]
+
+            platforms.add(platform_name)
+            metrics.add(metric_name)
+
+            # Group by platform
+            if platform_name not in platform_data:
+                platform_data[platform_name] = {
+                    "metrics": {},
+                    "date_range": {"start": date, "end": date},
+                    "total_records": 0
+                }
+
+            platform_data[platform_name]["total_records"] += 1
+
+            # Update date range
+            if date < platform_data[platform_name]["date_range"]["start"]:
+                platform_data[platform_name]["date_range"]["start"] = date
+            if date > platform_data[platform_name]["date_range"]["end"]:
+                platform_data[platform_name]["date_range"]["end"] = date
+
+            # Group metrics
+            if metric_name not in platform_data[platform_name]["metrics"]:
+                platform_data[platform_name]["metrics"][metric_name] = {
+                    "count": 0,
+                    "latest_value": value,
+                    "latest_date": date,
+                    "values": []
+                }
+
+            platform_data[platform_name]["metrics"][metric_name]["count"] += 1
+
+            # Keep only recent values for summary (last 7 days)
+            snapshot_date = datetime.fromisoformat(date).date()
+            if snapshot_date >= (end_date - timedelta(days=7)):
+                platform_data[platform_name]["metrics"][metric_name]["values"].append({
+                    "date": date,
+                    "value": value
+                })
+
+            # Update latest value
+            if date > platform_data[platform_name]["metrics"][metric_name]["latest_date"]:
+                platform_data[platform_name]["metrics"][metric_name]["latest_value"] = value
+                platform_data[platform_name]["metrics"][metric_name]["latest_date"] = date
+
+        return {
+            "user_id": user_id,
+            "platform_filter": platform,
+            "date_range": f"{start_date} to {end_date}",
+            "total_snapshots": len(snapshots),
+            "platforms": sorted(list(platforms)),
+            "metrics": sorted(list(metrics)),
+            "platform_data": platform_data
+        }
+
+    except Exception as e:
+        logger.error(f"Error generating analytics summary: {e}")
+        return {"error": str(e)}
+
+
+def store_analytics_snapshot(
+    user_id: str,
+    platform: str,
+    metric: str,
+    value: float,
+    date: str,
+    source: str = "social_media",
+    post_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None
+) -> bool:
+    """
+    Store a single analytics snapshot in the database.
+
+    Args:
+        user_id: User ID
+        platform: Platform name
+        metric: Metric name
+        value: Metric value
+        date: Date in YYYY-MM-DD format
+        source: Source type (social_media or blog)
+        post_id: Optional post ID for post-level metrics
+        metadata: Optional metadata dictionary
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        if not supabase:
+            logger.error("Supabase client not initialized")
+            return False
+
+        # Prepare snapshot data
+        snapshot = {
+            "user_id": user_id,
+            "platform": platform.lower(),
+            "source": source,
+            "metric": metric,
+            "value": float(value) if value is not None else 0.0,
+            "date": date,
+            "post_id": post_id,
+            "metadata": metadata or {}
+        }
+
+        # Use UPSERT to handle duplicates gracefully
+        result = supabase.table("analytics_snapshots").upsert(
+            snapshot,
+            on_conflict="user_id,platform,source,metric,date,post_id"
+        ).execute()
+
+        success = bool(result.data)
+        if success:
+            logger.info(f"✅ Stored analytics snapshot: {platform}/{metric} = {value} on {date}")
+        else:
+            logger.warning(f"❌ Failed to store analytics snapshot: {platform}/{metric}")
+
+        return success
+
+    except Exception as e:
+        logger.error(f"Error storing analytics snapshot: {e}")
+        return False
+
+
+def fetch_and_store_platform_analytics(
+    user_id: str,
+    platform: str,
+    metrics: List[str],
+    date_range: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Fetch analytics from platform API and store in snapshots.
+
+    This combines real-time API fetching with snapshot storage.
+
+    Args:
+        user_id: User ID
+        platform: Platform name
+        metrics: List of metrics to fetch
+        date_range: Optional date range for historical data
+
+    Returns:
+        Dictionary with fetch and storage results
+    """
+    try:
+        result = {
+            "success": False,
+            "platform": platform,
+            "metrics_requested": metrics,
+            "api_fetch_success": False,
+            "snapshots_stored": 0,
+            "errors": []
+        }
+
+        # Get platform connection
+        connection = get_platform_connection(user_id, platform)
+        if not connection:
+            result["errors"].append(f"No active connection found for {platform}")
+            return result
+
+        # Fetch data from platform API
+        platform_data = None
+        if platform.lower() == "instagram":
+            platform_data = fetch_instagram_insights(connection, metrics, date_range)
+        elif platform.lower() == "facebook":
+            platform_data = fetch_facebook_insights(connection, metrics, date_range)
+        else:
+            result["errors"].append(f"Platform {platform} not supported for analytics fetching")
+            return result
+
+        if not platform_data:
+            result["errors"].append(f"Failed to fetch analytics data from {platform} API")
+            return result
+
+        result["api_fetch_success"] = True
+
+        # Store each metric as a snapshot
+        from datetime import datetime
+        today = datetime.now().date().isoformat()
+        stored_count = 0
+
+        for metric_name, value in platform_data.items():
+            if isinstance(value, (int, float)):
+                success = store_analytics_snapshot(
+                    user_id=user_id,
+                    platform=platform,
+                    metric=metric_name,
+                    value=value,
+                    date=today,
+                    source="social_media",
+                    metadata={
+                        "fetched_at": datetime.now().isoformat(),
+                        "date_range": date_range,
+                        "fetch_method": "api_direct"
+                    }
+                )
+                if success:
+                    stored_count += 1
+
+        result["snapshots_stored"] = stored_count
+        result["success"] = stored_count > 0
+
+        logger.info(f"📊 {platform}: Fetched {len(platform_data)} metrics, stored {stored_count} snapshots")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error in fetch_and_store_platform_analytics: {e}")
+        return {
+            "success": False,
+            "platform": platform,
+            "error": str(e)
+        }
+
+
+# ============================================================================
+# UTILITY FUNCTIONS FOR MANUAL OPERATIONS
+# ============================================================================
+
+def test_token_decryption(user_id: str, platform: str) -> Dict[str, Any]:
+    """
+    Test token decryption for a user's platform connection.
+
+    Returns:
+        Dictionary with decryption test results
+    """
+    try:
+        connection = get_platform_connection(user_id, platform)
+        if not connection:
+            return {"success": False, "error": f"No connection found for {platform}"}
+
+        access_token = connection.get('access_token', '')
+        if not access_token:
+            return {"success": False, "error": "No access token found"}
+
+        # Test decryption
+        decrypted_token = decrypt_token(access_token)
+
+        # Don't log the actual token for security
+        token_length = len(decrypted_token)
+        token_prefix = decrypted_token[:10] + "..." if len(decrypted_token) > 10 else decrypted_token
+
+        return {
+            "success": True,
+            "platform": platform,
+            "token_encrypted": bool(access_token and access_token != decrypted_token),
+            "token_length": token_length,
+            "token_prefix": token_prefix,
+            "decryption_success": True
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def bulk_store_analytics_snapshots(
+    user_id: str,
+    snapshots_data: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Bulk store multiple analytics snapshots.
+
+    Args:
+        user_id: User ID
+        snapshots_data: List of snapshot dictionaries with keys:
+            - platform, metric, value, date, source, post_id, metadata
+
+    Returns:
+        Dictionary with bulk storage results
+    """
+    try:
+        stored_count = 0
+        errors = []
+
+        for snapshot in snapshots_data:
+            try:
+                success = store_analytics_snapshot(
+                    user_id=user_id,
+                    platform=snapshot["platform"],
+                    metric=snapshot["metric"],
+                    value=snapshot["value"],
+                    date=snapshot["date"],
+                    source=snapshot.get("source", "social_media"),
+                    post_id=snapshot.get("post_id"),
+                    metadata=snapshot.get("metadata")
+                )
+                if success:
+                    stored_count += 1
+                else:
+                    errors.append(f"Failed to store: {snapshot['platform']}/{snapshot['metric']}")
+            except Exception as e:
+                errors.append(f"Error storing {snapshot.get('platform', 'unknown')}/{snapshot.get('metric', 'unknown')}: {str(e)}")
+
+        return {
+            "success": stored_count > 0,
+            "total_requested": len(snapshots_data),
+            "stored_count": stored_count,
+            "failed_count": len(errors),
+            "errors": errors if errors else None
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}

@@ -2009,19 +2009,24 @@ def fetch_instagram_insights(connection: Dict[str, Any], metrics: List[str], dat
         
         # Fetch insights (only if we have account-level metrics to fetch)
         result = {}
+        insights_api_success = False  # Track if primary API call succeeded
+
         if api_metrics:
             insights_url = f"https://graph.facebook.com/v18.0/{instagram_account_id}/insights"
             params = {"access_token": access_token, "metric": ",".join(api_metrics), "period": period}
             logger.info(f"🌐 Fetching Instagram insights from: {insights_url}")
             logger.info(f"   Metrics: {api_metrics}, Period: {period}")
-            
+
             resp = requests.get(insights_url, params=params, timeout=15)
             if resp.status_code != 200:
                 logger.error(f"❌ Instagram API error: {resp.status_code} - {resp.text}")
-                # Don't return None yet - we might still have post-level metrics to aggregate
+                # Mark that primary API failed - we'll still try post aggregation but mark data as partial
+                result["_insights_api_failed"] = True
+                result["_api_error"] = f"Instagram insights API failed: {resp.status_code} - {resp.text}"
             else:
+                insights_api_success = True
                 insights = resp.json()
-                
+
                 # Transform response
                 if insights.get('data'):
                     for metric_data in insights.get('data', []):
@@ -2062,9 +2067,19 @@ def fetch_instagram_insights(connection: Dict[str, Any], metrics: List[str], dat
             except Exception as e:
                 logger.warning(f"⚠️ Could not aggregate post-level metrics: {e}")
         
+        # Check if we have any meaningful data
         if result:
-            logger.info(f"✅ Successfully fetched Instagram insights: {list(result.keys())} = {result}")
-            return result
+            # If insights API failed but we have post-aggregated data, mark as partial
+            if result.get("_insights_api_failed") and any(k for k in result.keys() if not k.startswith("_")):
+                logger.warning(f"⚠️ Instagram insights API failed, but post-aggregated data available: {list(result.keys())}")
+                result["_data_quality"] = "partial"
+                return result
+            elif insights_api_success or any(k for k in result.keys() if not k.startswith("_") and k not in ["_insights_api_failed", "_api_error"]):
+                logger.info(f"✅ Successfully fetched Instagram insights: {list(result.keys())} = {result}")
+                return result
+            else:
+                logger.warning(f"⚠️ No insights data extracted from Instagram API response")
+                return None
         else:
             logger.warning(f"⚠️ No insights data extracted from Instagram API response")
             return None

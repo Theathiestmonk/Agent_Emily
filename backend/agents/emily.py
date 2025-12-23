@@ -3638,6 +3638,12 @@ Return ONLY valid JSON matching the IntentPayload structure. No explanations, no
                 if "_warning" in p_data:
                     response.append(f"NOTE: {p_data['_warning']}\n")
                     continue
+
+                # Check for partial data quality
+                if p_data.get("_data_quality") == "partial":
+                    api_error = p_data.get("_api_error", "API access issue")
+                    response.append(f"⚠️ PARTIAL DATA: {api_error}\n")
+                    response.append("Some metrics may be estimated from recent posts rather than official analytics.\n")
                 
                 # CRITICAL: Handle both data structures:
                 # 1. Analytics mode: {"metrics": {...}, "comparison": {...}}
