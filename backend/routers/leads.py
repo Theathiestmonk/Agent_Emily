@@ -731,7 +731,7 @@ Return a JSON object with:
 """
                     
                     response = openai_client.chat.completions.create(
-                        model="gpt-4",
+                        model="gpt-4o-mini",
                         messages=[
                             {"role": "system", "content": "You are an expert email marketer. Always respond with valid JSON."},
                             {"role": "user", "content": prompt}
@@ -746,7 +746,7 @@ Return a JSON object with:
                         await token_tracker.track_chat_completion_usage(
                             user_id=current_user["id"],
                             feature_type="lead_email",
-                            model_name="gpt-4",
+                            model_name="gpt-4o-mini",
                             response=response,
                             request_metadata={"lead_id": str(lead_id)}
                         )
@@ -1267,7 +1267,7 @@ Return a JSON object with:
 """
                                         
                                         response = openai_client.chat.completions.create(
-                                            model="gpt-4",
+                                            model="gpt-4o-mini",
                                             messages=[
                                                 {"role": "system", "content": "You are an expert email marketer. Always respond with valid JSON. Always use the actual lead name provided, never use placeholders."},
                                                 {"role": "user", "content": prompt}
@@ -1283,7 +1283,7 @@ Return a JSON object with:
                                             await token_tracker.track_chat_completion_usage(
                                                 user_id=current_user["id"],
                                                 feature_type="lead_email",
-                                                model_name="gpt-4",
+                                                model_name="gpt-4o-mini",
                                                 response=response,
                                                 request_metadata={"lead_id": str(lead_id), "source": "csv_import"}
                                             )
@@ -2056,7 +2056,7 @@ Return a JSON object with:
         
         # Generate email
         response = openai_client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are an expert email marketer. Always respond with valid JSON."},
                 {"role": "user", "content": prompt}
@@ -2074,7 +2074,7 @@ Return a JSON object with:
             await token_tracker.track_chat_completion_usage(
                 user_id=current_user["id"],
                 feature_type="lead_email",
-                model_name="gpt-4",
+                model_name="gpt-4o-mini",
                 response=response,
                 request_metadata={"lead_id": lead_id}
             )
