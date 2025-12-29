@@ -221,12 +221,13 @@ const SideNavbar = () => {
     <div className="hidden md:block bg-white shadow-lg transition-all duration-300 fixed left-0 top-0 h-screen z-50 w-48 xl:w-64 flex flex-col overflow-hidden" style={{position: 'fixed', zIndex: 50}}>
       {/* Header */}
       <div className="p-3 lg:p-4 border-b border-gray-200">
-        <div className="flex items-center justify-center">
-          <img
-            src="/workvilalge.svg"
-            alt="Workvillage"
-            className="h-12 lg:h-16 w-auto object-contain filter grayscale"
-          />
+        <div className="flex items-start justify-start">
+          <div className="flex flex-col space-y-1">
+            <h1 className="text-lg lg:text-xl font-bold text-gray-600">Workvillage.ai</h1>
+            <p className="text-xs text-gray-500 truncate">
+              {profile?.business_name || 'AI Marketing'}
+            </p>
+          </div>
         </div>
       </div>
 
