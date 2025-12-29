@@ -10,6 +10,7 @@ import ATSNContentCard from './ATSNContentCard'
 import ATSNContentModal from './ATSNContentModal'
 import LeadCard from './LeadCard'
 import MultiMediaUpload from './MultiMediaUpload'
+import CharacterCard from './CharacterCard'
 import { leadsAPI } from '../services/leads'
 import { connectionsAPI } from '../services/connections'
 import { mediaAPI } from '../services/api'
@@ -69,6 +70,8 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const [showMediaUploadModal, setShowMediaUploadModal] = useState(false)
   const [uploadedMediaUrls, setUploadedMediaUrls] = useState([])
   const [selectedFilesForUpload, setSelectedFilesForUpload] = useState([])
+  const [tooltipAgent, setTooltipAgent] = useState(null)
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -247,21 +250,47 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       if (response.ok) {
         const data = await response.json()
+        console.log('ATSN loadConversations response:', data)
         if (data.success && data.conversations) {
           // Conversations are already filtered by agent on the backend
+          console.log(`Found ${data.conversations.length} ATSN conversations`)
           if (data.conversations.length > 0) {
             // Convert conversations to message format
-            const conversationMessages = data.conversations.map(conv => ({
-              id: conv.id,
-              conversationId: conv.id,
-              sender: conv.message_type === 'user' ? 'user' : 'bot',
-              text: conv.content,
-              timestamp: conv.created_at,
-              intent: conv.intent,
-              isNew: false
-            }))
+            const conversationMessages = data.conversations.map(conv => {
+              console.log(`Conversation ${conv.id}: metadata=`, conv.metadata, `agent_name=${conv.metadata?.agent_name}`)
+
+              // Determine agent_name with fallback logic
+              let agent_name = conv.metadata?.agent_name
+              if (!agent_name && conv.message_type === 'bot' && conv.intent) {
+                // Fallback: determine agent from intent (similar to backend logic)
+                const intent = conv.intent.toLowerCase()
+                if (intent.includes('lead')) {
+                  agent_name = 'chase'
+                } else if (['view_content', 'publish_content', 'delete_content'].includes(intent)) {
+                  agent_name = 'emily'
+                } else if (['create_content', 'edit_content', 'schedule_content'].includes(intent)) {
+                  agent_name = 'leo'
+                } else if (intent.includes('orio') || intent.includes('analytics')) {
+                  agent_name = 'orio'
+                } else {
+                  agent_name = 'emily' // default
+                }
+              }
+
+              return {
+                id: conv.id,
+                conversationId: conv.id,
+                sender: conv.message_type === 'user' ? 'user' : 'bot',
+                text: conv.content,
+                timestamp: conv.created_at,
+                intent: conv.intent,
+                agent_name: agent_name,
+                isNew: false
+              }
+            })
 
             setMessages(conversationMessages)
+            console.log(`Loaded ${conversationMessages.length} ATSN conversations`)
             return // Don't show welcome message if we have conversations
           }
         }
@@ -286,8 +315,8 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       // Load external conversations (from past discussions panel)
       setMessages(externalConversations)
     } else if (user && messages.length === 0) {
-      // Load today's conversations automatically (similar to Chatbot.jsx)
-      loadTodayConversations()
+      // Load all ATSN conversations (not just today's)
+      loadConversations()
     }
   }, [user, externalConversations, messages.length, chatReset])
 
@@ -320,15 +349,35 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         // Convert conversations to message format
         const conversationMessages = data.conversations
           .filter(conv => conv.metadata?.agent === 'atsn') // Only ATSN conversations
-          .map(conv => ({
-            id: conv.id,
-            conversationId: conv.id,
-            sender: conv.message_type === 'user' ? 'user' : 'bot',
-            text: conv.content,
-            timestamp: conv.created_at,
-            intent: conv.intent,
-            agent_name: conv.metadata?.agent_name
-          }))
+          .map(conv => {
+            // Determine agent_name with fallback logic
+            let agent_name = conv.metadata?.agent_name
+            if (!agent_name && conv.message_type === 'bot' && conv.intent) {
+              // Fallback: determine agent from intent (similar to backend logic)
+              const intent = conv.intent.toLowerCase()
+              if (intent.includes('lead')) {
+                agent_name = 'chase'
+              } else if (['view_content', 'publish_content', 'delete_content'].includes(intent)) {
+                agent_name = 'emily'
+              } else if (['create_content', 'edit_content', 'schedule_content'].includes(intent)) {
+                agent_name = 'leo'
+              } else if (intent.includes('orio') || intent.includes('analytics')) {
+                agent_name = 'orio'
+              } else {
+                agent_name = 'emily' // default
+              }
+            }
+
+            return {
+              id: conv.id,
+              conversationId: conv.id,
+              sender: conv.message_type === 'user' ? 'user' : 'bot',
+              text: conv.content,
+              timestamp: conv.created_at,
+              intent: conv.intent,
+              agent_name: agent_name
+            }
+          })
 
         if (conversationMessages.length > 0) {
           setMessages(conversationMessages)
@@ -360,6 +409,24 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
           // Only process ATSN conversations
           if (newMessage.metadata?.agent === 'atsn') {
+            // Determine agent_name with fallback logic
+            let agent_name = newMessage.metadata?.agent_name
+            if (!agent_name && newMessage.message_type === 'bot' && newMessage.intent) {
+              // Fallback: determine agent from intent (similar to backend logic)
+              const intent = newMessage.intent.toLowerCase()
+              if (intent.includes('lead')) {
+                agent_name = 'chase'
+              } else if (['view_content', 'publish_content', 'delete_content'].includes(intent)) {
+                agent_name = 'emily'
+              } else if (['create_content', 'edit_content', 'schedule_content'].includes(intent)) {
+                agent_name = 'leo'
+              } else if (intent.includes('orio') || intent.includes('analytics')) {
+                agent_name = 'orio'
+              } else {
+                agent_name = 'emily' // default
+              }
+            }
+
             const messageObj = {
               id: newMessage.id,
               conversationId: newMessage.id,
@@ -367,6 +434,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
               text: newMessage.content,
               timestamp: newMessage.created_at,
               intent: newMessage.intent,
+              agent_name: agent_name,
               isNew: true
             }
 
@@ -1443,6 +1511,18 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     setSelectedFilesForUpload(files)
   }
 
+  const handleAgentHover = (agentName, event) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setTooltipAgent(agentName)
+    setTooltipPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top
+    })
+  }
+
+  const handleAgentLeave = () => {
+    setTooltipAgent(null)
+  }
 
   const handleCancelUpload = () => {
     setSelectedFilesForUpload([])
@@ -1770,14 +1850,14 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const renderAgentIcon = (agentName) => {
     switch (agentName?.toLowerCase()) {
       case 'leo':
-        return <span className="text-xl font-bold text-white">L</span>
+        return <img src="/leo_logo.jpg" alt="Leo" className="w-16 h-16 rounded-full object-cover" />
       case 'chase':
-        return <span className="text-xl font-bold text-white">C</span>
+        return <img src="/chase_logo.png" alt="Chase" className="w-16 h-16 rounded-full object-cover" />
       case 'orio':
         return <span className="text-xl font-bold text-white">O</span>
       case 'emily':
       default:
-        return <span className="text-xl font-bold text-white">E</span>
+        return <img src="/emily_icon.png" alt="Emily" className="w-16 h-16 rounded-full object-cover" />
     }
   }
 
@@ -1927,15 +2007,27 @@ const ATSNChatbot = ({ externalConversations = null }) => {
             className={`group flex gap-3 ${message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
           >
             {/* Avatar */}
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-              message.sender === 'user'
-                ? 'bg-gradient-to-br from-pink-500 to-rose-500'
-                : message.agent_name?.toLowerCase() === 'leo'
-                ? 'bg-gradient-to-r from-green-600 to-emerald-500'
-                : message.agent_name?.toLowerCase() === 'chase'
-                ? 'bg-gradient-to-r from-blue-500 to-blue-700'
-                : 'bg-gradient-to-br from-purple-500 to-pink-500'
-            }`}>
+            <div
+              className={`${
+                message.agent_name?.toLowerCase() === 'emily' || message.agent_name?.toLowerCase() === 'leo' || message.agent_name?.toLowerCase() === 'chase'
+                  ? 'w-16 h-16'
+                  : 'w-8 h-8'
+              } rounded-full flex items-center justify-center flex-shrink-0 ${
+                message.sender === 'bot' ? 'hover:scale-110 transition-transform duration-200 cursor-pointer border-2 border-gray-300' : ''
+              } ${
+                message.sender === 'user'
+                  ? 'bg-gradient-to-br from-pink-500 to-rose-500'
+                  : message.agent_name?.toLowerCase() === 'leo'
+                  ? '' // No background for Leo
+                  : message.agent_name?.toLowerCase() === 'chase'
+                  ? '' // No background for Chase
+                  : message.agent_name?.toLowerCase() === 'emily'
+                  ? '' // No background for Emily
+                  : 'bg-gradient-to-br from-purple-500 to-pink-500'
+              }`}
+              onMouseEnter={message.sender === 'bot' ? (e) => handleAgentHover(message.agent_name, e) : undefined}
+              onMouseLeave={message.sender === 'bot' ? handleAgentLeave : undefined}
+            >
               {message.sender === 'user' ? (
                 <User className="w-5 h-5 text-white" />
               ) : (
@@ -1960,9 +2052,9 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                     <div className="flex items-center justify-between mb-2">
                       <span className={`text-base font-bold bg-clip-text text-transparent ${
                         message.agent_name?.toLowerCase() === 'leo'
-                          ? 'bg-gradient-to-r from-green-600 to-emerald-500'
-                          : message.agent_name?.toLowerCase() === 'chase'
                           ? 'bg-gradient-to-r from-blue-500 to-blue-700'
+                          : message.agent_name?.toLowerCase() === 'chase'
+                          ? 'bg-gradient-to-r from-green-800 to-amber-800'
                           : 'bg-gradient-to-r from-purple-600 to-pink-500'
                       }`}>
                         {formatAgentName(message.agent_name)}
@@ -3201,6 +3293,13 @@ const ATSNChatbot = ({ externalConversations = null }) => {
           </div>
         </div>
       )}
+
+      {/* Character Card Tooltip */}
+      <CharacterCard
+        agentName={tooltipAgent}
+        isVisible={!!tooltipAgent}
+        position={tooltipPosition}
+      />
     </div>
   )
 }

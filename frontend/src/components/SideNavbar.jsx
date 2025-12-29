@@ -42,9 +42,62 @@ const SideNavbar = () => {
   const [expandedMenus, setExpandedMenus] = useState({})
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [userPlan, setUserPlan] = useState('')
+  const [usageCounts, setUsageCounts] = useState({ tasks: 0, images: 0 })
 
   // Cache key for localStorage
   const getCacheKey = (userId) => `profile_${userId}`
+
+  // Get API URL
+  const getApiBaseUrl = () => {
+    const envUrl = import.meta.env.VITE_API_URL
+    if (envUrl) {
+      if (envUrl.startsWith(':')) {
+        return `http://localhost${envUrl}`
+      }
+      if (!envUrl.startsWith('http://') && !envUrl.startsWith('https://')) {
+        return `http://${envUrl}`
+      }
+      return envUrl
+    }
+    return 'http://localhost:8000'
+  }
+  const API_BASE_URL = getApiBaseUrl().replace(/\/$/, '')
+
+  // Get authentication token from session
+  const getAuthToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token
+  }
+
+  // Fetch usage counts
+  const fetchUsageCounts = async () => {
+    if (!user) return
+
+    try {
+      const token = await getAuthToken()
+      if (!token) return
+
+      const response = await fetch(`${API_BASE_URL}/profile/usage-counts`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setUsageCounts({
+          tasks: data.tasks_count || 0,
+          images: data.images_count || 0
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching usage counts:', error)
+    }
+  }
+
 
   // Load profile from cache or fetch from API
   const loadProfile = useCallback(async () => {
@@ -106,13 +159,15 @@ const SideNavbar = () => {
           .select('subscription_plan')
           .eq('id', user.id)
           .single()
-        
+
         if (error || !profile) {
           setIsAdmin(false)
+          setUserPlan('')
           return
         }
-        
-        // Check if subscription plan is 'admin'
+
+        // Store user plan and check if admin
+        setUserPlan(profile.subscription_plan || '')
         setIsAdmin(profile.subscription_plan === 'admin')
       } catch (error) {
         console.error('Error checking admin status:', error)
@@ -202,6 +257,13 @@ const SideNavbar = () => {
     setExpandedMenus(prev => ({ ...prev, ...newExpandedMenus }))
   }, [location.pathname])
 
+  // Fetch usage counts on component mount
+  useEffect(() => {
+    if (user) {
+      fetchUsageCounts()
+    }
+  }, [user])
+
   const displayName = useMemo(() => {
     return profile?.name || user?.user_metadata?.name || user?.email || 'User'
   }, [profile, user])
@@ -223,10 +285,7 @@ const SideNavbar = () => {
       <div className="p-3 lg:p-4 border-b border-gray-200">
         <div className="flex items-start justify-start">
           <div className="flex flex-col space-y-1">
-            <h1 className="text-lg lg:text-xl font-bold text-gray-600">Workvillage.ai</h1>
-            <p className="text-xs text-gray-500 truncate">
-              {profile?.business_name || 'AI Marketing'}
-            </p>
+            <h1 className="text-xl lg:text-2xl font-bold text-gray-600">Workvillage.ai</h1>
           </div>
         </div>
       </div>
@@ -345,6 +404,93 @@ const SideNavbar = () => {
           <Hand className="w-5 h-5 mr-3" style={{ transform: 'rotate(-20deg)' }} />
           <span className="font-medium">Say Bye</span>
         </button>
+
+        {/* Separator Line */}
+        <div className="w-full px-2 lg:px-3 py-2">
+          <div className="border-t border-gray-200"></div>
+        </div>
+
+        {/* Plan Name Heading */}
+        {userPlan && (
+          <div className="w-full px-2 lg:px-3 py-2">
+            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide text-left">
+              {userPlan.replace('_', ' ').toUpperCase()} Plan
+            </h3>
+          </div>
+        )}
+
+        {/* Usage Counters */}
+        <div className="w-full px-2 lg:px-3 py-1 space-y-5">
+          {/* Tasks Donut */}
+          <div className="flex items-center space-x-3">
+            <div className="relative w-20 h-20">
+              <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 24 24">
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  fill="none"
+                  className="text-gray-200"
+                />
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  fill="none"
+                  strokeDasharray={`${(usageCounts.tasks / 100) * 56.5} 56.5`}
+                  className={`${usageCounts.tasks >= 100 ? 'text-purple-500' : 'text-blue-500'} transition-all duration-300`}
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="text-sm font-bold text-pink-500">
+                    {usageCounts.tasks}/100
+                  </div>
+                </div>
+              </div>
+            </div>
+            <span className="text-xs text-gray-500 font-medium">Tasks</span>
+          </div>
+
+          {/* Images Donut */}
+          <div className="flex items-center space-x-3">
+            <div className="relative w-20 h-20">
+              <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 24 24">
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  fill="none"
+                  className="text-gray-200"
+                />
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  fill="none"
+                  strokeDasharray={`${(usageCounts.images / 100) * 56.5} 56.5`}
+                  className={`${usageCounts.images >= 100 ? 'text-purple-500' : 'text-purple-500'} transition-all duration-300`}
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="text-sm font-bold text-pink-500">
+                    {usageCounts.images}/100
+                  </div>
+                </div>
+              </div>
+            </div>
+            <span className="text-xs text-gray-500 font-medium">Images</span>
+          </div>
+        </div>
       </div>
 
       {/* Settings Menu */}

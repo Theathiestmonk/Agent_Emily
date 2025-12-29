@@ -163,6 +163,41 @@ async def chat(
                 }
             }
             supabase_client.table("chatbot_conversations").insert(bot_message_data).execute()
+
+            # Increment task counter for ALL completed tasks
+            current_intent = response.get('intent')
+            logger.info(f"Incrementing task count for intent: {current_intent}")
+
+            # Count ALL tasks that have an intent (not None/empty)
+            if current_intent and current_intent.strip():
+                try:
+                    # Read current count and increment
+                    current = supabase_client.table('profiles').select('tasks_completed_this_month').eq('id', user_id).execute()
+                    if current.data and len(current.data) > 0:
+                        current_count = current.data[0]['tasks_completed_this_month'] or 0
+                        supabase_client.table('profiles').update({
+                            'tasks_completed_this_month': current_count + 1
+                        }).eq('id', user_id).execute()
+                        logger.info(f"Incremented task count for user {user_id}, intent: {current_intent} (from {current_count} to {current_count + 1})")
+                except Exception as counter_error:
+                    logger.error(f"Error incrementing task count: {counter_error}")
+
+            # Increment image counter when creating content (since content creation generates images)
+            if current_intent == 'create_content':
+                try:
+                    # Read current image count and increment
+                    current_images = supabase_client.table('profiles').select('images_generated_this_month').eq('id', user_id).execute()
+                    if current_images.data and len(current_images.data) > 0:
+                        current_image_count = current_images.data[0]['images_generated_this_month'] or 0
+                        supabase_client.table('profiles').update({
+                            'images_generated_this_month': current_image_count + 1
+                        }).eq('id', user_id).execute()
+                        logger.info(f"Incremented image count for user {user_id}, intent: {current_intent} (from {current_image_count} to {current_image_count + 1})")
+                except Exception as counter_error:
+                    logger.error(f"Error incrementing image count for content creation: {counter_error}")
+            else:
+                logger.info(f"No valid intent found, not incrementing counter")
+
         except Exception as e:
             logger.error(f"Error saving ATSN bot response to conversation history: {e}")
         

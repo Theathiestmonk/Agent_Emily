@@ -103,7 +103,19 @@ async def generate_image_for_post(
         
         # Generate image
         result = await media_agent.generate_media_for_post(request.post_id, current_user.id)
-        
+
+        # Increment image generation count
+        try:
+            current = supabase_admin.table('profiles').select('images_generated_this_month').eq('id', current_user.id).execute()
+            if current.data and len(current.data) > 0:
+                current_count = current.data[0]['images_generated_this_month'] or 0
+                supabase_admin.table('profiles').update({
+                    'images_generated_this_month': current_count + 1
+                }).eq('id', current_user.id).execute()
+                logger.info(f"Incremented image count for user {current_user.id} (from {current_count} to {current_count + 1})")
+        except Exception as counter_error:
+            logger.error(f"Error incrementing image count: {counter_error}")
+
         return ImageGenerationResponse(**result)
         
     except Exception as e:
@@ -153,6 +165,17 @@ async def generate_images_for_posts(
                 
                 if result["success"]:
                     successful += 1
+                    # Increment image generation count for successful generation
+                    try:
+                        current = supabase_admin.table('profiles').select('images_generated_this_month').eq('id', current_user.id).execute()
+                        if current.data and len(current.data) > 0:
+                            current_count = current.data[0]['images_generated_this_month'] or 0
+                            supabase_admin.table('profiles').update({
+                                'images_generated_this_month': current_count + 1
+                            }).eq('id', current_user.id).execute()
+                            logger.info(f"Incremented image count for user {current_user.id} (batch, from {current_count} to {current_count + 1})")
+                    except Exception as counter_error:
+                        logger.error(f"Error incrementing image count in batch: {counter_error}")
                 else:
                     failed += 1
                     

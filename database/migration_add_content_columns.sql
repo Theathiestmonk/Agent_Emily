@@ -23,3 +23,4 @@ COMMENT ON COLUMN created_content.email_subject IS 'Email subject line for email
 COMMENT ON COLUMN created_content.email_body IS 'Full email body content';
 COMMENT ON COLUMN created_content.message IS 'Message content for messaging platforms (WhatsApp, SMS, etc.)';
 
+

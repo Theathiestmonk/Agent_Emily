@@ -392,15 +392,51 @@ function EmilyDashboard() {
 
       if (hasAtsnConversations) {
         // Load ATSN conversations into the chatbot
-        const atsnMessages = uniqueMessages.map(msg => ({
-          id: msg.id,
-          conversationId: msg.id.includes('conv-') ? msg.id.replace('conv-', '') : msg.id,
-          sender: msg.type === 'user' ? 'user' : 'bot',
-          text: msg.content,
-          timestamp: msg.timestamp,
-          intent: null, // Will be determined from conversation
-          step: null
-        }))
+        const atsnMessages = uniqueMessages.map(msg => {
+          // Find the corresponding conversation to get metadata
+          const originalConv = dateConversations.find(conv => `conv-${conv.id}` === msg.id)
+          let metadata = {}
+          if (originalConv?.metadata) {
+            if (typeof originalConv.metadata === 'string') {
+              try {
+                metadata = JSON.parse(originalConv.metadata)
+              } catch {
+                metadata = {}
+              }
+            } else {
+              metadata = originalConv.metadata
+            }
+          }
+
+          // Extract agent_name from metadata (same as ATSN chatbot)
+          let agent_name = metadata?.agent_name
+          if (!agent_name && msg.type === 'bot' && (msg.intent || originalConv?.intent)) {
+            // Fallback: determine agent from intent (same logic as ATSN chatbot)
+            const intent = (msg.intent || originalConv?.intent || '').toLowerCase()
+            if (intent.includes('lead')) {
+              agent_name = 'chase'
+            } else if (['view_content', 'publish_content', 'delete_content'].includes(intent)) {
+              agent_name = 'emily'
+            } else if (['create_content', 'edit_content', 'schedule_content'].includes(intent)) {
+              agent_name = 'leo'
+            } else if (intent.includes('orio') || intent.includes('analytics')) {
+              agent_name = 'orio'
+            } else {
+              agent_name = 'emily' // default
+            }
+          }
+
+          return {
+            id: msg.id,
+            conversationId: msg.id.includes('conv-') ? msg.id.replace('conv-', '') : msg.id,
+            sender: msg.type === 'user' ? 'user' : 'bot',
+            text: msg.content,
+            timestamp: msg.timestamp,
+            intent: msg.intent || originalConv?.intent || null,
+            agent_name: agent_name,
+            step: null
+          }
+        })
 
         setAtsnConversationToLoad(atsnMessages)
         // Clear after a short delay to allow ATSNChatbot to load them
@@ -471,40 +507,40 @@ function EmilyDashboard() {
                   {/* Emily */}
                   <button
                     onClick={() => setMessageFilter('emily')}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all border-2 border-gray-300 ${
                       messageFilter === 'emily'
-                        ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white ring-2 ring-purple-300'
-                        : 'bg-gradient-to-br from-purple-500 to-pink-500 text-white hover:opacity-80'
+                        ? 'ring-2 ring-purple-300'
+                        : 'hover:opacity-80'
                     }`}
                     title="Emily Messages"
                   >
-                    E
+                    <img src="/emily_icon.png" alt="Emily" className="w-9 h-9 rounded-full object-cover" />
                   </button>
 
                   {/* Chase */}
                   <button
                     onClick={() => setMessageFilter('chase')}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all border-2 border-gray-300 ${
                       messageFilter === 'chase'
-                        ? 'bg-gradient-to-r from-blue-500 to-blue-700 text-white ring-2 ring-blue-300'
-                        : 'bg-gradient-to-r from-blue-500 to-blue-700 text-white hover:opacity-80'
+                        ? 'ring-2 ring-blue-300'
+                        : 'hover:opacity-80'
                     }`}
                     title="Chase Messages"
                   >
-                    C
+                    <img src="/chase_logo.png" alt="Chase" className="w-9 h-9 rounded-full object-cover" />
                   </button>
 
                   {/* Leo */}
                   <button
                     onClick={() => setMessageFilter('leo')}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all border-2 border-gray-300 ${
                       messageFilter === 'leo'
-                        ? 'bg-gradient-to-r from-green-600 to-emerald-500 text-white ring-2 ring-green-300'
-                        : 'bg-gradient-to-r from-green-600 to-emerald-500 text-white hover:opacity-80'
+                        ? 'ring-2 ring-green-300'
+                        : 'hover:opacity-80'
                     }`}
                     title="Leo Messages"
                   >
-                    L
+                    <img src="/leo_logo.jpg" alt="Leo" className="w-9 h-9 rounded-full object-cover" />
                   </button>
                 </div>
                 <span className="text-gray-400">|</span>
