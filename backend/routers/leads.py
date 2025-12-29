@@ -121,6 +121,8 @@ class LeadResponse(BaseModel):
     updated_at: str
     follow_up_at: Optional[str] = None
     last_remark: Optional[str] = None
+    remarks: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 class ConversationResponse(BaseModel):
     id: str
@@ -1496,11 +1498,38 @@ async def get_lead(lead_id: str, current_user: dict = Depends(get_current_user))
     """Get lead by ID"""
     try:
         result = supabase_admin.table("leads").select("*").eq("id", lead_id).eq("user_id", current_user["id"]).execute()
-        
+
         if not result.data:
             raise HTTPException(status_code=404, detail="Lead not found")
-        
-        return result.data[0]
+
+        lead = result.data[0]
+
+        # Extract remarks from metadata if available
+        if lead.get("metadata") and isinstance(lead["metadata"], dict):
+            remarks = lead["metadata"].get("remarks", "")
+            lead["remarks"] = remarks
+            lead["last_remark"] = remarks  # For LeadCard compatibility
+
+        # Transform status and source_platform to proper case for frontend display
+        if lead.get("status"):
+            # Status should already be lowercase from database, but ensure it's proper
+            lead["status"] = lead["status"].lower()
+
+        if lead.get("source_platform"):
+            # Transform source_platform to proper case for LeadCard
+            platform_mapping = {
+                "manual entry": "Manual Entry",
+                "facebook": "Facebook",
+                "instagram": "Instagram",
+                "walk ins": "Walk Ins",
+                "referral": "Referral",
+                "email": "Email",
+                "website": "Website",
+                "phone call": "Phone Call"
+            }
+            lead["source_platform"] = platform_mapping.get(lead["source_platform"].lower(), lead["source_platform"])
+
+        return lead
         
     except HTTPException:
         raise

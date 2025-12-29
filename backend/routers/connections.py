@@ -3365,10 +3365,15 @@ async def post_to_facebook(
 
         hashtags = post_data.get('hashtags', [])
 
-        image_url = post_data.get('image_url', '')
+        # Get image URL from content data if available, otherwise fallback to post_data
+        image_url = ''
+        if content_data and content_data.get('images') and len(content_data['images']) > 0:
+            image_url = content_data['images'][0]
+            print(f"✅ Using image URL from database: {image_url}")
+        else:
+            image_url = post_data.get('image_url', '')
+            print(f"⚠️ Using fallback image URL from request: {image_url}")
 
-        
-        
         # Combine title, message, and hashtags
 
         full_message = ""
@@ -4830,8 +4835,24 @@ async def post_to_instagram(
 
         print(f"📝 Post data: {post_data}")
 
-        
-        
+        # Get content data from database using content_id
+        content_id = post_data.get('content_id')
+        print(f"🔍 Received content_id: {content_id} (type: {type(content_id)})")
+        content_data = None
+
+        if content_id:
+            try:
+                content_response = supabase_admin.table('created_content').select('*').eq('id', content_id).eq('user_id', current_user.id).execute()
+                if content_response.data and len(content_response.data) > 0:
+                    content_data = content_response.data[0]
+                    print(f"📄 Fetched content data for ID {content_id}: images={content_data.get('images', 'MISSING')}")
+                else:
+                    print(f"❌ No content found for ID {content_id}")
+            except Exception as e:
+                print(f"⚠️ Failed to fetch content data: {e}")
+        else:
+            print(f"❌ No content_id provided in request")
+
         # Get user's Instagram connection
 
         response = supabase_admin.table("platform_connections").select("*").eq("user_id", current_user.id).eq("platform", "instagram").eq("is_active", True).execute()
@@ -4898,10 +4919,15 @@ async def post_to_instagram(
 
         hashtags = post_data.get('hashtags', [])
 
-        image_url = post_data.get('image_url', '')
+        # Get image URL from content data if available, otherwise fallback to post_data
+        image_url = ''
+        if content_data and content_data.get('images') and len(content_data['images']) > 0:
+            image_url = content_data['images'][0]
+            print(f"✅ Using image URL from database: {image_url}")
+        else:
+            image_url = post_data.get('image_url', '')
+            print(f"⚠️ Using fallback image URL from request: {image_url}")
 
-        
-        
         # Combine title, message, and hashtags
 
         full_message = ""

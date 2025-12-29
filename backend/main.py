@@ -41,6 +41,7 @@ from routers.content_from_drive import router as content_from_drive_router
 from routers.admin import router as admin_router
 from routers.faq_embeddings import router as faq_embeddings_router
 from routers.analytics_insights import router as analytics_insights_router
+from routers.atsn_chatbot import router as atsn_chatbot_router
 from services.scheduler import start_analytics_scheduler, stop_analytics_scheduler, get_scheduler_status, trigger_analytics_collection_now
 
 # Load environment variables
@@ -126,6 +127,7 @@ app.include_router(content_from_drive_router)
 app.include_router(admin_router)
 app.include_router(faq_embeddings_router)
 app.include_router(analytics_insights_router)
+app.include_router(atsn_chatbot_router)
 
 # Health check endpoint
 @app.get("/health")

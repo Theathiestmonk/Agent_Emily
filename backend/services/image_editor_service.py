@@ -33,7 +33,7 @@ class ImageEditorService:
             raise Exception("Gemini API key missing")
             
         self.gemini_client = genai.Client(api_key=self.gemini_api_key)
-        self.gemini_model = 'gemini-2.0-flash-exp'
+        self.gemini_model = 'gemini-2.5-flash-lite'
         self.gemini_image_model = 'gemini-2.5-flash-image-preview'
         self.token_tracker = TokenUsageService(self.supabase_url, self.supabase_key)
         

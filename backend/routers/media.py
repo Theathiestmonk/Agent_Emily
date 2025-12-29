@@ -590,7 +590,7 @@ async def upload_media(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
-    """Upload a media file (image or video) to Supabase storage for onboarding/profile use"""
+    """Upload a media file (image or video) to Supabase storage for content uploads"""
     try:
         logger.info(f"Media upload request received - filename: {file.filename}, user: {current_user.id}")
         
@@ -625,7 +625,7 @@ async def upload_media(
         import uuid
         file_ext = file.filename.split('.')[-1] if '.' in file.filename else ('mp4' if is_video else 'png')
         filename = f"{current_user.id}-{uuid.uuid4().hex[:8]}.{file_ext}"
-        file_path = f"onboarding-media/{filename}"
+        file_path = f"uploaded/{filename}"
         logger.info(f"Generated file path: {file_path}")
         
         # Use user-uploads bucket for media (supports both images and videos)

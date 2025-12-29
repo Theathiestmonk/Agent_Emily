@@ -4,11 +4,20 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { adminAPI } from '../services/admin'
 import SettingsMenu from './SettingsMenu'
-import { 
-  Home, 
-  FileText, 
-  Settings, 
-  Hand, 
+// Custom Discussions Icon Component
+const DiscussionsIcon = ({ className }) => (
+  <img
+    src="/discussions.svg"
+    alt="Discussions"
+    className={className}
+    style={{ width: '24px', height: '24px', objectFit: 'contain' }}
+  />
+)
+import {
+  Home,
+  FileText,
+  Settings,
+  Hand,
   Sparkles,
   BarChart3,
   Share2,
@@ -120,12 +129,12 @@ const SideNavbar = () => {
     {
       name: 'Discussions',
       href: '/dashboard',
-      icon: MessageSquare
+      icon: DiscussionsIcon
     },
     {
       name: 'Suggestions',
-      href: '/content',
-      icon: Lightbulb
+      href: '/post-suggestions',
+      icon: Sparkles
     },
     {
       name: 'Writings',
@@ -212,17 +221,16 @@ const SideNavbar = () => {
     <div className="hidden md:block bg-white shadow-lg transition-all duration-300 fixed left-0 top-0 h-screen z-50 w-48 xl:w-64 flex flex-col overflow-hidden" style={{position: 'fixed', zIndex: 50}}>
       {/* Header */}
       <div className="p-3 lg:p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center flex-1 min-w-0">
-            <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full flex items-center justify-center mr-2 lg:mr-3 flex-shrink-0">
-              <span className="text-white font-bold text-sm lg:text-lg">E</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-base lg:text-lg font-bold text-gray-900 truncate">Emily</h1>
-              <p className="text-xs text-gray-500 truncate">
-                {profile?.business_name ? `For ${profile.business_name}` : 'AI Marketing'}
-              </p>
-            </div>
+        <div className="flex items-start justify-start">
+          <div className="flex flex-col space-y-1">
+            <img
+              src="/workvilalge.svg"
+              alt="Workvillage"
+              className="h-8 lg:h-10 w-auto object-contain"
+            />
+            <p className="text-xs text-gray-500 truncate">
+              {profile?.business_name ? `For ${profile.business_name}` : 'AI Marketing'}
+            </p>
           </div>
         </div>
       </div>
