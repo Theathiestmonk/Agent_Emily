@@ -4850,9 +4850,9 @@ def handle_create_leads(state: AgentState) -> AgentState:
         state.result = "User authentication required."
         return state
 
-    # Get contact info (payload completion should ensure at least one is present)
-    lead_email = payload.get('lead_email')
-    lead_phone = payload.get('lead_phone')
+    # Get contact info from original values (not masked payload values)
+    lead_email = state.original_email
+    lead_phone = state.original_phone
 
     # Final validation for contact info
     if not lead_email and not lead_phone:
