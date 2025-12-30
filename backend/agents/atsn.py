@@ -380,6 +380,7 @@ class AgentState(BaseModel):
     lead_items: Optional[List[Dict[str, Any]]] = None  # Structured lead data for frontend card rendering
     needs_connection: Optional[bool] = None  # Whether user needs to connect an account
     connection_platform: Optional[str] = None  # Platform that needs to be connected
+<<<<<<< HEAD
 
     # Temporary fields for PII privacy protection
     temp_original_email: Optional[str] = None  # Original email from user input (create operations)
@@ -393,6 +394,12 @@ class AgentState(BaseModel):
     temp_followup_emails: Optional[List[str]] = Field(default_factory=list)  # Original emails for follow-up
     temp_followup_phones: Optional[List[str]] = Field(default_factory=list)  # Original phones for follow-up
 
+    # Intent change detection
+    intent_change_detected: bool = False
+    intent_change_type: Optional[str] = None  # 'refinement', 'complete_shift', 'none'
+    previous_intent: Optional[str] = None
+    
+>>>>>>> 05be2b7 (feat: Implement intelligent intent change detection in ATSN agent)
     class Config:
         arbitrary_types_allowed = True
 
@@ -420,11 +427,18 @@ INTENT_MAP = {
 
 def classify_intent(state: AgentState) -> AgentState:
     """Classify user intent using Gemini"""
-    
-    # If intent is already set and we're continuing from a clarification, preserve it
-    # This prevents re-classification when user responds to clarification questions
-    if state.intent and state.current_step == "payload_construction":
-        print(f" Intent preserved: {state.intent} (continuing from clarification)")
+
+    # Only preserve intent for clarification responses, not for new user messages
+    # Check if this is a clarification response vs a new intent
+    is_clarification_response = (
+        state.waiting_for_user and
+        state.clarification_question and
+        state.current_step == "waiting_for_clarification"
+    )
+
+    # If this is just a clarification response, preserve the original intent
+    if is_clarification_response:
+        print(f" Intent preserved: {state.intent} (clarification response)")
         return state
     
     # Check for greetings first (simple pattern matching)
@@ -438,8 +452,25 @@ def classify_intent(state: AgentState) -> AgentState:
         print(f" Intent classified: greeting")
         return state
     
+    # Detect intent changes by analyzing conversation context
+    intent_change_prompt = ""
+    if state.previous_intent:
+        intent_change_prompt = f"""
+
+INTENT CHANGE ANALYSIS:
+Previous intent: {state.previous_intent}
+Current conversation context: {state.user_query}
+
+Analyze if the user has changed their intent:
+- REFINEMENT: User is refining the same intent (e.g., "create post" → "generate post")
+- COMPLETE_SHIFT: User has switched to a different intent type (e.g., "create post" → "view posts")
+- NONE: No intent change, continuing with same intent
+
+Return intent change type: "refinement", "complete_shift", or "none"
+"""
+
     prompt = f"""You are an intent classifier for a content and lead management system.
-    
+
 Available intents:
 1. greeting - User is greeting (hi, hello, good morning, etc.)
 2. create_content - Creating new content (posts, videos, emails, messages)
@@ -457,15 +488,29 @@ Available intents:
 14. view_analytics - Viewing analytics data
 15. general_talks - General conversation not related to the above tasks
 
+{intent_change_prompt}
+
 User query: {state.user_query}
 
-Return ONLY the intent name (e.g., "create_content", "greeting", "general_talks", etc.) without any explanation.
-If the query doesn't match any specific task, return "general_talks"."""
+Return format: intent_name|change_type
+Where change_type is: "refinement", "complete_shift", or "none"
+
+Example: "create_content|refinement"
+Example: "view_content|complete_shift"
+Example: "greeting|none"
+
+Return ONLY the formatted response without any explanation."""
 
     try:
         response = model.generate_content(prompt)
-        intent = response.text.strip().lower()
-        
+
+        # Parse response format: "intent_name|change_type"
+        response_parts = response.text.strip().split('|')
+        intent = response_parts[0].strip().lower()
+
+        # Extract change type (default to "none" if not provided)
+        change_type = response_parts[1].strip().lower() if len(response_parts) > 1 else "none"
+
         # Validate intent
         if intent not in INTENT_MAP:
             # Try to find closest match
@@ -476,8 +521,25 @@ If the query doesn't match any specific task, return "general_talks"."""
             else:
                 # Default to general_talks for unmatched intents
                 intent = "general_talks"
-        
+
+        # Set intent and change detection
         state.intent = intent
+        state.intent_change_type = change_type
+
+        # Detect intent changes - check against both current and previous intent
+        if state.intent and state.intent != intent:
+            # Direct change from current intent
+            state.intent_change_detected = True
+            print(f"🎯 Intent change detected: {state.intent} → {intent} (type: {change_type})")
+        elif state.previous_intent and state.previous_intent != intent and not state.intent:
+            # Fallback check for cases where intent might not be set yet
+            state.intent_change_detected = True
+            print(f"🎯 Intent change detected (fallback): {state.previous_intent} → {intent} (type: {change_type})")
+        else:
+            state.intent_change_detected = False
+
+        # Update previous intent for next comparison
+        state.previous_intent = intent
         
         # For greeting, handle directly and end
         if intent == "greeting":
@@ -3171,15 +3233,7 @@ def handle_create_content(state: AgentState) -> AgentState:
         content_data = {}  # Store data to save to database
 
         # Load business context from profiles table
-        business_context = {}
-        if state.user_id:
-            try:
-                profile_response = supabase.table("profiles").select("*, profile_embedding").eq("id", state.user_id).execute()
-                if profile_response.data and len(profile_response.data) > 0:
-                    profile_data = profile_response.data[0]
-                    business_context = get_profile_context_with_embedding(profile_data)
-            except Exception as e:
-                logger.warning(f"Failed to load business context: {e}")
+        business_context = _load_business_context(state.user_id) if state.user_id else _get_default_business_context()
 
         # Handle different content types
         content_type = payload.get('content_type', '')
@@ -3522,6 +3576,19 @@ Create a high-quality, professional image that:
 
                                         if generated_image_url and isinstance(generated_image_url, str):
                                             content_data['images'] = [generated_image_url]
+
+                                            # ✅ Increment image count after successful generation and storage
+                                            try:
+                                                # Read current image count and increment
+                                                current_images = supabase.table('profiles').select('images_generated_this_month').eq('id', state.user_id).execute()
+                                                if current_images.data and len(current_images.data) > 0:
+                                                    current_image_count = current_images.data[0]['images_generated_this_month'] or 0
+                                                    supabase.table('profiles').update({
+                                                        'images_generated_this_month': current_image_count + 1
+                                                    }).eq('id', state.user_id).execute()
+                                                    logger.info(f"Incremented image count for user {state.user_id} after successful generation (from {current_image_count} to {current_image_count + 1})")
+                                            except Exception as counter_error:
+                                                logger.error(f"Error incrementing image count after generation: {counter_error}")
                                         else:
                                             logger.error(f"Invalid public URL returned: {generated_image_url}")
                                             generated_image_url = None
@@ -5319,6 +5386,52 @@ def should_continue_to_action(state: AgentState) -> str:
     return "end"
 
 
+def route_based_on_intent_change(state: AgentState) -> str:
+    """Route based on intent change detection"""
+    if state.intent_change_detected:
+        if state.intent_change_type == "complete_shift":
+            print(f"🔄 Complete intent shift detected - restarting entire flow")
+
+            # Aggressive reset for complete intent changes
+            state = reset_state_for_new_intent(state)
+
+            # Return to start for complete restart
+            return "classify_intent"
+        elif state.intent_change_type == "refinement":
+            print(f"🔧 Intent refinement detected - continuing with context")
+            state.intent_change_detected = False
+            # Continue with normal routing for refinements
+            return route_to_constructor(state)
+        else:
+            # Unknown change type, treat as refinement
+            print(f"🔧 Intent change detected (unknown type) - continuing")
+            state.intent_change_detected = False
+            return route_to_constructor(state)
+    else:
+        # No change - normal routing
+        return route_to_constructor(state)
+
+
+def reset_state_for_new_intent(state: AgentState) -> AgentState:
+    """Reset state completely for new intent processing"""
+    print("🧹 Resetting state for new intent")
+
+    # Keep only essential fields, reset everything else
+    preserved_user_id = state.user_id
+    preserved_previous_intent = state.intent  # Keep for logging
+
+    # Create fresh state
+    fresh_state = AgentState(
+        user_query=state.user_query,  # Keep the full conversation context
+        user_id=preserved_user_id,
+        intent_change_detected=False,
+        previous_intent=preserved_previous_intent
+    )
+
+    print(f"✅ State reset complete. Ready for new intent processing.")
+    return fresh_state
+
+
 def build_graph():
     """Build the LangGraph workflow"""
     
@@ -5349,11 +5462,12 @@ def build_graph():
     # Add edges
     workflow.set_entry_point("classify_intent")
     
-    # Route from intent classifier to specific constructor or direct to action
+    # Route from intent classifier with intent change detection
     workflow.add_conditional_edges(
         "classify_intent",
-        route_to_constructor,
+        route_based_on_intent_change,
         {
+            "classify_intent": "classify_intent",  # For complete intent shifts - restart
             "execute_action": "execute_action",  # For greeting and general_talks
             "construct_create_content": "construct_create_content",
             "construct_edit_content": "construct_edit_content",
@@ -5402,6 +5516,60 @@ def build_graph():
     workflow.add_edge("execute_action", END)
     
     return workflow.compile()
+
+
+# ==================== HELPER FUNCTIONS ====================
+
+def _get_default_business_context() -> Dict[str, Any]:
+    """Get default business context when profile is not available"""
+    return {
+        "business_name": "AI Marketing Company",
+        "industry": ["Technology", "Marketing"],
+        "target_audience": ["Businesses", "Entrepreneurs"],
+        "brand_voice": "Professional and innovative",
+        "content_goals": ["Lead generation", "Brand awareness"],
+        "brand_personality": "Helpful and knowledgeable",
+        "brand_values": ["Innovation", "Quality", "Customer success"]
+    }
+
+
+def _load_business_context(user_id: str) -> Dict[str, Any]:
+    """Load business context from user profile"""
+    try:
+        if not supabase:
+            logger.info(f"Supabase not available for user {user_id}, using default business context")
+            return _get_default_business_context()
+
+        # Get user profile from Supabase including embeddings
+        response = supabase.table("profiles").select("*, profile_embedding").eq("id", user_id).execute()
+
+        if response.data and len(response.data) > 0:
+            profile_data = response.data[0]
+            # Use embedding context utility if available
+            try:
+                from utils.embedding_context import get_profile_context_with_embedding
+                business_context = get_profile_context_with_embedding(profile_data)
+                logger.info(f"User {user_id} - Business context extracted using embedding: {business_context}")
+                return business_context
+            except ImportError:
+                # Fallback to basic extraction
+                business_context = {
+                    "business_name": profile_data.get("business_name", ""),
+                    "industry": profile_data.get("industry", ""),
+                    "target_audience": profile_data.get("target_audience", ""),
+                    "brand_voice": profile_data.get("brand_voice", ""),
+                    "content_goals": profile_data.get("content_goals", []),
+                    "brand_personality": profile_data.get("brand_personality", ""),
+                    "brand_values": profile_data.get("brand_values", [])
+                }
+                logger.info(f"User {user_id} - Business context extracted using basic fallback: {business_context}")
+                return business_context
+        else:
+            logger.warning(f"No profile found for user {user_id}")
+            return _get_default_business_context()
+    except Exception as e:
+        logger.error(f"Error loading business context for user {user_id}: {e}")
+        return _get_default_business_context()
 
 
 # ==================== MAIN AGENT CLASS ====================

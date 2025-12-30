@@ -51,3 +51,66 @@ async def get_usage_counts(current_user: User = Depends(get_current_user)):
         logger.error(f"Error fetching usage counts for user {current_user.id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching usage counts: {str(e)}")
 
+@router.post("/agents/{agent_name}/like")
+async def increment_agent_likes(agent_name: str, current_user: User = Depends(get_current_user)):
+    """Increment the likes count for a specific agent"""
+    try:
+        # Validate agent name
+        valid_agents = ['emily', 'leo', 'chase', 'atsn']
+        if agent_name.lower() not in valid_agents:
+            raise HTTPException(status_code=400, detail=f"Invalid agent name. Must be one of: {', '.join(valid_agents)}")
+
+        # First get current likes count
+        current_response = supabase_client.table('agent_profiles').select('likes_count').eq('agent_name', agent_name.lower()).execute()
+
+        if not current_response.data or len(current_response.data) == 0:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_name} not found")
+
+        current_likes = current_response.data[0]['likes_count'] or 0
+
+        # Increment likes count
+        response = supabase_client.table('agent_profiles').update({
+            'likes_count': current_likes + 1
+        }).eq('agent_name', agent_name.lower()).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to update likes count")
+
+        logger.info(f"Incremented likes count for agent {agent_name} by user {current_user.id} (from {current_likes} to {current_likes + 1})")
+        return {"success": True, "agent_name": agent_name, "new_likes_count": current_likes + 1}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error incrementing likes for agent {agent_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error incrementing likes count: {str(e)}")
+
+@router.post("/increment-task")
+async def increment_task_count(current_user: User = Depends(get_current_user)):
+    """Increment task count when a task is actually completed and displayed"""
+    try:
+        # Read current task count and increment
+        current_response = supabase_client.table('profiles').select('tasks_completed_this_month').eq('id', current_user.id).execute()
+
+        if not current_response.data or len(current_response.data) == 0:
+            raise HTTPException(status_code=404, detail="User profile not found")
+
+        current_count = current_response.data[0]['tasks_completed_this_month'] or 0
+
+        # Increment task count
+        update_response = supabase_client.table('profiles').update({
+            'tasks_completed_this_month': current_count + 1
+        }).eq('id', current_user.id).execute()
+
+        if not update_response.data:
+            raise HTTPException(status_code=500, detail="Failed to update task count")
+
+        logger.info(f"Incremented task count for user {current_user.id} after task completion (from {current_count} to {current_count + 1})")
+        return {"success": True, "new_task_count": current_count + 1}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error incrementing task count for user {current_user.id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error incrementing task count: {str(e)}")
+

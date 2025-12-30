@@ -4,13 +4,19 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { adminAPI } from '../services/admin'
 import SettingsMenu from './SettingsMenu'
+import { Moon, Sun } from 'lucide-react'
 // Custom Discussions Icon Component
-const DiscussionsIcon = ({ className }) => (
+const DiscussionsIcon = ({ className, isDarkMode }) => (
   <img
     src="/discussions.svg"
     alt="Discussions"
     className={className}
-    style={{ width: '24px', height: '24px', objectFit: 'contain' }}
+    style={{
+      width: '24px',
+      height: '24px',
+      objectFit: 'contain',
+      filter: isDarkMode ? 'brightness(0) invert(1)' : 'none'
+    }}
   />
 )
 import {
@@ -44,6 +50,10 @@ const SideNavbar = () => {
   const [isAdmin, setIsAdmin] = useState(false)
   const [userPlan, setUserPlan] = useState('')
   const [usageCounts, setUsageCounts] = useState({ tasks: 0, images: 0 })
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Check localStorage for saved preference, default to light mode
+    return localStorage.getItem('darkMode') === 'true'
+  })
 
   // Cache key for localStorage
   const getCacheKey = (userId) => `profile_${userId}`
@@ -159,13 +169,13 @@ const SideNavbar = () => {
           .select('subscription_plan')
           .eq('id', user.id)
           .single()
-
+        
         if (error || !profile) {
           setIsAdmin(false)
           setUserPlan('')
           return
         }
-
+        
         // Store user plan and check if admin
         setUserPlan(profile.subscription_plan || '')
         setIsAdmin(profile.subscription_plan === 'admin')
@@ -264,6 +274,27 @@ const SideNavbar = () => {
     }
   }, [user])
 
+  // Apply dark mode to document body
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    // Save preference to localStorage
+    localStorage.setItem('darkMode', isDarkMode.toString())
+  }, [isDarkMode])
+
+  // Toggle dark mode function
+  const toggleDarkMode = () => {
+    const newValue = !isDarkMode
+    setIsDarkMode(newValue)
+    // Dispatch custom event to notify other components
+    window.dispatchEvent(new CustomEvent('localStorageChange', {
+      detail: { key: 'darkMode', value: newValue.toString() }
+    }))
+  }
+
   const displayName = useMemo(() => {
     return profile?.name || user?.user_metadata?.name || user?.email || 'User'
   }, [profile, user])
@@ -280,13 +311,31 @@ const SideNavbar = () => {
   }, [user])
 
   return (
-    <div className="hidden md:block bg-white shadow-lg transition-all duration-300 fixed left-0 top-0 h-screen z-50 w-48 xl:w-64 flex flex-col overflow-hidden" style={{position: 'fixed', zIndex: 50}}>
+    <div className={`hidden md:block shadow-lg transition-all duration-300 fixed left-0 top-0 h-screen z-50 w-48 xl:w-64 flex flex-col overflow-hidden ${
+      isDarkMode ? 'bg-gray-900' : 'bg-white'
+    }`} style={{position: 'fixed', zIndex: 50}}>
       {/* Header */}
-      <div className="p-3 lg:p-4 border-b border-gray-200">
-        <div className="flex items-start justify-start">
+      <div className={`p-3 lg:p-4 border-b ${
+        isDarkMode ? 'border-gray-700' : 'border-gray-200'
+      }`}>
+        <div className="flex items-center justify-between">
           <div className="flex flex-col space-y-1">
-            <h1 className="text-xl lg:text-2xl font-bold text-gray-600">Workvillage.ai</h1>
+            <h1 className={`text-xl lg:text-2xl font-bold ${
+              isDarkMode ? 'text-gray-200' : 'text-gray-600'
+            }`}>Workvillage.ai</h1>
           </div>
+          {/* Dark Mode Toggle */}
+          <button
+            onClick={toggleDarkMode}
+            className={`p-2 rounded-lg transition-colors ${
+              isDarkMode
+                ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+            title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
         </div>
       </div>
 
@@ -305,10 +354,16 @@ const SideNavbar = () => {
                   className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-all duration-200 group ${
                     active
                       ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800 hover:text-gray-100'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                   }`}
                 >
+                  {item.name === 'Discussions' ? (
+                    <DiscussionsIcon className="w-5 h-5 mr-3" isDarkMode={isDarkMode} />
+                  ) : (
                   <Icon className="w-5 h-5 mr-3" />
+                  )}
                   <div className="flex-1 text-left">
                     <div className="font-medium">{item.name}</div>
                   </div>
@@ -333,6 +388,8 @@ const SideNavbar = () => {
                           className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-all duration-200 group ${
                             subActive
                               ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg'
+                              : isDarkMode
+                              ? 'text-gray-300 hover:bg-gray-800 hover:text-gray-100'
                               : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                           }`}
                         >
@@ -362,11 +419,19 @@ const SideNavbar = () => {
               }}
               className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-all duration-200 group ${
                 active
-                  ? 'bg-gray-200/50 backdrop-blur-md text-gray-900 border border-gray-300/30 shadow-sm'
+                  ? isDarkMode
+                    ? 'bg-gray-700/50 backdrop-blur-md text-gray-100 border border-gray-600/30 shadow-sm'
+                    : 'bg-gray-200/50 backdrop-blur-md text-gray-900 border border-gray-300/30 shadow-sm'
+                  : isDarkMode
+                  ? 'text-gray-300 hover:bg-gray-800 hover:text-gray-100'
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
               }`}
             >
+              {item.name === 'Discussions' ? (
+                <DiscussionsIcon className="w-5 h-5 mr-3" isDarkMode={isDarkMode} />
+              ) : (
               <Icon className="w-5 h-5 mr-3" />
+              )}
               <div className="flex-1 text-left">
                 <div className="font-medium">{item.name}</div>
               </div>
@@ -376,13 +441,19 @@ const SideNavbar = () => {
       </nav>
 
       {/* User Section */}
-      <div className="p-4 border-t border-gray-200 flex-shrink-0 space-y-1">
+      <div className={`p-4 border-t flex-shrink-0 space-y-1 ${
+        isDarkMode ? 'border-gray-700' : 'border-gray-200'
+      }`}>
         {isAdmin && (
           <button
             onClick={() => navigate('/admin')}
             className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-colors group ${
               location.pathname === '/admin'
-                ? 'bg-gray-200/50 backdrop-blur-md text-gray-900 border border-gray-300/30 shadow-sm'
+                ? isDarkMode
+                  ? 'bg-gray-700/50 backdrop-blur-md text-gray-100 border border-gray-600/30 shadow-sm'
+                  : 'bg-gray-200/50 backdrop-blur-md text-gray-900 border border-gray-300/30 shadow-sm'
+                : isDarkMode
+                ? 'text-gray-300 hover:bg-gray-800 hover:text-gray-100'
                 : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
             }`}
           >
@@ -392,14 +463,22 @@ const SideNavbar = () => {
         )}
         <button
           onClick={() => setIsSettingsMenuOpen(true)}
-          className="w-full flex items-center p-2 lg:p-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-lg transition-colors group"
+          className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-colors group ${
+            isDarkMode
+              ? 'text-gray-300 hover:bg-gray-800 hover:text-gray-100'
+              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+          }`}
         >
           <Settings className="w-5 h-5 mr-3" />
           <span className="font-medium">Settings</span>
         </button>
         <button
           onClick={handleLogout}
-          className="w-full flex items-center p-2 lg:p-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors group"
+          className={`w-full flex items-center p-2 lg:p-3 rounded-lg transition-colors group ${
+            isDarkMode
+              ? 'text-gray-300 hover:bg-red-900/50 hover:text-red-400'
+              : 'text-gray-600 hover:bg-red-50 hover:text-red-600'
+          }`}
         >
           <Hand className="w-5 h-5 mr-3" style={{ transform: 'rotate(-20deg)' }} />
           <span className="font-medium">Say Bye</span>
@@ -407,13 +486,17 @@ const SideNavbar = () => {
 
         {/* Separator Line */}
         <div className="w-full px-2 lg:px-3 py-2">
-          <div className="border-t border-gray-200"></div>
+          <div className={`border-t ${
+            isDarkMode ? 'border-gray-700' : 'border-gray-200'
+          }`}></div>
         </div>
 
         {/* Plan Name Heading */}
         {userPlan && (
           <div className="w-full px-2 lg:px-3 py-2">
-            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide text-left">
+            <h3 className={`text-xs font-semibold uppercase tracking-wide text-left ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>
               {userPlan.replace('_', ' ').toUpperCase()} Plan
             </h3>
           </div>
@@ -432,7 +515,7 @@ const SideNavbar = () => {
                   stroke="currentColor"
                   strokeWidth="2"
                   fill="none"
-                  className="text-gray-200"
+                  className={isDarkMode ? 'text-gray-700' : 'text-gray-200'}
                 />
                 <circle
                   cx="12"
@@ -453,7 +536,9 @@ const SideNavbar = () => {
                 </div>
               </div>
             </div>
-            <span className="text-xs text-gray-500 font-medium">Tasks</span>
+            <span className={`text-xs font-medium ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+            }`}>Tasks</span>
           </div>
 
           {/* Images Donut */}
@@ -467,7 +552,7 @@ const SideNavbar = () => {
                   stroke="currentColor"
                   strokeWidth="2"
                   fill="none"
-                  className="text-gray-200"
+                  className={isDarkMode ? 'text-gray-700' : 'text-gray-200'}
                 />
                 <circle
                   cx="12"
@@ -488,7 +573,9 @@ const SideNavbar = () => {
                 </div>
               </div>
             </div>
-            <span className="text-xs text-gray-500 font-medium">Images</span>
+            <span className={`text-xs font-medium ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+            }`}>Images</span>
           </div>
         </div>
       </div>

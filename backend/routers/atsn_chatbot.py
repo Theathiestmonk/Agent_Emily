@@ -5,7 +5,9 @@ Handles chat interactions with the ATSN agent (Content & Lead Management)
 
 import os
 import sys
-from fastapi import APIRouter, HTTPException, Depends
+import uuid
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
@@ -61,6 +63,72 @@ class ChatResponse(BaseModel):
 # Store agent instances per user session
 user_agents = {}
 
+# Store active conversation sessions per user
+user_conversations = {}
+
+
+def get_or_create_conversation(user_id: str, session_id: str = None) -> dict:
+    """Get or create a conversation record for the user"""
+    if session_id and session_id in user_conversations:
+        return user_conversations[session_id]
+
+    try:
+        # If no session_id provided, check if user has an active conversation today
+        if not session_id:
+            today = datetime.now().date()
+            result = supabase_client.table("atsn_conversations").select("id, session_id").eq("user_id", user_id).eq("conversation_date", today.isoformat()).eq("is_active", True).execute()
+
+            if result.data and len(result.data) > 0:
+                conversation = result.data[0]
+                user_conversations[conversation["session_id"]] = conversation
+                return conversation
+
+        # Create new conversation
+        session_id = session_id or str(uuid.uuid4())
+        conversation_data = {
+            "user_id": user_id,
+            "session_id": session_id,
+            "conversation_date": datetime.now().date().isoformat(),
+            "primary_agent_name": "atsn",
+            "is_active": True
+        }
+
+        result = supabase_client.table("atsn_conversations").insert(conversation_data).execute()
+        conversation = result.data[0]
+        user_conversations[session_id] = conversation
+
+        logger.info(f"Created new conversation {conversation['id']} for user {user_id}")
+        return conversation
+
+    except Exception as e:
+        logger.error(f"Error creating/getting conversation for user {user_id}: {e}")
+        # Fallback to a dummy conversation for error resilience
+        return {"id": str(uuid.uuid4()), "session_id": session_id or str(uuid.uuid4())}
+
+
+def save_message_to_conversation(conversation_id: str, user_id: str, message_data: dict) -> None:
+    """Save a message to the conversation messages table"""
+    try:
+        # Get message sequence number
+        sequence_result = supabase_client.table("atsn_conversation_messages").select("message_sequence").eq("conversation_id", conversation_id).order("message_sequence", desc=True).limit(1).execute()
+
+        sequence = 1
+        if sequence_result.data and len(sequence_result.data) > 0:
+            sequence = sequence_result.data[0]["message_sequence"] + 1
+
+        message_record = {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "message_sequence": sequence,
+            **message_data
+        }
+
+        supabase_client.table("atsn_conversation_messages").insert(message_record).execute()
+        logger.info(f"Saved {message_data.get('message_type', 'unknown')} message to conversation {conversation_id}")
+
+    except Exception as e:
+        logger.error(f"Error saving message to conversation {conversation_id}: {e}")
+
 
 def get_user_agent(user_id: str) -> ATSNAgent:
     """Get or create ATSN agent for user"""
@@ -82,15 +150,17 @@ async def chat(
         user_id = current_user.id
         logger.info(f"ATSN chat request from user {user_id}: {chat_message.message}")
 
+        # Get or create conversation for this user
+        conversation = get_or_create_conversation(user_id)
+
         # Save user message to conversation history
         try:
             user_message_data = {
-                "user_id": user_id,
                 "message_type": "user",
                 "content": chat_message.message,
-                "metadata": {"agent": "atsn"}
+                "agent_name": "atsn"
             }
-            supabase_client.table("chatbot_conversations").insert(user_message_data).execute()
+            save_message_to_conversation(conversation["id"], user_id, user_message_data)
         except Exception as e:
             logger.error(f"Error saving ATSN user message to conversation history: {e}")
 
@@ -150,53 +220,20 @@ async def chat(
         # Save bot response to conversation history
         try:
             bot_message_data = {
-                "user_id": user_id,
                 "message_type": "bot",
                 "content": response_text,
+                "agent_name": agent_name,
                 "intent": response.get('intent'),
-                "metadata": {
-                    "agent": "atsn",
-                    "agent_name": agent_name,
-                    "step": response.get('current_step', 'unknown'),
-                    "payload_complete": response.get('payload_complete', False),
-                    "waiting_for_user": response.get('waiting_for_user', False)
-                }
+                "current_step": response.get('current_step', 'unknown'),
+                "clarification_question": response.get('clarification_question'),
+                "clarification_options": response.get('clarification_options'),
+                "content_items": response.get('content_items'),
+                "lead_items": response.get('lead_items')
             }
-            supabase_client.table("chatbot_conversations").insert(bot_message_data).execute()
+            save_message_to_conversation(conversation["id"], user_id, bot_message_data)
 
-            # Increment task counter for ALL completed tasks
-            current_intent = response.get('intent')
-            logger.info(f"Incrementing task count for intent: {current_intent}")
-
-            # Count ALL tasks that have an intent (not None/empty)
-            if current_intent and current_intent.strip():
-                try:
-                    # Read current count and increment
-                    current = supabase_client.table('profiles').select('tasks_completed_this_month').eq('id', user_id).execute()
-                    if current.data and len(current.data) > 0:
-                        current_count = current.data[0]['tasks_completed_this_month'] or 0
-                        supabase_client.table('profiles').update({
-                            'tasks_completed_this_month': current_count + 1
-                        }).eq('id', user_id).execute()
-                        logger.info(f"Incremented task count for user {user_id}, intent: {current_intent} (from {current_count} to {current_count + 1})")
-                except Exception as counter_error:
-                    logger.error(f"Error incrementing task count: {counter_error}")
-
-            # Increment image counter when creating content (since content creation generates images)
-            if current_intent == 'create_content':
-                try:
-                    # Read current image count and increment
-                    current_images = supabase_client.table('profiles').select('images_generated_this_month').eq('id', user_id).execute()
-                    if current_images.data and len(current_images.data) > 0:
-                        current_image_count = current_images.data[0]['images_generated_this_month'] or 0
-                        supabase_client.table('profiles').update({
-                            'images_generated_this_month': current_image_count + 1
-                        }).eq('id', user_id).execute()
-                        logger.info(f"Incremented image count for user {user_id}, intent: {current_intent} (from {current_image_count} to {current_image_count + 1})")
-                except Exception as counter_error:
-                    logger.error(f"Error incrementing image count for content creation: {counter_error}")
-            else:
-                logger.info(f"No valid intent found, not incrementing counter")
+            # Note: Task count increment moved to frontend after task completion display
+            # Note: Image count increment moved to after successful image generation in atsn.py
 
         except Exception as e:
             logger.error(f"Error saving ATSN bot response to conversation history: {e}")
@@ -267,10 +304,81 @@ async def health_check():
     Health check endpoint
     """
     from agents.atsn import supabase
-    
+
     return {
         "status": "healthy",
         "service": "atsn_chatbot",
         "gemini_configured": bool(os.getenv("GEMINI_API_KEY")),
         "supabase_configured": bool(supabase)
     }
+
+
+@router.get("/conversations")
+async def get_atsn_conversations(
+    current_user=Depends(get_current_user),
+    date: str = Query(None, description="Get conversations for specific date (YYYY-MM-DD)"),
+    all: bool = Query(False, description="Get all conversations instead of just today's")
+):
+    """Get ATSN conversations for current user"""
+    try:
+        user_id = current_user.id
+        logger.info(f"Fetching ATSN conversations for user {user_id}, date={date}, all={all}")
+
+        # Get conversations
+        query = supabase_client.table("atsn_conversations").select("*").eq("user_id", user_id)
+
+        if not all:
+            target_date = date if date else datetime.now().date().isoformat()
+            query = query.eq("conversation_date", target_date)
+
+        conversations_result = query.order("created_at", desc=True).execute()
+        conversations = conversations_result.data if conversations_result.data else []
+
+        # For each conversation, get the messages
+        conversations_with_messages = []
+        for conv in conversations:
+            # Get messages for this conversation
+            messages_result = supabase_client.table("atsn_conversation_messages").select("*").eq("conversation_id", conv["id"]).order("message_sequence", desc=False).execute()
+            messages = messages_result.data if messages_result.data else []
+
+            # Convert messages to frontend format
+            formatted_messages = []
+            for msg in messages:
+                formatted_msg = {
+                    "id": f"msg-{msg['id']}",
+                    "sender": msg["message_type"],
+                    "text": msg["content"],
+                    "timestamp": msg["created_at"],
+                    "intent": msg.get("intent"),
+                    "agent_name": msg.get("agent_name"),
+                    "current_step": msg.get("current_step"),
+                    "clarification_question": msg.get("clarification_question"),
+                    "clarification_options": msg.get("clarification_options"),
+                    "content_items": msg.get("content_items"),
+                    "lead_items": msg.get("lead_items")
+                }
+                formatted_messages.append(formatted_msg)
+
+            conversations_with_messages.append({
+                "id": conv["id"],
+                "session_id": conv["session_id"],
+                "conversation_date": conv["conversation_date"],
+                "primary_agent_name": conv["primary_agent_name"],
+                "total_messages": len(formatted_messages),
+                "messages": formatted_messages,
+                "created_at": conv["created_at"],
+                "updated_at": conv["updated_at"]
+            })
+
+        logger.info(f"Returning {len(conversations_with_messages)} ATSN conversations for user {user_id}")
+        return {
+            "conversations": conversations_with_messages,
+            "count": len(conversations_with_messages)
+        }
+
+    except Exception as e:
+        logger.error(f"Error fetching ATSN conversations: {str(e)}", exc_info=True)
+        return {
+            "conversations": [],
+            "count": 0
+        }

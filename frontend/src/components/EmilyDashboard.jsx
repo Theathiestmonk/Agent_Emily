@@ -6,6 +6,38 @@ import { onboardingAPI } from '../services/onboarding'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 
+// Get dark mode state from localStorage or default to light mode
+const getDarkModePreference = () => {
+  return localStorage.getItem('darkMode') === 'true'
+}
+
+// Listen for storage changes to sync dark mode across components
+const useStorageListener = (key, callback) => {
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === key) {
+        callback(e.newValue === 'true')
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+
+    // Also listen for custom events for same-tab updates
+    const handleCustomChange = (e) => {
+      if (e.detail.key === key) {
+        callback(e.detail.value === 'true')
+      }
+    }
+
+    window.addEventListener('localStorageChange', handleCustomChange)
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('localStorageChange', handleCustomChange)
+    }
+  }, [key, callback])
+}
+
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 import MobileNavigation from './MobileNavigation'
 import LoadingBar from './LoadingBar'
@@ -158,7 +190,10 @@ function EmilyDashboard() {
   const [messageFilter, setMessageFilter] = useState('all') // 'all', 'emily', 'chase', 'leo'
   const [showCustomContentChatbot, setShowCustomContentChatbot] = useState(false)
   const [showMobileChatHistory, setShowMobileChatHistory] = useState(false)
+  const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference)
 
+  // Listen for dark mode changes from other components (like SideNavbar)
+  useStorageListener('darkMode', setIsDarkMode)
 
   const handleRefreshChat = async () => {
     try {
@@ -231,6 +266,17 @@ function EmilyDashboard() {
       }
     }
   }, [conversations])
+
+  // Apply dark mode to document body
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    // Save preference to localStorage
+    localStorage.setItem('darkMode', isDarkMode.toString())
+  }, [isDarkMode])
 
   const getAuthToken = async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -315,6 +361,39 @@ function EmilyDashboard() {
     })
   }
 
+  // Function to load ATSN conversations for a specific date
+  const loadAtsnConversationsForDate = async (dateObj) => {
+    try {
+      const authToken = await getAuthToken()
+      if (!authToken) {
+        console.error('No auth token available')
+        return []
+      }
+
+      const dateStr = dateObj.toISOString().split('T')[0] // Format as YYYY-MM-DD
+
+      const response = await fetch(`${API_BASE_URL}/atsn/conversations?date=${dateStr}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('ATSN conversations for date:', data)
+        return data.conversations || []
+      } else {
+        console.error('Failed to load ATSN conversations:', response.status)
+        return []
+      }
+    } catch (error) {
+      console.error('Error loading ATSN conversations:', error)
+      return []
+    }
+  }
+
   // Function to load conversations for a specific date
   const loadConversationsForDate = async (dateObj) => {
     try {
@@ -338,6 +417,10 @@ function EmilyDashboard() {
         const convDate = new Date(conv.created_at)
         return convDate >= startDate && convDate <= endDate
       })
+
+      // Also load ATSN conversations for this date
+      const atsnConversations = await loadAtsnConversationsForDate(dateObj)
+      console.log('Loaded ATSN conversations:', atsnConversations)
 
       // Convert to message format and load in chatbot
       const conversationMessages = dateConversations
@@ -388,59 +471,40 @@ function EmilyDashboard() {
           }
         }
         return metadata?.agent === 'atsn'
-      })
+      }) || atsnConversations.length > 0
 
       if (hasAtsnConversations) {
         // Load ATSN conversations into the chatbot
-        const atsnMessages = uniqueMessages.map(msg => {
-          // Find the corresponding conversation to get metadata
-          const originalConv = dateConversations.find(conv => `conv-${conv.id}` === msg.id)
-          let metadata = {}
-          if (originalConv?.metadata) {
-            if (typeof originalConv.metadata === 'string') {
-              try {
-                metadata = JSON.parse(originalConv.metadata)
-              } catch {
-                metadata = {}
-              }
-            } else {
-              metadata = originalConv.metadata
-            }
-          }
+        let atsnMessages = []
 
-          // Extract agent_name from metadata (same as ATSN chatbot)
-          let agent_name = metadata?.agent_name
-          if (!agent_name && msg.type === 'bot' && (msg.intent || originalConv?.intent)) {
-            // Fallback: determine agent from intent (same logic as ATSN chatbot)
-            const intent = (msg.intent || originalConv?.intent || '').toLowerCase()
-            if (intent.includes('lead')) {
-              agent_name = 'chase'
-            } else if (['view_content', 'publish_content', 'delete_content'].includes(intent)) {
-              agent_name = 'emily'
-            } else if (['create_content', 'edit_content', 'schedule_content'].includes(intent)) {
-              agent_name = 'leo'
-            } else if (intent.includes('orio') || intent.includes('analytics')) {
-              agent_name = 'orio'
-            } else {
-              agent_name = 'emily' // default
-            }
-          }
-
-          return {
+        // Process new format ATSN conversations (from ATSN conversations table)
+        if (atsnConversations.length > 0) {
+          // Use the first conversation for this date (they should be ordered by creation time)
+          const conversation = atsnConversations[0]
+          atsnMessages = conversation.messages.map(msg => ({
             id: msg.id,
-            conversationId: msg.id.includes('conv-') ? msg.id.replace('conv-', '') : msg.id,
-            sender: msg.type === 'user' ? 'user' : 'bot',
-            text: msg.content,
+            conversationId: conversation.id,
+            sender: msg.sender,
+            text: msg.text,
             timestamp: msg.timestamp,
-            intent: msg.intent || originalConv?.intent || null,
-            agent_name: agent_name,
-            step: null
-          }
-        })
+            intent: msg.intent,
+            agent_name: msg.agent_name,
+            current_step: msg.current_step,
+            clarification_question: msg.clarification_question,
+            clarification_options: msg.clarification_options,
+            content_items: msg.content_items,
+            lead_items: msg.lead_items
+          }))
+        }
 
-        setAtsnConversationToLoad(atsnMessages)
+        // Always create a new array reference to ensure useEffect triggers
+        console.log('Setting ATSN conversation to load:', atsnMessages)
+        setAtsnConversationToLoad([...atsnMessages])
         // Clear after a short delay to allow ATSNChatbot to load them
-        setTimeout(() => setAtsnConversationToLoad(null), 100)
+        setTimeout(() => {
+          console.log('Clearing ATSN conversation to load')
+          setAtsnConversationToLoad(null)
+        }, 100)
       } else {
         // Regular chatbot conversations are loaded internally
         // ATSNChatbot loads conversations internally via hooks
@@ -463,7 +527,9 @@ function EmilyDashboard() {
 
 
   return (
-    <div className="h-screen bg-white overflow-hidden md:overflow-auto">
+    <div className={`h-screen overflow-hidden md:overflow-auto ${
+      isDarkMode ? 'bg-gray-900' : 'bg-white'
+    }`}>
       {/* Mobile Navigation */}
       <MobileNavigation 
         setShowCustomContentChatbot={() => {}} // Dashboard doesn't have these functions
@@ -483,9 +549,13 @@ function EmilyDashboard() {
       <SideNavbar />
       
       {/* Main Content */}
-      <div className="md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden pt-16 md:pt-0 md:bg-white bg-transparent">
+      <div className={`md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden pt-16 md:pt-0 bg-transparent ${
+        isDarkMode ? 'md:bg-gray-900' : 'md:bg-white'
+      }`}>
         {/* Header */}
-        <div className="hidden md:block bg-white shadow-sm border-b z-30 flex-shrink-0">
+        <div className={`hidden md:block shadow-sm border-b z-30 flex-shrink-0 ${
+          isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+        }`}>
           <div className="px-4 lg:px-6 py-3 lg:py-4">
             <div className="flex justify-between items-center">
               <div className="hidden md:flex items-center gap-3">
@@ -497,6 +567,8 @@ function EmilyDashboard() {
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                       messageFilter === 'all'
                         ? 'bg-gray-600 text-white ring-2 ring-gray-300'
+                        : isDarkMode
+                        ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                     title="All Messages"
@@ -543,12 +615,16 @@ function EmilyDashboard() {
                     <img src="/leo_logo.jpg" alt="Leo" className="w-9 h-9 rounded-full object-cover" />
                   </button>
                 </div>
-                <span className="text-gray-400">|</span>
-                <div className="text-sm lg:text-base text-gray-900">
+                <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>|</span>
+                <div className={`text-sm lg:text-base ${
+                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                }`}>
                   {profile?.business_name || user?.user_metadata?.name || 'you'}
                 </div>
-                <span className="text-gray-400">|</span>
-                <div className="text-sm lg:text-base text-gray-700">
+                <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>|</span>
+                <div className={`text-sm lg:text-base ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}>
                   {selectedDate.toLocaleDateString('en-US', { 
                     year: 'numeric', 
                     month: 'long', 
@@ -558,17 +634,24 @@ function EmilyDashboard() {
               </div>
               
               <div className="flex items-center gap-2">
-                
                 {/* Panel Toggle Button */}
                 <button
                   onClick={() => setIsPanelOpen(!isPanelOpen)}
-                  className="p-2 rounded-md hover:bg-gray-100 transition-colors border border-gray-200"
+                  className={`p-2 rounded-md transition-colors border ${
+                    isDarkMode
+                      ? 'hover:bg-gray-700 border-gray-600 text-gray-300'
+                      : 'hover:bg-gray-100 border-gray-200'
+                  }`}
                   title={isPanelOpen ? "Close Panel" : "Open Panel"}
                 >
                   {isPanelOpen ? (
-                    <PanelLeft className="w-5 h-5 text-gray-700" />
+                    <PanelLeft className={`w-5 h-5 ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`} />
                   ) : (
-                    <PanelRight className="w-5 h-5 text-gray-700" />
+                    <PanelRight className={`w-5 h-5 ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`} />
                   )}
                 </button>
               </div>
@@ -577,7 +660,9 @@ function EmilyDashboard() {
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex items-start md:bg-gray-50 bg-transparent h-full" style={{ minHeight: 0, overflow: 'hidden' }}>
+        <div className={`flex-1 flex items-start bg-transparent h-full ${
+          isDarkMode ? 'md:bg-gray-800' : 'md:bg-gray-50'
+        }`} style={{ minHeight: 0, overflow: 'hidden' }}>
             <div className="w-full h-full flex gap-2">
                 {/* Main Chat Area */}
               <div className="flex-1 h-full">
@@ -588,23 +673,37 @@ function EmilyDashboard() {
 
               {/* Right Side Panel - Part of main content */}
               <div
-                className={`hidden md:flex bg-white border border-gray-200 rounded-lg transition-all duration-300 ease-in-out overflow-hidden h-full ${
+                className={`hidden md:flex border rounded-lg transition-all duration-300 ease-in-out overflow-hidden h-full ${
+                  isDarkMode
+                    ? 'bg-gray-900 border-gray-700'
+                    : 'bg-white border-gray-200'
+                } ${
                   isPanelOpen ? 'w-48 xl:w-64' : 'w-0'
                 }`}
               >
                 {isPanelOpen && (
                   <div className="h-full flex flex-col">
                     {/* Panel Header */}
-                    <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 flex-shrink-0">
-                      <h2 className="text-lg font-semibold text-gray-900">
+                    <div className={`p-4 border-b flex items-center justify-between flex-shrink-0 ${
+                      isDarkMode
+                        ? 'border-gray-700 bg-gray-800'
+                        : 'border-gray-200 bg-gray-50'
+                    }`}>
+                      <h2 className={`text-lg font-semibold ${
+                        isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                      }`}>
                         Past Discussions
                       </h2>
                       <button
                         onClick={() => setIsPanelOpen(false)}
-                        className="p-1.5 rounded-md hover:bg-gray-200 transition-colors"
+                        className={`p-1.5 rounded-md transition-colors ${
+                          isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
+                        }`}
                         title="Collapse Panel"
                       >
-                        <ChevronRight className="w-5 h-5 text-gray-600" />
+                        <ChevronRight className={`w-5 h-5 ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`} />
                       </button>
                     </div>
 
@@ -613,11 +712,15 @@ function EmilyDashboard() {
                     <div className="flex-1 overflow-y-auto p-4">
                       {loadingConversations ? (
                         <div className="flex items-center justify-center py-8">
-                          <div className="text-sm text-gray-500">Loading conversations...</div>
+                          <div className={`text-sm ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                          }`}>Loading conversations...</div>
                         </div>
                       ) : conversations.length === 0 ? (
                         <div className="flex items-center justify-center py-8">
-                          <div className="text-sm text-gray-500">No conversations yet</div>
+                          <div className={`text-sm ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                          }`}>No conversations yet</div>
                         </div>
                       ) : (
                         <div className="space-y-4">
@@ -646,8 +749,8 @@ function EmilyDashboard() {
                                   }}
                                   className={`p-2 rounded-lg cursor-pointer transition-colors ${
                                     isSelected 
-                                      ? 'bg-gray-100'
-                                      : 'hover:bg-gray-50'
+                                      ? isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                                      : isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
                                   }`}
                                 >
                                   <div className="flex items-center gap-2">
@@ -666,12 +769,20 @@ function EmilyDashboard() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center justify-between mb-1">
-                                        <span className={`text-xs font-medium ${isUser ? 'text-pink-700' : 'text-purple-700'}`}>
+                                        <span className={`text-xs font-medium ${
+                                          isUser
+                                            ? 'text-pink-400'
+                                            : isDarkMode ? 'text-purple-300' : 'text-purple-700'
+                                        }`}>
                                           {isUser ? 'You' : 'Emily'}
                                         </span>
-                                        <span className="text-xs text-gray-400">{formattedDate}</span>
+                                        <span className={`text-xs ${
+                                          isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                                        }`}>{formattedDate}</span>
                                       </div>
-                                      <p className="text-xs text-gray-700 line-clamp-2">{preview}</p>
+                                      <p className={`text-xs line-clamp-2 ${
+                                        isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                                      }`}>{preview}</p>
                   </div>
                 </div>
               </div>

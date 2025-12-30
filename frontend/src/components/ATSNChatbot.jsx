@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
-import { Send, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone } from 'lucide-react'
+import { Send, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone, Heart } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import ContentCard from './ContentCard'
@@ -14,6 +14,38 @@ import CharacterCard from './CharacterCard'
 import { leadsAPI } from '../services/leads'
 import { connectionsAPI } from '../services/connections'
 import { mediaAPI } from '../services/api'
+
+// Get dark mode state from localStorage or default to light mode
+const getDarkModePreference = () => {
+  return localStorage.getItem('darkMode') === 'true'
+}
+
+// Listen for storage changes to sync dark mode across components
+const useStorageListener = (key, callback) => {
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === key) {
+        callback(e.newValue === 'true')
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+
+    // Also listen for custom events for same-tab updates
+    const handleCustomChange = (e) => {
+      if (e.detail.key === key) {
+        callback(e.detail.value === 'true')
+      }
+    }
+
+    window.addEventListener('localStorageChange', handleCustomChange)
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('localStorageChange', handleCustomChange)
+    }
+  }, [key, callback])
+}
 
 // Get API URL
 const getApiBaseUrl = () => {
@@ -70,10 +102,15 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const [showMediaUploadModal, setShowMediaUploadModal] = useState(false)
   const [uploadedMediaUrls, setUploadedMediaUrls] = useState([])
   const [selectedFilesForUpload, setSelectedFilesForUpload] = useState([])
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false)
   const [tooltipAgent, setTooltipAgent] = useState(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
+  const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference)
+  const [likedMessages, setLikedMessages] = useState(new Set())
+  const [countedTasks, setCountedTasks] = useState(new Set())
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const lastExternalConversationsRef = useRef(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -144,6 +181,9 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Listen for dark mode changes from other components (like SideNavbar)
+  useStorageListener('darkMode', setIsDarkMode)
 
   // Handle thinking message phases
   useEffect(() => {
@@ -241,7 +281,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       const token = await getAuthToken()
       if (!token) return
 
-      const response = await fetch(`${API_BASE_URL}/chatbot/conversations?agent=atsn`, {
+      const response = await fetch(`${API_BASE_URL}/atsn/conversations`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -251,46 +291,39 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       if (response.ok) {
         const data = await response.json()
         console.log('ATSN loadConversations response:', data)
-        if (data.success && data.conversations) {
-          // Conversations are already filtered by agent on the backend
+        if (data.conversations && data.conversations.length > 0) {
+          // Handle new conversation structure with embedded messages
           console.log(`Found ${data.conversations.length} ATSN conversations`)
-          if (data.conversations.length > 0) {
-            // Convert conversations to message format
-            const conversationMessages = data.conversations.map(conv => {
-              console.log(`Conversation ${conv.id}: metadata=`, conv.metadata, `agent_name=${conv.metadata?.agent_name}`)
 
-              // Determine agent_name with fallback logic
-              let agent_name = conv.metadata?.agent_name
-              if (!agent_name && conv.message_type === 'bot' && conv.intent) {
-                // Fallback: determine agent from intent (similar to backend logic)
-                const intent = conv.intent.toLowerCase()
-                if (intent.includes('lead')) {
-                  agent_name = 'chase'
-                } else if (['view_content', 'publish_content', 'delete_content'].includes(intent)) {
-                  agent_name = 'emily'
-                } else if (['create_content', 'edit_content', 'schedule_content'].includes(intent)) {
-                  agent_name = 'leo'
-                } else if (intent.includes('orio') || intent.includes('analytics')) {
-                  agent_name = 'orio'
-                } else {
-                  agent_name = 'emily' // default
-                }
-              }
+          // Flatten all messages from all conversations
+          const allMessages = []
+          data.conversations.forEach(conv => {
+            if (conv.messages && conv.messages.length > 0) {
+              conv.messages.forEach(msg => {
+                allMessages.push({
+                  id: msg.id,
+                  conversationId: conv.id,
+                  sender: msg.sender,
+                  text: msg.text,
+                  timestamp: msg.timestamp,
+                  intent: msg.intent,
+                  agent_name: msg.agent_name,
+                  current_step: msg.current_step,
+                  clarification_question: msg.clarification_question,
+                  clarification_options: msg.clarification_options,
+                  content_items: msg.content_items,
+                  lead_items: msg.lead_items,
+                  isNew: false
+                })
+              })
+            }
+          })
 
-              return {
-                id: conv.id,
-                conversationId: conv.id,
-                sender: conv.message_type === 'user' ? 'user' : 'bot',
-                text: conv.content,
-                timestamp: conv.created_at,
-                intent: conv.intent,
-                agent_name: agent_name,
-                isNew: false
-              }
-            })
-
-            setMessages(conversationMessages)
-            console.log(`Loaded ${conversationMessages.length} ATSN conversations`)
+          if (allMessages.length > 0) {
+            // Sort messages by timestamp
+            allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+            setMessages(allMessages)
+            console.log(`Loaded ${allMessages.length} ATSN messages from ${data.conversations.length} conversations`)
             return // Don't show welcome message if we have conversations
           }
         }
@@ -313,12 +346,44 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
     if (externalConversations) {
       // Load external conversations (from past discussions panel)
+      console.log('Loading external conversations:', externalConversations)
       setMessages(externalConversations)
+      // Scroll to bottom after loading external conversations
+      setTimeout(() => scrollToBottom(), 100)
     } else if (user && messages.length === 0) {
       // Load all ATSN conversations (not just today's)
       loadConversations()
     }
-  }, [user, externalConversations, messages.length, chatReset])
+  }, [user, externalConversations, chatReset])
+
+  // Detect and count completed tasks when results are displayed
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1]
+
+      // Only count bot messages that contain actual task results and haven't been counted yet
+      if (lastMessage.sender === 'bot' && !countedTasks.has(lastMessage.id)) {
+        const hasContentResults = lastMessage.content_items && lastMessage.content_items.length > 0
+        const hasLeadResults = lastMessage.lead_items && lastMessage.lead_items.length > 0
+        const isMeaningfulIntent = lastMessage.intent && [
+          'create_content', 'edit_content', 'publish_content',
+          'delete_content', 'schedule_content', 'create_lead',
+          'edit_lead', 'delete_lead', 'show_leads'
+        ].includes(lastMessage.intent.toLowerCase())
+
+        // Count task if it has results OR is a meaningful completed intent
+        if (hasContentResults || hasLeadResults || isMeaningfulIntent) {
+          // Mark as counted and increment
+          setCountedTasks(prev => new Set([...prev, lastMessage.id]))
+
+          // Use a timeout to avoid counting during rapid updates
+          setTimeout(() => {
+            incrementTaskCount()
+          }, 500)
+        }
+      }
+    }
+  }, [messages])
 
   // Load today's conversations (similar to Chatbot.jsx)
   const loadTodayConversations = async () => {
@@ -329,7 +394,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         return
       }
 
-      const response = await fetch(`${API_BASE_URL}/chatbot/conversations`, {
+      const response = await fetch(`${API_BASE_URL}/atsn/conversations`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -345,43 +410,39 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       const data = await response.json()
       console.log('Today\'s conversations response:', data)
 
-      if (data.success && data.conversations && data.conversations.length > 0) {
-        // Convert conversations to message format
-        const conversationMessages = data.conversations
-          .filter(conv => conv.metadata?.agent === 'atsn') // Only ATSN conversations
-          .map(conv => {
-            // Determine agent_name with fallback logic
-            let agent_name = conv.metadata?.agent_name
-            if (!agent_name && conv.message_type === 'bot' && conv.intent) {
-              // Fallback: determine agent from intent (similar to backend logic)
-              const intent = conv.intent.toLowerCase()
-              if (intent.includes('lead')) {
-                agent_name = 'chase'
-              } else if (['view_content', 'publish_content', 'delete_content'].includes(intent)) {
-                agent_name = 'emily'
-              } else if (['create_content', 'edit_content', 'schedule_content'].includes(intent)) {
-                agent_name = 'leo'
-              } else if (intent.includes('orio') || intent.includes('analytics')) {
-                agent_name = 'orio'
-              } else {
-                agent_name = 'emily' // default
-              }
-            }
+      if (data.conversations && data.conversations.length > 0) {
+        // Handle new conversation structure with embedded messages
+        console.log(`Found ${data.conversations.length} ATSN conversations for today`)
 
-            return {
-              id: conv.id,
-              conversationId: conv.id,
-              sender: conv.message_type === 'user' ? 'user' : 'bot',
-              text: conv.content,
-              timestamp: conv.created_at,
-              intent: conv.intent,
-              agent_name: agent_name
-            }
-          })
+        // Flatten all messages from all conversations
+        const allMessages = []
+        data.conversations.forEach(conv => {
+          if (conv.messages && conv.messages.length > 0) {
+            conv.messages.forEach(msg => {
+              allMessages.push({
+                id: msg.id,
+                conversationId: conv.id,
+                sender: msg.sender,
+                text: msg.text,
+                timestamp: msg.timestamp,
+                intent: msg.intent,
+                agent_name: msg.agent_name,
+                current_step: msg.current_step,
+                clarification_question: msg.clarification_question,
+                clarification_options: msg.clarification_options,
+                content_items: msg.content_items,
+                lead_items: msg.lead_items,
+                isNew: false
+              })
+            })
+          }
+        })
 
-        if (conversationMessages.length > 0) {
-          setMessages(conversationMessages)
-          console.log(`Loaded ${conversationMessages.length} today's ATSN conversations`)
+        if (allMessages.length > 0) {
+          // Sort messages by timestamp
+          allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+          setMessages(allMessages)
+          console.log(`Loaded ${allMessages.length} today's ATSN messages from ${data.conversations.length} conversations`)
         }
       }
     } catch (error) {
@@ -510,6 +571,75 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     } catch (error) {
       console.error('Error deleting message:', error)
       showError('Failed to delete message')
+    }
+  }
+
+  const handleLikeMessage = async (message) => {
+    const isCurrentlyLiked = likedMessages.has(message.id)
+
+    // Update local state immediately for better UX
+    setLikedMessages(prev => {
+      const newSet = new Set(prev)
+      if (isCurrentlyLiked) {
+        newSet.delete(message.id)
+        showSuccess('Message unliked')
+      } else {
+        newSet.add(message.id)
+        showSuccess('Message liked')
+      }
+      return newSet
+    })
+
+    // If liking (not unliking) and message has an agent_name, increment likes count
+    if (!isCurrentlyLiked && message.agent_name) {
+      try {
+        const token = await getAuthToken()
+        if (!token) {
+          console.error('No auth token available')
+          return
+        }
+
+        const response = await fetch(`${API_BASE_URL}/agents/${message.agent_name}/like`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (!response.ok) {
+          console.error('Failed to increment likes count')
+          // Optionally revert the local state if API call fails
+        }
+      } catch (error) {
+        console.error('Error incrementing likes count:', error)
+      }
+    }
+  }
+
+  const incrementTaskCount = async () => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        console.error('No auth token available for task increment')
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/profile/increment-task`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        console.log('Task count incremented successfully')
+      } else {
+        console.error('Failed to increment task count')
+      }
+    } catch (error) {
+      console.error('Error incrementing task count:', error)
     }
   }
 
@@ -666,9 +796,10 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       setMessages([{
         id: 'welcome-new-chat',
         sender: 'bot',
-        text: `Hi! I'm your Content & Lead Management assistant.\n\n I can help you create, edit, and publish content, as well as manage your leads. \n\n What would you like to do today?`,
+        text: `Hi! I'm your ATSN team - Emily, Leo, and Chase.\n\nTogether we can help you create and manage content, publish across platforms, and nurture your leads.\n\nWhat would you like to do today?`,
         timestamp: new Date().toISOString(),
-        intent: null
+        intent: null,
+        agent_name: 'atsn' // Special agent name for welcome message
       }])
 
       showSuccess('New chat started successfully')
@@ -1528,6 +1659,97 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     setSelectedFilesForUpload([])
   }
 
+  const handleConfirmUpload = async () => {
+    if (selectedFilesForUpload.length === 0) return
+
+    setIsUploadingMedia(true)
+
+    // Capture media type before clearing
+    const mediaType = selectedFilesForUpload[0].type.startsWith('image/') ? 'image' : 'video'
+
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        showError('Authentication required')
+        return
+      }
+
+      const formData = new FormData()
+      selectedFilesForUpload.forEach((file, index) => {
+        formData.append('files', file)
+      })
+
+      const response = await fetch(`${API_BASE_URL}/media/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setUploadedMediaUrls(data.urls || [])
+        setShowMediaUploadModal(false)
+
+        // Create a task for media upload
+        const taskMessage = `I uploaded a ${mediaType} for my content. Please help me create engaging content using this media.`
+
+        // Clear selected files after capturing media type
+        setSelectedFilesForUpload([])
+
+        // Add user message about media upload
+        setMessages(prev => [...prev, {
+          id: Date.now(),
+          sender: 'user',
+          text: taskMessage,
+          timestamp: new Date().toISOString(),
+          media_urls: data.urls || []
+        }])
+
+        // Send to chatbot
+        try {
+          const chatResponse = await fetch(`${API_BASE_URL}/atsn/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              message: taskMessage,
+              media_urls: data.urls || [],
+              conversation_history: [...conversationHistory, taskMessage]
+            })
+          })
+
+          if (chatResponse.ok) {
+            const chatData = await chatResponse.json()
+            // Handle the response similar to regular messages
+            setMessages(prev => [...prev, {
+              id: Date.now() + 1,
+              sender: 'bot',
+              text: chatData.response || 'Content creation task started!',
+              timestamp: new Date().toISOString(),
+              intent: chatData.intent,
+              agent_name: chatData.agent_name
+            }])
+          }
+        } catch (chatError) {
+          console.error('Error sending media upload task:', chatError)
+        }
+
+        showSuccess('Media uploaded and task created successfully!')
+      } else {
+        throw new Error('Upload failed')
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      showError('Failed to upload media')
+    } finally {
+      setIsUploadingMedia(false)
+    }
+  }
+
   // Publish functions copied from ContentDashboard
   const getBestImageUrl = (content) => {
     console.log('🔍 getBestImageUrl - Content object:', {
@@ -1855,6 +2077,24 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         return <img src="/chase_logo.png" alt="Chase" className="w-16 h-16 rounded-full object-cover" />
       case 'orio':
         return <span className="text-xl font-bold text-white">O</span>
+      case 'atsn':
+        // Combined logo for ATSN welcome message
+        return (
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 via-blue-500 to-green-500 flex items-center justify-center relative overflow-hidden">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                <div className="grid grid-cols-2 gap-1">
+                  <img src="/emily_icon.png" alt="E" className="w-4 h-4 rounded-full object-cover" />
+                  <img src="/leo_logo.jpg" alt="L" className="w-4 h-4 rounded-full object-cover" />
+                  <img src="/chase_logo.png" alt="C" className="w-4 h-4 rounded-full object-cover" />
+                  <div className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center">
+                    <span className="text-xs font-bold text-white">A</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
       case 'emily':
       default:
         return <img src="/emily_icon.png" alt="Emily" className="w-16 h-16 rounded-full object-cover" />
@@ -1909,6 +2149,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   // Format agent name for display
   const formatAgentName = (agentName) => {
     if (!agentName) return 'Emily';
+    if (agentName.toLowerCase() === 'atsn') return 'ATSN Team';
     return agentName.charAt(0).toUpperCase() + agentName.slice(1);
   }
 
@@ -1998,7 +2239,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       {/* Messages */}
       <div
-        className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-6 bg-gradient-to-b from-transparent via-gray-50/50 to-transparent"
+        className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-6"
         onClick={handleChatAreaClick}
       >
         {messages.map((message, index) => (
@@ -2009,21 +2250,23 @@ const ATSNChatbot = ({ externalConversations = null }) => {
             {/* Avatar */}
             <div
               className={`${
-                message.agent_name?.toLowerCase() === 'emily' || message.agent_name?.toLowerCase() === 'leo' || message.agent_name?.toLowerCase() === 'chase'
+                message.agent_name?.toLowerCase() === 'emily' || message.agent_name?.toLowerCase() === 'leo' || message.agent_name?.toLowerCase() === 'chase' || message.agent_name?.toLowerCase() === 'atsn'
                   ? 'w-16 h-16'
                   : 'w-8 h-8'
               } rounded-full flex items-center justify-center flex-shrink-0 ${
                 message.sender === 'bot' ? 'hover:scale-110 transition-transform duration-200 cursor-pointer border-2 border-gray-300' : ''
               } ${
-                message.sender === 'user'
-                  ? 'bg-gradient-to-br from-pink-500 to-rose-500'
-                  : message.agent_name?.toLowerCase() === 'leo'
+              message.sender === 'user'
+                ? 'bg-gradient-to-br from-pink-500 to-rose-500'
+                : message.agent_name?.toLowerCase() === 'leo'
                   ? '' // No background for Leo
-                  : message.agent_name?.toLowerCase() === 'chase'
+                : message.agent_name?.toLowerCase() === 'chase'
                   ? '' // No background for Chase
                   : message.agent_name?.toLowerCase() === 'emily'
                   ? '' // No background for Emily
-                  : 'bg-gradient-to-br from-purple-500 to-pink-500'
+                  : message.agent_name?.toLowerCase() === 'atsn'
+                  ? '' // No background for ATSN combined logo
+                : 'bg-gradient-to-br from-purple-500 to-pink-500'
               }`}
               onMouseEnter={message.sender === 'bot' ? (e) => handleAgentHover(message.agent_name, e) : undefined}
               onMouseLeave={message.sender === 'bot' ? handleAgentLeave : undefined}
@@ -2042,7 +2285,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                   message.sender === 'user'
                     ? 'bg-pink-500/90 border-pink-400 text-white rounded-tr-none'
                     : message.error
-                    ? 'bg-red-50 border-red-200 text-red-900 rounded-tl-none'
+                    ? isDarkMode
+                      ? 'bg-red-900/50 border-red-700 text-red-200 rounded-tl-none'
+                      : 'bg-red-50 border-red-200 text-red-900 rounded-tl-none'
+                    : isDarkMode
+                    ? 'bg-gray-800/80 border-gray-600 text-white rounded-tl-none'
                     : 'bg-white/80 border-gray-200 text-gray-900 rounded-tl-none'
                 }`}
               >
@@ -2052,9 +2299,19 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                     <div className="flex items-center justify-between mb-2">
                       <span className={`text-base font-bold bg-clip-text text-transparent ${
                         message.agent_name?.toLowerCase() === 'leo'
-                          ? 'bg-gradient-to-r from-blue-500 to-blue-700'
+                          ? isDarkMode
+                            ? 'bg-gradient-to-r from-blue-300 to-blue-500'
+                            : 'bg-gradient-to-r from-blue-500 to-blue-700'
                           : message.agent_name?.toLowerCase() === 'chase'
-                          ? 'bg-gradient-to-r from-green-800 to-amber-800'
+                          ? isDarkMode
+                            ? 'bg-gradient-to-r from-green-400 to-yellow-400'
+                            : 'bg-gradient-to-r from-green-800 to-amber-800'
+                          : message.agent_name?.toLowerCase() === 'atsn'
+                          ? isDarkMode
+                            ? 'bg-gradient-to-r from-purple-300 via-blue-300 to-green-300'
+                            : 'bg-gradient-to-r from-purple-500 via-blue-500 to-green-500'
+                          : isDarkMode
+                          ? 'bg-gradient-to-r from-purple-400 to-pink-400'
                           : 'bg-gradient-to-r from-purple-600 to-pink-500'
                       }`}>
                         {formatAgentName(message.agent_name)}
@@ -2062,36 +2319,67 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => handleCopyMessage(message)}
-                          className="p-1 hover:bg-gray-100 rounded transition-colors"
+                          className={`p-1 rounded transition-colors ${
+                            isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                          }`}
                           title="Copy message"
                         >
-                          <Copy className="w-3 h-3 text-gray-600" />
+                          <Copy className={`w-3 h-3 ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`} />
+                        </button>
+                        <button
+                          onClick={() => handleLikeMessage(message)}
+                          className={`p-1 rounded transition-colors ${
+                            isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                          }`}
+                          title={likedMessages.has(message.id) ? "Unlike message" : "Like message"}
+                        >
+                          <Heart className={`w-3 h-3 ${
+                            likedMessages.has(message.id)
+                              ? 'text-red-500 fill-current'
+                              : isDarkMode
+                              ? 'text-gray-400'
+                              : 'text-gray-600'
+                          }`} />
                         </button>
                         <button
                           onClick={() => handleDeleteMessage(message)}
-                          className="p-1 hover:bg-gray-100 rounded transition-colors"
+                          className={`p-1 rounded transition-colors ${
+                            isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                          }`}
                           title="Delete message"
                         >
-                          <Trash2 className="w-3 h-3 text-gray-600" />
+                          <Trash2 className={`w-3 h-3 ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`} />
                         </button>
                       </div>
                     </div>
 
-                    <div className="relative prose max-w-none leading-tight">
+                    <div className="relative max-w-none leading-tight">
                       {/* Check if message contains markdown syntax */}
                       {message.text.includes('#') || message.text.includes('*') || message.text.includes('`') || message.text.includes('[') ? (
-                        <div className="leading-tight pr-16">
+                        <div className={`leading-tight pr-16 ${
+                          isDarkMode ? 'prose-invert prose prose-gray' : 'prose'
+                        }`}>
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {message.text}
                           </ReactMarkdown>
                         </div>
                       ) : (
-                        <div className="whitespace-pre-line leading-tight pr-16">
+                        <div className={`whitespace-pre-line leading-tight pr-16 ${
+                          isDarkMode ? 'text-white' : ''
+                        }`}>
                           {message.text}
                         </div>
                       )}
                       <div className={`absolute bottom-0 right-0 text-xs ${
-                        message.sender === 'user' ? 'text-white' : 'text-gray-400'
+                        message.sender === 'user'
+                          ? 'text-white'
+                          : isDarkMode
+                          ? 'text-gray-500'
+                          : 'text-gray-400'
                       }`}>
                         {new Date(message.timestamp).toLocaleTimeString()}
                       </div>
@@ -2104,7 +2392,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                           <button
                             key={index}
                             onClick={() => handleOptionSelect(option.value)}
-                            className="px-4 py-3 bg-white/80 backdrop-blur-sm text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 text-sm font-normal transform hover:scale-105"
+                            className={`px-4 py-3 backdrop-blur-sm rounded-xl border shadow-lg hover:shadow-xl transition-all duration-200 text-sm font-normal transform hover:scale-105 ${
+                              isDarkMode
+                                ? 'bg-gray-700/80 text-gray-200 hover:text-white border-gray-600'
+                                : 'bg-white/80 text-gray-800 hover:text-gray-900 border-gray-300'
+                            }`}
                           >
                             <div className="font-normal text-center">{option.label}</div>
                             {option.description && (
@@ -2131,7 +2423,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                 minWidth: message.content_items.length > 5 ? `${message.content_items.length * 336}px` : 'auto' // 320px + 16px gap (w-80 = 320px)
                               }}>
                                 {message.content_items.map((contentItem, index) => (
-                                  <div key={`${message.id}-${index}`} className="relative flex-shrink-0 w-80 transform hover:scale-105 transition-transform duration-200">
+                                   <div key={`${message.id}-${index}`} className="relative flex-shrink-0 w-96">
                                     {/* Selection checkbox for view, delete, and publish operations */}
                                     {(message.intent === 'view_content' || message.intent === 'delete_content' || message.intent === 'created_content' || message.intent === 'publish_content') && (
                                       <div className="absolute top-2 right-2 z-10">
@@ -2182,6 +2474,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                         contentType={contentItem.content_type}
                                         intent={message.intent}
                                         onClick={() => handleContentClick(contentItem)}
+                                        isDarkMode={isDarkMode}
                                       />
                                     ) : (
                                       <ContentCard
@@ -2258,12 +2551,20 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
                                           {/* Action buttons for publish content */}
                           {message.intent === 'publish_content' && message.content_items && message.content_items.length > 0 && selectedContent.length > 0 && (
-                            <div className="mt-4 flex flex-wrap items-center gap-3 p-4 bg-white/90 backdrop-blur-md border border-gray-200 rounded-xl shadow-lg">
+                            <div className={`mt-4 flex flex-wrap items-center gap-3 p-4 backdrop-blur-md border rounded-xl shadow-lg ${
+                              isDarkMode
+                                ? 'bg-gray-800/90 border-gray-700'
+                                : 'bg-white/90 border-gray-200'
+                            }`}>
                               <div className="flex gap-2">
                                 <button
                                   onClick={handlePublishSelected}
                                   disabled={isPublishing}
-                                  className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                                  className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                 >
                                   {isPublishing ? (
                                     <>
@@ -2283,11 +2584,19 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
                                           {/* Action buttons for created content */}
                           {message.intent === 'created_content' && message.content_items && message.content_items.length > 0 && (
-                            <div className="mt-4 flex flex-wrap items-center gap-3 p-4 bg-white/90 backdrop-blur-md border border-gray-200 rounded-xl shadow-lg">
+                            <div className={`mt-4 flex flex-wrap items-center gap-3 p-4 backdrop-blur-md border rounded-xl shadow-lg ${
+                              isDarkMode
+                                ? 'bg-gray-800/90 border-gray-700'
+                                : 'bg-white/90 border-gray-200'
+                            }`}>
                               <div className="flex gap-2">
                                 <button
                                   onClick={handleEditSelected}
-                                  className="px-4 py-3 bg-white/80 backdrop-blur-sm text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 text-sm font-normal transform hover:scale-105 flex items-center gap-2"
+                                  className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                 >
                                   <Edit className="w-4 h-4" />
                                   <span>Edit</span>
@@ -2295,7 +2604,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                 <button
                                   onClick={handlePublishSelected}
                                   disabled={isPublishing}
-                                  className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                                  className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                 >
                                   {isPublishing ? (
                                     <>
@@ -2312,7 +2625,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                 <button
                                   onClick={handleScheduleSelected}
                                   disabled={isScheduling}
-                                  className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                                  className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                 >
                                   {isScheduling ? (
                                     <>
@@ -2328,14 +2645,22 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                 </button>
                                 <button
                                   onClick={handleSaveSelected}
-                                  className="px-4 py-3 bg-white/80 backdrop-blur-sm text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 text-sm font-normal transform hover:scale-105 flex items-center gap-2"
+                                  className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                 >
                                   <Save className="w-4 h-4" />
                                   <span>Save Draft</span>
                                 </button>
                                 <button
                                   onClick={handleDeleteSelected}
-                                  className="px-4 py-3 bg-white/80 backdrop-blur-sm text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 text-sm font-normal transform hover:scale-105 flex items-center gap-2"
+                                  className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                   <span>Delete</span>
@@ -2350,14 +2675,22 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => handleSelectAll(message.content_items)}
-                                  className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2"
+                                  className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                 >
                                   <CheckSquare className="w-4 h-4" />
                                   <span>Select All</span>
                                 </button>
                                 <button
                                   onClick={handleDeselectAll}
-                                  className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2"
+                                  className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                 >
                                   <Square className="w-4 h-4" />
                                   <span>Deselect All</span>
@@ -2371,7 +2704,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                   <button
                                     onClick={handleEditSelected}
                                     disabled={selectedContent.length > 1}
-                                    className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                                    className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                   >
                                     <Edit className="w-4 h-4" />
                                     <span>Edit {selectedContent.length === 1 ? '' : '(Select 1)'}</span>
@@ -2379,7 +2716,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                   <button
                                     onClick={handlePublishSelected}
                                     disabled={isPublishing}
-                                    className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                                    className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                   >
                                     {isPublishing ? (
                                       <>
@@ -2396,7 +2737,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                   <button
                                     onClick={handleScheduleSelected}
                                     disabled={selectedContent.length > 1}
-                                    className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                                    className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                   >
                                     <Calendar className="w-4 h-4" />
                                     <span>Schedule {selectedContent.length === 1 ? '' : '(Select 1)'}</span>
@@ -2404,7 +2749,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                   <button
                                     onClick={handleDeleteSelected}
                                     disabled={isDeleting}
-                                    className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                                    className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                   >
                                     {isDeleting ? (
                                       <>
@@ -2429,14 +2778,22 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => handleSelectAll(message.content_items)}
-                                  className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2"
+                                  className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                 >
                                   <CheckSquare className="w-4 h-4" />
                                   <span>Select All</span>
                                 </button>
                                 <button
                                   onClick={handleDeselectAll}
-                                  className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2"
+                                  className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                                 >
                                   <Square className="w-4 h-4" />
                                   <span>Deselect All</span>
@@ -2755,14 +3112,22 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                               const allLeadIds = message.lead_items.map(item => item.lead_id || item.id)
                               setSelectedLeads(allLeadIds)
                             }}
-                            className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2"
+                            className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                           >
                             <CheckSquare className="w-4 h-4" />
                             <span>Select All</span>
                           </button>
                           <button
                             onClick={() => setSelectedLeads([])}
-                            className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2"
+                            className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                                  }`}
                           >
                             <Square className="w-4 h-4" />
                             <span>Deselect All</span>
@@ -2776,12 +3141,20 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
                     {/* Lead Action Buttons for Selected Leads */}
                     {selectedLeads.length > 0 && (
-                      <div className="mt-4 flex flex-wrap items-center gap-3 p-4 bg-white/90 backdrop-blur-md border border-gray-200 rounded-xl shadow-lg">
+                      <div className={`mt-4 flex flex-wrap items-center gap-3 p-4 backdrop-blur-md border rounded-xl shadow-lg ${
+                        isDarkMode
+                          ? 'bg-gray-800/90 border-gray-700'
+                          : 'bg-white/90 border-gray-200'
+                      }`}>
                         <div className="flex gap-2">
                           <button
                             onClick={handleEditSelectedLead}
                             disabled={selectedLeads.length !== 1}
-                            className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                            className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg ${
+                              isDarkMode
+                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                            }`}
                           >
                             <Edit className="w-4 h-4" />
                             <span>Edit Lead {selectedLeads.length !== 1 ? '(Select 1)' : ''}</span>
@@ -2789,7 +3162,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                           <button
                             onClick={handleDeleteSelectedLeads}
                             disabled={isDeleting}
-                            className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                            className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg ${
+                              isDarkMode
+                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                            }`}
                           >
                             {isDeleting ? (
                               <>
@@ -2809,25 +3186,41 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
                     {/* Lead Action Buttons */}
                     {message.lead_id && fetchedLeads[message.lead_id] && (
-                      <div className="mt-4 flex flex-wrap items-center gap-3 p-4 bg-white/90 backdrop-blur-md border border-gray-200 rounded-xl shadow-lg">
+                      <div className={`mt-4 flex flex-wrap items-center gap-3 p-4 backdrop-blur-md border rounded-xl shadow-lg ${
+                        isDarkMode
+                          ? 'bg-gray-800/90 border-gray-700'
+                          : 'bg-white/90 border-gray-200'
+                      }`}>
                         <div className="flex gap-2">
                           <button
                             onClick={handleEditLead}
-                            className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2"
+                            className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                              isDarkMode
+                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                            }`}
                           >
                             <Edit className="w-4 h-4" />
                             <span>Edit</span>
                           </button>
                           <button
                             onClick={handleSaveLead}
-                            className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2"
+                            className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                              isDarkMode
+                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                            }`}
                           >
                             <Save className="w-4 h-4" />
                             <span>Save</span>
                           </button>
                           <button
                             onClick={handleDeleteLead}
-                            className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 rounded-xl border border-gray-300 hover:border-gray-400 transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2"
+                            className={`px-4 py-3 rounded-xl border transition-all duration-200 text-sm font-normal shadow-sm hover:shadow-md transform hover:scale-105 flex items-center gap-2 ${
+                              isDarkMode
+                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 hover:text-white border-gray-600 hover:border-gray-500'
+                                : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:text-gray-900 border-gray-300 hover:border-gray-400'
+                            }`}
                           >
                             <Trash2 className="w-4 h-4" />
                             <span>Delete</span>
@@ -2878,17 +3271,25 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-gray-200 bg-gray-50">
+      <div className={`p-4 border-t ${
+        isDarkMode ? 'border-gray-700' : 'border-gray-200'
+      }`}>
         {/* New Chat Option */}
         <div className="flex items-center justify-between mb-3">
           <button
             onClick={handleReset}
-            className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+              isDarkMode
+                ? 'text-white hover:text-gray-200'
+                : 'text-blue-600 hover:text-blue-700'
+            }`}
           >
             <span className="text-lg">+</span>
             <span>New Chat</span>
           </button>
-          <div className="text-xs text-gray-500">
+          <div className={`text-xs ${
+            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+          }`}>
             Press Enter to send
           </div>
         </div>
@@ -2912,7 +3313,9 @@ const ATSNChatbot = ({ externalConversations = null }) => {
           </button>
         </div>
         
-        <div className="mt-2 text-xs text-gray-500 text-center">
+        <div className={`mt-2 text-xs text-center ${
+          isDarkMode ? 'text-gray-400' : 'text-gray-500'
+        }`}>
           Try: "Show scheduled posts" • "Create lead" • "View analytics"
         </div>
       </div>
@@ -3299,6 +3702,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         agentName={tooltipAgent}
         isVisible={!!tooltipAgent}
         position={tooltipPosition}
+        isDarkMode={isDarkMode}
       />
     </div>
   )

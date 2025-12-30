@@ -1,7 +1,7 @@
 import React from 'react'
-import { Instagram, Facebook, MessageCircle, Hash } from 'lucide-react'
+import { Instagram, Facebook, MessageCircle, Hash, Heart, Share, MessageSquare } from 'lucide-react'
 
-const ATSNContentCard = ({ content, platform, contentType, intent, onClick }) => {
+const ATSNContentCard = ({ content, platform, contentType, intent, onClick, isDarkMode = false }) => {
   // Platform icons
   const getPlatformIcon = (platformName) => {
     switch (platformName?.toLowerCase()) {
@@ -34,29 +34,34 @@ const ATSNContentCard = ({ content, platform, contentType, intent, onClick }) =>
 
   return (
     <div
-      className="bg-white rounded-xl shadow-lg overflow-hidden max-w-md w-full cursor-pointer hover:shadow-xl transition-shadow duration-200"
+      className={`rounded-xl shadow-lg overflow-hidden max-w-lg w-full cursor-pointer transition-all duration-200 ${
+        isDarkMode
+          ? 'bg-gray-800 border border-gray-700 shadow-xl hover:bg-gray-700'
+          : 'bg-white shadow-lg hover:shadow-xl'
+      }`}
       onClick={onClick}
     >
       {/* Header with platform logo and name */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-100">
+      <div className={`flex items-center justify-between p-4 border-b ${
+        isDarkMode ? 'border-gray-600 bg-gray-900' : 'border-gray-100'
+      }`}>
         <div className="flex items-center gap-3">
           {getPlatformIcon(platform)}
-          <span className="font-semibold text-gray-900">
-            {getPlatformDisplayName(platform)}
+          <span className={`font-semibold ${
+            isDarkMode ? 'text-gray-100' : 'text-gray-900'
+          }`}>
+            {getPlatformDisplayName(platform)} | {contentType?.replace('_', ' ')}
           </span>
-        </div>
-        <div className="text-xs text-gray-500 capitalize">
-          {contentType?.replace('_', ' ')}
         </div>
       </div>
 
       {/* Image on top */}
       {content.media_url && (
-        <div className="relative">
+        <div className="p-2">
           <img
             src={content.media_url}
             alt={content.title || "Content image"}
-            className="w-full aspect-square object-cover"
+            className="w-full aspect-square object-cover rounded-lg"
             onError={(e) => {
               e.target.style.display = 'none'
             }}
@@ -64,11 +69,36 @@ const ATSNContentCard = ({ content, platform, contentType, intent, onClick }) =>
         </div>
       )}
 
+      {/* Instagram interaction icons */}
+      {content.media_url && platform?.toLowerCase() === 'instagram' && (
+        <div className="px-4 pb-2 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <button className={`hover:text-red-500 transition-colors ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-700'
+            }`}>
+              <Heart className="w-5 h-5" />
+            </button>
+            <button className={`hover:text-blue-500 transition-colors ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-700'
+            }`}>
+              <MessageSquare className="w-5 h-5" />
+            </button>
+          </div>
+          <button className={`hover:text-green-500 transition-colors ${
+            isDarkMode ? 'text-gray-400' : 'text-gray-700'
+          }`}>
+            <Share className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
       {/* Content */}
       <div className="p-4">
         {/* Title */}
         {content.title && (
-          <h3 className="text-lg text-gray-900 mb-2 leading-tight">
+          <h3 className={`text-lg font-bold mb-2 leading-tight ${
+            isDarkMode ? 'text-gray-100' : 'text-gray-900'
+          }`}>
             {content.title}
           </h3>
         )}
@@ -78,7 +108,9 @@ const ATSNContentCard = ({ content, platform, contentType, intent, onClick }) =>
           <>
             {/* Content text */}
             {content.content && (
-              <p className="text-gray-700 text-sm leading-relaxed mb-3">
+              <p className={`text-sm leading-relaxed mb-3 ${
+                isDarkMode ? 'text-gray-200' : 'text-gray-700'
+              }`}>
                 {content.content.length > 150
                   ? `${content.content.substring(0, 150)}...`
                   : content.content
@@ -88,22 +120,21 @@ const ATSNContentCard = ({ content, platform, contentType, intent, onClick }) =>
 
             {/* Hashtags */}
             {content.hashtags && content.hashtags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {content.hashtags.slice(0, 5).map((hashtag, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full"
-                  >
-                    <Hash className="w-3 h-3" />
-                    {hashtag.replace('#', '')}
+              <p className={`text-sm ${
+                isDarkMode ? 'text-blue-400' : 'text-blue-500'
+              }`}>
+                {content.hashtags.slice(0, 8).map((hashtag, index) => (
+                  <span key={index}>
+                    {hashtag.startsWith('#') ? hashtag : `#${hashtag}`}
+                    {index < Math.min(content.hashtags.length, 8) - 1 ? ' ' : ''}
                   </span>
                 ))}
-                {content.hashtags.length > 5 && (
-                  <span className="text-xs text-gray-500">
-                    +{content.hashtags.length - 5} more
+                {content.hashtags.length > 8 && (
+                  <span className={isDarkMode ? 'text-gray-500' : 'text-gray-500'}>
+                    +{content.hashtags.length - 8} more
                   </span>
                 )}
-              </div>
+              </p>
             )}
           </>
         )}

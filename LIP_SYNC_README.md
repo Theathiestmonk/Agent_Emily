@@ -119,3 +119,7 @@ Try these texts to see different mouth animations:
 
 **Experience the magic**: Switch to the Lip-Sync Demo tab and watch Leo come to life! 🎭✨
 
+
+
+
+
