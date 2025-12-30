@@ -191,6 +191,48 @@ else:
     logger.info(" Supabase client initialized successfully")
 
 
+# ==================== UTILITY FUNCTIONS ====================
+
+def detect_and_replace_pii_in_query(query: str) -> tuple[str, list, list]:
+    """
+    Detect email and phone numbers in user query and return sanitized query with defaults.
+
+    Args:
+        query: The user query containing potential PII
+
+    Returns:
+        tuple: (sanitized_query, original_emails, original_phones)
+        - sanitized_query: Query with real PII replaced by default values
+        - original_emails: List of original emails found
+        - original_phones: List of original phones found
+    """
+    sanitized_query = query
+    original_emails = []
+    original_phones = []
+
+    # Email regex pattern - matches most common email formats
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+
+    # Phone regex pattern - matches various phone number formats (non-capturing groups)
+    phone_pattern = r'\b(?:\+?1[-.\s]?)?(?:[0-9]{3})?[-.\s]?(?:[0-9]{3})[-.\s]?(?:[0-9]{4})\b|\b\+?[0-9]{1,4}?[-.\s]?(?:[0-9]{1,4})?[-.\s]?(?:[0-9]{1,4})?[-.\s]?(?:[0-9]{1,4})\b'
+
+    # Find and store all original emails
+    email_matches = re.findall(email_pattern, query, re.IGNORECASE)
+    original_emails = email_matches
+    # Replace all emails with default for LLM
+    if email_matches:
+        sanitized_query = re.sub(email_pattern, 'atsn@gmail.com', sanitized_query, flags=re.IGNORECASE)
+
+    # Find and store all original phones
+    phone_matches = re.findall(phone_pattern, query)
+    original_phones = phone_matches
+    # Replace all phones with default for LLM
+    if phone_matches:
+        sanitized_query = re.sub(phone_pattern, '9876543210', sanitized_query)
+
+    return sanitized_query, original_emails, original_phones
+
+
 # ==================== PYDANTIC MODELS ====================
 
 class CreateContentPayload(BaseModel):
@@ -338,7 +380,19 @@ class AgentState(BaseModel):
     lead_items: Optional[List[Dict[str, Any]]] = None  # Structured lead data for frontend card rendering
     needs_connection: Optional[bool] = None  # Whether user needs to connect an account
     connection_platform: Optional[str] = None  # Platform that needs to be connected
-    
+
+    # Temporary fields for PII privacy protection
+    temp_original_email: Optional[str] = None  # Original email from user input (create operations)
+    temp_original_phone: Optional[str] = None  # Original phone from user input (create operations)
+    temp_original_emails: Optional[List[str]] = Field(default_factory=list)  # Original emails (edit operations)
+    temp_original_phones: Optional[List[str]] = Field(default_factory=list)  # Original phones (edit operations)
+    temp_filter_emails: Optional[List[str]] = Field(default_factory=list)  # Original emails for filtering
+    temp_filter_phones: Optional[List[str]] = Field(default_factory=list)  # Original phones for filtering
+    temp_delete_emails: Optional[List[str]] = Field(default_factory=list)  # Original emails for deletion
+    temp_delete_phones: Optional[List[str]] = Field(default_factory=list)  # Original phones for deletion
+    temp_followup_emails: Optional[List[str]] = Field(default_factory=list)  # Original emails for follow-up
+    temp_followup_phones: Optional[List[str]] = Field(default_factory=list)  # Original phones for follow-up
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -882,14 +936,17 @@ Extract ONLY explicitly mentioned information. Set fields to null if not mention
 
 def construct_create_leads_payload(state: AgentState) -> AgentState:
     """Construct payload for create leads task"""
-    
-    # Use user_query which contains the full conversation context
-    conversation = state.user_query
-    
+
+    # Detect and replace PII with default values, store originals
+    sanitized_conversation, original_emails, original_phones = detect_and_replace_pii_in_query(state.user_query)
+    # Store first email/phone found (for create operations, typically only one set)
+    state.temp_original_email = original_emails[0] if original_emails else None
+    state.temp_original_phone = original_phones[0] if original_phones else None
+
     prompt = f"""You are extracting information to create a new lead in the system.
 
 User conversation:
-{conversation}
+{sanitized_conversation}
 
 Extract these fields if mentioned:
 - lead_name: Full name of the lead
@@ -902,10 +959,10 @@ Extract these fields if mentioned:
 
 Examples:
 
-Query: "Add a new lead John Doe from the website, email john@example.com, follow up tomorrow"
+Query: "Add a new lead John Doe from the website, email atsn@gmail.com, follow up tomorrow"
 {{
     "lead_name": "John Doe",
-    "lead_email": "john@example.com",
+    "lead_email": "atsn@gmail.com",
     "lead_phone": null,
     "lead_source": "website",
     "lead_status": null,
@@ -913,20 +970,20 @@ Query: "Add a new lead John Doe from the website, email john@example.com, follow
     "remarks": null
 }}
 
-Query: "Create lead Sarah Johnson, phone +1234567890, came from LinkedIn, status is qualified"
+Query: "Create lead Sarah Johnson, phone 9876543210, came from LinkedIn, status is qualified"
 {{
     "lead_name": "Sarah Johnson",
     "lead_email": null,
-    "lead_phone": "+1234567890",
+    "lead_phone": "9876543210",
     "lead_source": "LinkedIn",
     "lead_status": "Qualified",
     "remarks": null
 }}
 
-Query: "New lead: Mike Chen, mike.chen@company.com, referred by existing client, very interested in our services"
+Query: "New lead: Mike Chen, atsn@gmail.com, referred by existing client, very interested in our services"
 {{
     "lead_name": "Mike Chen",
-    "lead_email": "mike.chen@company.com",
+    "lead_email": "atsn@gmail.com",
     "lead_phone": null,
     "lead_source": "referral",
     "lead_status": null,
@@ -941,9 +998,12 @@ Extract ONLY explicitly mentioned information. Set fields to null if not mention
 
 def construct_view_leads_payload(state: AgentState) -> AgentState:
     """Construct payload for view leads task"""
-    
-    # Use user_query which contains the full conversation context
-    conversation = state.user_query
+
+    # Detect and replace PII with default values for privacy
+    sanitized_conversation, original_emails, original_phones = detect_and_replace_pii_in_query(state.user_query)
+    # Store originals for potential filtering
+    state.temp_filter_emails = original_emails
+    state.temp_filter_phones = original_phones
 
     # Get current date and user timezone for date parsing context
     from datetime import datetime
@@ -965,7 +1025,7 @@ Current date reference: Today is {current_date}
 User timezone: {user_timezone}
 
 User conversation:
-{conversation}
+{sanitized_conversation}
 
 Extract these fields if mentioned:
 - lead_source: One of "Manual Entry", "Facebook", "Instagram", "Walk Ins", "Referral", "Email", "Website", "Phone Call"
@@ -1062,25 +1122,28 @@ Return ONLY this format:
 
 def construct_edit_leads_payload(state: AgentState) -> AgentState:
     """Construct payload for edit leads task"""
-    
-    # Use user_query which contains the full conversation context
-    conversation = state.user_query
-    
+
+    # Detect and replace PII with default values, store originals for both current and new values
+    sanitized_conversation, original_emails, original_phones = detect_and_replace_pii_in_query(state.user_query)
+    # For edit operations, store multiple emails/phones (current and new)
+    state.temp_original_emails = original_emails
+    state.temp_original_phones = original_phones
+
     prompt = f"""You are extracting information to edit an existing lead.
 
 User conversation:
-{conversation}
+{sanitized_conversation}
 
 Extract these fields if mentioned:
 Identification (current values):
 - lead_name: Current name to find the lead
-- lead_email: Current email to find the lead
-- lead_phone: Current phone to find the lead
+- lead_email: Current email to find the lead (use atsn@gmail.com if mentioned)
+- lead_phone: Current phone to find the lead (use 9876543210 if mentioned)
 
 Updates (new values, prefix with "new_"):
 - new_lead_name: New name
-- new_lead_email: New email
-- new_lead_phone: New phone
+- new_lead_email: New email (use atsn@gmail.com if mentioned)
+- new_lead_phone: New phone (use 9876543210 if mentioned)
 - new_lead_source: New source
 - new_lead_status: "New", "Contacted", "Qualified", "Lost", or "Won"
 - new_remarks: New remarks
@@ -1095,18 +1158,18 @@ Query: "Update John Doe's status to Contacted"
     "new_lead_status": "Contacted"
 }}
 
-Query: "Change the email for Sarah Johnson to sarah.j@newmail.com"
+Query: "Change the email for Sarah Johnson to atsn@gmail.com"
 {{
     "lead_name": "Sarah Johnson",
     "lead_email": null,
     "lead_phone": null,
-    "new_lead_email": "sarah.j@newmail.com"
+    "new_lead_email": "atsn@gmail.com"
 }}
 
-Query: "Mark lead mike@company.com as won and add note: closed deal worth $10k"
+Query: "Mark lead atsn@gmail.com as won and add note: closed deal worth $10k"
 {{
     "lead_name": null,
-    "lead_email": "mike@company.com",
+    "lead_email": "atsn@gmail.com",
     "lead_phone": null,
     "new_lead_status": "Won",
     "new_remarks": "closed deal worth $10k"
@@ -1120,14 +1183,17 @@ Extract ONLY explicitly mentioned information. Set fields to null if not mention
 
 def construct_delete_leads_payload(state: AgentState) -> AgentState:
     """Construct payload for delete leads task"""
-    
-    # Use user_query which contains the full conversation context
-    conversation = state.user_query
-    
+
+    # Detect and replace PII with default values for privacy
+    sanitized_conversation, original_emails, original_phones = detect_and_replace_pii_in_query(state.user_query)
+    # Store originals for deletion identification
+    state.temp_delete_emails = original_emails
+    state.temp_delete_phones = original_phones
+
     prompt = f"""You are extracting information to delete a lead.
 
 User conversation:
-{conversation}
+{sanitized_conversation}
 
 Extract these fields if mentioned:
 - lead_name: Name of lead to delete
@@ -1145,7 +1211,7 @@ Query: "Delete the lead John Doe"
     "lead_status": null
 }}
 
-Query: "Remove lead with email spam@example.com"
+Query: "Remove lead with email atsn@gmail.com"
 {{
     "lead_name": null,
     "lead_phone": null,
@@ -1169,14 +1235,17 @@ Extract ONLY explicitly mentioned information. Set fields to null if not mention
 
 def construct_follow_up_leads_payload(state: AgentState) -> AgentState:
     """Construct payload for follow up leads task"""
-    
-    # Use user_query which contains the full conversation context
-    conversation = state.user_query
-    
+
+    # Detect and replace PII with default values for privacy
+    sanitized_conversation, original_emails, original_phones = detect_and_replace_pii_in_query(state.user_query)
+    # Store originals for follow-up identification
+    state.temp_followup_emails = original_emails
+    state.temp_followup_phones = original_phones
+
     prompt = f"""You are extracting information to follow up with a lead.
 
 User conversation:
-{conversation}
+{sanitized_conversation}
 
 Extract these fields if mentioned:
 - lead_name: Name of lead to follow up
@@ -1194,7 +1263,7 @@ Query: "Follow up with John Doe about the proposal"
     "follow_up_message": "following up about the proposal"
 }}
 
-Query: "Send follow-up email to sarah@company.com asking about the meeting"
+Query: "Send follow-up email to atsn@gmail.com asking about the meeting"
 {{
     "lead_name": null,
     "lead_email": "sarah@company.com",
@@ -4850,9 +4919,9 @@ def handle_create_leads(state: AgentState) -> AgentState:
         state.result = "User authentication required."
         return state
 
-    # Get contact info from original values (not masked payload values)
-    lead_email = state.original_email
-    lead_phone = state.original_phone
+    # Get contact info - use original values if available, otherwise use payload values
+    lead_email = getattr(state, 'temp_original_email', None) or payload.get('lead_email')
+    lead_phone = getattr(state, 'temp_original_phone', None) or payload.get('lead_phone')
 
     # Final validation for contact info
     if not lead_email and not lead_phone:
@@ -4985,12 +5054,16 @@ def handle_view_leads(state: AgentState) -> AgentState:
             filters.append(f"Name contains: {payload['lead_name']}")
 
         if payload.get('lead_email'):
-            query = query.ilike("email", f"%{payload['lead_email']}%")
-            filters.append(f"Email contains: {payload['lead_email']}")
+            # Use original email for filtering
+            filter_email = getattr(state, 'temp_filter_emails', [payload['lead_email']])[0]
+            query = query.ilike("email", f"%{filter_email}%")
+            filters.append(f"Email contains: {filter_email}")
 
         if payload.get('lead_phone'):
-            query = query.ilike("phone", f"%{payload['lead_phone']}%")
-            filters.append(f"Phone contains: {payload['lead_phone']}")
+            # Use original phone for filtering
+            filter_phone = getattr(state, 'temp_filter_phones', [payload['lead_phone']])[0]
+            query = query.ilike("phone", f"%{filter_phone}%")
+            filters.append(f"Phone contains: {filter_phone}")
 
         # Order by creation date (newest first) and limit results
         query = query.order("created_at", desc=True).limit(50)
@@ -5102,12 +5175,16 @@ def handle_delete_leads(state: AgentState) -> AgentState:
     # Set agent name to Chase
     payload['agent_name'] = 'chase'
     
+    # Get original contact info for display
+    display_email = getattr(state, 'temp_delete_emails', [None])[0] or payload.get('lead_email')
+    display_phone = getattr(state, 'temp_delete_phones', [None])[0] or payload.get('lead_phone')
+
     state.result = f"""⚠️ Lead deletion prepared
 
 Lead to delete:
 - Name: {payload.get('lead_name')}
-- Email: {payload.get('lead_email')}
-- Phone: {payload.get('lead_phone')}
+- Email: {display_email}
+- Phone: {display_phone}
 
 Status: Awaiting confirmation"""
     
@@ -5137,10 +5214,14 @@ Make it friendly, brief, and action-oriented."""
     else:
         follow_up_message = payload['follow_up_message']
     
+    # Get original contact info for display
+    display_email = getattr(state, 'temp_followup_emails', [None])[0] or payload.get('lead_email')
+    display_phone = getattr(state, 'temp_followup_phones', [None])[0] or payload.get('lead_phone')
+
     state.result = f"""📧 Follow-up prepared
 
 Lead: {payload.get('lead_name')}
-Contact: {payload.get('lead_email') or payload.get('lead_phone')}
+Contact: {display_email or display_phone}
 
 Message:
 {follow_up_message}
