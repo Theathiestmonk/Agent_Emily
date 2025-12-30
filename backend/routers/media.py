@@ -103,7 +103,7 @@ async def generate_image_for_post(
         
         # Generate image
         result = await media_agent.generate_media_for_post(request.post_id, current_user.id)
-
+        
         # Increment image generation count
         try:
             current = supabase_admin.table('profiles').select('images_generated_this_month').eq('id', current_user.id).execute()

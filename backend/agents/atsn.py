@@ -3453,6 +3453,19 @@ Create a high-quality, professional image that:
 
                                         if generated_image_url and isinstance(generated_image_url, str):
                                             content_data['images'] = [generated_image_url]
+
+                                            # ✅ Increment image count after successful generation and storage
+                                            try:
+                                                # Read current image count and increment
+                                                current_images = supabase.table('profiles').select('images_generated_this_month').eq('id', state.user_id).execute()
+                                                if current_images.data and len(current_images.data) > 0:
+                                                    current_image_count = current_images.data[0]['images_generated_this_month'] or 0
+                                                    supabase.table('profiles').update({
+                                                        'images_generated_this_month': current_image_count + 1
+                                                    }).eq('id', state.user_id).execute()
+                                                    logger.info(f"Incremented image count for user {state.user_id} after successful generation (from {current_image_count} to {current_image_count + 1})")
+                                            except Exception as counter_error:
+                                                logger.error(f"Error incrementing image count after generation: {counter_error}")
                                         else:
                                             logger.error(f"Invalid public URL returned: {generated_image_url}")
                                             generated_image_url = None
