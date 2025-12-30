@@ -213,8 +213,8 @@ def detect_and_replace_pii_in_query(query: str) -> tuple[str, list, list]:
     # Email regex pattern - matches most common email formats
     email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
 
-    # Phone regex pattern - matches various phone number formats (non-capturing groups)
-    phone_pattern = r'\b(?:\+?1[-.\s]?)?(?:[0-9]{3})?[-.\s]?(?:[0-9]{3})[-.\s]?(?:[0-9]{4})\b|\b\+?[0-9]{1,4}?[-.\s]?(?:[0-9]{1,4})?[-.\s]?(?:[0-9]{1,4})?[-.\s]?(?:[0-9]{1,4})\b'
+    # Phone regex pattern - matches common phone number formats (very comprehensive)
+    phone_pattern = r'\b\+?[0-9]{1,4}?[-.\s]?\(?[0-9]{1,4}\)?[-.\s]?[0-9]{1,4}[-.\s]?[0-9]{1,4}[-.\s]?[0-9]{1,4}\b|\b[0-9]{7,15}\b'
 
     # Find and store all original emails
     email_matches = re.findall(email_pattern, query, re.IGNORECASE)
