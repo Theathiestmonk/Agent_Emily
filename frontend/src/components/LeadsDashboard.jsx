@@ -25,6 +25,32 @@ const useDarkMode = () => {
     }
   }, [isDarkMode])
 
+  // Listen for dark mode changes from navbar
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.detail && event.detail.key === 'darkMode') {
+        const newValue = event.detail.value === 'true'
+        setIsDarkMode(newValue)
+      }
+    }
+
+    // Also listen for direct localStorage changes (for cross-tab sync)
+    const handleLocalStorageChange = (e) => {
+      if (e.key === 'darkMode') {
+        const newValue = e.newValue === 'true'
+        setIsDarkMode(newValue)
+      }
+    }
+
+    window.addEventListener('localStorageChange', handleStorageChange)
+    window.addEventListener('storage', handleLocalStorageChange)
+
+    return () => {
+      window.removeEventListener('localStorageChange', handleStorageChange)
+      window.removeEventListener('storage', handleLocalStorageChange)
+    }
+  }, [])
+
   return [isDarkMode, setIsDarkMode]
 }
 import {
@@ -473,56 +499,56 @@ const LeadsDashboard = () => {
       new: {
         color: 'from-blue-500 to-blue-600',
         bgColor: 'bg-blue-50',
-        textColor: 'text-blue-700',
-        borderColor: 'border-blue-200',
+        textColor: isDarkMode ? 'text-blue-400' : 'text-blue-700',
+        borderColor: isDarkMode ? 'border-blue-700' : 'border-blue-300',
         icon: AlertCircle,
         label: 'New'
       },
       contacted: {
         color: 'from-purple-500 to-purple-600',
         bgColor: 'bg-purple-50',
-        textColor: 'text-purple-700',
-        borderColor: 'border-purple-200',
+        textColor: isDarkMode ? 'text-purple-400' : 'text-purple-700',
+        borderColor: isDarkMode ? 'border-purple-700' : 'border-purple-300',
         icon: MessageCircle,
         label: 'Contacted'
       },
       responded: {
         color: 'from-green-500 to-green-600',
         bgColor: 'bg-green-50',
-        textColor: 'text-green-700',
-        borderColor: 'border-green-200',
+        textColor: isDarkMode ? 'text-green-400' : 'text-green-700',
+        borderColor: isDarkMode ? 'border-green-700' : 'border-green-300',
         icon: CheckCircle,
         label: 'Responded'
       },
       qualified: {
         color: 'from-orange-500 to-orange-600',
         bgColor: 'bg-orange-50',
-        textColor: 'text-orange-700',
-        borderColor: 'border-orange-200',
+        textColor: isDarkMode ? 'text-orange-400' : 'text-orange-700',
+        borderColor: isDarkMode ? 'border-orange-700' : 'border-orange-300',
         icon: CheckCircle,
         label: 'Qualified'
       },
       converted: {
         color: 'from-emerald-500 to-emerald-600',
         bgColor: 'bg-emerald-50',
-        textColor: 'text-emerald-700',
-        borderColor: 'border-emerald-200',
+        textColor: isDarkMode ? 'text-emerald-400' : 'text-emerald-700',
+        borderColor: isDarkMode ? 'border-emerald-700' : 'border-emerald-300',
         icon: CheckCircle,
         label: 'Converted'
       },
       lost: {
         color: 'from-gray-400 to-gray-500',
         bgColor: 'bg-gray-50',
-        textColor: 'text-gray-700',
-        borderColor: 'border-gray-200',
+        textColor: isDarkMode ? 'text-gray-400' : 'text-gray-700',
+        borderColor: isDarkMode ? 'border-gray-600' : 'border-gray-300',
         icon: XCircle,
         label: 'Lost'
       },
       invalid: {
         color: 'from-red-500 to-red-600',
         bgColor: 'bg-red-50',
-        textColor: 'text-red-700',
-        borderColor: 'border-red-200',
+        textColor: isDarkMode ? 'text-red-400' : 'text-red-700',
+        borderColor: isDarkMode ? 'border-red-700' : 'border-red-300',
         icon: XCircle,
         label: 'Invalid'
       }
@@ -852,10 +878,12 @@ const LeadsDashboard = () => {
                       <div className={`mb-2 border-b ${statusConfig.borderColor}`}></div>
 
                       {/* Column Cards */}
-                      <div className="space-y-1.5 max-h-[calc(100vh-180px)] overflow-y-auto pb-4 scrollbar-hide">
+                      <div className={`space-y-1.5 max-h-[calc(100vh-180px)] overflow-y-auto pb-4 custom-scrollbar ${
+                        isDarkMode ? 'dark-mode' : 'light-mode'
+                      }`}>
                         {columnLeads.length === 0 ? (
                           <div className={`text-center py-8 text-sm ${
-                            isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
                           }`}>
                             No {statusFilter.label.toLowerCase()} leads
                           </div>
