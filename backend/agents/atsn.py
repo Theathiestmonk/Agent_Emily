@@ -343,6 +343,7 @@ class FollowUpLeadsPayload(BaseModel):
     lead_email: Optional[str] = None
     lead_phone: Optional[str] = None
     follow_up_message: Optional[str] = None
+    follow_up_date: Optional[str] = None  # ISO format date string for follow-up scheduling
 
 
 class ViewInsightsPayload(BaseModel):
@@ -380,6 +381,7 @@ class AgentState(BaseModel):
     lead_items: Optional[List[Dict[str, Any]]] = None  # Structured lead data for frontend card rendering
     needs_connection: Optional[bool] = None  # Whether user needs to connect an account
     connection_platform: Optional[str] = None  # Platform that needs to be connected
+
     # Temporary fields for PII privacy protection
     temp_original_email: Optional[str] = None  # Original email from user input (create operations)
     temp_original_phone: Optional[str] = None  # Original phone from user input (create operations)
@@ -396,6 +398,7 @@ class AgentState(BaseModel):
     intent_change_detected: bool = False
     intent_change_type: Optional[str] = None  # 'refinement', 'complete_shift', 'none'
     previous_intent: Optional[str] = None
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -423,18 +426,11 @@ INTENT_MAP = {
 
 def classify_intent(state: AgentState) -> AgentState:
     """Classify user intent using Gemini"""
-
-    # Only preserve intent for clarification responses, not for new user messages
-    # Check if this is a clarification response vs a new intent
-    is_clarification_response = (
-        state.waiting_for_user and
-        state.clarification_question and
-        state.current_step == "waiting_for_clarification"
-    )
-
-    # If this is just a clarification response, preserve the original intent
-    if is_clarification_response:
-        print(f" Intent preserved: {state.intent} (clarification response)")
+    
+    # If intent is already set and we're continuing from a clarification, preserve it
+    # This prevents re-classification when user responds to clarification questions
+    if state.intent and state.current_step == "payload_construction":
+        print(f" Intent preserved: {state.intent} (continuing from clarification)")
         return state
     
     # Check for greetings first (simple pattern matching)
@@ -448,25 +444,8 @@ def classify_intent(state: AgentState) -> AgentState:
         print(f" Intent classified: greeting")
         return state
     
-    # Detect intent changes by analyzing conversation context
-    intent_change_prompt = ""
-    if state.previous_intent:
-        intent_change_prompt = f"""
-
-INTENT CHANGE ANALYSIS:
-Previous intent: {state.previous_intent}
-Current conversation context: {state.user_query}
-
-Analyze if the user has changed their intent:
-- REFINEMENT: User is refining the same intent (e.g., "create post" → "generate post")
-- COMPLETE_SHIFT: User has switched to a different intent type (e.g., "create post" → "view posts")
-- NONE: No intent change, continuing with same intent
-
-Return intent change type: "refinement", "complete_shift", or "none"
-"""
-
     prompt = f"""You are an intent classifier for a content and lead management system.
-
+    
 Available intents:
 1. greeting - User is greeting (hi, hello, good morning, etc.)
 2. create_content - Creating new content (posts, videos, emails, messages)
@@ -484,29 +463,15 @@ Available intents:
 14. view_analytics - Viewing analytics data
 15. general_talks - General conversation not related to the above tasks
 
-{intent_change_prompt}
-
 User query: {state.user_query}
 
-Return format: intent_name|change_type
-Where change_type is: "refinement", "complete_shift", or "none"
-
-Example: "create_content|refinement"
-Example: "view_content|complete_shift"
-Example: "greeting|none"
-
-Return ONLY the formatted response without any explanation."""
+Return ONLY the intent name (e.g., "create_content", "greeting", "general_talks", etc.) without any explanation.
+If the query doesn't match any specific task, return "general_talks"."""
 
     try:
         response = model.generate_content(prompt)
-
-        # Parse response format: "intent_name|change_type"
-        response_parts = response.text.strip().split('|')
-        intent = response_parts[0].strip().lower()
-
-        # Extract change type (default to "none" if not provided)
-        change_type = response_parts[1].strip().lower() if len(response_parts) > 1 else "none"
-
+        intent = response.text.strip().lower()
+        
         # Validate intent
         if intent not in INTENT_MAP:
             # Try to find closest match
@@ -517,25 +482,8 @@ Return ONLY the formatted response without any explanation."""
             else:
                 # Default to general_talks for unmatched intents
                 intent = "general_talks"
-
-        # Set intent and change detection
+        
         state.intent = intent
-        state.intent_change_type = change_type
-
-        # Detect intent changes - check against both current and previous intent
-        if state.intent and state.intent != intent:
-            # Direct change from current intent
-            state.intent_change_detected = True
-            print(f"🎯 Intent change detected: {state.intent} → {intent} (type: {change_type})")
-        elif state.previous_intent and state.previous_intent != intent and not state.intent:
-            # Fallback check for cases where intent might not be set yet
-            state.intent_change_detected = True
-            print(f"🎯 Intent change detected (fallback): {state.previous_intent} → {intent} (type: {change_type})")
-        else:
-            state.intent_change_detected = False
-
-        # Update previous intent for next comparison
-        state.previous_intent = intent
         
         # For greeting, handle directly and end
         if intent == "greeting":
@@ -1031,7 +979,24 @@ def construct_create_leads_payload(state: AgentState) -> AgentState:
     state.temp_original_email = original_emails[0] if original_emails else None
     state.temp_original_phone = original_phones[0] if original_phones else None
 
+    # Get current date and user timezone for date parsing context
+    from datetime import datetime
+    current_date = datetime.now().strftime("%Y-%m-%d")
+
+    # Get user timezone from profile
+    user_timezone = "UTC"  # default
+    if state.user_id and supabase:
+        try:
+            profile_response = supabase.table("profiles").select("timezone").eq("id", state.user_id).execute()
+            if profile_response.data and len(profile_response.data) > 0:
+                user_timezone = profile_response.data[0].get("timezone", "UTC")
+        except Exception as e:
+            logger.warning(f"Could not fetch user timezone: {e}")
+
     prompt = f"""You are extracting information to create a new lead in the system.
+
+Current date reference: Today is {current_date}
+User timezone: {user_timezone}
 
 User conversation:
 {sanitized_conversation}
@@ -1042,8 +1007,25 @@ Extract these fields if mentioned:
 - lead_phone: Phone number
 - lead_source: Where the lead came from (website, referral, event, social media, etc.)
 - lead_status: "New", "Contacted", "Qualified", "Lost", or "Won"
-- follow_up: When to follow up (dates, times, or relative periods)
+- follow_up: PARSE dates into YYYY-MM-DD format or ISO format (YYYY-MM-DDTHH:MM:SS)
 - remarks: Additional notes
+
+CRITICAL DATE PARSING RULES FOR follow_up:
+- Parse ALL date mentions into YYYY-MM-DD format
+- "today" → current date ({current_date}) in YYYY-MM-DD format
+- "yesterday" → DO NOT USE PAST DATES, convert to tomorrow
+- "tomorrow" → tomorrow's date in YYYY-MM-DD format
+- "next week" → date 7 days from {current_date}
+- Weekday names ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday") → calculate the NEXT occurrence of that weekday from {current_date}
+  * If today is Tuesday (Dec 31, 2025) and user says "Sunday", return 2026-01-04 (next Sunday)
+  * If today is Tuesday and user says "Friday", return 2026-01-03 (this Friday)
+  * If today is Tuesday and user says "Tuesday", return 2026-01-07 (next Tuesday, not today)
+  * ALWAYS find the NEXT upcoming occurrence, never use today or past dates
+- "next monday", "next tuesday", etc → same as above, calculate next occurrence of that weekday
+- Specific dates like "Jan 15" → "YYYY-01-15" (use current/next year appropriately)
+- NEVER use past dates - always convert to future dates
+- If no date mentioned, set follow_up to null
+- Use {current_date} as the reference point for all calculations
 
 Examples:
 
@@ -1054,17 +1036,18 @@ Query: "Add a new lead John Doe from the website, email atsn@gmail.com, follow u
     "lead_phone": null,
     "lead_source": "website",
     "lead_status": null,
-    "follow_up": "tomorrow",
+    "follow_up": "{(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')}",
     "remarks": null
 }}
 
-Query: "Create lead Sarah Johnson, phone 9876543210, came from LinkedIn, status is qualified"
+Query: "Create lead Sarah Johnson, phone 9876543210, came from LinkedIn, status is qualified, follow up next Monday"
 {{
     "lead_name": "Sarah Johnson",
     "lead_email": null,
     "lead_phone": "9876543210",
     "lead_source": "LinkedIn",
     "lead_status": "Qualified",
+    "follow_up": "2025-01-06",
     "remarks": null
 }}
 
@@ -1075,6 +1058,7 @@ Query: "New lead: Mike Chen, atsn@gmail.com, referred by existing client, very i
     "lead_phone": null,
     "lead_source": "referral",
     "lead_status": null,
+    "follow_up": null,
     "remarks": "very interested in our services, referred by existing client"
 }}
 
@@ -1330,7 +1314,13 @@ def construct_follow_up_leads_payload(state: AgentState) -> AgentState:
     state.temp_followup_emails = original_emails
     state.temp_followup_phones = original_phones
 
+    # Get current date for date parsing context
+    from datetime import datetime
+    current_date = datetime.now().strftime("%Y-%m-%d")
+
     prompt = f"""You are extracting information to follow up with a lead.
+
+Current date reference: Today is {current_date}
 
 User conversation:
 {sanitized_conversation}
@@ -1340,23 +1330,41 @@ Extract these fields if mentioned:
 - lead_email: Email of lead to follow up
 - lead_phone: Phone of lead to follow up
 - follow_up_message: Specific message to send (optional)
+- follow_up_date: PARSE dates into YYYY-MM-DD format
+
+DATE PARSING RULES FOR follow_up_date:
+- "today" → current date ({current_date}) in YYYY-MM-DD format
+- "tomorrow" → tomorrow's date in YYYY-MM-DD format
+- "next week" → date 7 days from {current_date}
+- Weekday names ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday") → calculate the NEXT occurrence of that weekday from {current_date}
+  * If today is Tuesday (Dec 31, 2025) and user says "Sunday", return 2026-01-04 (next Sunday)
+  * If today is Tuesday and user says "Friday", return 2026-01-03 (this Friday)
+  * If today is Tuesday and user says "Tuesday", return 2026-01-07 (next Tuesday, not today)
+  * ALWAYS find the NEXT upcoming occurrence, never use today or past dates
+- "next monday", "next tuesday", etc → same as above, calculate next occurrence of that weekday
+- Specific dates like "Jan 15" → "YYYY-01-15" (use current/next year appropriately)
+- NEVER use past dates - always convert to future dates
+- If no date mentioned, set to null
+- Use {current_date} as the reference point for all calculations
 
 Examples:
 
-Query: "Follow up with John Doe about the proposal"
+Query: "Follow up with John Doe about the proposal next Monday"
 {{
     "lead_name": "John Doe",
     "lead_email": null,
     "lead_phone": null,
-    "follow_up_message": "following up about the proposal"
+    "follow_up_message": "following up about the proposal",
+    "follow_up_date": "2025-01-06"
 }}
 
-Query: "Send follow-up email to atsn@gmail.com asking about the meeting"
+Query: "Send follow-up email to atsn@gmail.com asking about the meeting tomorrow"
 {{
     "lead_name": null,
     "lead_email": "sarah@company.com",
     "lead_phone": null,
-    "follow_up_message": "asking about the meeting"
+    "follow_up_message": "asking about the meeting",
+    "follow_up_date": "{(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')}"
 }}
 
 Query: "Call lead Mike Chen to check if he's ready to proceed"
@@ -1364,7 +1372,8 @@ Query: "Call lead Mike Chen to check if he's ready to proceed"
     "lead_name": "Mike Chen",
     "lead_email": null,
     "lead_phone": null,
-    "follow_up_message": "check if ready to proceed with next steps"
+    "follow_up_message": "check if ready to proceed with next steps",
+    "follow_up_date": null
 }}
 
 Extract ONLY explicitly mentioned information. Set fields to null if not mentioned.
@@ -2954,7 +2963,7 @@ def complete_delete_leads_payload(state: AgentState) -> AgentState:
 
 def complete_follow_up_leads_payload(state: AgentState) -> AgentState:
     """Complete follow_up_leads payload"""
-    required_fields = ["lead_name"]
+    required_fields = ["lead_name", "follow_up_date"]
     clarifications = FIELD_CLARIFICATIONS.get("follow_up_leads", {})
     
     missing_fields = [
@@ -2965,30 +2974,30 @@ def complete_follow_up_leads_payload(state: AgentState) -> AgentState:
     if not missing_fields:
         state.payload_complete = True
         state.current_step = "action_execution"
-        print(" Follow up leads payload complete")
+        print("✓ Follow up leads payload complete")
         return state
     
     next_field = missing_fields[0]
-    clarification_data = clarifications.get(next_field, {})
-
-    if isinstance(clarification_data, dict):
-        base_question = clarification_data.get("question", f"Please provide: {next_field.replace('_', ' ')}")
-
-        # Generate personalized question using LLM
-        logger.info(f"Calling LLM for clarification question. Base: '{base_question}', User context length: {len(state.user_query or '')}")
-        personalized_question = generate_clarifying_question(
-            base_question=base_question,
-            user_context=state.user_query,
-            user_input=state.user_query.split('\n')[-1] if state.user_query else ""
-        )
-        logger.info(f"LLM returned: '{personalized_question}'")
-
-        state.clarification_question = personalized_question
-        state.clarification_options = clarification_data.get("options", [])
-    else:
-        # Backward compatibility for string clarifications
-        state.clarification_question = clarification_data or f"Please provide: {next_field.replace('_', ' ')}"
+    
+    # Special handling for follow_up_date
+    if next_field == "follow_up_date":
+        state.clarification_question = "When should we follow up with this lead? (e.g., 'tomorrow', 'next week', 'Jan 15')"
         state.clarification_options = []
+    else:
+        clarification_data = clarifications.get(next_field, {})
+
+        if isinstance(clarification_data, dict):
+            base_question = clarification_data.get("question", f"Please provide: {next_field.replace('_', ' ')}")
+            personalized_question = generate_clarifying_question(
+                base_question=base_question,
+                user_context=state.user_query,
+                user_input=state.user_query.split('\n')[-1] if state.user_query else ""
+            )
+            state.clarification_question = personalized_question
+            state.clarification_options = clarification_data.get("options", [])
+        else:
+            state.clarification_question = clarification_data or f"Please provide: {next_field.replace('_', ' ')}"
+            state.clarification_options = []
 
     state.waiting_for_user = True
     state.current_step = "waiting_for_clarification"
@@ -3259,7 +3268,15 @@ def handle_create_content(state: AgentState) -> AgentState:
         content_data = {}  # Store data to save to database
 
         # Load business context from profiles table
-        business_context = _load_business_context(state.user_id) if state.user_id else _get_default_business_context()
+        business_context = {}
+        if state.user_id:
+            try:
+                profile_response = supabase.table("profiles").select("*, profile_embedding").eq("id", state.user_id).execute()
+                if profile_response.data and len(profile_response.data) > 0:
+                    profile_data = profile_response.data[0]
+                    business_context = get_profile_context_with_embedding(profile_data)
+            except Exception as e:
+                logger.warning(f"Failed to load business context: {e}")
 
         # Handle different content types
         content_type = payload.get('content_type', '')
@@ -5310,11 +5327,15 @@ Make it friendly, brief, and action-oriented."""
     # Get original contact info for display
     display_email = getattr(state, 'temp_followup_emails', [None])[0] or payload.get('lead_email')
     display_phone = getattr(state, 'temp_followup_phones', [None])[0] or payload.get('lead_phone')
+    
+    # Format the follow-up date for display
+    follow_up_date = payload.get('follow_up_date')
+    formatted_date = f"\n📅 Scheduled: {follow_up_date}" if follow_up_date else ""
 
     state.result = f"""📧 Follow-up prepared
 
 Lead: {payload.get('lead_name')}
-Contact: {display_email or display_phone}
+Contact: {display_email or display_phone}{formatted_date}
 
 Message:
 {follow_up_message}
@@ -5412,52 +5433,6 @@ def should_continue_to_action(state: AgentState) -> str:
     return "end"
 
 
-def route_based_on_intent_change(state: AgentState) -> str:
-    """Route based on intent change detection"""
-    if state.intent_change_detected:
-        if state.intent_change_type == "complete_shift":
-            print(f"🔄 Complete intent shift detected - restarting entire flow")
-
-            # Aggressive reset for complete intent changes
-            state = reset_state_for_new_intent(state)
-
-            # Return to start for complete restart
-            return "classify_intent"
-        elif state.intent_change_type == "refinement":
-            print(f"🔧 Intent refinement detected - continuing with context")
-            state.intent_change_detected = False
-            # Continue with normal routing for refinements
-            return route_to_constructor(state)
-        else:
-            # Unknown change type, treat as refinement
-            print(f"🔧 Intent change detected (unknown type) - continuing")
-            state.intent_change_detected = False
-            return route_to_constructor(state)
-    else:
-        # No change - normal routing
-        return route_to_constructor(state)
-
-
-def reset_state_for_new_intent(state: AgentState) -> AgentState:
-    """Reset state completely for new intent processing"""
-    print("🧹 Resetting state for new intent")
-
-    # Keep only essential fields, reset everything else
-    preserved_user_id = state.user_id
-    preserved_previous_intent = state.intent  # Keep for logging
-
-    # Create fresh state
-    fresh_state = AgentState(
-        user_query=state.user_query,  # Keep the full conversation context
-        user_id=preserved_user_id,
-        intent_change_detected=False,
-        previous_intent=preserved_previous_intent
-    )
-
-    print(f"✅ State reset complete. Ready for new intent processing.")
-    return fresh_state
-
-
 def build_graph():
     """Build the LangGraph workflow"""
     
@@ -5488,12 +5463,11 @@ def build_graph():
     # Add edges
     workflow.set_entry_point("classify_intent")
     
-    # Route from intent classifier with intent change detection
+    # Route from intent classifier to specific constructor or direct to action
     workflow.add_conditional_edges(
         "classify_intent",
-        route_based_on_intent_change,
+        route_to_constructor,
         {
-            "classify_intent": "classify_intent",  # For complete intent shifts - restart
             "execute_action": "execute_action",  # For greeting and general_talks
             "construct_create_content": "construct_create_content",
             "construct_edit_content": "construct_edit_content",
@@ -5542,60 +5516,6 @@ def build_graph():
     workflow.add_edge("execute_action", END)
     
     return workflow.compile()
-
-
-# ==================== HELPER FUNCTIONS ====================
-
-def _get_default_business_context() -> Dict[str, Any]:
-    """Get default business context when profile is not available"""
-    return {
-        "business_name": "AI Marketing Company",
-        "industry": ["Technology", "Marketing"],
-        "target_audience": ["Businesses", "Entrepreneurs"],
-        "brand_voice": "Professional and innovative",
-        "content_goals": ["Lead generation", "Brand awareness"],
-        "brand_personality": "Helpful and knowledgeable",
-        "brand_values": ["Innovation", "Quality", "Customer success"]
-    }
-
-
-def _load_business_context(user_id: str) -> Dict[str, Any]:
-    """Load business context from user profile"""
-    try:
-        if not supabase:
-            logger.info(f"Supabase not available for user {user_id}, using default business context")
-            return _get_default_business_context()
-
-        # Get user profile from Supabase including embeddings
-        response = supabase.table("profiles").select("*, profile_embedding").eq("id", user_id).execute()
-
-        if response.data and len(response.data) > 0:
-            profile_data = response.data[0]
-            # Use embedding context utility if available
-            try:
-                from utils.embedding_context import get_profile_context_with_embedding
-                business_context = get_profile_context_with_embedding(profile_data)
-                logger.info(f"User {user_id} - Business context extracted using embedding: {business_context}")
-                return business_context
-            except ImportError:
-                # Fallback to basic extraction
-                business_context = {
-                    "business_name": profile_data.get("business_name", ""),
-                    "industry": profile_data.get("industry", ""),
-                    "target_audience": profile_data.get("target_audience", ""),
-                    "brand_voice": profile_data.get("brand_voice", ""),
-                    "content_goals": profile_data.get("content_goals", []),
-                    "brand_personality": profile_data.get("brand_personality", ""),
-                    "brand_values": profile_data.get("brand_values", [])
-                }
-                logger.info(f"User {user_id} - Business context extracted using basic fallback: {business_context}")
-                return business_context
-        else:
-            logger.warning(f"No profile found for user {user_id}")
-            return _get_default_business_context()
-    except Exception as e:
-        logger.error(f"Error loading business context for user {user_id}: {e}")
-        return _get_default_business_context()
 
 
 # ==================== MAIN AGENT CLASS ====================
