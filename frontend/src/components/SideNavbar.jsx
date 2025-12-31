@@ -581,9 +581,10 @@ const SideNavbar = () => {
       </div>
 
       {/* Settings Menu */}
-      <SettingsMenu 
-        isOpen={isSettingsMenuOpen} 
-        onClose={() => setIsSettingsMenuOpen(false)} 
+      <SettingsMenu
+        isOpen={isSettingsMenuOpen}
+        onClose={() => setIsSettingsMenuOpen(false)}
+        isDarkMode={isDarkMode} 
       />
     </div>
   )

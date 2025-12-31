@@ -380,8 +380,6 @@ class AgentState(BaseModel):
     lead_items: Optional[List[Dict[str, Any]]] = None  # Structured lead data for frontend card rendering
     needs_connection: Optional[bool] = None  # Whether user needs to connect an account
     connection_platform: Optional[str] = None  # Platform that needs to be connected
-<<<<<<< HEAD
-
     # Temporary fields for PII privacy protection
     temp_original_email: Optional[str] = None  # Original email from user input (create operations)
     temp_original_phone: Optional[str] = None  # Original phone from user input (create operations)
@@ -398,8 +396,6 @@ class AgentState(BaseModel):
     intent_change_detected: bool = False
     intent_change_type: Optional[str] = None  # 'refinement', 'complete_shift', 'none'
     previous_intent: Optional[str] = None
-    
->>>>>>> 05be2b7 (feat: Implement intelligent intent change detection in ATSN agent)
     class Config:
         arbitrary_types_allowed = True
 
@@ -671,11 +667,28 @@ Extract ONLY explicitly mentioned information. Set fields to null if not mention
 
 def construct_delete_content_payload(state: AgentState) -> AgentState:
     """Construct payload for delete content task"""
-    
+
     # Use user_query which contains the full conversation context
     conversation = state.user_query
-    
+
+    # Get current date and user timezone for date parsing context
+    from datetime import datetime
+    current_date = datetime.now().strftime("%Y-%m-%d")
+
+    # Get user timezone from profile
+    user_timezone = "UTC"  # default
+    if state.user_id and supabase:
+        try:
+            profile_response = supabase.table("profiles").select("timezone").eq("id", state.user_id).execute()
+            if profile_response.data and len(profile_response.data) > 0:
+                user_timezone = profile_response.data[0].get("timezone", "UTC")
+        except Exception as e:
+            logger.warning(f"Could not fetch user timezone: {e}")
+
     prompt = f"""You are extracting information to delete content.
+
+Current date reference: Today is {current_date}
+User timezone: {user_timezone}
 
 User conversation:
 {conversation}
@@ -690,19 +703,21 @@ Extract these fields ONLY if explicitly mentioned:
 
 CRITICAL DATE PARSING RULES:
 - Parse ALL date mentions into YYYY-MM-DD format without errors
-- "today" → current date in YYYY-MM-DD format
-- "yesterday" → yesterday's date in YYYY-MM-DD format
-- "tomorrow" → tomorrow's date in YYYY-MM-DD format
-- "this week" → current week range (Monday to current day)
-- "last week" → previous week range (Monday to Sunday)
-- "this month" → current month range (1st to current day)
-- "last month" → previous month range (1st to last day)
-- "last_7_days" → date range for last 7 days
-- "last_30_days" → date range for last 30 days
-- Specific dates like "27 december" → "YYYY-12-27" (use current year)
+- "today" → current date ({current_date}) in YYYY-MM-DD format
+- "yesterday" → yesterday's date relative to {current_date}
+- "tomorrow" → tomorrow's date relative to {current_date}
+- "this week" → current week range (Monday to current day) relative to {current_date}
+- "last week" → previous week range (Monday to Sunday) relative to {current_date}
+- "this month" → current month range (1st to current day) relative to {current_date}
+- "last month" → previous month range (1st to last day) relative to {current_date}
+- "last_7_days" → date range for last 7 days from {current_date}
+- "last_30_days" → date range for last 30 days from {current_date}
+- Specific dates like "27 december" → "YYYY-12-27" (use current year if not specified)
+- Month names: "january"/"jan" → "01", "february"/"feb" → "02", etc.
 - For date ranges, use format "YYYY-MM-DD to YYYY-MM-DD"
 - If no date mentioned, set date_range to null
 - NEVER leave date parsing incomplete - always convert to proper format
+- Use the user's timezone ({user_timezone}) for all date calculations
 
 CRITICAL QUERY EXTRACTION:
 - Extract search queries that indicate what content the user is looking for
@@ -719,16 +734,27 @@ CRITICAL RULES:
 6. Only set status to "scheduled" if user explicitly says "scheduled", "scheduled posts", etc.
 7. Only set status to "generated" if user explicitly says "generated", "draft", "created", etc.
 8. IMPORTANT: When user responds to clarification questions with single words, parse dates correctly:
-   - "yesterday" → date_range: yesterday's date
-   - "today" → date_range: today's date
-   - "tomorrow" → date_range: tomorrow's date
+   - "yesterday" → date_range: yesterday's date ({(datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')})
+   - "today" → date_range: today's date ({current_date})
+   - "tomorrow" → date_range: tomorrow's date ({(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')})
    - "this week" → date_range: current week range
    - "last week" → date_range: previous week range
    - "this month" → date_range: current month range
    - "last month" → date_range: previous month range
+   - "last_7_days" → date_range: last 7 days from {current_date}
+   - "last_30_days" → date_range: last 30 days from {current_date}
    - "generated" → status: "generated"
+   - "scheduled" → status: "scheduled"
+   - "published" → status: "published"
    - "Instagram" → platform: "Instagram"
+   - "Facebook" → platform: "Facebook"
+   - "LinkedIn" → platform: "LinkedIn"
+   - "YouTube" → platform: "Youtube"
+   - "Gmail" → platform: "Gmail"
+   - "WhatsApp" → platform: "Whatsapp"
    - "Social Media" → channel: "Social Media"
+   - "Blog" → channel: "Blog"
+   - "Email" → channel: "Email"
 9. Preserve existing payload values - only update fields that are explicitly mentioned in the current response
 
 

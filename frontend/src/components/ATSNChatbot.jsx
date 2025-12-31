@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
-import { Send, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone, Heart } from 'lucide-react'
+import { Send, ArrowRight, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone, Heart } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import ContentCard from './ContentCard'
@@ -2831,11 +2831,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                     {message.lead_items && message.lead_items.length > 0 && (
                       <div className="mt-4">
                         {/* Filter Controls */}
-                        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 mb-4">
+                        <div className={`rounded-xl shadow-lg border p-4 mb-4 ${
+                          isDarkMode
+                            ? 'bg-gray-800 border-gray-700 shadow-gray-900/50'
+                            : 'bg-amber-50 border-amber-200'
+                        }`}>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                             {/* Search Filter */}
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                              <label className={`block text-sm font-medium mb-2 ${
+                                isDarkMode ? 'text-green-300' : 'text-green-800'
+                              }`}>
                                 Search
                               </label>
                               <input
@@ -2843,19 +2849,29 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                 placeholder="Name or email..."
                                 value={leadFilters.search}
                                 onChange={(e) => setLeadFilters(prev => ({ ...prev, search: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-sm ${
+                                  isDarkMode
+                                    ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500 placeholder-gray-400'
+                                    : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                                }`}
                               />
                             </div>
 
                             {/* Status Filter */}
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                              <label className={`block text-sm font-medium mb-2 ${
+                                isDarkMode ? 'text-green-300' : 'text-green-800'
+                              }`}>
                                 Status
                               </label>
                               <select
                                 value={leadFilters.status}
                                 onChange={(e) => setLeadFilters(prev => ({ ...prev, status: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-sm ${
+                                  isDarkMode
+                                    ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500'
+                                    : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                                }`}
                               >
                                 <option value="">All Status</option>
                                 <option value="new">New</option>
@@ -2870,13 +2886,19 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
                             {/* Source Filter */}
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                              <label className={`block text-sm font-medium mb-2 ${
+                                isDarkMode ? 'text-green-300' : 'text-green-800'
+                              }`}>
                                 Source
                               </label>
                               <select
                                 value={leadFilters.source}
                                 onChange={(e) => setLeadFilters(prev => ({ ...prev, source: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-sm ${
+                                  isDarkMode
+                                    ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500'
+                                    : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                                }`}
                               >
                                 <option value="">All Sources</option>
                                 <option value="Website">Website</option>
@@ -2893,27 +2915,39 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
                             {/* Date From Filter */}
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                              <label className={`block text-sm font-medium mb-2 ${
+                                isDarkMode ? 'text-green-300' : 'text-green-800'
+                              }`}>
                                 Date From
                               </label>
                               <input
                                 type="date"
                                 value={leadFilters.dateFrom}
                                 onChange={(e) => setLeadFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-sm ${
+                                  isDarkMode
+                                    ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500'
+                                    : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                                }`}
                               />
                             </div>
 
                             {/* Date To Filter */}
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                              <label className={`block text-sm font-medium mb-2 ${
+                                isDarkMode ? 'text-green-300' : 'text-green-800'
+                              }`}>
                                 Date To
                               </label>
                               <input
                                 type="date"
                                 value={leadFilters.dateTo}
                                 onChange={(e) => setLeadFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-sm ${
+                                  isDarkMode
+                                    ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500'
+                                    : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                                }`}
                               />
                             </div>
                           </div>
@@ -2928,14 +2962,22 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                 dateFrom: '',
                                 dateTo: ''
                               })}
-                              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
+                              className={`px-4 py-2 text-sm rounded-md transition-colors border ${
+                                isDarkMode
+                                  ? 'text-green-300 hover:text-green-200 hover:bg-gray-700 border-green-600'
+                                  : 'text-green-700 hover:text-green-800 hover:bg-green-50 border-green-200'
+                              }`}
                             >
                               Clear Filters
                             </button>
                           </div>
                         </div>
 
-                        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                        <div className={`rounded-xl shadow-lg border overflow-hidden ${
+                          isDarkMode
+                            ? 'bg-gray-800 border-gray-700 shadow-gray-900/50'
+                            : 'bg-amber-50 border-amber-200'
+                        }`}>
                           {(() => {
                             // Apply filters to lead items
                             const filteredLeads = message.lead_items.filter(lead => {
@@ -2977,15 +3019,25 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                             return (
                               <>
                                 {/* Results count */}
-                                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-                                  <span className="text-sm text-gray-600">
+                                <div className={`px-4 py-3 border-b flex justify-between items-center ${
+                                  isDarkMode
+                                    ? 'bg-gray-700 border-gray-600'
+                                    : 'bg-green-100 border-green-200'
+                                }`}>
+                                  <span className={`text-sm font-medium ${
+                                    isDarkMode ? 'text-green-300' : 'text-green-800'
+                                  }`}>
                                     Showing {filteredLeads.length} of {message.lead_items.length} leads
                                   </span>
                                 </div>
 
                                 <div className="overflow-x-auto">
                                   <table className="w-full">
-                                    <thead className="bg-gray-50 border-b border-gray-200">
+                                    <thead className={`border-b ${
+                                      isDarkMode
+                                        ? 'bg-gray-700 border-gray-600'
+                                        : 'bg-green-100 border-green-200'
+                                    }`}>
                                       <tr>
                                         <th className="px-4 py-3 text-left">
                                           {(message.intent === 'view_leads' || message.intent === 'delete_leads') && (
@@ -2994,44 +3046,71 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                                 const allFilteredIds = filteredLeads.map(item => item.lead_id || item.id)
                                                 setSelectedLeads(allFilteredIds)
                                               }}
-                                              className="text-gray-600 hover:text-gray-800 p-1 rounded hover:bg-gray-100 transition-colors"
+                                              className={`p-1 rounded transition-colors ${
+                                                isDarkMode
+                                                  ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-600'
+                                                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                                              }`}
                                               title="Select All Filtered"
                                             >
                                               <CheckSquare className="w-4 h-4" />
                                             </button>
                                           )}
                                         </th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                        <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
+                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                        }`}>
                                           Lead Name
                                         </th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                        <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
+                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                        }`}>
                                           Email
                                         </th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                        <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
+                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                        }`}>
                                           Phone
                                         </th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                        <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
+                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                        }`}>
                                           Status
                                         </th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                        <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
+                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                        }`}>
+                                          Source
+                                        </th>
+                                        <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
+                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                        }`}>
                                           Latest Remark
                                         </th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                        <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
+                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                        }`}>
                                           Created
                                         </th>
                                       </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-200">
+                                    <tbody className={`divide-y ${
+                                      isDarkMode ? 'divide-gray-600' : 'divide-green-200'
+                                    }`}>
                                       {filteredLeads.map((leadItem, index) => (
-                                        <tr key={`${message.id}-${index}`} className="hover:bg-gray-50 transition-colors">
+                                        <tr key={`${message.id}-${index}`} className={`transition-colors ${
+                                          isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-amber-50'
+                                        }`}>
                                           <td className="px-4 py-3">
                                             {(message.intent === 'view_leads' || message.intent === 'delete_leads') && (
                                               <button
                                                 onClick={() => handleLeadSelect(leadItem.lead_id || leadItem.id, message.intent)}
                                                 className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                                                   selectedLeads.includes(leadItem.lead_id || leadItem.id)
-                                                    ? 'bg-purple-600 border-purple-600 text-white'
-                                                    : 'bg-white border-gray-300 hover:border-purple-400'
+                                                    ? 'bg-green-600 border-green-600 text-white'
+                                                    : isDarkMode
+                                                    ? 'bg-gray-700 border-gray-500 hover:border-green-400'
+                                                    : 'bg-white border-gray-300 hover:border-green-400'
                                                 }`}
                                               >
                                                 {selectedLeads.includes(leadItem.lead_id || leadItem.id) ? (
@@ -3047,15 +3126,21 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
                                                 <User className="w-4 h-4 text-white" />
                                               </div>
-                                              <span className="font-medium text-gray-900 truncate">
+                                              <span className={`font-medium truncate ${
+                                                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                                              }`}>
                                                 {leadItem.name || 'Unknown Lead'}
                                               </span>
                                             </div>
                                           </td>
-                                          <td className="px-4 py-3 text-sm text-gray-600 truncate max-w-xs">
+                                          <td className={`px-4 py-3 text-sm truncate max-w-xs ${
+                                            isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                          }`}>
                                             {leadItem.email || 'No email'}
                                           </td>
-                                          <td className="px-4 py-3 text-sm text-gray-600">
+                                          <td className={`px-4 py-3 text-sm ${
+                                            isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                          }`}>
                                             {leadItem.phone || 'No phone'}
                                           </td>
                                           <td className="px-4 py-3">
@@ -3072,10 +3157,19 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                               {leadItem.status ? leadItem.status.charAt(0).toUpperCase() + leadItem.status.slice(1) : 'Unknown'}
                                             </span>
                                           </td>
-                                          <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate" title={leadItem.last_remark}>
+                                          <td className={`px-4 py-3 text-sm ${
+                                            isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                          }`}>
+                                            {leadItem.source || leadItem.source_platform || 'Unknown'}
+                                          </td>
+                                          <td className={`px-4 py-3 text-sm max-w-xs truncate ${
+                                            isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                          }`} title={leadItem.last_remark}>
                                             {leadItem.last_remark || 'No remarks'}
                                           </td>
-                                          <td className="px-4 py-3 text-sm text-gray-500">
+                                          <td className={`px-4 py-3 text-sm ${
+                                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                          }`}>
                                             {leadItem.created_at || 'Unknown'}
                                           </td>
                                         </tr>
@@ -3301,15 +3395,23 @@ const ATSNChatbot = ({ externalConversations = null }) => {
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Ask me to manage your content or leads..."
-            className="w-full px-4 pr-12 py-3 text-base rounded-[10px] bg-white/80 backdrop-blur-sm border border-white/20 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/50 text-gray-900 placeholder-gray-500 shadow-lg"
+            className={`w-full px-4 pr-12 py-3 text-base rounded-[10px] backdrop-blur-sm focus:outline-none shadow-lg ${
+              isDarkMode
+                ? 'bg-gray-700/80 border-0 focus:ring-0 text-gray-100 placeholder-gray-400'
+                : 'bg-white/80 border border-white/20 focus:ring-2 focus:ring-white/30 focus:border-white/50 text-gray-900 placeholder-gray-500'
+            }`}
             disabled={isLoading}
           />
           <button
             onClick={handleSendMessage}
             disabled={isLoading || !inputMessage.trim()}
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 w-6 h-6 text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+            className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-6 h-6 transition-all flex items-center justify-center ${
+              isDarkMode
+                ? 'text-green-400 hover:text-green-300 disabled:text-gray-500'
+                : 'text-blue-600 hover:text-blue-700 disabled:text-gray-400'
+            } disabled:cursor-not-allowed`}
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-5 h-5 transform rotate-45" />
           </button>
         </div>
         
