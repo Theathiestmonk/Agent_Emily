@@ -644,10 +644,14 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
                          key={platform.id}
                          className="flex items-center justify-between py-2"
                        >
-                         <span className="text-sm font-medium text-gray-900">
+                         <span className={`text-sm font-medium ${
+                           isDarkMode ? 'text-gray-200' : 'text-gray-900'
+                         }`}>
                            {platform.name}
                            {isConnected && pageName && (
-                             <span className="text-gray-500 font-normal ml-1">({pageName})</span>
+                             <span className={`font-normal ml-1 ${
+                               isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                             }`}>({pageName})</span>
                            )}
                          </span>
                          <div className="flex items-center">
