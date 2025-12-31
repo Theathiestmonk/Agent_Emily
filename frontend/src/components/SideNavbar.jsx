@@ -202,6 +202,11 @@ const SideNavbar = () => {
       icon: Sparkles
     },
     {
+      name: 'Content',
+      href: '/created-content',
+      icon: FileText
+    },
+    {
       name: 'Writings',
       href: '/blogs',
       icon: Pen
