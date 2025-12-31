@@ -97,6 +97,8 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const [selectedContentForModal, setSelectedContentForModal] = useState(null)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [selectedDateRange, setSelectedDateRange] = useState({ start: '', end: '' })
+  const [showSingleDatePicker, setShowSingleDatePicker] = useState(false)
+  const [selectedSingleDate, setSelectedSingleDate] = useState('')
   const [thinkingPhase, setThinkingPhase] = useState(0) // 0: assigning, 1: contacting, 2: invoking, 3: working
   const [isFirstMessage, setIsFirstMessage] = useState(true) // Track if this is the first message in session
   const [showMediaUploadModal, setShowMediaUploadModal] = useState(false)
@@ -140,7 +142,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     if (window.getSelection().toString().length > 0) return;
 
     // 🔑 KEY: Ignore if any modal is open
-    if (showEditLeadModal || showScheduleModal || showContentModal || showMediaUploadModal || showDatePicker) return;
+    if (showEditLeadModal || showScheduleModal || showContentModal || showMediaUploadModal || showDatePicker || showSingleDatePicker) return;
 
     // Only then focus chat input
     input.focus();
@@ -152,7 +154,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     if (e.target.closest("a, button, input, textarea, select")) return;
 
     // Prevent focusing when modals are open
-    if (showEditLeadModal || showScheduleModal || showContentModal || showMediaUploadModal || showDatePicker) return;
+    if (showEditLeadModal || showScheduleModal || showContentModal || showMediaUploadModal || showDatePicker || showSingleDatePicker) return;
 
     inputRef.current?.focus();
   };
@@ -241,11 +243,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
           const response = await leadsAPI.getLead(latestMessage.lead_id)
           console.log('Lead data fetched:', response)
 
-          if (response) {
+          if (response && response.data) {
             // Store fetched lead data separately
             setFetchedLeads(prev => ({
               ...prev,
-              [latestMessage.lead_id]: response
+              [latestMessage.lead_id]: response.data
             }))
           }
         } catch (error) {
@@ -1424,7 +1426,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
     // Special handling for custom date picker
     if (value === 'show_date_picker') {
-      setShowDatePicker(true)
+      // Detect if this is for lead follow-up (single date) or content viewing (range)
+      const lastMessage = messages[messages.length - 1]
+      const isLeadFollowUp = lastMessage?.clarification_options?.some(opt =>
+        opt.value === 'tomorrow' || opt.value === 'next week' || opt.value === 'next month'
+      )
+
+      if (isLeadFollowUp) {
+        setShowSingleDatePicker(true)
+      } else {
+        setShowDatePicker(true)
+      }
       return
     }
 
@@ -1635,6 +1647,110 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const handleDatePickerCancel = () => {
     setShowDatePicker(false)
     setSelectedDateRange({ start: '', end: '' })
+  }
+
+  const handleSingleDatePickerConfirm = async () => {
+    if (!selectedSingleDate) {
+      showError('Please select a follow-up date')
+      return
+    }
+
+    const dateMessage = selectedSingleDate
+    const messageId = Date.now()
+
+    // Add user message with selected date
+    setMessages(prev => [...prev, {
+      id: messageId,
+      sender: 'user',
+      text: dateMessage,
+      timestamp: new Date().toISOString()
+    }])
+
+    // Update conversation history
+    const updatedHistory = [...conversationHistory, dateMessage]
+    setConversationHistory(updatedHistory)
+    setShowSingleDatePicker(false)
+    setSelectedSingleDate('')
+    setIsLoading(true)
+
+    try {
+      // Get token from session
+      const token = await getAuthToken()
+
+      if (!token) {
+        throw new Error('No authentication session found. Please log in again.')
+      }
+
+      const response = await fetch(`${API_BASE_URL}/atsn/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          message: dateMessage,
+          conversation_history: updatedHistory
+        })
+      })
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Session expired. Please log in again.')
+        }
+        throw new Error('Failed to send message')
+      }
+
+      const data = await response.json()
+
+      // Add bot response
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        sender: 'bot',
+        text: data.response,
+        timestamp: new Date().toISOString(),
+        intent: data.intent,
+        step: data.current_step,
+        payload: data.payload,
+        waiting_for_user: data.waiting_for_user,
+        payload_complete: data.payload_complete,
+        error: data.error,
+        content_items: data.content_items || null,
+        lead_id: data.lead_id || null,
+        lead_items: data.lead_items || null,
+        agent_name: data.agent_name || 'emily',
+        clarification_options: data.clarification_options || [],
+        needs_connection: data.needs_connection || false,
+        connection_platform: data.connection_platform || null
+      }])
+
+      // Update agent status
+      setAgentStatus({
+        intent: data.intent,
+        step: data.current_step,
+        waiting: data.waiting_for_user,
+        complete: data.payload_complete
+      })
+
+    } catch (error) {
+      console.error('Error sending follow-up date:', error)
+      const errorMessage = error.message || 'Failed to send follow-up date. Please try again.'
+      showError(errorMessage)
+
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        sender: 'bot',
+        text: `❌ ${errorMessage}\n\n${error.message?.includes('authentication') ? 'Please refresh the page and log in again.' : 'Please try again or reset the conversation.'}`,
+        timestamp: new Date().toISOString(),
+        error: true
+      }])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSingleDatePickerCancel = () => {
+    setShowSingleDatePicker(false)
+    setSelectedSingleDate('')
   }
 
   const handleFileSelection = (files) => {
@@ -3193,6 +3309,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                           onClick={() => setSelectedLeadId(message.lead_id)}
                           isSelected={selectedLeadId === message.lead_id}
                           selectionMode={true}
+                          isDarkMode={isDarkMode}
                         />
                       </div>
                     )}
@@ -3476,6 +3593,47 @@ const ATSNChatbot = ({ externalConversations = null }) => {
               <button
                 onClick={handleDatePickerConfirm}
                 disabled={!selectedDateRange.start}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single Date Picker Modal for Lead Follow-up */}
+      {showSingleDatePicker && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Follow-up Date</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Follow-up Date
+                </label>
+                <input
+                  type="date"
+                  value={selectedSingleDate}
+                  onChange={(e) => setSelectedSingleDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  min={new Date().toISOString().split('T')[0]} // Today or later
+                  max="2030-12-31"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleSingleDatePickerCancel}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSingleDatePickerConfirm}
+                disabled={!selectedSingleDate}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors"
               >
                 Confirm

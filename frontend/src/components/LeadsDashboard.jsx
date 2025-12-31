@@ -7,6 +7,26 @@ import MobileNavigation from './MobileNavigation'
 import LeadCard from './LeadCard'
 import LeadDetailModal from './LeadDetailModal'
 import AddLeadModal from './AddLeadModal'
+
+// Dark mode hook
+const useDarkMode = () => {
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Check localStorage for saved preference, default to light mode
+    return localStorage.getItem('darkMode') === 'true'
+  })
+
+  useEffect(() => {
+    localStorage.setItem('darkMode', isDarkMode.toString())
+    // Apply to document for global dark mode
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
+
+  return [isDarkMode, setIsDarkMode]
+}
 import {
   Users,
   UserPlus,
@@ -67,6 +87,7 @@ const getDateRange = (range) => {
 const LeadsDashboard = () => {
   const { user } = useAuth()
   const { showSuccess, showError, showInfo } = useNotifications()
+  const [isDarkMode, setIsDarkMode] = useDarkMode()
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedLead, setSelectedLead] = useState(null)
@@ -521,7 +542,7 @@ const LeadsDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <SideNavbar />
       <MobileNavigation
         setShowCustomContentChatbot={() => { }}
@@ -532,7 +553,9 @@ const LeadsDashboard = () => {
 
       <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen">
         {/* Header */}
-        <div className="bg-white shadow-sm border-b sticky top-0 z-20">
+        <div className={`shadow-sm border-b sticky top-0 z-20 ${
+          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white'
+        }`}>
           <div className="px-4 lg:px-6 py-3 lg:py-4">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
               {/* Date Range Filter */}
@@ -542,7 +565,9 @@ const LeadsDashboard = () => {
                     key={filter.value}
                     onClick={() => setFilterDateRange(filter.value)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${filterDateRange === filter.value
-                      ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md'
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
                       }`}
                   >
@@ -559,25 +584,40 @@ const LeadsDashboard = () => {
                   placeholder="Search by name, email, or phone..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full pl-10 pr-10 py-2 text-sm border rounded-lg focus:ring-2 ${
+                    isDarkMode
+                      ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500 placeholder-gray-400'
+                      : 'border-gray-300 focus:ring-blue-500 focus:border-transparent'
+                  }`}
                 />
                 <button
                   onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                  className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-1 rounded transition-colors ${filterPlatform !== 'all'
-                    ? 'text-blue-600'
-                    : 'text-gray-400 hover:text-gray-600'
+                  className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-1 rounded transition-colors ${
+                    filterPlatform !== 'all'
+                      ? 'text-green-600'
+                      : isDarkMode
+                      ? 'text-gray-500 hover:text-gray-300'
+                      : 'text-gray-400 hover:text-gray-600'
                     }`}
                 >
                   <Filter className="w-4 h-4" />
                 </button>
                 {showFilterDropdown && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto">
+                  <div className={`absolute right-0 mt-2 w-48 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto ${
+                    isDarkMode
+                      ? 'bg-gray-800 border border-gray-700 shadow-gray-900/50'
+                      : 'bg-white border border-gray-200'
+                  }`}>
                     <button
                       onClick={() => {
                         setFilterPlatform('all')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg ${filterPlatform === 'all' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      className={`w-full text-left px-4 py-2 text-sm first:rounded-t-lg ${filterPlatform === 'all'
+                        ? 'bg-green-100 text-green-700 font-medium'
+                        : isDarkMode
+                        ? 'text-gray-200 hover:bg-gray-700'
+                        : 'text-gray-700 hover:bg-gray-50'
                         }`}
                     >
                       All Platforms
@@ -587,7 +627,12 @@ const LeadsDashboard = () => {
                         setFilterPlatform('facebook')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'facebook' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'facebook'
+                          ? 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
                         }`}
                     >
                       Facebook
@@ -597,7 +642,12 @@ const LeadsDashboard = () => {
                         setFilterPlatform('instagram')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'instagram' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'instagram'
+                          ? 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
                         }`}
                     >
                       Instagram
@@ -607,7 +657,12 @@ const LeadsDashboard = () => {
                         setFilterPlatform('walk_ins')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'walk_ins' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'walk_ins'
+                          ? 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
                         }`}
                     >
                       Walk Ins
@@ -617,7 +672,12 @@ const LeadsDashboard = () => {
                         setFilterPlatform('referral')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'referral' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'referral'
+                          ? 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
                         }`}
                     >
                       Referral
@@ -627,7 +687,12 @@ const LeadsDashboard = () => {
                         setFilterPlatform('email')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'email' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'email'
+                          ? 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
                         }`}
                     >
                       Email
@@ -637,7 +702,12 @@ const LeadsDashboard = () => {
                         setFilterPlatform('website')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterPlatform === 'website' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'website'
+                          ? 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
                         }`}
                     >
                       Website
@@ -647,7 +717,12 @@ const LeadsDashboard = () => {
                         setFilterPlatform('phone_call')
                         setShowFilterDropdown(false)
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 last:rounded-b-lg ${filterPlatform === 'phone_call' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                      className={`w-full text-left px-4 py-2 text-sm last:rounded-b-lg ${
+                        filterPlatform === 'phone_call'
+                          ? 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
                         }`}
                     >
                       Phone Call
@@ -662,7 +737,7 @@ const LeadsDashboard = () => {
                   <>
                     <button
                       onClick={handleSelectAll}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl"
                     >
                       <CheckCircle className="w-4 h-4" />
                       <span>{selectedLeadIds.size === filteredLeads.length ? 'Deselect All' : 'Select All'}</span>
@@ -683,7 +758,11 @@ const LeadsDashboard = () => {
                     )}
                     <button
                       onClick={handleToggleSelectionMode}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-all duration-200 shadow-lg hover:shadow-xl"
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl ${
+                        isDarkMode
+                          ? 'bg-gray-600 text-gray-200 hover:bg-gray-500'
+                          : 'bg-gray-500 text-white hover:bg-gray-600'
+                      }`}
                     >
                       <X className="w-4 h-4" />
                       <span>Cancel</span>
@@ -694,7 +773,11 @@ const LeadsDashboard = () => {
                   <>
                     <button
                       onClick={() => setShowAddModal(true)}
-                      className="p-2 bg-white text-black rounded-lg hover:bg-gray-100 transition-all duration-200 shadow-md hover:shadow-lg border border-gray-200"
+                      className={`p-2 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg border ${
+                        isDarkMode
+                          ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border-gray-600'
+                          : 'bg-white text-black hover:bg-gray-100 border-gray-200'
+                      }`}
                       title="Add Lead"
                     >
                       <UserPlus className="w-5 h-5" />
@@ -702,7 +785,11 @@ const LeadsDashboard = () => {
                     <button
                       onClick={handleRefresh}
                       disabled={loading}
-                      className="p-2 bg-white text-black rounded-lg hover:bg-gray-100 transition-all duration-200 disabled:opacity-50 shadow-md hover:shadow-lg border border-gray-200"
+                      className={`p-2 rounded-lg transition-all duration-200 disabled:opacity-50 shadow-md hover:shadow-lg border ${
+                        isDarkMode
+                          ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border-gray-600'
+                          : 'bg-white text-black hover:bg-gray-100 border-gray-200'
+                      }`}
                       title="Refresh"
                     >
                       <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -718,15 +805,21 @@ const LeadsDashboard = () => {
         <div className="flex-1 px-4 lg:px-6 py-6 overflow-x-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <p className="text-gray-600 text-lg">Loading leads...</p>
+              <p className={`text-lg ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Loading leads...</p>
             </div>
           ) : filteredLeads.length === 0 ? (
             <div className="text-center py-12">
-              <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <Users className={`w-16 h-16 mx-auto mb-4 ${
+                isDarkMode ? 'text-gray-600' : 'text-gray-300'
+              }`} />
+              <h3 className={`text-lg font-semibold mb-2 ${
+                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+              }`}>
                 {searchQuery ? 'No leads found' : 'No leads yet'}
               </h3>
-              <p className="text-gray-500">
+              <p className={`${
+                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+              }`}>
                 {searchQuery
                   ? 'Try adjusting your search or filters'
                   : 'Leads from your Facebook and Instagram ads will appear here'}
@@ -761,7 +854,9 @@ const LeadsDashboard = () => {
                       {/* Column Cards */}
                       <div className="space-y-1.5 max-h-[calc(100vh-180px)] overflow-y-auto pb-4 scrollbar-hide">
                         {columnLeads.length === 0 ? (
-                          <div className="text-center py-8 text-gray-400 text-sm">
+                          <div className={`text-center py-8 text-sm ${
+                            isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                          }`}>
                             No {statusFilter.label.toLowerCase()} leads
                           </div>
                         ) : (
@@ -773,6 +868,7 @@ const LeadsDashboard = () => {
                               onDelete={handleDeleteLead}
                               isSelected={selectedLeadIds.has(lead.id)}
                               onSelect={handleSelectLead}
+                              isDarkMode={isDarkMode}
                               selectionMode={selectionMode}
                             />
                           ))
@@ -792,6 +888,7 @@ const LeadsDashboard = () => {
           lead={selectedLead}
           onClose={handleCloseModal}
           onUpdate={fetchLeads}
+          isDarkMode={isDarkMode}
         />
       )}
 
@@ -811,6 +908,7 @@ const LeadsDashboard = () => {
           }
         }}
         isImporting={importingCSV}
+        isDarkMode={isDarkMode}
       />
     </div>
   )

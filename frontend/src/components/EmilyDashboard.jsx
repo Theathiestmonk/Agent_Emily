@@ -692,7 +692,7 @@ function EmilyDashboard() {
                       <h2 className={`text-lg font-semibold ${
                         isDarkMode ? 'text-gray-100' : 'text-gray-900'
                       }`}>
-                        Past Discussions
+                        Reminders
                       </h2>
                       <button
                         onClick={() => setIsPanelOpen(false)}

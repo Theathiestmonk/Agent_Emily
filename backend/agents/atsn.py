@@ -1869,6 +1869,16 @@ FIELD_CLARIFICATIONS = {
                 {"label": "Closed Lost", "value": "closed_lost", "description": "Didn't work out"}
             ]
         },
+        "follow_up": {
+            "question": "When should we follow up with this lead? Choose from common options or pick a custom date.",
+            "options": [
+                {"label": "Today", "value": "today"},
+                {"label": "Tomorrow", "value": "tomorrow"},
+                {"label": "Next week", "value": "next week"},
+                {"label": "Next month", "value": "next month"},
+                {"label": "Custom date", "value": "show_date_picker"}
+            ]
+        },
         "remarks": {
             "question": "Awesome! Any additional notes or details about this lead that would be helpful to remember?",
             "options": []
@@ -2788,8 +2798,19 @@ def complete_create_leads_payload(state: AgentState) -> AgentState:
             state.clarification_question = clarification_data or "What's their current status?"
             state.clarification_options = []
     elif not has_follow_up:
-        state.clarification_question = "When should we follow up with this lead? (e.g., 'tomorrow', 'next week', '2025-01-15')"
-        state.clarification_options = []
+        clarification_data = clarifications.get("follow_up", {})
+        if isinstance(clarification_data, dict):
+            base_question = clarification_data.get("question", "When should we follow up with this lead?")
+            personalized_question = generate_clarifying_question(
+                base_question=base_question,
+                user_context=state.user_query,
+                user_input=state.user_query.split('\n')[-1] if state.user_query else ""
+            )
+            state.clarification_question = personalized_question
+            state.clarification_options = clarification_data.get("options", [])
+        else:
+            state.clarification_question = clarification_data or "When should we follow up with this lead?"
+            state.clarification_options = []
     elif not has_remarks:
         clarification_data = clarifications.get("remarks", {})
         if isinstance(clarification_data, dict):
@@ -5082,15 +5103,8 @@ def handle_create_leads(state: AgentState) -> AgentState:
                 # Set success intent for frontend
                 state.intent = "lead_created"
 
-                base_message = f"""Added a new lead
-
-Name: {payload.get('lead_name')}
-Email: {payload.get('lead_email', 'N/A')}
-Phone: {payload.get('lead_phone', 'N/A')}
-Source: {payload.get('lead_source')}
-Status: {payload.get('lead_status')}
-Follow up: {payload.get('follow_up', 'N/A')}
-Remarks: {payload.get('remarks', 'N/A')}"""
+                # Simple success message - lead card will be displayed separately
+                base_message = "Added a new lead successfully!"
 
                 state.result = generate_personalized_message(
                     base_message=base_message,
