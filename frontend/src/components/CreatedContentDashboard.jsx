@@ -4,6 +4,7 @@ import { useNotifications } from '../contexts/NotificationContext'
 import SideNavbar from './SideNavbar'
 import MobileNavigation from './MobileNavigation'
 import ATSNContentCard from './ATSNContentCard'
+import ATSNContentModal from './ATSNContentModal'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 
@@ -63,9 +64,9 @@ import { supabase } from '../lib/supabase'
 const getPlatformIcon = (platformName) => {
   switch (platformName?.toLowerCase()) {
     case 'instagram':
-      return <Instagram className="w-4 h-4 text-pink-500" />
+      return <Instagram className="w-4 h-4 text-white" />
     case 'facebook':
-      return <Facebook className="w-4 h-4 text-blue-600" />
+      return <Facebook className="w-4 h-4 text-white" />
     case 'linkedin':
       return <div className="w-4 h-4 bg-blue-700 rounded-sm flex items-center justify-center text-white text-xs font-bold">in</div>
     case 'twitter':
@@ -74,7 +75,7 @@ const getPlatformIcon = (platformName) => {
     case 'tiktok':
       return <div className="w-4 h-4 bg-black rounded-sm flex items-center justify-center text-white text-xs">TT</div>
     default:
-      return <MessageCircle className="w-4 h-4 text-gray-500" />
+      return <MessageCircle className="w-4 h-4 text-white" />
   }
 }
 
@@ -102,6 +103,10 @@ function CreatedContentDashboard() {
   // Action loading states
   const [isDeleting, setIsDeleting] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
+
+  // Modal states
+  const [selectedContent, setSelectedContent] = useState(null)
+  const [isContentModalOpen, setIsContentModalOpen] = useState(false)
 
   const contentRef = useRef([])
 
@@ -198,9 +203,14 @@ function CreatedContentDashboard() {
   }
 
   const handlePreview = (contentItem) => {
-    // Handle preview functionality - TBD
-    console.log('Preview content:', contentItem)
-    showInfo('Preview functionality coming soon')
+    // Open content modal for preview
+    setSelectedContent(contentItem)
+    setIsContentModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsContentModalOpen(false)
+    setSelectedContent(null)
   }
 
   const handleDelete = async (contentItem) => {
@@ -717,9 +727,17 @@ function CreatedContentDashboard() {
                     />
 
                     {/* Action Buttons Overlay */}
-                    <div className={`absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-center justify-center ${
+                    <div className={`absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex flex-col items-center justify-center ${
                       isDarkMode ? 'group-hover:bg-opacity-60' : ''
                     }`}>
+                      {/* Title Display */}
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white text-center p-2 mb-2">
+                        <div className="text-sm font-medium truncate max-w-full">
+                          {contentItem.title || `Content for ${contentItem.platform}`}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-2">
                         <button
                           onClick={(e) => { e.stopPropagation(); handleEdit(contentItem); }}
@@ -773,6 +791,14 @@ function CreatedContentDashboard() {
           )}
         </div>
       </div>
+
+      {/* ATSN Content Modal */}
+      {isContentModalOpen && selectedContent && (
+        <ATSNContentModal
+          content={selectedContent}
+          onClose={handleCloseModal}
+        />
+      )}
     </div>
     </>
   )

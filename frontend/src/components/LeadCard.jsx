@@ -82,22 +82,22 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
   const getPlatformIcon = (platform) => {
     switch (platform) {
       case 'Facebook':
-        return <Facebook className="w-4 h-4" />
+        return <Facebook className="w-6 h-6" />
       case 'Instagram':
-        return <Instagram className="w-4 h-4" />
+        return <Instagram className="w-6 h-6" />
       case 'Walk Ins':
-        return <LogIn className="w-4 h-4" />
+        return <LogIn className="w-6 h-6" />
       case 'Referral':
-        return <Users className="w-4 h-4" />
+        return <Users className="w-6 h-6" />
       case 'Email':
-        return <Mail className="w-4 h-4" />
+        return <Mail className="w-6 h-6" />
       case 'Website':
-        return <Globe className="w-4 h-4" />
+        return <Globe className="w-6 h-6" />
       case 'Phone Call':
-        return <Phone className="w-4 h-4" />
+        return <Phone className="w-6 h-6" />
       case 'Manual Entry':
       default:
-        return <User className="w-4 h-4" />
+        return <User className="w-6 h-6" />
     }
   }
 
@@ -205,14 +205,14 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
                 className={`w-4 h-4 rounded ${isDarkMode ? 'border-gray-600 bg-gray-700 text-green-400 focus:ring-green-400' : 'border-gray-300 bg-white text-green-600 focus:ring-green-500'} focus:ring-2 cursor-pointer flex-shrink-0`}
               />
             )}
-            <div className={`w-7 h-7 rounded-full ${isDarkMode ? 'bg-green-700' : 'bg-green-200'} flex items-center justify-center flex-shrink-0 ${isDarkMode ? 'text-green-100' : 'text-green-800'}`}>
+            <div className={`w-9 h-9 rounded-full ${isDarkMode ? 'bg-green-700' : 'bg-green-200'} flex items-center justify-center flex-shrink-0 ${isDarkMode ? 'text-green-100' : 'text-green-800'}`}>
               {getPlatformIcon(lead.source_platform)}
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className={`font-semibold text-sm truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
-                {lead.name || 'Unknown Lead'}
+              <h3 className={`font-semibold text-lg truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                {(lead.name || 'Unknown Lead').charAt(0).toUpperCase() + (lead.name || 'Unknown Lead').slice(1)}
               </h3>
-              <div className={`flex items-center space-x-0.5 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+              <div className={`flex items-center space-x-0.5 text-base ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                 <span className="capitalize truncate">{lead.source_platform}</span>
                 <span>•</span>
                 <span className="truncate">{formatTimeAgo(lead.created_at)}</span>
@@ -237,8 +237,8 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
       {/* Follow-up Date */}
       {lead.follow_up_at && (
         <div className={`p-1.5 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-          <div className={`flex items-center space-x-1 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-            <Calendar className="w-3.5 h-3.5" />
+          <div className={`flex items-center space-x-1 text-base ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            <Calendar className="w-5 h-5" />
             <span className="font-medium">Follow-up:</span>
             <span>{formatFollowUpDate(lead.follow_up_at)}</span>
           </div>
@@ -248,7 +248,7 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
       {/* Remarks Section */}
       {lead.last_remark && (
         <div className={`p-1.5 ${statusConfig.bgColor} border-t ${statusConfig.borderColor}`}>
-          <p className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} line-clamp-2`}>
+          <p className={`text-base ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} line-clamp-2`}>
             {lead.last_remark.charAt(0).toUpperCase() + lead.last_remark.slice(1)}
           </p>
         </div>
@@ -257,7 +257,7 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
       {/* Content - Only show if form data exists */}
       {lead.form_data && Object.keys(lead.form_data).length > 0 && (
         <div className="p-1.5">
-          <p className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>
+          <p className={`text-base ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>
             {Object.keys(lead.form_data).length} form field{Object.keys(lead.form_data).length !== 1 ? 's' : ''} captured
           </p>
         </div>

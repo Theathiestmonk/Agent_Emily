@@ -67,7 +67,8 @@ import {
   AlertCircle,
   Facebook,
   Instagram,
-  X
+  X,
+  CalendarDays
 } from 'lucide-react'
 
 // Get date range for filtering (moved outside component to prevent recreation)
@@ -123,6 +124,9 @@ const LeadsDashboard = () => {
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterPlatform, setFilterPlatform] = useState('all')
   const [filterDateRange, setFilterDateRange] = useState('today')
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState(null)
@@ -452,7 +456,19 @@ const LeadsDashboard = () => {
 
       // Date range filter
       if (filterDateRange !== 'all') {
-        const dateRange = getDateRange(filterDateRange)
+        let dateRange = null
+
+        if (filterDateRange === 'custom' && customStartDate && customEndDate) {
+          // Use custom date range
+          dateRange = {
+            start: new Date(customStartDate + 'T00:00:00'),
+            end: new Date(customEndDate + 'T23:59:59')
+          }
+        } else {
+          // Use predefined date range
+          dateRange = getDateRange(filterDateRange)
+        }
+
         if (dateRange) {
           const leadDate = new Date(lead.created_at)
           if (leadDate < dateRange.start || leadDate > dateRange.end) {
@@ -474,14 +490,15 @@ const LeadsDashboard = () => {
 
       return true
     })
-  }, [leads, filterStatus, filterDateRange, searchQuery])
+  }, [leads, filterStatus, filterDateRange, customStartDate, customEndDate, searchQuery])
 
   const dateRangeFilters = [
     { value: 'today', label: 'Today' },
     { value: 'this_week', label: 'This Week' },
     { value: 'this_month', label: 'This Month' },
     { value: 'last_month', label: 'Last Month' },
-    { value: 'all', label: 'All Time' }
+    { value: 'all', label: 'All Time' },
+    { value: 'custom', label: 'Custom Range' }
   ]
 
   const statusFilters = [
@@ -589,7 +606,12 @@ const LeadsDashboard = () => {
                 {dateRangeFilters.map((filter) => (
                   <button
                     key={filter.value}
-                    onClick={() => setFilterDateRange(filter.value)}
+                    onClick={() => {
+                      setFilterDateRange(filter.value)
+                      if (filter.value === 'custom') {
+                        setShowCustomDatePicker(true)
+                      }
+                    }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${filterDateRange === filter.value
                       ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md'
                       : isDarkMode
@@ -601,6 +623,56 @@ const LeadsDashboard = () => {
                   </button>
                 ))}
               </div>
+
+              {/* Custom Date Picker */}
+              {filterDateRange === 'custom' && (
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-1">
+                    <CalendarDays className={`w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className={`px-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+                        isDarkMode
+                          ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500'
+                          : 'bg-white border-gray-300 text-gray-900 focus:ring-green-500 focus:border-green-500'
+                      }`}
+                      placeholder="Start date"
+                    />
+                  </div>
+                  <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>to</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className={`px-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+                        isDarkMode
+                          ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500'
+                          : 'bg-white border-gray-300 text-gray-900 focus:ring-green-500 focus:border-green-500'
+                      }`}
+                      placeholder="End date"
+                    />
+                    {(customStartDate || customEndDate) && (
+                      <button
+                        onClick={() => {
+                          setCustomStartDate('')
+                          setCustomEndDate('')
+                        }}
+                        className={`p-1 rounded transition-colors ${
+                          isDarkMode
+                            ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-600'
+                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                        }`}
+                        title="Clear date filter"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Search - Inline with Filter */}
               <div className="flex-1 max-w-xs relative filter-dropdown-container">

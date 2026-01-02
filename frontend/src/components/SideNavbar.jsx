@@ -197,20 +197,21 @@ const SideNavbar = () => {
       icon: DiscussionsIcon
     },
     {
-      name: 'Suggestions',
-      href: '/post-suggestions',
-      icon: Sparkles
-    },
-    {
       name: 'Content',
       href: '/created-content',
       icon: FileText
     },
     {
-      name: 'Writings',
-      href: '/blogs',
-      icon: Pen
+      name: 'Suggestions',
+      href: '/post-suggestions',
+      icon: Sparkles
     },
+    // Temporarily hidden - Writings dashboard
+    // {
+    //   name: 'Writings',
+    //   href: '/blogs',
+    //   icon: Pen
+    // },
     {
       name: 'Happenings',
       href: '/social',
