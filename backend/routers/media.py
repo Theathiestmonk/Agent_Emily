@@ -494,6 +494,80 @@ async def extract_colors_from_logo(
         logger.error(f"Error extracting colors from logo: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error extracting colors: {str(e)}")
 
+@router.post("/upload")
+async def upload_files(
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload multiple files to Supabase storage - returns format expected by frontend"""
+    try:
+        logger.info(f"Upload request received - files: {[f.filename for f in files]}, user: {current_user.id}")
+
+        urls = []
+
+        for file in files:
+            # Validate file type - support both images and videos
+            allowed_image_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+            allowed_video_types = ['video/mp4', 'video/mpeg', 'video/quicktime', 'video/x-msvideo', 'video/webm']
+            allowed_types = allowed_image_types + allowed_video_types
+
+            if file.content_type not in allowed_types:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid file type. Please upload an image (JPEG, PNG, GIF, WebP) or video (MP4, MOV, AVI, WebM)."
+                )
+
+            # Read file content
+            file_content = await file.read()
+            file_size = len(file_content)
+            logger.info(f"File content read - {file.filename}: {file_size} bytes")
+
+            # Validate file size (max 50MB for videos, 10MB for images)
+            is_video = file.content_type in allowed_video_types
+            max_size = 50 * 1024 * 1024 if is_video else 10 * 1024 * 1024  # 50MB for videos, 10MB for images
+
+            if file_size > max_size:
+                size_limit_mb = 50 if is_video else 10
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File size too large. Maximum size is {size_limit_mb}MB for {'videos' if is_video else 'images'}."
+                )
+
+            # Generate filename
+            import uuid
+            file_ext = file.filename.split('.')[-1] if '.' in file.filename else ('mp4' if is_video else 'png')
+            filename = f"{current_user.id}-{uuid.uuid4().hex[:8]}.{file_ext}"
+            file_path = f"uploaded/{filename}"
+            logger.info(f"Generated file path: {file_path}")
+
+            # Use user-uploads bucket for media (supports both images and videos)
+            bucket_name = "user-uploads"
+            logger.info(f"Using bucket: {bucket_name} for upload")
+
+            # Upload using admin client (bypasses RLS)
+            storage_response = supabase_admin.storage.from_(bucket_name).upload(
+                file_path,
+                file_content,
+                file_options={"content-type": file.content_type}
+            )
+
+            if hasattr(storage_response, 'error') and storage_response.error:
+                raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_response.error}")
+
+            # Get public URL
+            public_url = supabase_admin.storage.from_(bucket_name).get_public_url(file_path)
+            logger.info(f"File uploaded successfully: {public_url}")
+
+            urls.append(public_url)
+
+        return {"urls": urls}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading files: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading files: {str(e)}")
+
 @router.post("/upload-media")
 async def upload_media(
     file: UploadFile = File(...),
@@ -502,59 +576,59 @@ async def upload_media(
     """Upload a media file (image or video) to Supabase storage for content uploads"""
     try:
         logger.info(f"Media upload request received - filename: {file.filename}, user: {current_user.id}")
-        
+
         # Validate file type - support both images and videos
         allowed_image_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
         allowed_video_types = ['video/mp4', 'video/mpeg', 'video/quicktime', 'video/x-msvideo', 'video/webm']
         allowed_types = allowed_image_types + allowed_video_types
-        
+
         if file.content_type not in allowed_types:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="Invalid file type. Please upload an image (JPEG, PNG, GIF, WebP) or video (MP4, MOV, AVI, WebM)."
             )
-        
+
         # Read file content
         file_content = await file.read()
         file_size = len(file_content)
         logger.info(f"File content read - size: {file_size} bytes")
-        
+
         # Validate file size (max 50MB for videos, 10MB for images)
         is_video = file.content_type in allowed_video_types
         max_size = 50 * 1024 * 1024 if is_video else 10 * 1024 * 1024  # 50MB for videos, 10MB for images
         size_limit_mb = 50 if is_video else 10
-        
+
         if file_size > max_size:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"File size too large. Maximum size is {size_limit_mb}MB for {'videos' if is_video else 'images'}."
             )
-        
+
         # Generate filename
         import uuid
         file_ext = file.filename.split('.')[-1] if '.' in file.filename else ('mp4' if is_video else 'png')
         filename = f"{current_user.id}-{uuid.uuid4().hex[:8]}.{file_ext}"
         file_path = f"uploaded/{filename}"
         logger.info(f"Generated file path: {file_path}")
-        
+
         # Use user-uploads bucket for media (supports both images and videos)
         bucket_name = "user-uploads"
         logger.info(f"Using bucket: {bucket_name} for media upload")
-        
+
         # Upload using admin client (bypasses RLS)
         storage_response = supabase_admin.storage.from_(bucket_name).upload(
             file_path,
             file_content,
             file_options={"content-type": file.content_type}
         )
-        
+
         if hasattr(storage_response, 'error') and storage_response.error:
             raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_response.error}")
-        
+
         # Get public URL
         public_url = supabase_admin.storage.from_(bucket_name).get_public_url(file_path)
         logger.info(f"Media uploaded successfully: {public_url}")
-        
+
         return {
             "success": True,
             "url": public_url,
@@ -562,7 +636,7 @@ async def upload_media(
             "size": file_size,
             "type": "video" if is_video else "image"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:

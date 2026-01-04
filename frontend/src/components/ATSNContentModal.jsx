@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, Hash, Edit, Check, X as XIcon, Sparkles, RefreshCw } from 'lucide-react'
+import { X, Hash, Edit, Check, X as XIcon, Sparkles, RefreshCw, Copy } from 'lucide-react'
 import { Instagram, Facebook, MessageCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -96,10 +96,19 @@ const ATSNContentModal = ({ content, onClose }) => {
     console.log('Saving title:', editTitleValue)
     console.log('Saving content:', editContentValue)
     console.log('Saving hashtags:', editHashtagsValue)
+
+    // Handle different content types
+    if (content.content_type === 'short_video or reel' && editContentValue) {
+      // For short video scripts, save to short_video_script field
+      content.short_video_script = editContentValue
+    } else {
+      // For regular content, save to content field
+      content.content = editContentValue
+    }
+
     setIsEditing(false)
     // Update the content object (this is just local for now)
     content.title = editTitleValue
-    content.content = editContentValue
     content.hashtags = editHashtagsValue ? editHashtagsValue.split(' ').filter(tag => tag.trim()) : []
   }
 
@@ -238,7 +247,7 @@ const ATSNContentModal = ({ content, onClose }) => {
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-75 z-30"
+      className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm z-30"
       onClick={onClose}
     >
       <div
@@ -277,9 +286,20 @@ const ATSNContentModal = ({ content, onClose }) => {
 
           {/* Content - Two Column Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 min-h-[400px]">
-            {/* Left Column - Image */}
+            {/* Left Column - Image (like posts) */}
             <div className="space-y-4 -mx-2">
-              {content.media_url && (
+              {content.images && content.images.length > 0 ? (
+                <div className="flex justify-center">
+                  <img
+                    src={content.images[0]}
+                    alt={content.title || "Video thumbnail"}
+                    className="w-full max-h-[32rem] object-contain rounded-lg shadow-lg"
+                    onError={(e) => {
+                      e.target.style.display = 'none'
+                    }}
+                  />
+                </div>
+              ) : content.media_url ? (
                 <div className="flex justify-center">
                   <img
                     src={content.media_url}
@@ -290,13 +310,106 @@ const ATSNContentModal = ({ content, onClose }) => {
                     }}
                   />
                 </div>
-              )}
+              ) : content.images && content.images.length > 0 ? (
+                <div className="flex justify-center">
+                  <img
+                    src={content.images[0]}
+                    alt={content.title || "Video thumbnail"}
+                    className="w-full max-h-[32rem] object-contain rounded-lg shadow-lg"
+                    onError={(e) => {
+                      e.target.style.display = 'none'
+                    }}
+                  />
+                </div>
+              ) : null}
             </div>
 
-            {/* Right Column - Content Details */}
+            {/* Right Column - Content Details or Script */}
             <div className="space-y-6 pr-4">
-              {/* Business Logo and Name */}
-              {profileData && (
+              {/* For reels, show script on the right */}
+              {(content.content_type === 'short_video or reel' || content.content_type === 'reel') && content.short_video_script ? (
+                <div className="flex justify-center">
+                  <div className={`w-full max-h-[32rem] rounded-lg shadow-lg overflow-hidden ${
+                    isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
+                  }`}>
+                    <div className={`p-4 border-b ${
+                      isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className={`text-lg font-semibold ${
+                            isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                          }`}>
+                            🎬 Video Script
+                          </h3>
+                          <p className={`text-sm mt-1 ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>
+                            15-30 second video script optimized for virality
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(content.short_video_script);
+                              // Could add a toast notification here
+                            }}
+                            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                              isDarkMode
+                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                            }`}
+                            title="Copy script to clipboard"
+                          >
+                            📋 Copy
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsEditing(true);
+                              setAiEditType('script');
+                              setEditContentValue(content.short_video_script);
+                              setEditTitleValue(content.title || 'Video Script');
+                            }}
+                            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                              isDarkMode
+                                ? 'bg-purple-600 hover:bg-purple-500 text-white'
+                                : 'bg-purple-500 hover:bg-purple-600 text-white'
+                            }`}
+                            title="Edit script"
+                          >
+                            ✏️ Edit
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowAIEditModal(true);
+                              setAiEditType('script');
+                              setEditContentValue(content.short_video_script);
+                            }}
+                            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                              isDarkMode
+                                ? 'bg-green-600 hover:bg-green-500 text-white'
+                                : 'bg-green-500 hover:bg-green-600 text-white'
+                            }`}
+                            title="Edit with AI"
+                          >
+                            🤖 AI Edit
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className={`p-4 max-h-[28rem] overflow-y-auto ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}>
+                      <div className="whitespace-pre-wrap font-mono text-sm leading-relaxed">
+                        {content.short_video_script}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {/* Business Logo and Name */}
+                  {profileData && (
                 <div className="flex items-center justify-between pb-4 border-b border-gray-200">
                   <div className="flex items-center gap-3">
                     <img
@@ -543,6 +656,8 @@ const ATSNContentModal = ({ content, onClose }) => {
                   }`}>{content.message}</div>
                 </div>
               )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -551,7 +666,7 @@ const ATSNContentModal = ({ content, onClose }) => {
       {/* AI Edit Modal */}
       {showAIEditModal && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-75 z-[60]"
+          className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm z-[60]"
           onClick={handleCancelAIEdit}
         >
           <div

@@ -117,14 +117,21 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
   
   const carouselImageCount = carouselImages.length;
   
+  // Check if this is a short video/reel
+  const isShortVideo = contentType?.toLowerCase() === 'short video' ||
+                       contentType?.toLowerCase() === 'reel' ||
+                       content.content_type?.toLowerCase() === 'short_video or reel' ||
+                       (content.short_video_script && content.short_video_script.trim());
+
   // Determine post type for proper rendering
   const getPostType = () => {
     if (isCarousel) return 'carousel';
+    if (isShortVideo) return 'short_video';
     if (isVideo) return 'video';
     if (content.post_type === 'image' || mediaUrl) return 'image';
     return 'text';
   };
-  
+
   const postType = getPostType();
   
   // Helper functions for carousel navigation
@@ -332,6 +339,28 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
             )}
           </div>
         </div>
+      ) : isShortVideo && content.images && content.images.length > 0 ? (
+        <div className="relative group cursor-pointer" onClick={() => onPreview && onPreview(content)}>
+          <img
+            src={content.images[0]}
+            alt="Video thumbnail"
+            className="w-full h-48 object-cover rounded-lg"
+            onError={(e) => {
+              e.target.style.display = 'none';
+            }}
+          />
+          {/* Video Play Button Overlay */}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors rounded-lg">
+            <div className="bg-white/90 rounded-full p-4 shadow-lg group-hover:scale-110 transition-transform">
+              <Play className="w-8 h-8 text-purple-600 fill-purple-600" />
+            </div>
+          </div>
+          {/* Video Badge */}
+          <div className="absolute top-2 right-2 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
+            <Video className="w-3 h-3" />
+            <span>REEL</span>
+          </div>
+        </div>
       ) : mediaUrl && (
         <div className="relative group cursor-pointer" onClick={() => onPreview && onPreview(content)}>
           {isVideo ? (
@@ -407,7 +436,7 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
                   </div>
                 </div>
               </div>
-            ) : (contentType?.toLowerCase() === 'short video' || contentType?.toLowerCase() === 'long video') && content.short_video_script || content.long_video_script ? (
+            ) : (contentType?.toLowerCase() === 'short video' || contentType?.toLowerCase() === 'long video') && (content.short_video_script || content.long_video_script) ? (
               <div>
                 <h4 className="font-semibold text-gray-900 mb-2">🎬 Video Script:</h4>
                 <div className="text-gray-800 leading-relaxed bg-gray-50 p-3 rounded-lg border-l-4 border-purple-400">
@@ -421,6 +450,18 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
                     </button>
                   )}
                 </div>
+              </div>
+            ) : (contentType?.toLowerCase() === 'short_video or reel') && content.content ? (
+              <div className="text-gray-800 leading-relaxed">
+                {showFullContent ? content.content : content.content.substring(0, 200)}
+                {content.content.length > 200 && (
+                  <button
+                    onClick={() => setShowFullContent(!showFullContent)}
+                    className="ml-2 text-pink-500 hover:text-pink-600 font-medium"
+                  >
+                    {showFullContent ? 'Show less' : '...Show more'}
+                  </button>
+                )}
               </div>
             ) : contentType?.toLowerCase() === 'message' && content.message ? (
               <div>

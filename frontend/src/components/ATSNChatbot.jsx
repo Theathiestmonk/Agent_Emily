@@ -8,6 +8,7 @@ import remarkGfm from 'remark-gfm'
 import ContentCard from './ContentCard'
 import ATSNContentCard from './ATSNContentCard'
 import ATSNContentModal from './ATSNContentModal'
+import ReelModal from './ReelModal'
 import LeadCard from './LeadCard'
 import MultiMediaUpload from './MultiMediaUpload'
 import CharacterCard from './CharacterCard'
@@ -94,6 +95,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const [currentRequestIntent, setCurrentRequestIntent] = useState(null)
   const [lastSentMessage, setLastSentMessage] = useState('')
   const [showContentModal, setShowContentModal] = useState(false)
+  const [showReelModal, setShowReelModal] = useState(false)
   const [chatReset, setChatReset] = useState(false) // Track if chat was reset
   const [freshReset, setFreshReset] = useState(false) // Track if chat was just reset to prevent loading conversations
   const [resetTimestamp, setResetTimestamp] = useState(null) // Track when reset happened
@@ -741,6 +743,8 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         step: data.current_step,
         payload: data.payload,
         waiting_for_user: data.waiting_for_user,
+        waiting_for_upload: data.waiting_for_upload,
+        upload_type: data.upload_type,
         payload_complete: data.payload_complete,
         error: data.error,
         content_items: data.content_items || null,
@@ -748,9 +752,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         lead_items: data.lead_items || null,
         agent_name: data.agent_name || 'emily',
         clarification_options: data.clarification_options || [],
+        clarification_data: data.clarification_data,
         needs_connection: data.needs_connection || false,
         connection_platform: data.connection_platform || null
       }])
+
+      // Auto-open upload modal if waiting for upload
+      if (data.waiting_for_upload) {
+        setTimeout(() => {
+          setShowMediaUploadModal(true)
+        }, 500) // Small delay to ensure modal renders properly
+      }
 
       // Update agent status
       setAgentStatus({
@@ -948,11 +960,25 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     }
 
     setSelectedContentForModal(processedContent)
-    setShowContentModal(true)
+
+    // Check if it's a reel and open appropriate modal
+    if (processedContent.content_type === 'short_video or reel' ||
+        processedContent.content_type === 'reel' ||
+        processedContent.content_type?.toLowerCase().includes('reel') ||
+        processedContent.content_type?.toLowerCase().includes('video')) {
+      setShowReelModal(true)
+    } else {
+      setShowContentModal(true)
+    }
   }
 
   const handleCloseContentModal = () => {
     setShowContentModal(false)
+    setSelectedContentForModal(null)
+  }
+
+  const handleCloseReelModal = () => {
+    setShowReelModal(false)
     setSelectedContentForModal(null)
   }
 
@@ -1562,6 +1588,8 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         step: data.current_step,
         payload: data.payload,
         waiting_for_user: data.waiting_for_user,
+        waiting_for_upload: data.waiting_for_upload,
+        upload_type: data.upload_type,
         payload_complete: data.payload_complete,
         error: data.error,
         content_items: data.content_items || null,
@@ -1569,9 +1597,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         lead_items: data.lead_items || null,
         agent_name: data.agent_name || 'emily',
         clarification_options: data.clarification_options || [],
+        clarification_data: data.clarification_data,
         needs_connection: data.needs_connection || false,
         connection_platform: data.connection_platform || null
       }])
+
+      // Auto-open upload modal if waiting for upload
+      if (data.waiting_for_upload) {
+        setTimeout(() => {
+          setShowMediaUploadModal(true)
+        }, 500) // Small delay to ensure modal renders properly
+      }
 
       // Update agent status
       setAgentStatus({
@@ -1665,6 +1701,8 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         step: data.current_step,
         payload: data.payload,
         waiting_for_user: data.waiting_for_user,
+        waiting_for_upload: data.waiting_for_upload,
+        upload_type: data.upload_type,
         payload_complete: data.payload_complete,
         error: data.error,
         content_items: data.content_items || null,
@@ -1672,9 +1710,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         lead_items: data.lead_items || null,
         agent_name: data.agent_name || 'emily',
         clarification_options: data.clarification_options || [],
+        clarification_data: data.clarification_data,
         needs_connection: data.needs_connection || false,
         connection_platform: data.connection_platform || null
       }])
+
+      // Auto-open upload modal if waiting for upload
+      if (data.waiting_for_upload) {
+        setTimeout(() => {
+          setShowMediaUploadModal(true)
+        }, 500) // Small delay to ensure modal renders properly
+      }
 
       // Update agent status
       setAgentStatus({
@@ -1769,6 +1815,8 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         step: data.current_step,
         payload: data.payload,
         waiting_for_user: data.waiting_for_user,
+        waiting_for_upload: data.waiting_for_upload,
+        upload_type: data.upload_type,
         payload_complete: data.payload_complete,
         error: data.error,
         content_items: data.content_items || null,
@@ -1776,9 +1824,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         lead_items: data.lead_items || null,
         agent_name: data.agent_name || 'emily',
         clarification_options: data.clarification_options || [],
+        clarification_data: data.clarification_data,
         needs_connection: data.needs_connection || false,
         connection_platform: data.connection_platform || null
       }])
+
+      // Auto-open upload modal if waiting for upload
+      if (data.waiting_for_upload) {
+        setTimeout(() => {
+          setShowMediaUploadModal(true)
+        }, 500) // Small delay to ensure modal renders properly
+      }
 
       // Update agent status
       setAgentStatus({
@@ -1865,38 +1921,54 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         setUploadedMediaUrls(data.urls || [])
         setShowMediaUploadModal(false)
 
-        // Create a task for media upload
-        const taskMessage = `I uploaded a ${mediaType} for my content. Please help me create engaging content using this media.`
-
         // Clear selected files after capturing media type
         setSelectedFilesForUpload([])
 
-        // Add user message about media upload
-        setMessages(prev => [...prev, {
-          id: Date.now(),
-          sender: 'user',
-          text: taskMessage,
-          timestamp: new Date().toISOString(),
-          media_urls: data.urls || []
-        }])
+        // Check if this is a clarification upload or waiting for upload
+        const lastMessage = messages[messages.length - 1]
+        const isClarificationUpload = lastMessage && lastMessage.clarification_data && lastMessage.clarification_data.type === 'upload_request'
+        const isWaitingForUpload = lastMessage && lastMessage.waiting_for_upload
 
-        // Send to chatbot
-        try {
-          const chatResponse = await fetch(`${API_BASE_URL}/atsn/chat`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              message: taskMessage,
-              media_urls: data.urls || [],
-              conversation_history: [...conversationHistory, taskMessage]
+        if (isClarificationUpload || isWaitingForUpload) {
+          // Send upload response without adding a chat message for waiting_for_upload
+          let messageToSend = ""
+          let conversationHistoryToSend = conversationHistory
+
+          if (isWaitingForUpload) {
+            // For waiting_for_upload, send a special token that won't trigger intent changes
+            messageToSend = "[MEDIA_UPLOAD]"
+          } else {
+            // For clarification uploads, send the upload message
+            messageToSend = `I uploaded the ${mediaType}: ${data.urls[0]}`
+            conversationHistoryToSend = [...conversationHistory, messageToSend]
+
+            // Add to chat for clarification uploads
+            setMessages(prev => [...prev, {
+              id: Date.now(),
+              sender: 'user',
+              text: messageToSend,
+              timestamp: new Date().toISOString(),
+              media_urls: data.urls || []
+            }])
+          }
+
+          // Send upload response
+          try {
+            const chatResponse = await fetch(`${API_BASE_URL}/atsn/chat`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                message: messageToSend,
+                media_urls: data.urls || [],
+                conversation_history: conversationHistoryToSend
+              })
             })
-          })
 
-          if (chatResponse.ok) {
-            const chatData = await chatResponse.json()
+            if (chatResponse.ok) {
+              const chatData = await chatResponse.json()
             // Handle the response similar to regular messages
             setMessages(prev => [...prev, {
               id: Date.now() + 1,
@@ -1907,11 +1979,54 @@ const ATSNChatbot = ({ externalConversations = null }) => {
               agent_name: chatData.agent_name
             }])
           }
-        } catch (chatError) {
-          console.error('Error sending media upload task:', chatError)
-        }
+          } catch (chatError) {
+            console.error('Error sending clarification response:', chatError)
+          }
+        } else {
+          // This is a regular media upload (not clarification) - create new task
+          const taskMessage = `I uploaded a ${mediaType} for my content. Please help me create engaging content using this media.`
 
-        showSuccess('Media uploaded and task created successfully!')
+          setMessages(prev => [...prev, {
+            id: Date.now(),
+            sender: 'user',
+            text: taskMessage,
+            timestamp: new Date().toISOString(),
+            media_urls: data.urls || []
+          }])
+
+          // Send to chatbot
+          try {
+            const chatResponse = await fetch(`${API_BASE_URL}/atsn/chat`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                message: taskMessage,
+                media_urls: data.urls || [],
+                conversation_history: [...conversationHistory, taskMessage]
+              })
+            })
+
+            if (chatResponse.ok) {
+              const chatData = await chatResponse.json()
+              // Handle the response similar to regular messages
+              setMessages(prev => [...prev, {
+                id: Date.now() + 1,
+                sender: 'bot',
+                text: chatData.response || 'Content creation task started!',
+                timestamp: new Date().toISOString(),
+                intent: chatData.intent,
+                agent_name: chatData.agent_name
+              }])
+            }
+          } catch (chatError) {
+            console.error('Error sending media upload task:', chatError)
+          }
+
+          showSuccess('Media uploaded and task created successfully!')
+        }
       } else {
         throw new Error('Upload failed')
       }
@@ -2558,6 +2673,30 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                       </div>
                       </div>
 
+                    {/* Handle upload requests */}
+                    {message.clarification_data && message.clarification_data.type === 'upload_request' && message.waiting_for_user && (
+                      <div className="mt-4">
+                        <button
+                          onClick={() => {
+                            // Open media upload modal for image upload
+                            setShowMediaUploadModal(true)
+                          }}
+                          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                            isDarkMode
+                              ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                              : 'bg-blue-500 hover:bg-blue-600 text-white'
+                          }`}
+                        >
+                          📤 Upload {message.clarification_data.upload_type === 'image' ? 'Image' : 'Media'}
+                        </button>
+                        <p className={`mt-2 text-sm ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                          {message.clarification_data.message}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Render clarification options only for active clarifications */}
                     {message.clarification_options && message.clarification_options.length > 0 && message.waiting_for_user && (
                       <div className="mt-4 flex flex-wrap gap-3">
@@ -2633,8 +2772,9 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                       </div>
                                     )}
 
-                                    {/* Use ATSNContentCard for posts, ContentCard for others */}
-                                    {contentItem.raw_data?.content_type === 'post' || contentItem.content_type?.toLowerCase().includes('post') ? (
+                                    {/* Use ATSNContentCard for posts and reels, ContentCard for others */}
+                                    {contentItem.raw_data?.content_type === 'post' || contentItem.content_type?.toLowerCase().includes('post') ||
+                                     contentItem.content_type?.toLowerCase().includes('reel') || contentItem.content_type?.toLowerCase().includes('video') ? (
                                       <ATSNContentCard
                                         content={{
                                           id: contentItem.content_id,
@@ -2713,8 +2853,9 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                           }
                                         }}
                                         onPreview={(content) => {
-                                          // Open content preview modal or navigate to detail view
-                                          console.log('Preview content:', content);
+                                          // Open content preview modal
+                                          setSelectedContentForModal(content);
+                                          setShowContentModal(true);
                                         }}
                                         onEdit={() => {
                                           // Handle edit action - could navigate to edit page or open modal
@@ -3617,6 +3758,14 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         <ATSNContentModal
           content={selectedContentForModal}
           onClose={handleCloseContentModal}
+        />
+      )}
+
+      {/* Reel Modal */}
+      {showReelModal && selectedContentForModal && (
+        <ReelModal
+          content={selectedContentForModal}
+          onClose={handleCloseReelModal}
         />
       )}
 

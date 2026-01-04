@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { Play } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import SideNavbar from './SideNavbar'
 import MobileNavigation from './MobileNavigation'
 import ATSNContentCard from './ATSNContentCard'
 import ATSNContentModal from './ATSNContentModal'
+import ReelModal from './ReelModal'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 
@@ -108,6 +110,7 @@ function CreatedContentDashboard() {
   // Modal states
   const [selectedContent, setSelectedContent] = useState(null)
   const [isContentModalOpen, setIsContentModalOpen] = useState(false)
+  const [isReelModalOpen, setIsReelModalOpen] = useState(false)
 
   const contentRef = useRef([])
 
@@ -206,11 +209,25 @@ function CreatedContentDashboard() {
   const handlePreview = (contentItem) => {
     // Open content modal for preview
     setSelectedContent(contentItem)
-    setIsContentModalOpen(true)
+
+    // Check if it's a reel and open appropriate modal
+    if (contentItem.content_type === 'short_video or reel' ||
+        contentItem.content_type === 'reel' ||
+        contentItem.content_type?.toLowerCase().includes('reel') ||
+        contentItem.content_type?.toLowerCase().includes('video')) {
+      setIsReelModalOpen(true)
+    } else {
+      setIsContentModalOpen(true)
+    }
   }
 
   const handleCloseModal = () => {
     setIsContentModalOpen(false)
+    setSelectedContent(null)
+  }
+
+  const handleCloseReelModal = () => {
+    setIsReelModalOpen(false)
     setSelectedContent(null)
   }
 
@@ -764,21 +781,28 @@ function CreatedContentDashboard() {
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {Array.isArray(filteredContent) && filteredContent.map((contentItem) => {
-                // Extract image URL from various possible fields
-                let imageUrl = null;
+                // Extract media URL from various possible fields
+                let mediaUrl = null;
+                let isVideo = false;
+
                 if (contentItem.media_url) {
-                  imageUrl = contentItem.media_url;
+                  mediaUrl = contentItem.media_url;
+                  // Check if it's a video file
+                  isVideo = mediaUrl.match(/\.(mp4|mov|avi|webm|m4v)$/i) ||
+                           mediaUrl.includes('video') ||
+                           contentItem.content_type?.toLowerCase().includes('video') ||
+                           contentItem.content_type === 'short_video or reel';
                 } else if (contentItem.images && Array.isArray(contentItem.images) && contentItem.images.length > 0) {
-                  imageUrl = contentItem.images[0];
+                  mediaUrl = contentItem.images[0];
                 } else if (contentItem.image_url) {
-                  imageUrl = contentItem.image_url;
+                  mediaUrl = contentItem.image_url;
                 } else if (contentItem.metadata && contentItem.metadata.image_url) {
-                  imageUrl = contentItem.metadata.image_url;
+                  mediaUrl = contentItem.metadata.image_url;
                 }
 
-                const hasImage = imageUrl && imageUrl.trim();
+                const hasMedia = mediaUrl && mediaUrl.trim();
 
-                if (!hasImage) return null; // Skip items without images
+                if (!hasMedia) return null; // Skip items without media
 
                 return (
                   <div
@@ -786,14 +810,36 @@ function CreatedContentDashboard() {
                     className="relative aspect-square group cursor-pointer overflow-hidden bg-gray-200"
                     onClick={() => handlePreview(contentItem)}
                   >
-                    <img
-                      src={imageUrl}
-                      alt={contentItem.title || 'Content'}
-                      className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                      }}
-                    />
+                    {isVideo ? (
+                      <video
+                        src={mediaUrl}
+                        className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                        muted
+                        poster={mediaUrl} // Use video as poster to show first frame
+                        preload="none" // Don't preload to save bandwidth
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <img
+                        src={mediaUrl}
+                        alt={contentItem.title || 'Content'}
+                        className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    )}
+
+                    {/* Video Play Button Overlay */}
+                    {isVideo && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+                        <div className="bg-white/90 rounded-full p-3 shadow-lg group-hover:scale-110 transition-transform">
+                          <Play className="w-6 h-6 text-purple-600 fill-purple-600" />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Action Buttons Overlay */}
                     <div className={`absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex flex-col items-center justify-center ${
@@ -866,6 +912,14 @@ function CreatedContentDashboard() {
         <ATSNContentModal
           content={selectedContent}
           onClose={handleCloseModal}
+        />
+      )}
+
+      {/* Reel Modal */}
+      {isReelModalOpen && selectedContent && (
+        <ReelModal
+          content={selectedContent}
+          onClose={handleCloseReelModal}
         />
       )}
     </div>

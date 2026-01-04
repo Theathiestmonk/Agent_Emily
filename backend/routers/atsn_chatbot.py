@@ -37,6 +37,7 @@ class ChatMessage(BaseModel):
     message: str
     conversation_history: Optional[List[str]] = None
     media_file: Optional[str] = None
+    media_urls: Optional[List[str]] = None
 
 
 class ChatResponse(BaseModel):
@@ -47,6 +48,9 @@ class ChatResponse(BaseModel):
     waiting_for_user: bool = False
     clarification_question: Optional[str] = None
     clarification_options: Optional[List[dict]] = None  # Clickable options for clarification
+    clarification_data: Optional[dict] = None  # Additional clarification data (e.g., upload requests)
+    waiting_for_upload: bool = False  # Whether the agent is waiting for a file upload
+    upload_type: Optional[str] = None  # Type of upload expected ('image', 'video', etc.)
     result: Optional[str] = None
     error: Optional[str] = None
     current_step: str
@@ -172,7 +176,8 @@ async def chat(
             user_query=chat_message.message,
             conversation_history=chat_message.conversation_history,
             user_id=user_id,
-            media_file=chat_message.media_file
+            media_file=chat_message.media_file,
+            media_urls=chat_message.media_urls
         )
         
         # Format response - ensure we always have a valid response string
@@ -204,6 +209,9 @@ async def chat(
             waiting_for_user=response.get('waiting_for_user', False),
             clarification_question=response.get('clarification_question'),
             clarification_options=response.get('clarification_options', []),
+            clarification_data=response.get('clarification_data'),
+            waiting_for_upload=response.get('waiting_for_upload', False),
+            upload_type=response.get('upload_type'),
             result=response.get('result'),
             error=response.get('error'),
             current_step=response.get('current_step', 'unknown'),
@@ -317,23 +325,30 @@ async def health_check():
 async def get_atsn_conversations(
     current_user=Depends(get_current_user),
     limit: int = Query(20, description="Number of conversations to return", le=50),
-    date: str = Query(None, description="Date to filter conversations (YYYY-MM-DD format). If not provided, uses today's date")
+    date: str = Query(None, description="Date to filter conversations (YYYY-MM-DD format). If not provided, uses today's date"),
+    all: bool = Query(False, description="Get all conversations instead of just today's")
 ):
-    """Get ATSN conversations for current user (filtered by date)"""
+    """Get ATSN conversations for current user - today's by default, or all if all=true"""
     try:
         user_id = current_user.id
 
-        # Use provided date or default to today
-        if date:
-            filter_date = date
+        logger.info(f"Fetching ATSN conversations for user {user_id}, all={all}, limit={limit}")
+
+        if all:
+            # Get all conversations
+            conversations_result = supabase_client.table("atsn_conversations").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit).execute()
         else:
-            from datetime import datetime
-            filter_date = datetime.now().strftime("%Y-%m-%d")
+            # Use provided date or default to today
+            if date:
+                filter_date = date
+            else:
+                from datetime import datetime
+                filter_date = datetime.now().strftime("%Y-%m-%d")
 
-        logger.info(f"Fetching ATSN conversations for user {user_id}, date={filter_date}, limit={limit}")
+            logger.info(f"Fetching ATSN conversations for user {user_id}, date={filter_date}, limit={limit}")
+            # Get conversations filtered by date
+            conversations_result = supabase_client.table("atsn_conversations").select("*").eq("user_id", user_id).eq("conversation_date", filter_date).order("created_at", desc=True).limit(limit).execute()
 
-        # Get conversations filtered by date
-        conversations_result = supabase_client.table("atsn_conversations").select("*").eq("user_id", user_id).eq("conversation_date", filter_date).order("created_at", desc=True).limit(limit).execute()
         conversations = conversations_result.data if conversations_result.data else []
 
         # For each conversation, get the messages

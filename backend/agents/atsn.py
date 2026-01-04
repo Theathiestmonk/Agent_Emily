@@ -38,6 +38,7 @@ import os
 import logging
 import re
 import random
+import uuid
 from typing import List, Optional, Literal, Dict, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
@@ -1248,7 +1249,10 @@ class AgentState(BaseModel):
     payload_complete: bool = False
     clarification_question: Optional[str] = None
     clarification_options: Optional[List[Dict[str, Any]]] = None  # Clickable options for clarification
+    clarification_data: Optional[Dict[str, Any]] = None  # Additional clarification data (e.g., upload requests)
     waiting_for_user: bool = False
+    waiting_for_upload: bool = False  # Whether the agent is waiting for a file upload
+    upload_type: Optional[str] = None  # Type of upload expected ('image', 'video', etc.)
     result: Optional[str] = None
     error: Optional[str] = None
     current_step: str = "intent_classification"
@@ -1260,6 +1264,20 @@ class AgentState(BaseModel):
     lead_items: Optional[List[Dict[str, Any]]] = None  # Structured lead data for frontend card rendering
     needs_connection: Optional[bool] = None  # Whether user needs to connect an account
     connection_platform: Optional[str] = None  # Platform that needs to be connected
+    intent_change_detected: bool = False  # Whether an intent change was detected
+    previous_intent: Optional[str] = None  # Previous intent before change
+    intent_change_type: str = "none"  # Type of intent change: 'none', 'refinement', 'complete_shift'
+    # Temporary fields for PII handling
+    temp_original_email: Optional[str] = None
+    temp_original_phone: Optional[str] = None
+    temp_filter_emails: Optional[List[str]] = None
+    temp_filter_phones: Optional[List[str]] = None
+    temp_original_emails: Optional[List[str]] = None
+    temp_original_phones: Optional[List[str]] = None
+    temp_delete_emails: Optional[List[str]] = None
+    temp_delete_phones: Optional[List[str]] = None
+    temp_followup_emails: Optional[List[str]] = None
+    temp_followup_phones: Optional[List[str]] = None
 
     # Temporary fields for PII privacy protection
     temp_original_email: Optional[str] = None  # Original email from user input (create operations)
@@ -1358,6 +1376,12 @@ def detect_intent_changes(state: AgentState) -> AgentState:
 
     # Skip intent detection for very short responses to clarifications
     last_message = state.user_query.strip().split('\n')[-1].strip()
+
+    # Special case: skip intent detection for media upload messages
+    if last_message.lower() == "[media_upload]":
+        print(f"   Skipping intent detection for media upload message")
+        return state
+
     if len(last_message.split()) <= 2:  # Reduced from 3 to 2 for more sensitivity
         print(f"   Skipping intent detection for short response: '{last_message}'")
         # Likely a short clarification response, preserve current intent
@@ -1493,11 +1517,19 @@ def classify_intent(state: AgentState) -> AgentState:
         print(f" Intent preserved: {state.intent} (continuing from clarification)")
         return state
     
-    # Check for greetings first (simple pattern matching)
+    # Check for special upload message that should preserve existing intent
     user_query_lower = state.user_query.lower().strip()
-    greeting_words = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 
+    if user_query_lower == "[media_upload]":
+        # This is an upload completion - preserve existing intent and continue
+        if state.intent:
+            print(f" Media upload detected, preserving intent: {state.intent}")
+            state.current_step = "payload_construction"
+            return state
+
+    # Check for greetings first (simple pattern matching)
+    greeting_words = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening',
                       'greetings', 'howdy', 'what\'s up', 'whats up', 'sup', 'yo']
-    
+
     if any(greeting in user_query_lower for greeting in greeting_words) and len(user_query_lower.split()) <= 5:
         state.intent = "greeting"
         state.current_step = "action_execution"
@@ -3499,11 +3531,32 @@ def complete_view_content_payload(state: AgentState) -> AgentState:
 def complete_create_content_payload(state: AgentState) -> AgentState:
     """Complete create_content payload"""
 
-    # Define the clarification flow order
+    # Define the clarification flow order (media last)
     clarification_flow = ["channel", "platform", "content_type", "content_idea", "Post_type", "media"]
 
     # Build required fields list based on current state
     required_fields = []
+
+    # Check if all fields before media are complete
+    other_fields_complete = True
+    for field in clarification_flow[:-1]:  # All fields except media
+        if field == "Image_type":
+            # Only require Image_type if media is "Generate"
+            if state.payload.get("media") == "Generate":
+                if field not in state.payload or state.payload.get(field) is None or not state.payload.get(field):
+                    other_fields_complete = False
+                    break
+        elif field == "content_idea":
+            # Special handling for content_idea - check word count
+            content_idea = state.payload.get("content_idea", "")
+            if not content_idea or len(content_idea.split()) < 10:
+                other_fields_complete = False
+                break
+        else:
+            # Check if field is missing or empty
+            if field not in state.payload or state.payload.get(field) is None or not state.payload.get(field):
+                other_fields_complete = False
+                break
 
     for field in clarification_flow:
         if field == "Image_type":
@@ -3516,6 +3569,11 @@ def complete_create_content_payload(state: AgentState) -> AgentState:
             content_idea = state.payload.get("content_idea", "")
             if not content_idea or len(content_idea.split()) < 10:
                 required_fields.append(field)
+        elif field == "media":
+            # Only ask for media if all other fields are complete
+            if other_fields_complete:
+                if field not in state.payload or state.payload.get(field) is None or not state.payload.get(field):
+                    required_fields.append(field)
         else:
             # Check if field is missing or empty
             if field not in state.payload or state.payload.get(field) is None or not state.payload.get(field):
@@ -3532,8 +3590,13 @@ def complete_create_content_payload(state: AgentState) -> AgentState:
     next_field = required_fields[0]
     clarification_data = clarifications.get(next_field, {})
 
+    # Calculate remaining questions count
+    remaining_questions = len(required_fields)
+
     if isinstance(clarification_data, dict):
         base_question = clarification_data.get("question", f"Please provide: {next_field.replace('_', ' ')}")
+
+        # Question count will be included in the enhanced_base_question for personalization
 
         # Special handling for channel options when content_type is a post type
         if next_field == "channel":
@@ -3547,6 +3610,40 @@ def complete_create_content_payload(state: AgentState) -> AgentState:
                     option for option in original_options
                     if option.get("value") in ["Social Media"]
                 ]
+        # Special handling for content_type options when platform is Instagram
+        elif next_field == "content_type":
+            platform = state.payload.get("platform")
+            print(f"DEBUG: Content type clarification - platform is: {platform}")
+            if platform == "Instagram":
+                # Filter out "Blog Post" for Instagram
+                original_options = clarification_data.get("options", [])
+                filtered_options = [
+                    option for option in original_options
+                    if option.get("value") != "blog"
+                ]
+                state.clarification_options = filtered_options
+                # Add question count to the base question that was already modified above
+                state.clarification_question = base_question
+                state.waiting_for_user = True
+                state.result = f"{base_question}\n\nPlease choose one of the options below:"
+                return state
+        # Special handling for media options when platform is Instagram
+        elif next_field == "media":
+            platform = state.payload.get("platform")
+            print(f"DEBUG: Media clarification - platform is: {platform}")
+            if platform == "Instagram":
+                # Filter out "Without media" for Instagram - Instagram requires visual content
+                original_options = clarification_data.get("options", [])
+                filtered_options = [
+                    option for option in original_options
+                    if option.get("value") != "Without media"
+                ]
+                state.clarification_options = filtered_options
+                # Add question count to the base question that was already modified above
+                state.clarification_question = base_question
+                state.waiting_for_user = True
+                state.result = f"{base_question}\n\nPlease choose one of the options below:"
+                return state
                 clarification_data = clarification_data.copy()
                 clarification_data["options"] = filtered_options
                 print(f"DEBUG: Filtered channel options to: {[opt.get('value') for opt in filtered_options]}")
@@ -3583,10 +3680,14 @@ def complete_create_content_payload(state: AgentState) -> AgentState:
                 )
                 base_question = f"{base_question} Based on what you've told me, how about '{contextual_suggestion}'? Or tell me your own preference!"
 
+        # Add remaining questions count to the question for personalization
+        question_count_context = f"I will ask you just {remaining_questions} more question{'s' if remaining_questions > 1 else ''} for further understanding."
+        enhanced_base_question = f"{question_count_context}\n\n{base_question}"
+
         # Generate personalized question using LLM
-        logger.info(f"Calling LLM for clarification question. Base: '{base_question}', User context length: {len(state.user_query or '')}")
+        logger.info(f"Calling LLM for clarification question. Base: '{enhanced_base_question}', User context length: {len(state.user_query or '')}")
         personalized_question = generate_clarifying_question(
-            base_question=base_question,
+            base_question=enhanced_base_question,
             user_context=state.user_query,
             user_input=state.user_query.split('\n')[-1] if state.user_query else ""
         )
@@ -3594,10 +3695,15 @@ def complete_create_content_payload(state: AgentState) -> AgentState:
 
         state.clarification_question = personalized_question
         state.clarification_options = clarification_data.get("options", [])
+        state.result = f"{personalized_question}\n\nPlease choose one of the options below:"
     else:
         # Backward compatibility for string clarifications
-        state.clarification_question = clarification_data or f"Please provide: {next_field.replace('_', ' ')}"
+        question_text = clarification_data or f"Please provide: {next_field.replace('_', ' ')}"
+        # Add remaining questions count to the question
+        question_count_context = f"I will ask you just {remaining_questions} more question{'s' if remaining_questions > 1 else ''} for further understanding."
+        state.clarification_question = f"{question_count_context}\n\n{question_text}"
         state.clarification_options = []
+        state.result = f"{state.clarification_question}\n\nPlease choose one of the options below:"
 
     state.waiting_for_user = True
     state.current_step = "waiting_for_clarification"
@@ -3652,14 +3758,21 @@ def complete_edit_content_payload(state: AgentState) -> AgentState:
         clarification_data = FIELD_CLARIFICATIONS.get("edit_content", {}).get("edit_instruction", {})
         if isinstance(clarification_data, dict):
             base_question = clarification_data.get("question", "What changes would you like to make to this content?")
+
+            # Add remaining questions count to the question for personalization
+            question_count_context = f"I will ask you just {len(missing_fields)} more question{'s' if len(missing_fields) > 1 else ''} for further understanding."
+            enhanced_base_question = f"{question_count_context}\n\n{base_question}"
+
             personalized_question = generate_clarifying_question(
-                base_question=base_question,
+                base_question=enhanced_base_question,
                 user_context=state.user_query,
                 user_input=state.user_query.split('\n')[-1] if state.user_query else ""
             )
             state.clarification_question = personalized_question
+            state.result = f"{personalized_question}\n\nPlease choose one of the options below:"
         else:
             state.clarification_question = clarification_data or "What changes would you like to make to this content?"
+            state.result = f"{state.clarification_question}\n\nPlease choose one of the options below:"
 
         state.waiting_for_user = True
         state.current_step = "waiting_for_clarification"
@@ -3788,6 +3901,11 @@ def complete_edit_content_payload(state: AgentState) -> AgentState:
     if isinstance(clarification_data, dict):
         base_question = clarification_data.get("question", f"Please provide: {next_field.replace('_', ' ')}")
 
+        # Add remaining questions count to the question for personalization
+        remaining_questions = len(missing_fields)
+        question_count_context = f"I will ask you just {remaining_questions} more question{'s' if remaining_questions > 1 else ''} for further understanding."
+        base_question = f"{question_count_context}\n\n{base_question}"
+
         # Generate personalized question using LLM
         logger.info(f"Calling LLM for clarification question. Base: '{base_question}', User context length: {len(state.user_query or '')}")
         personalized_question = generate_clarifying_question(
@@ -3801,7 +3919,11 @@ def complete_edit_content_payload(state: AgentState) -> AgentState:
         state.clarification_options = clarification_data.get("options", [])
     else:
         # Backward compatibility for string clarifications
-        state.clarification_question = clarification_data
+        question_text = clarification_data or f"Please provide: {next_field.replace('_', ' ')}"
+        # Add remaining questions count to the question
+        remaining_questions = len(missing_fields)
+        question_count_context = f"I will ask you just {remaining_questions} more question{'s' if remaining_questions > 1 else ''} for further understanding."
+        state.clarification_question = f"{question_count_context}\n\n{question_text}"
         state.clarification_options = []
 
     state.waiting_for_user = True
@@ -4204,119 +4326,194 @@ def complete_create_leads_payload(state: AgentState) -> AgentState:
         print(" Create leads payload complete")
         return state
 
+    # Calculate remaining questions
+    missing_count = sum([not has_name, not (has_email or has_phone), not has_source, not has_status, not has_follow_up, not has_remarks])
+
     # Ask for what's missing - check in priority order
     if not has_name:
         clarification_data = clarifications.get("lead_name", {})
         if isinstance(clarification_data, dict):
             base_question = clarification_data.get("question", "What's the lead's name?")
+            # Question count will be included in the enhanced_base_question for personalization
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            enhanced_base_question = f"{question_count_context}\n\n{base_question}"
+
             personalized_question = generate_clarifying_question(
-                base_question=base_question,
+                base_question=enhanced_base_question,
                 user_context=state.user_query,
                 user_input=state.user_query.split('\n')[-1] if state.user_query else ""
             )
             state.clarification_question = personalized_question
             state.clarification_options = clarification_data.get("options", [])
+            state.result = f"{personalized_question}\n\nPlease choose one of the options below:"
         else:
-            state.clarification_question = clarification_data or "What's the lead's name?"
+            question_text = clarification_data or "What's the lead's name?"
+            # Add remaining questions count to the question
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            state.clarification_question = f"{question_count_context}\n\n{question_text}"
             state.clarification_options = []
+            state.result = f"{state.clarification_question}\n\nPlease choose one of the options below:"
     elif not has_email and not has_phone:
         clarification_data = clarifications.get("lead_email", {})
         if isinstance(clarification_data, dict):
             base_question = clarification_data.get("question", "What's their email address?")
+            # Question count will be included in the enhanced_base_question for personalization
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            enhanced_base_question = f"{question_count_context}\n\n{base_question}"
+
             personalized_question = generate_clarifying_question(
-                base_question=base_question,
+                base_question=enhanced_base_question,
                 user_context=state.user_query,
                 user_input=state.user_query.split('\n')[-1] if state.user_query else ""
             )
             state.clarification_question = personalized_question
             state.clarification_options = clarification_data.get("options", [])
+            state.result = f"{personalized_question}\n\nPlease choose one of the options below:"
         else:
-            state.clarification_question = clarification_data or "What's their email address?"
+            question_text = clarification_data or "What's their email address?"
+            # Add remaining questions count to the question
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            state.clarification_question = f"{question_count_context}\n\n{question_text}"
             state.clarification_options = []
+            state.result = f"{state.clarification_question}\n\nPlease choose one of the options below:"
     elif not has_email:
         clarification_data = clarifications.get("lead_email", {})
         if isinstance(clarification_data, dict):
             base_question = clarification_data.get("question", "What's their email address?")
+            # Question count will be included in the enhanced_base_question for personalization
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            enhanced_base_question = f"{question_count_context}\n\n{base_question}"
+
             personalized_question = generate_clarifying_question(
-                base_question=base_question,
+                base_question=enhanced_base_question,
                 user_context=state.user_query,
                 user_input=state.user_query.split('\n')[-1] if state.user_query else ""
             )
             state.clarification_question = personalized_question
             state.clarification_options = clarification_data.get("options", [])
+            state.result = f"{personalized_question}\n\nPlease choose one of the options below:"
         else:
-            state.clarification_question = clarification_data or "What's their email address?"
+            question_text = clarification_data or "What's their email address?"
+            # Add remaining questions count to the question
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            state.clarification_question = f"{question_count_context}\n\n{question_text}"
             state.clarification_options = []
+            state.result = f"{state.clarification_question}\n\nPlease choose one of the options below:"
     elif not has_phone:
         clarification_data = clarifications.get("lead_phone", {})
         if isinstance(clarification_data, dict):
             base_question = clarification_data.get("question", "What's their phone number?")
+            # Question count will be included in the enhanced_base_question for personalization
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            enhanced_base_question = f"{question_count_context}\n\n{base_question}"
+
             personalized_question = generate_clarifying_question(
-                base_question=base_question,
+                base_question=enhanced_base_question,
                 user_context=state.user_query,
                 user_input=state.user_query.split('\n')[-1] if state.user_query else ""
             )
             state.clarification_question = personalized_question
             state.clarification_options = clarification_data.get("options", [])
+            state.result = f"{personalized_question}\n\nPlease choose one of the options below:"
         else:
-            state.clarification_question = clarification_data or "What's their phone number?"
+            question_text = clarification_data or "What's their phone number?"
+            # Add remaining questions count to the question
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            state.clarification_question = f"{question_count_context}\n\n{question_text}"
             state.clarification_options = []
+            state.result = f"{state.clarification_question}\n\nPlease choose one of the options below:"
     elif not has_source:
         clarification_data = clarifications.get("lead_source", {})
         if isinstance(clarification_data, dict):
             base_question = clarification_data.get("question", "How did you connect with this lead?")
+            # Question count will be included in the enhanced_base_question for personalization
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            enhanced_base_question = f"{question_count_context}\n\n{base_question}"
+
             personalized_question = generate_clarifying_question(
-                base_question=base_question,
+                base_question=enhanced_base_question,
                 user_context=state.user_query,
                 user_input=state.user_query.split('\n')[-1] if state.user_query else ""
             )
             state.clarification_question = personalized_question
             state.clarification_options = clarification_data.get("options", [])
+            state.result = f"{personalized_question}\n\nPlease choose one of the options below:"
         else:
-            state.clarification_question = clarification_data or "How did you connect with this lead?"
+            question_text = clarification_data or "How did you connect with this lead?"
+            # Add remaining questions count to the question
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            state.clarification_question = f"{question_count_context}\n\n{question_text}"
             state.clarification_options = []
+            state.result = f"{state.clarification_question}\n\nPlease choose one of the options below:"
     elif not has_status:
         clarification_data = clarifications.get("lead_status", {})
         if isinstance(clarification_data, dict):
             base_question = clarification_data.get("question", "What's their current status?")
+            # Question count will be included in the enhanced_base_question for personalization
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            enhanced_base_question = f"{question_count_context}\n\n{base_question}"
+
             personalized_question = generate_clarifying_question(
-                base_question=base_question,
+                base_question=enhanced_base_question,
                 user_context=state.user_query,
                 user_input=state.user_query.split('\n')[-1] if state.user_query else ""
             )
             state.clarification_question = personalized_question
             state.clarification_options = clarification_data.get("options", [])
+            state.result = f"{personalized_question}\n\nPlease choose one of the options below:"
         else:
-            state.clarification_question = clarification_data or "What's their current status?"
+            question_text = clarification_data or "What's their current status?"
+            # Add remaining questions count to the question
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            state.clarification_question = f"{question_count_context}\n\n{question_text}"
             state.clarification_options = []
+            state.result = f"{state.clarification_question}\n\nPlease choose one of the options below:"
     elif not has_follow_up:
         clarification_data = clarifications.get("follow_up", {})
         if isinstance(clarification_data, dict):
             base_question = clarification_data.get("question", "When should we follow up with this lead?")
+            # Question count will be included in the enhanced_base_question for personalization
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            enhanced_base_question = f"{question_count_context}\n\n{base_question}"
+
             personalized_question = generate_clarifying_question(
-                base_question=base_question,
+                base_question=enhanced_base_question,
                 user_context=state.user_query,
                 user_input=state.user_query.split('\n')[-1] if state.user_query else ""
             )
             state.clarification_question = personalized_question
             state.clarification_options = clarification_data.get("options", [])
+            state.result = f"{personalized_question}\n\nPlease choose one of the options below:"
         else:
-            state.clarification_question = clarification_data or "When should we follow up with this lead?"
+            question_text = clarification_data or "When should we follow up with this lead?"
+            # Add remaining questions count to the question
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            state.clarification_question = f"{question_count_context}\n\n{question_text}"
             state.clarification_options = []
+            state.result = f"{state.clarification_question}\n\nPlease choose one of the options below:"
     elif not has_remarks:
         clarification_data = clarifications.get("remarks", {})
         if isinstance(clarification_data, dict):
             base_question = clarification_data.get("question", "Any additional notes or remarks about this lead?")
+            # Question count will be included in the enhanced_base_question for personalization
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            enhanced_base_question = f"{question_count_context}\n\n{base_question}"
+
             personalized_question = generate_clarifying_question(
-                base_question=base_question,
+                base_question=enhanced_base_question,
                 user_context=state.user_query,
                 user_input=state.user_query.split('\n')[-1] if state.user_query else ""
             )
             state.clarification_question = personalized_question
             state.clarification_options = clarification_data.get("options", [])
+            state.result = f"{personalized_question}\n\nPlease choose one of the options below:"
         else:
-            state.clarification_question = clarification_data or "Any additional notes or remarks about this lead?"
+            question_text = clarification_data or "Any additional notes or remarks about this lead?"
+            # Add remaining questions count to the question
+            question_count_context = f"I will ask you just {missing_count} more question{'s' if missing_count > 1 else ''} for further understanding."
+            state.clarification_question = f"{question_count_context}\n\n{question_text}"
             state.clarification_options = []
+            state.result = f"{state.clarification_question}\n\nPlease choose one of the options below:"
 
     state.waiting_for_user = True
     state.current_step = "waiting_for_clarification"
@@ -4878,6 +5075,11 @@ async def handle_create_content(state: AgentState) -> AgentState:
             logger.info(prompt)
             logger.info("=" * 80)
 
+            # Initialize variables
+            title = ""
+            content = ""
+            hashtags = []
+
             # Generate structured content with GPT-4o-mini
             from datetime import datetime
             content_gen_datetime = datetime.now()
@@ -4899,9 +5101,7 @@ async def handle_create_content(state: AgentState) -> AgentState:
                     hashtags = parsed_content['hashtags']
                 else:
                     # Fallback parsing for other platforms
-                    title = ""
-                    content = ""
-                    hashtags = []
+                    # Variables already initialized above
 
                     lines = generated_response.split('\n')
                     current_section = None
@@ -4934,51 +5134,263 @@ async def handle_create_content(state: AgentState) -> AgentState:
                 content_data['title'] = "Content Generation Failed"
                 content_data['content'] = generated_content
                 content_data['hashtags'] = []
+                title = "Content Generation Failed"
+                content = generated_content
 
         elif content_type == 'short_video or reel':
-            # Generate short video script using GPT-4o-mini
-            prompt = f"""You are a professional video script writer specializing in short-form video content for {payload.get('platform', 'social media')}.
+            # Check if user wants to upload their own video
+            if payload.get('media') == 'Upload':
+                # Set flag for upload requirement - user will upload both video and cover
+                if not payload.get('media_file'):
+                    state.waiting_for_upload = True
+                    state.upload_type = 'video'  # They need to upload video file
+                    state.result = "Ready to upload your short video/reel. Please select and upload a video file."
+                    return state
+                else:
+                    # File already uploaded, use it
+                    generated_image_url = payload.get('media_file')
+                    if generated_image_url:
+                        content_data['images'] = [generated_image_url]
+
+            # Step 1: Get viral content trends from Grok
+            topic = payload.get('content_idea', 'viral content trends')
+            trends_data = await get_trends_from_grok(topic, business_context)
+
+            # Step 2: Generate short video script using GPT-4o-mini with trend insights
+            viral_content = ""
+            if trends_data and 'trends' in trends_data:
+                viral_content = "\n\nVIRAL CONTENT INSIGHTS:\n" + "\n".join([
+                    f"- {trend.get('trend_name', '')}: {trend.get('description', '')[:100]}..."
+                    for trend in trends_data['trends'][:3]  # Top 3 trends
+                ])
+
+            prompt = f"""You are a professional short-form video script writer creating viral content for {payload.get('platform', 'social media')} Reels.
 
 BUSINESS CONTEXT:
 {business_context.get('business_name', 'Business')}
 Industry: {business_context.get('industry', 'General')}
 Target Audience: {business_context.get('target_audience', 'General audience')}
 Brand Voice: {business_context.get('brand_voice', 'Professional and friendly')}
+Business Description: {business_context.get('business_description', 'N/A')}
 
 CONTENT REQUIREMENTS:
-- Platform: {payload.get('platform', 'TikTok/Instagram Reels/YouTube Shorts')}
+- Platform: {payload.get('platform', 'Instagram Reels/TikTok/YouTube Shorts')}
 - Content Idea: {payload.get('content_idea', '')}
-- Duration: 15-60 seconds (keep script concise)
+- Duration: 15-30 seconds (keep script concise and punchy)
+- Goal: Create engaging, scroll-stopping content{viral_content}
 
 TASK:
-Create a complete short video script that includes:
-1. Hook (first 3-5 seconds - grab attention)
-2. Main content (deliver value based on the content idea)
-3. Call-to-action (what you want viewers to do)
-4. Visual cues and transitions
+Create a complete 15-30 second video script optimized for virality that includes:
+1. STRONG HOOK (0-3 seconds - shock, question, or surprising fact)
+2. VALUE DELIVERY (3-20 seconds - solve problem or provide insight)
+3. EMOTIONAL CLOSE (20-25 seconds - build connection)
+4. CLEAR CTA (25-30 seconds - what to do next)
 
 SCRIPT FORMAT:
-[0-3s] HOOK: [Compelling opening line]
-[3-45s] MAIN CONTENT: [Core message and value]
-[45-60s] CTA: [Call to action with clear next steps]
+🎬 SCENE BREAKDOWN:
+[0-3s] HOOK: [One powerful sentence that stops the scroll]
+[3-20s] VALUE: [2-3 key points that deliver real value]
+[20-25s] STORY/CONNECTION: [Make it relatable, add emotion]
+[25-30s] CTA: [Specific action + urgency]
 
-Keep total script length suitable for 15-60 second video.
-Use engaging, conversational language.
-Include timing cues for editing."""
+VISUAL CUES:
+- Background music suggestions
+- Text overlays for key points
+- Transitions between sections
+- Thumbnail-worthy moments
+
+Make it conversational, authentic, and optimized for the algorithm."""
 
             if openai_client:
                 response = openai_client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=800,
-                    temperature=0.7
+                    max_tokens=1000,
+                    temperature=0.8
                 )
                 generated_script = response.choices[0].message.content.strip()
                 content_data['short_video_script'] = generated_script  # Save to short_video_script column
-                generated_content = f"Short Video Script Generated:\n\n{generated_script}"
+                content_data['content'] = generated_script  # Required field for database
+
+                # Step 3: Generate video cover image using Gemini (only if not uploading)
+                if payload.get('media') != 'Upload' and not payload.get('media_url'):
+                    cover_prompt = f"""Create a professional, eye-catching thumbnail image for a {payload.get('platform', 'social media')} short video about: {payload.get('content_idea', 'viral content')}
+
+Business: {business_context.get('business_name', 'Business')}
+Style: Scroll-stopping, viral-worthy, modern and engaging
+Visual elements: Bold text overlays, vibrant gradients, clean mobile-first design
+Composition: High contrast, clear focal point, optimized for 9:16 aspect ratio
+Make it irresistible to click and watch!"""
+
+                logger.info(f"🎨 Complete video cover generation prompt:")
+                logger.info("=" * 80)
+                logger.info(cover_prompt)
+                logger.info("=" * 80)
+
+                # Import datetime locally (following working image generation pattern)
+                from datetime import datetime
+
+                # Check if logo is available and prepare to send it to Gemini
+                logo_data = None
+                if profile_assets and profile_assets.get('logo'):
+                    logo_url = profile_assets.get('logo')
+                    logger.info(f"📎 Including logo in video cover generation: {logo_url}")
+                    try:
+                        import httpx
+                        async with httpx.AsyncClient(follow_redirects=True) as client:
+                            logo_response = await client.get(logo_url)
+                            logo_response.raise_for_status()
+                            logo_data = logo_response.content
+                        logger.info(f"✅ Logo downloaded successfully: {len(logo_data)} bytes")
+                    except Exception as e:
+                        logger.warning(f"Failed to download logo: {e}")
+                        logo_data = None
+
+                # Generate image with Gemini
+                logger.info(f"🎨 Generating video cover with Gemini for platform: {payload.get('platform')} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                logger.info(f"   Logo included: {logo_data is not None}")
+
+                gemini_image_model = 'gemini-2.5-flash-image-preview'
+
+                # Prepare contents for Gemini API
+                contents = [cover_prompt]  # Text prompt is always first
+
+                # Add logo as reference image if available
+                if logo_data:
+                    import base64
+                    contents.append({
+                        "inline_data": {
+                            "mime_type": "image/png",  # Assume PNG for transparency
+                            "data": base64.b64encode(logo_data).decode('utf-8')
+                        }
+                    })
+
+                image_response = genai.GenerativeModel(gemini_image_model).generate_content(
+                    contents=contents
+                )
+                logger.info(f"Gemini response received, has candidates: {bool(image_response.candidates)}")
+
+                # Extract image data
+                if image_response.candidates and len(image_response.candidates) > 0:
+                    candidate = image_response.candidates[0]
+                    if candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if part.inline_data is not None and part.inline_data.data:
+                                try:
+                                    # Get image data as bytes
+                                    image_data = part.inline_data.data
+                                    if not isinstance(image_data, bytes):
+                                        import base64
+                                        image_data = base64.b64decode(image_data)
+
+                                    # Generate unique filename
+                                    import uuid
+                                    filename = f"video_covers/{uuid.uuid4()}.png"
+                                    file_path = filename
+
+                                    logger.info(f"📤 Uploading generated video cover to ai-generated-images bucket: {file_path}")
+
+                                    # Upload to ai-generated-images bucket in generated folder
+                                    storage_response = supabase.storage.from_("ai-generated-images").upload(
+                                        file_path,
+                                        image_data,
+                                        file_options={"content-type": "image/png", "upsert": "false"}
+                                    )
+
+                                    if hasattr(storage_response, 'error') and storage_response.error:
+                                        logger.error(f"Storage upload error: {storage_response.error}")
+                                        generated_image_url = None
+                                    else:
+                                        # Get public URL
+                                        generated_image_url = supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+                                        logger.info(f"✅ Video cover uploaded successfully: {generated_image_url}")
+
+                                        if generated_image_url and isinstance(generated_image_url, str):
+                                            content_data['images'] = [generated_image_url]
+
+                                            # Update metadata for video cover
+                                            content_data['metadata'] = {
+                                                'video_cover_generated': True,
+                                                'cover_prompt': cover_prompt,
+                                                'trends_used': trends_data.get('trends', [])[:3] if trends_data else [],
+                                                'generated_with': 'gemini'
+                                            }
+                                        else:
+                                            logger.error(f"Invalid public URL returned: {generated_image_url}")
+
+                                except Exception as upload_error:
+                                    logger.error(f"Error uploading video cover to storage: {upload_error}")
+
+                                break
+                    else:
+                        # When uploading, don't generate cover - user will upload their own
+                        content_data['metadata'] = {
+                            'video_cover_uploaded': True,
+                            'trends_used': trends_data.get('trends', [])[:3] if trends_data else [],
+                            'generated_with': 'user_upload'
+                        }
+
+                # Step 4: Generate compelling title and caption for the reel
+                caption_prompt = f"""Based on this short video script, create a compelling title and Instagram caption for the reel.
+
+VIDEO SCRIPT:
+{generated_script}
+
+BUSINESS CONTEXT:
+{business_context.get('business_name', 'Business')}
+Industry: {business_context.get('industry', 'General')}
+Target Audience: {business_context.get('target_audience', 'General audience')}
+
+TASK:
+Create a viral-worthy Instagram Reel title and caption that will:
+1. Hook viewers in the first 3 words
+2. Use trending hashtags and emojis naturally
+3. Include a strong call-to-action
+4. Be optimized for Instagram's algorithm
+
+FORMAT (Return ONLY this format):
+TITLE: [Compelling 1-5 word title]
+CAPTION: [Scroll-stopping caption with emojis, 100-150 characters]
+
+Make it authentic, engaging, and optimized for maximum engagement!"""
+
+                try:
+                    caption_response = openai_client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": caption_prompt}],
+                        max_tokens=300,
+                        temperature=0.9
+                    )
+                    caption_result = caption_response.choices[0].message.content.strip()
+
+                    # Parse title and caption
+                    title = ""
+                    caption = ""
+                    for line in caption_result.split('\n'):
+                        line = line.strip()
+                        if line.startswith('TITLE:'):
+                            title = line.replace('TITLE:', '').strip()
+                        elif line.startswith('CAPTION:'):
+                            caption = line.replace('CAPTION:', '').strip()
+
+                    # Save title and caption
+                    content_data['title'] = title if title else f"Reel: {payload.get('content_idea', 'Viral Content')[:30]}"
+                    content_data['content'] = caption if caption else generated_script[:200] + "..."
+
+                    logger.info(f"✅ Generated reel title: '{title}' and caption: '{caption[:50]}...'")
+
+                except Exception as caption_error:
+                    logger.warning(f"Failed to generate reel caption: {caption_error}")
+                    # Fallback: use script as content
+                    content_data['title'] = f"Reel: {payload.get('content_idea', 'Viral Content')[:30]}"
+                    content_data['content'] = generated_script[:200] + "..."
+
+                generated_content = f"🎬 Short Video Script Generated:\n\n{generated_script}"
             else:
                 generated_content = "OpenAI client not configured"
                 content_data['short_video_script'] = "Script generation failed - OpenAI client not configured"
+                content_data['title'] = "Reel Generation Failed"
+                content_data['content'] = generated_content
 
         elif content_type == 'long_video':
             # Generate long video script using GPT-4o-mini
@@ -5033,7 +5445,7 @@ Include timing estimates for each section."""
 
         # Handle media generation based on payload.media
         logger.info(f"Media type: {payload.get('media')}")
-        if payload.get('media') == 'Generate':
+        if payload.get('media') == 'Generate' and not payload.get('media_url'):
             # Generate image using Gemini with the generated content and business context
             try:
                 # First, generate enhanced image prompt using AI
@@ -5190,10 +5602,18 @@ Create a high-quality, professional image optimized for Instagram that reflects 
                 generated_image_url = None
 
         elif payload.get('media') == 'Upload':
-            # Use uploaded image (managed by frontend, media_file should contain the URL/path)
-            generated_image_url = payload.get('media_file')
-            if generated_image_url:
-                content_data['images'] = [generated_image_url]
+            # Set flag for upload requirement
+            if not payload.get('media_file'):
+                # No file uploaded yet, set upload flag
+                state.waiting_for_upload = True
+                state.upload_type = 'image'
+                state.result = "Ready to upload an image for your content. Please select and upload an image file."
+                return state
+            else:
+                # File already uploaded, use it
+                generated_image_url = payload.get('media_file')
+                if generated_image_url:
+                    content_data['images'] = [generated_image_url]
         # For "without media", no images added
 
         # Save to Supabase created_content table
@@ -7299,10 +7719,10 @@ def should_continue_to_action(state: AgentState) -> str:
         return "end"
     if state.payload_complete:
         return "execute_action"
-    # When waiting for user clarification, stop graph execution
+    # When waiting for user clarification or upload, stop graph execution
     # The graph will pause and return control. When user responds,
     # process_query will update state and invoke graph again from entry point
-    if state.waiting_for_user:
+    if state.waiting_for_user or state.waiting_for_upload:
         return "end"  # Stop execution - graph pauses naturally
     return "end"
 
@@ -7402,7 +7822,7 @@ class ATSNAgent:
         self.state = None
         self.user_id = user_id
     
-    async def process_query(self, user_query: str, conversation_history: List[str] = None, user_id: Optional[str] = None, media_file: Optional[str] = None) -> Dict[str, Any]:
+    async def process_query(self, user_query: str, conversation_history: List[str] = None, user_id: Optional[str] = None, media_file: Optional[str] = None, media_urls: Optional[List[str]] = None) -> Dict[str, Any]:
         """Process a user query
         
         Maintains conversation context by appending new messages to user_query.
@@ -7423,10 +7843,11 @@ class ATSNAgent:
         # Initialize or update state
         # Check if previous query was completed (has result and payload_complete)
         previous_completed = (
-            self.state is not None 
-            and self.state.payload_complete 
+            self.state is not None
+            and self.state.payload_complete
             and (self.state.result or self.state.current_step == "end")
             and not self.state.waiting_for_user
+            and not self.state.waiting_for_upload
         )
         
         if self.state is None or previous_completed or not self.state.waiting_for_user:
@@ -7474,10 +7895,13 @@ class ATSNAgent:
             if active_user_id:
                 self.state.user_id = active_user_id
 
-        # Handle media_file if provided (for upload functionality)
+        # Handle media_file or media_urls if provided (for upload functionality)
         if media_file:
             self.state.payload['media_file'] = media_file
             logger.info(f"Media file set in payload: {media_file}")
+        elif media_urls and len(media_urls) > 0:
+            self.state.payload['media_file'] = media_urls[0]  # Use first URL
+            logger.info(f"Media URLs set in payload: {media_urls}")
 
         # Run the graph
         result = await self.graph.ainvoke(self.state)
@@ -7490,16 +7914,23 @@ class ATSNAgent:
         if self.state.waiting_for_user and hasattr(self.state, 'clarification_options'):
             clarification_options = getattr(self.state, 'clarification_options', [])
 
+        # Adjust current_step for waiting states
+        current_step = self.state.current_step
+        if self.state.waiting_for_upload:
+            current_step = "waiting_for_upload"
+
         response = {
             "intent": self.state.intent,
             "payload": self.state.payload,
             "payload_complete": self.state.payload_complete,
             "waiting_for_user": self.state.waiting_for_user,
+            "waiting_for_upload": self.state.waiting_for_upload,
+            "upload_type": self.state.upload_type,
             "clarification_question": self.state.clarification_question,
             "clarification_options": clarification_options,  # Only include when waiting
             "result": self.state.result,
             "error": self.state.error,
-            "current_step": self.state.current_step,
+            "current_step": current_step,
             "content_id": self.state.content_id,  # Single content ID (UUID)
             "content_ids": getattr(self.state, 'content_ids', None),  # List of content IDs for selection
             "lead_id": self.state.lead_id,  # Single lead ID (UUID)
