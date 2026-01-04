@@ -433,7 +433,7 @@ INSTAGRAM CONTENT REQUIREMENTS:
 - Platform: Instagram
 - Format: {parsed_trends.get('format')}
 - Caption Style: Scroll-stopping, conversational, value-driven
-- Emoji Usage: Natural and engaging
+- Emoji Usage: DO NOT include any emojis in the caption or title
 - CTA: Include exactly ONE clear CTA
 - Line Breaks: Use short paragraphs for readability
 - Avoid generic advice — be specific and actionable
@@ -1284,6 +1284,54 @@ class AgentState(BaseModel):
 
 # ==================== INTENT CLASSIFICATION ====================
 
+def get_intent_change_message(from_intent: str, to_intent: str, agent_name: str = None) -> str:
+    """Generate a helpful message explaining what the AI can do for the new intent"""
+
+    # Map intents to agents
+    intent_to_agent = {
+        "create_content": "Leo",
+        "edit_content": "Leo",
+        "delete_content": "Emily",
+        "view_content": "Emily",
+        "publish_content": "Emily",
+        "schedule_content": "Emily",
+        "create_leads": "Chase",
+        "view_leads": "Chase",
+        "edit_leads": "Chase",
+        "delete_leads": "Chase",
+        "follow_up_leads": "Chase",
+        "view_insights": "Orion",
+        "view_analytics": "Orion"
+    }
+
+    # Determine agent name
+    if not agent_name:
+        agent_name = intent_to_agent.get(to_intent, "Emily")  # Default to Emily
+
+    intent_help = {
+        "create_content": "I can help you create engaging content for social media platforms like Instagram, Facebook, LinkedIn, and YouTube. Tell me your topic and target audience, and I'll craft compelling posts, captions, and hashtags.",
+        "edit_content": "I can help you modify your existing content. Show me which content you'd like to edit and what changes you need, and I'll help refine it for better engagement.",
+        "delete_content": "I can help you remove content from your social media platforms. Just specify which content and platform, and I'll assist with the deletion process.",
+        "view_content": "I can show you all your created content across different platforms. I can filter by platform, date, or status to help you find exactly what you're looking for.",
+        "publish_content": "I can help you publish your content to social media platforms. Tell me which content and when you'd like it published, and I'll handle the publishing process.",
+        "schedule_content": "I can help you schedule content for future publishing. Choose your content, set the date and time, and I'll ensure it gets posted at the right moment.",
+        "create_leads": "I can help you create and manage leads from various sources. Provide lead details and I'll help you organize and track them effectively.",
+        "view_leads": "I can show you all your leads with filtering options. You can view leads by status, source, or date to track your sales pipeline.",
+        "edit_leads": "I can help you update lead information. Tell me which lead and what information needs to be changed, and I'll assist with the updates.",
+        "delete_leads": "I can help you remove leads from your system. Just specify which leads and I'll assist with the deletion process.",
+        "follow_up_leads": "I can help you manage follow-ups with your leads. I can suggest follow-up strategies, create messages, and track interactions.",
+        "view_insights": "I can show you detailed analytics and insights about your content performance across all platforms. Get metrics on engagement, reach, and growth.",
+        "view_analytics": "I can provide comprehensive analytics about your social media performance. Track follower growth, engagement rates, and content performance over time."
+    }
+
+    from_display = from_intent.replace('_', ' ')
+    to_display = to_intent.replace('_', ' ')
+
+    help_text = intent_help.get(to_intent, "I can help you with this task. Just let me know what you need assistance with.")
+
+    return f"Hey, I am {agent_name}! I can help you with {to_display}.\n\n{help_text}\n\nHow can I assist you with this?"
+
+
 INTENT_MAP = {
     "greeting": None,  # No payload needed for greetings
     "general_talks": None,  # No payload needed for general conversation
@@ -1415,7 +1463,7 @@ EXAMPLES:
                     state.clarification_question = None
                     state.clarification_options = None
                     state.waiting_for_user = False
-                    state.result = f"I understand you'd like to switch from {old_intent.replace('_', ' ')} to {new_intent.replace('_', ' ')}. Let me help you with that.\n\n"
+                    state.result = get_intent_change_message(old_intent, new_intent)
                     state.current_step = "payload_construction"  # Restart payload construction
 
                 print(f"🎯 Continuous intent change detected: {old_intent} → {new_intent} ({state.intent_change_type})")
@@ -1545,7 +1593,7 @@ If the query doesn't match any specific task, return "general_talks"."""
 
             # For complete shifts, add a brief acknowledgment and reset state
             if state.intent_change_type == 'complete_shift':
-                state.result = f"I understand you'd like to switch from {previous_intent.replace('_', ' ')} to {intent.replace('_', ' ')}. Let me help you with that.\n\n"
+                state.result = get_intent_change_message(previous_intent, intent)
                 # Reset payload and clarification state for complete shifts
                 state.payload = {}
                 state.payload_complete = False

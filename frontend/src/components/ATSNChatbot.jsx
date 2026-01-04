@@ -2565,22 +2565,26 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                           <button
                             key={index}
                             onClick={() => handleOptionSelect(option.value)}
-                            className={`px-2 py-1 transition-all duration-200 text-sm font-normal hover:underline bg-clip-text text-transparent ${
+                            className={`px-3 py-2 transition-all duration-200 text-base font-normal hover:underline ${
                               message.agent_name?.toLowerCase() === 'leo'
                                 ? isDarkMode
-                                  ? 'bg-gradient-to-r from-blue-300 to-blue-500'
-                                  : 'bg-gradient-to-r from-blue-500 to-blue-700'
+                                  ? 'text-blue-300 hover:text-blue-200'
+                                  : 'text-blue-600 hover:text-blue-700'
+                                : message.agent_name?.toLowerCase() === 'emily'
+                                ? isDarkMode
+                                  ? 'text-pink-300 hover:text-pink-200'
+                                  : 'text-purple-600 hover:text-purple-700'
                                 : message.agent_name?.toLowerCase() === 'chase'
                                 ? isDarkMode
-                                  ? 'bg-gradient-to-r from-green-400 to-yellow-400'
-                                  : 'bg-gradient-to-r from-green-800 to-amber-800'
+                                  ? 'text-green-300 hover:text-green-200'
+                                  : 'text-green-800 hover:text-amber-800'
                                 : message.agent_name?.toLowerCase() === 'atsn'
                                 ? isDarkMode
-                                  ? 'bg-gradient-to-r from-purple-300 via-blue-300 to-green-300'
-                                  : 'bg-gradient-to-r from-purple-500 via-blue-500 to-green-500'
+                                  ? 'text-purple-300 hover:text-blue-300'
+                                  : 'text-purple-500 hover:text-blue-500'
                                 : isDarkMode
-                                ? 'bg-gradient-to-r from-purple-400 to-pink-400'
-                                : 'bg-gradient-to-r from-purple-600 to-pink-500'
+                                ? 'text-purple-400 hover:text-pink-400'
+                                : 'text-purple-600 hover:text-pink-500'
                             }`}
                           >
                             <div className="font-normal text-center">{option.label}</div>
