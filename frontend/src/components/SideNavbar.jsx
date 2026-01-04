@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { adminAPI } from '../services/admin'
 import SettingsMenu from './SettingsMenu'
-import { Moon, Sun } from 'lucide-react'
 // Custom Discussions Icon Component
 const DiscussionsIcon = ({ className, isDarkMode }) => (
   <img
@@ -51,8 +50,9 @@ const SideNavbar = () => {
   const [userPlan, setUserPlan] = useState('')
   const [usageCounts, setUsageCounts] = useState({ tasks: 0, images: 0 })
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    // Check localStorage for saved preference, default to light mode
-    return localStorage.getItem('darkMode') === 'true'
+    // Check localStorage for saved preference, default to dark mode
+    const saved = localStorage.getItem('darkMode')
+    return saved !== null ? saved === 'true' : true // Default to true (dark mode)
   })
 
   // Cache key for localStorage
@@ -291,15 +291,21 @@ const SideNavbar = () => {
     localStorage.setItem('darkMode', isDarkMode.toString())
   }, [isDarkMode])
 
-  // Toggle dark mode function
-  const toggleDarkMode = () => {
-    const newValue = !isDarkMode
-    setIsDarkMode(newValue)
-    // Dispatch custom event to notify other components
-    window.dispatchEvent(new CustomEvent('localStorageChange', {
-      detail: { key: 'darkMode', value: newValue.toString() }
-    }))
-  }
+  // Listen for dark mode changes from other components (like SettingsMenu)
+  useEffect(() => {
+    const handleCustomChange = (event) => {
+      if (event.detail && event.detail.key === 'darkMode') {
+        const newValue = event.detail.newValue === 'true'
+        setIsDarkMode(newValue)
+      }
+    }
+
+    window.addEventListener('localStorageChange', handleCustomChange)
+
+    return () => {
+      window.removeEventListener('localStorageChange', handleCustomChange)
+    }
+  }, [])
 
   const displayName = useMemo(() => {
     return profile?.name || user?.user_metadata?.name || user?.email || 'User'
@@ -330,18 +336,6 @@ const SideNavbar = () => {
               isDarkMode ? 'text-gray-200' : 'text-gray-600'
             }`}>atsn ai</h1>
           </div>
-          {/* Dark Mode Toggle */}
-          <button
-            onClick={toggleDarkMode}
-            className={`p-2 rounded-lg transition-colors ${
-              isDarkMode
-                ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-            }`}
-            title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
         </div>
       </div>
 

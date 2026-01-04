@@ -15,9 +15,10 @@ import { leadsAPI } from '../services/leads'
 import { connectionsAPI } from '../services/connections'
 import { mediaAPI } from '../services/api'
 
-// Get dark mode state from localStorage or default to light mode
+// Get dark mode state from localStorage or default to dark mode
 const getDarkModePreference = () => {
-  return localStorage.getItem('darkMode') === 'true'
+  const saved = localStorage.getItem('darkMode')
+  return saved !== null ? saved === 'true' : true // Default to true (dark mode)
 }
 
 // Listen for storage changes to sync dark mode across components

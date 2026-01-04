@@ -12,7 +12,8 @@ import AddLeadModal from './AddLeadModal'
 const useDarkMode = () => {
   const [isDarkMode, setIsDarkMode] = useState(() => {
     // Check localStorage for saved preference, default to light mode
-    return localStorage.getItem('darkMode') === 'true'
+    const saved = localStorage.getItem('darkMode')
+    return saved !== null ? saved === 'true' : true // Default to true (dark mode)
   })
 
   useEffect(() => {

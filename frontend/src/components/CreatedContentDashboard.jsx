@@ -10,7 +10,8 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onren
 
 // Get dark mode state from localStorage or default to light mode
 const getDarkModePreference = () => {
-  return localStorage.getItem('darkMode') === 'true'
+  const saved = localStorage.getItem('darkMode')
+  return saved !== null ? saved === 'true' : true // Default to true (dark mode)
 }
 
 // Listen for storage changes to sync dark mode across components

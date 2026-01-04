@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, CreditCard, User, Download } from 'lucide-react'
+import { X, CreditCard, User, Download, Moon, Sun, Settings } from 'lucide-react'
 import { socialMediaService } from '../services/socialMedia'
 import { connectionsAPI } from '../services/connections'
 import { fetchAllConnections } from '../services/fetchConnections'
@@ -16,7 +16,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
   const [connections, setConnections] = useState([])
   const [loading, setLoading] = useState(false)
   const [selectedPlatform, setSelectedPlatform] = useState('')
-  const [activeTab, setActiveTab] = useState('profile') // 'profile', 'tools', or 'billing'
+  const [activeTab, setActiveTab] = useState('profile') // 'profile', 'tools', 'billing', or 'preferences'
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -24,6 +24,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
   const [billingHistory, setBillingHistory] = useState([])
   const [billingLoading, setBillingLoading] = useState(false)
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
+  const [localDarkMode, setLocalDarkMode] = useState(isDarkMode)
   const pollingIntervalRef = useRef(null)
 
   const platforms = [
@@ -111,6 +112,11 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
     poll()
   }
 
+  // Sync local dark mode with parent component
+  useEffect(() => {
+    setLocalDarkMode(isDarkMode)
+  }, [isDarkMode])
+
   useEffect(() => {
     if (isOpen) {
       fetchConnections()
@@ -123,7 +129,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
       // Stop polling when menu is closed
       stopStatusPolling()
     }
-    
+
     return () => {
       // Cleanup polling on unmount
       stopStatusPolling()
@@ -196,7 +202,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
       }
 
       const latestBill = billingHistory[0]
-      
+
       // Format invoice data for PDF generation
       const invoiceData = {
         id: latestBill.id || latestBill.transaction_id || 'N/A',
@@ -216,7 +222,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
 
       // Generate PDF
       const pdf = generateInvoicePDF(invoiceData, billingHistory, userProfile)
-      
+
       // Download PDF
       const dateStr = new Date(invoiceData.date).toISOString().split('T')[0]
       pdf.save(`bill-${invoiceData.id}-${dateStr}.pdf`)
@@ -224,6 +230,17 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
       console.error('Error generating bill PDF:', error)
       alert(`Failed to generate bill PDF: ${error.message || 'Unknown error'}`)
     }
+  }
+
+  const toggleDarkMode = () => {
+    const newValue = !localDarkMode
+    setLocalDarkMode(newValue)
+    // Save to localStorage
+    localStorage.setItem('darkMode', newValue.toString())
+    // Dispatch custom event to notify other components
+    window.dispatchEvent(new CustomEvent('localStorageChange', {
+      detail: { key: 'darkMode', newValue: newValue.toString() }
+    }))
   }
 
   // Listen for OAuth success events
@@ -529,6 +546,19 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
                 <CreditCard className="w-4 h-4 mr-2" />
                 <span className="text-sm font-medium">Billing</span>
               </button>
+              <button
+                onClick={() => setActiveTab('preferences')}
+                className={`w-full flex items-center p-3 mb-2 rounded-lg transition-colors ${
+                  activeTab === 'preferences'
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
+                    : isDarkMode
+                    ? 'text-gray-300 hover:bg-gray-700'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                <span className="text-sm font-medium">Preferences</span>
+              </button>
             </div>
           </div>
 
@@ -824,6 +854,89 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'preferences' && (
+              <div>
+                <h3 className={`text-sm font-semibold mb-4 ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                }`}>Preferences</h3>
+
+                <div className="space-y-6">
+                  {/* Theme Settings */}
+                  <div className={`p-4 rounded-lg ${
+                    isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
+                  }`}>
+                    <h4 className={`text-xs font-medium mb-3 uppercase ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                    }`}>Theme</h4>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className={`text-sm font-medium ${
+                          isDarkMode ? 'text-gray-200' : 'text-gray-900'
+                        }`}>
+                          Dark Mode
+                        </div>
+                        <div className={`text-xs mt-1 ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                        }`}>
+                          Toggle between light and dark themes
+                        </div>
+                      </div>
+
+                      {/* Toggle Switch */}
+                      <div
+                        className="relative inline-block w-12 h-6 cursor-pointer"
+                        onClick={toggleDarkMode}
+                      >
+                        <div
+                          className={`relative w-full h-full rounded-full transition-all duration-300 ${
+                            localDarkMode
+                              ? 'bg-green-500'
+                              : 'bg-gray-300'
+                          }`}
+                        >
+                          <div
+                            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 ${
+                              localDarkMode
+                                ? 'transform translate-x-6'
+                                : 'transform translate-x-0'
+                            }`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Theme Preview */}
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className={`p-3 rounded-lg border-2 transition-colors ${
+                        !localDarkMode
+                          ? 'border-green-500 bg-white'
+                          : 'border-gray-600 bg-gray-100'
+                      }`}>
+                        <div className="text-xs font-medium text-gray-600 mb-2">Light</div>
+                        <div className="space-y-1">
+                          <div className="h-2 bg-gray-200 rounded"></div>
+                          <div className="h-2 bg-gray-100 rounded w-3/4"></div>
+                        </div>
+                      </div>
+
+                      <div className={`p-3 rounded-lg border-2 transition-colors ${
+                        localDarkMode
+                          ? 'border-green-500 bg-gray-800'
+                          : 'border-gray-600 bg-gray-800'
+                      }`}>
+                        <div className="text-xs font-medium text-gray-300 mb-2">Dark</div>
+                        <div className="space-y-1">
+                          <div className="h-2 bg-gray-700 rounded"></div>
+                          <div className="h-2 bg-gray-600 rounded w-3/4"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
