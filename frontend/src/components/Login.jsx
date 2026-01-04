@@ -80,7 +80,7 @@ function Login() {
             <span className="text-2xl font-bold text-white">W</span>
           </div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Workvillage.ai
+            atsn ai
           </h1>
           <p className="text-gray-600">
             The new normal of working

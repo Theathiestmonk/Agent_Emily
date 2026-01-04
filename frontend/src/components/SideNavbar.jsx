@@ -328,7 +328,7 @@ const SideNavbar = () => {
           <div className="flex flex-col space-y-1">
             <h1 className={`text-xl lg:text-2xl font-bold ${
               isDarkMode ? 'text-gray-200' : 'text-gray-600'
-            }`}>Workvillage.ai</h1>
+            }`}>atsn ai</h1>
           </div>
           {/* Dark Mode Toggle */}
           <button

@@ -854,10 +854,10 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       setMessages([{
         id: 'welcome-new-chat',
         sender: 'bot',
-        text: `Welcome to Workvillage Discussions!\n\nHi! This is your workvillage ai team - **Emily** (content creation & strategy), **Leo** (lead nurturing & CRM), **Chase** (social media & analytics), and **Orion** (creative design & media).\n\nTogether we help you create compelling content, manage publications across platforms, and nurture leads effectively.\n\nWhat would you like to do today?`,
+        text: `Welcome to atsn ai Discussions!\n\nHi! This is your atsn ai team - **Emily** (content creation & strategy), **Leo** (lead nurturing & CRM), **Chase** (social media & analytics), and **Orion** (creative design & media).\n\nTogether we help you create compelling content, manage publications across platforms, and nurture leads effectively.\n\nWhat would you like to do today?`,
         timestamp: new Date().toISOString(),
         intent: null,
-        agent_name: 'Workvillage' // Special agent name for welcome message
+        agent_name: 'atsn ai' // Special agent name for welcome message
       }])
 
       showSuccess('New chat started successfully')
@@ -2249,8 +2249,8 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         return <img src="/chase_logo.png" alt="Chase" className="w-16 h-16 rounded-full object-cover" />
       case 'orio':
         return <span className="text-xl font-bold text-white">O</span>
-      case 'workvillage':
-        // Combined logo for Workvillage welcome message - all four agents
+      case 'atsn ai':
+        // Combined logo for atsn ai welcome message - all four agents
         return (
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 via-blue-500 to-green-500 flex items-center justify-center relative overflow-hidden">
             <div className="absolute inset-0 flex items-center justify-center">
@@ -2422,7 +2422,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
             {/* Avatar */}
             <div
               className={`${
-                message.agent_name?.toLowerCase() === 'emily' || message.agent_name?.toLowerCase() === 'leo' || message.agent_name?.toLowerCase() === 'chase' || message.agent_name?.toLowerCase() === 'workvillage'
+                message.agent_name?.toLowerCase() === 'emily' || message.agent_name?.toLowerCase() === 'leo' || message.agent_name?.toLowerCase() === 'chase' || message.agent_name?.toLowerCase() === 'atsn ai'
                   ? 'w-16 h-16'
                   : 'w-8 h-8'
               } rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -2436,8 +2436,8 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                   ? '' // No background for Chase
                   : message.agent_name?.toLowerCase() === 'emily'
                   ? '' // No background for Emily
-                  : message.agent_name?.toLowerCase() === 'workvillage'
-                  ? '' // No background for Workvillage combined logo
+                  : message.agent_name?.toLowerCase() === 'atsn ai'
+                  ? '' // No background for atsn ai combined logo
                 : 'bg-gradient-to-br from-purple-500 to-pink-500'
               }`}
               onMouseEnter={message.sender === 'bot' ? (e) => handleAgentHover(message.agent_name, e) : undefined}
