@@ -5,7 +5,6 @@ import { trialAPI } from '../services/trial';
 import { generateInvoicePDF, generateBillingHistoryPDF } from '../services/pdfGenerator';
 import SideNavbar from './SideNavbar';
 import MobileNavigation from './MobileNavigation';
-import { DashboardSkeleton, CardSkeleton } from './LazyLoadingSkeleton';
 import { 
   CreditCard, 
   Calendar, 

@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from supabase import create_client, Client
 
 from routers.connections import get_current_user, User
-from agents.media_agent import create_media_agent, ImageStyle, ImageSize
 from services.color_extraction_service import ColorExtractionService
 
 # Configure logging
@@ -44,8 +43,8 @@ if not gemini_api_key:
 
 class ImageGenerationRequest(BaseModel):
     post_id: str = Field(..., description="ID of the post to generate image for")
-    style: Optional[ImageStyle] = Field(None, description="Image style preference")
-    size: Optional[ImageSize] = Field(None, description="Image size preference")
+    style: Optional[str] = Field(None, description="Image style preference")
+    size: Optional[str] = Field(None, description="Image size preference")
 
 class ImageGenerationResponse(BaseModel):
     success: bool
@@ -57,8 +56,8 @@ class ImageGenerationResponse(BaseModel):
 
 class BatchImageGenerationRequest(BaseModel):
     post_ids: List[str] = Field(..., description="List of post IDs to generate images for")
-    style: Optional[ImageStyle] = Field(None, description="Default image style for all posts")
-    size: Optional[ImageSize] = Field(None, description="Default image size for all posts")
+    style: Optional[str] = Field(None, description="Default image style for all posts")
+    size: Optional[str] = Field(None, description="Default image size for all posts")
 
 class BatchImageGenerationResponse(BaseModel):
     total_posts: int
@@ -71,56 +70,9 @@ async def generate_image_for_post(
     request: ImageGenerationRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Generate an image for a specific post"""
-    try:
-        logger.info(f"Media router: Generating image for post {request.post_id}, user {current_user.id}")
-        
-        # Verify post belongs to user
-        post_response = supabase_admin.table("content_posts").select("*, content_campaigns!inner(*)").eq("id", request.post_id).execute()
-        
-        logger.info(f"Media router query response: {post_response}")
-        logger.info(f"Media router response data: {post_response.data}")
-        
-        if not post_response.data:
-            logger.error(f"Media router: No post found with ID {request.post_id}")
-            raise HTTPException(status_code=404, detail="Post not found")
-        
-        post_data = post_response.data[0]
-        if post_data["content_campaigns"]["user_id"] != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied")
-        
-        # Create media agent
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
-        if not gemini_api_key:
-            logger.error("GEMINI_API_KEY environment variable not set")
-            raise HTTPException(status_code=500, detail="Image generation service not configured. Please contact support.")
-        
-        try:
-            media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, gemini_api_key)
-        except Exception as e:
-            logger.error(f"Failed to create media agent: {str(e)}")
-            raise HTTPException(status_code=500, detail="Image generation service initialization failed. Please contact support.")
-        
-        # Generate image
-        result = await media_agent.generate_media_for_post(request.post_id, current_user.id)
-        
-        # Increment image generation count
-        try:
-            current = supabase_admin.table('profiles').select('images_generated_this_month').eq('id', current_user.id).execute()
-            if current.data and len(current.data) > 0:
-                current_count = current.data[0]['images_generated_this_month'] or 0
-                supabase_admin.table('profiles').update({
-                    'images_generated_this_month': current_count + 1
-                }).eq('id', current_user.id).execute()
-                logger.info(f"Incremented image count for user {current_user.id} (from {current_count} to {current_count + 1})")
-        except Exception as counter_error:
-            logger.error(f"Error incrementing image count: {counter_error}")
-
-        return ImageGenerationResponse(**result)
-        
-    except Exception as e:
-        logger.error(f"Error generating image: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating image: {str(e)}")
+    """Generate an image for a specific post - Service temporarily unavailable"""
+    logger.warning(f"Image generation requested for post {request.post_id}, but media agent is disabled")
+    raise HTTPException(status_code=503, detail="Image generation service is temporarily unavailable. Please use manual image uploads instead.")
 
 @router.post("/generate/batch", response_model=BatchImageGenerationResponse)
 async def generate_images_for_posts(
@@ -128,76 +80,9 @@ async def generate_images_for_posts(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user)
 ):
-    """Generate images for multiple posts in batch"""
-    try:
-        # Verify all posts belong to user
-        posts_response = supabase_admin.table("content_posts").select("id, content_campaigns!inner(*)").in_("id", request.post_ids).execute()
-        
-        if not posts_response.data:
-            raise HTTPException(status_code=404, detail="No posts found")
-        
-        # Check ownership
-        user_posts = [post for post in posts_response.data if post["content_campaigns"]["user_id"] == current_user.id]
-        if len(user_posts) != len(request.post_ids):
-            raise HTTPException(status_code=403, detail="Some posts don't belong to you")
-        
-        # Create media agent
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
-        if not gemini_api_key:
-            logger.error("GEMINI_API_KEY environment variable not set")
-            raise HTTPException(status_code=500, detail="Image generation service not configured. Please contact support.")
-        
-        try:
-            media_agent = create_media_agent(supabase_url, supabase_service_key or supabase_anon_key, gemini_api_key)
-        except Exception as e:
-            logger.error(f"Failed to create media agent: {str(e)}")
-            raise HTTPException(status_code=500, detail="Image generation service initialization failed. Please contact support.")
-        
-        # Generate images for each post
-        results = []
-        successful = 0
-        failed = 0
-        
-        for post_id in request.post_ids:
-            try:
-                result = await media_agent.generate_media_for_post(post_id)
-                results.append(ImageGenerationResponse(**result))
-                
-                if result["success"]:
-                    successful += 1
-                    # Increment image generation count for successful generation
-                    try:
-                        current = supabase_admin.table('profiles').select('images_generated_this_month').eq('id', current_user.id).execute()
-                        if current.data and len(current.data) > 0:
-                            current_count = current.data[0]['images_generated_this_month'] or 0
-                            supabase_admin.table('profiles').update({
-                                'images_generated_this_month': current_count + 1
-                            }).eq('id', current_user.id).execute()
-                            logger.info(f"Incremented image count for user {current_user.id} (batch, from {current_count} to {current_count + 1})")
-                    except Exception as counter_error:
-                        logger.error(f"Error incrementing image count in batch: {counter_error}")
-                else:
-                    failed += 1
-                    
-            except Exception as e:
-                logger.error(f"Error generating image for post {post_id}: {str(e)}")
-                results.append(ImageGenerationResponse(
-                    success=False,
-                    status="failed",
-                    error=str(e)
-                ))
-                failed += 1
-        
-        return BatchImageGenerationResponse(
-            total_posts=len(request.post_ids),
-            successful=successful,
-            failed=failed,
-            results=results
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in batch image generation: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error in batch generation: {str(e)}")
+    """Generate images for multiple posts in batch - Service temporarily unavailable"""
+    logger.warning(f"Batch image generation requested for {len(request.post_ids)} posts, but media agent is disabled")
+    raise HTTPException(status_code=503, detail="Batch image generation service is temporarily unavailable. Please use manual image uploads instead.")
 
 @router.get("/posts/{post_id}/images")
 async def get_post_images(
@@ -481,10 +366,11 @@ async def delete_uploaded_media(
 
 @router.get("/styles")
 async def get_available_styles():
-    """Get available image styles"""
+    """Get available image styles - Service temporarily limited"""
     return {
-        "styles": [style.value for style in ImageStyle],
-        "sizes": [size.value for size in ImageSize]
+        "styles": ["photorealistic", "artistic", "minimalist", "vibrant"],
+        "sizes": ["small", "medium", "large"],
+        "note": "AI-generated styles are temporarily unavailable. Use manual uploads instead."
     }
 
 @router.get("/stats")

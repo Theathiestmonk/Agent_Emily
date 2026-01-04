@@ -6,18 +6,12 @@ import Login from './components/Login'
 import SignUp from './components/SignUp'
 import ForgotPassword from './components/ForgotPassword'
 import EmilyDashboard from './components/EmilyDashboard'
-import ContentDashboard from './components/ContentDashboard'
-import ContentCalendar from './components/ContentCalendar'
 import SocialMediaDashboard from './components/SocialMediaDashboard'
 import AnalyticsDashboard from './components/AnalyticsDashboard'
-import CampaignsDashboard from './components/CampaignsDashboard'
-import AdsDashboard from './components/AdsDashboard'
-import BlogDashboard from './components/BlogDashboard'
 import LeadsDashboard from './components/LeadsDashboard'
 import CreatedContentDashboard from './components/CreatedContentDashboard'
 import ATSNDashboard from './components/ATSNDashboard'
 import PostSuggestionsDashboard from './components/PostSuggestionsDashboard'
-import Chatbot from './components/Chatbot'
 import Onboarding from './components/Onboarding'
 import Profile from './components/Profile'
 import GoogleCallback from './components/GoogleCallback'
@@ -202,14 +196,6 @@ function AppContent() {
             <ProtectedRoute>
               <EmilyDashboard />
             </ProtectedRoute>
-          } 
-        />
-        <Route
-          path="/content"
-          element={
-            <ProtectedRoute>
-              <ContentDashboard />
-            </ProtectedRoute>
           }
         />
         <Route
@@ -217,14 +203,6 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <CreatedContentDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route 
-          path="/calendar" 
-          element={
-            <ProtectedRoute>
-              <ContentCalendar />
             </ProtectedRoute>
           } 
         />
@@ -244,22 +222,6 @@ function AppContent() {
             </ProtectedRoute>
           } 
         />
-        <Route 
-          path="/campaigns" 
-          element={
-            <ProtectedRoute>
-              <CampaignsDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/ads" 
-          element={
-            <ProtectedRoute>
-              <AdsDashboard />
-            </ProtectedRoute>
-          } 
-        />
         <Route
           path="/leads"
           element={
@@ -274,14 +236,6 @@ function AppContent() {
             <ProtectedRoute>
               <PostSuggestionsDashboard />
             </ProtectedRoute>
-          }
-        />
-        <Route 
-          path="/blogs" 
-          element={
-            <ProtectedRoute>
-              <BlogDashboard />
-            </ProtectedRoute>
           } 
         />
         <Route 
@@ -289,14 +243,6 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <ATSNDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/chatbot" 
-          element={
-            <ProtectedRoute>
-              <Chatbot />
             </ProtectedRoute>
           } 
         />

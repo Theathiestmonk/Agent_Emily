@@ -5095,14 +5095,6 @@ async def post_to_instagram(
                     }
                     supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
                     
-                    # Cancel any scheduled task for this post to prevent duplicate publishing
-                    try:
-                        from scheduler.post_publisher import post_publisher
-                        if post_publisher:
-                            await post_publisher.cancel_scheduled_post(content_id)
-                            print(f"✅ Cancelled scheduled task for post {content_id}")
-                    except Exception as e:
-                        print(f"⚠️ Could not cancel scheduled task (may not exist): {e}")
                 
                 # Try to get permalink from Instagram API, fallback to constructed URL
                 post_url = None
@@ -5412,14 +5404,6 @@ async def post_to_instagram(
                     check_response = supabase_admin.table("content_posts").select("id, status").eq("id", content_id).execute()
                     print(f"🔍 Current content status: {check_response.data}")
                 
-                # Cancel any scheduled task for this post to prevent duplicate publishing
-                try:
-                    from scheduler.post_publisher import post_publisher
-                    if post_publisher:
-                        await post_publisher.cancel_scheduled_post(content_id)
-                        print(f"✅ Cancelled scheduled task for post {content_id}")
-                except Exception as e:
-                    print(f"⚠️ Could not cancel scheduled task (may not exist): {e}")
 
             else:
 

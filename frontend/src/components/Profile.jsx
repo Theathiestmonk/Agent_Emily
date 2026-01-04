@@ -4,7 +4,6 @@ import SideNavbar from './SideNavbar'
 import MobileNavigation from './MobileNavigation'
 import EditProfileModal from './EditProfileModal'
 import LogoUpload from './LogoUpload'
-import ImageShowcaseModal from './ImageShowcaseModal'
 import { User, Mail, Phone, MapPin, Calendar, Edit, Save, X, Loader2, Building2, Globe, Target, BarChart3, Megaphone, Settings, Image as ImageIcon } from 'lucide-react'
 
 const Profile = () => {
@@ -1038,13 +1037,6 @@ const Profile = () => {
         onSuccess={handleModalSuccess}
       />
 
-      {/* Logo Showcase Modal */}
-      <ImageShowcaseModal
-        isOpen={isLogoModalOpen}
-        onClose={() => setIsLogoModalOpen(false)}
-        imageUrl={logoUrl}
-        imageAlt="Business Logo"
-      />
     </div>
   )
 }

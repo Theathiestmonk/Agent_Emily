@@ -94,6 +94,8 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const [lastSentMessage, setLastSentMessage] = useState('')
   const [showContentModal, setShowContentModal] = useState(false)
   const [chatReset, setChatReset] = useState(false) // Track if chat was reset
+  const [freshReset, setFreshReset] = useState(false) // Track if chat was just reset to prevent loading conversations
+  const [resetTimestamp, setResetTimestamp] = useState(null) // Track when reset happened
   const [selectedContentForModal, setSelectedContentForModal] = useState(null)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [selectedDateRange, setSelectedDateRange] = useState({ start: '', end: '' })
@@ -113,9 +115,10 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const lastExternalConversationsRef = useRef(null)
+  const hasScrolledToBottomRef = useRef(false)
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    messagesEndRef.current?.scrollIntoView()
   }
 
   // 1️⃣ Intent-based global keypress handler
@@ -277,13 +280,16 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     return session?.access_token
   }
 
-  // Load conversations from database
+  // Load conversations from database (today's conversations only)
   const loadConversations = async () => {
     try {
       const token = await getAuthToken()
       if (!token) return
 
-      const response = await fetch(`${API_BASE_URL}/atsn/conversations`, {
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date().toISOString().split('T')[0]
+
+      const response = await fetch(`${API_BASE_URL}/atsn/conversations?date=${today}&limit=20`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -337,12 +343,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     // Don't show automatic welcome message - only show when "New Chat" is clicked
   }
 
-
-  // Load today's conversations when component mounts (like Chatbot.jsx)
+  // Load conversations when component mounts
   useEffect(() => {
     // Don't load external conversations if chat was reset
     if (chatReset) {
       setChatReset(false) // Reset the flag
+      return
+    }
+
+    // Don't load conversations if recently reset (within last 10 seconds)
+    if (resetTimestamp && (Date.now() - resetTimestamp) < 10000) {
+      console.log('Recent reset detected - not loading conversations')
       return
     }
 
@@ -353,10 +364,29 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       // Scroll to bottom after loading external conversations
       setTimeout(() => scrollToBottom(), 100)
     } else if (user && messages.length === 0) {
-      // Load all ATSN conversations (not just today's)
+      // Load conversations from database
+      console.log('Loading conversations for user:', user)
       loadConversations()
     }
-  }, [user, externalConversations, chatReset])
+  }, [user, externalConversations, chatReset, resetTimestamp])
+
+  // Reset scroll flag when chat is reset
+  useEffect(() => {
+    if (chatReset) {
+      hasScrolledToBottomRef.current = false
+    }
+  }, [chatReset])
+
+  // Scroll to bottom only once when messages are first loaded (like WhatsApp)
+  useEffect(() => {
+    if (messages.length > 0 && !hasScrolledToBottomRef.current) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        scrollToBottom()
+        hasScrolledToBottomRef.current = true
+      }, 100)
+    }
+  }, [messages.length])
 
   // Detect and count completed tasks when results are displayed
   useEffect(() => {
@@ -777,11 +807,33 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       // Clear any selected content/leads
       setSelectedContent([])
       setSelectedLeadId(null)
+      setSelectedLeads([])
       setFetchedLeads({})
+      setSelectedContentForModal(null)
 
       // Clear input
       setInputMessage('')
       setLastSentMessage('')
+
+      // Reset modal data
+      setEditLeadData(null)
+      setScheduleData({ date: '', time: '', contentId: null })
+
+      // Reset date picker states
+      setShowDatePicker(false)
+      setSelectedDateRange({ start: '', end: '' })
+      setShowSingleDatePicker(false)
+      setSelectedSingleDate('')
+
+      // Reset lead filters
+      setLeadFilters({
+        search: '',
+        status: '',
+        tags: [],
+        dateRange: { start: '', end: '' },
+        sortBy: 'created_at',
+        sortOrder: 'desc'
+      })
 
       // Reset loading states
       setIsLoading(false)
@@ -789,19 +841,23 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       setIsDeleting(false)
       setIsScheduling(false)
       setShowScheduleModal(false)
+      setShowContentModal(false)
+      setShowEditLeadModal(false)
       setCurrentRequestIntent(null)
 
       // Mark chat as reset to prevent loading external conversations
       setChatReset(true)
+      setFreshReset(true) // Prevent loading conversations after reset
+      setResetTimestamp(Date.now()) // Record when reset happened
 
-      // Set a short, human-like welcome message
+      // Clear all messages and show welcome message
       setMessages([{
         id: 'welcome-new-chat',
         sender: 'bot',
-        text: `Hi! I'm your ATSN team - Emily, Leo, and Chase.\n\nTogether we can help you create and manage content, publish across platforms, and nurture your leads.\n\nWhat would you like to do today?`,
+        text: `Welcome to Workvillage Discussions!\n\nHi! This is your workvillage ai team - **Emily** (content creation & strategy), **Leo** (lead nurturing & CRM), **Chase** (social media & analytics), and **Orion** (creative design & media).\n\nTogether we help you create compelling content, manage publications across platforms, and nurture leads effectively.\n\nWhat would you like to do today?`,
         timestamp: new Date().toISOString(),
         intent: null,
-        agent_name: 'atsn' // Special agent name for welcome message
+        agent_name: 'Workvillage' // Special agent name for welcome message
       }])
 
       showSuccess('New chat started successfully')
@@ -2188,23 +2244,23 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const renderAgentIcon = (agentName) => {
     switch (agentName?.toLowerCase()) {
       case 'leo':
-        return <img src="/leo_logo.jpg" alt="Leo" className="w-16 h-16 rounded-full object-cover" />
+        return <img src="/leo_logo.png" alt="Leo" className="w-16 h-16 rounded-full object-cover" />
       case 'chase':
         return <img src="/chase_logo.png" alt="Chase" className="w-16 h-16 rounded-full object-cover" />
       case 'orio':
         return <span className="text-xl font-bold text-white">O</span>
-      case 'atsn':
-        // Combined logo for ATSN welcome message
+      case 'workvillage':
+        // Combined logo for Workvillage welcome message - all four agents
         return (
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 via-blue-500 to-green-500 flex items-center justify-center relative overflow-hidden">
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
                 <div className="grid grid-cols-2 gap-1">
                   <img src="/emily_icon.png" alt="E" className="w-4 h-4 rounded-full object-cover" />
-                  <img src="/leo_logo.jpg" alt="L" className="w-4 h-4 rounded-full object-cover" />
+                  <img src="/leo_logo.png" alt="L" className="w-4 h-4 rounded-full object-cover" />
                   <img src="/chase_logo.png" alt="C" className="w-4 h-4 rounded-full object-cover" />
-                  <div className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center">
-                    <span className="text-xs font-bold text-white">A</span>
+                  <div className="w-4 h-4 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center">
+                    <span className="text-xs font-bold text-white">O</span>
                   </div>
                 </div>
               </div>
@@ -2366,7 +2422,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
             {/* Avatar */}
             <div
               className={`${
-                message.agent_name?.toLowerCase() === 'emily' || message.agent_name?.toLowerCase() === 'leo' || message.agent_name?.toLowerCase() === 'chase' || message.agent_name?.toLowerCase() === 'atsn'
+                message.agent_name?.toLowerCase() === 'emily' || message.agent_name?.toLowerCase() === 'leo' || message.agent_name?.toLowerCase() === 'chase' || message.agent_name?.toLowerCase() === 'workvillage'
                   ? 'w-16 h-16'
                   : 'w-8 h-8'
               } rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -2380,15 +2436,15 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                   ? '' // No background for Chase
                   : message.agent_name?.toLowerCase() === 'emily'
                   ? '' // No background for Emily
-                  : message.agent_name?.toLowerCase() === 'atsn'
-                  ? '' // No background for ATSN combined logo
+                  : message.agent_name?.toLowerCase() === 'workvillage'
+                  ? '' // No background for Workvillage combined logo
                 : 'bg-gradient-to-br from-purple-500 to-pink-500'
               }`}
               onMouseEnter={message.sender === 'bot' ? (e) => handleAgentHover(message.agent_name, e) : undefined}
               onMouseLeave={message.sender === 'bot' ? handleAgentLeave : undefined}
             >
               {message.sender === 'user' ? (
-                <User className="w-5 h-5 text-white" />
+                <User className="w-4 h-4 text-white" />
               ) : (
                 renderAgentIcon(message.agent_name)
               )}
@@ -2508,10 +2564,22 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                           <button
                             key={index}
                             onClick={() => handleOptionSelect(option.value)}
-                            className={`px-4 py-3 backdrop-blur-sm rounded-xl border shadow-lg hover:shadow-xl transition-all duration-200 text-sm font-normal transform hover:scale-105 ${
-                              isDarkMode
-                                ? 'bg-gray-700/80 text-gray-200 hover:text-white border-gray-600'
-                                : 'bg-white/80 text-gray-800 hover:text-gray-900 border-gray-300'
+                            className={`px-2 py-1 transition-all duration-200 text-sm font-normal hover:underline bg-clip-text text-transparent ${
+                              message.agent_name?.toLowerCase() === 'leo'
+                                ? isDarkMode
+                                  ? 'bg-gradient-to-r from-blue-300 to-blue-500'
+                                  : 'bg-gradient-to-r from-blue-500 to-blue-700'
+                                : message.agent_name?.toLowerCase() === 'chase'
+                                ? isDarkMode
+                                  ? 'bg-gradient-to-r from-green-400 to-yellow-400'
+                                  : 'bg-gradient-to-r from-green-800 to-amber-800'
+                                : message.agent_name?.toLowerCase() === 'atsn'
+                                ? isDarkMode
+                                  ? 'bg-gradient-to-r from-purple-300 via-blue-300 to-green-300'
+                                  : 'bg-gradient-to-r from-purple-500 via-blue-500 to-green-500'
+                                : isDarkMode
+                                ? 'bg-gradient-to-r from-purple-400 to-pink-400'
+                                : 'bg-gradient-to-r from-purple-600 to-pink-500'
                             }`}
                           >
                             <div className="font-normal text-center">{option.label}</div>
@@ -3240,7 +3308,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                           <td className="px-4 py-3">
                                             <div className="flex items-center gap-3">
                                               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                                                <User className="w-4 h-4 text-white" />
+                                                <User className="w-3 h-3 text-white" />
                                               </div>
                                               <span className={`font-medium truncate ${
                                                 isDarkMode ? 'text-gray-100' : 'text-gray-900'

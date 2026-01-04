@@ -3,7 +3,6 @@ import { Mail, Calendar, Send, RefreshCw, Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import SideNavbar from './SideNavbar'
 import MainContentLoader from './MainContentLoader'
-import { DashboardSkeleton } from './LazyLoadingSkeleton'
 
 const GoogleDashboard = () => {
   const { user } = useAuth()
@@ -237,7 +236,14 @@ const GoogleDashboard = () => {
 
         {/* Main Content Area */}
         {loading && gmailMessages.length === 0 ? (
-          <DashboardSkeleton />
+          <div className="flex-1 pt-24 p-6">
+            <div className="max-w-7xl mx-auto">
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-300 rounded mb-4"></div>
+                <div className="h-64 bg-gray-300 rounded"></div>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="flex-1 pt-24 p-6">
             <div className="max-w-7xl mx-auto">

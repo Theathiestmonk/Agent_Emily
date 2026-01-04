@@ -27,7 +27,6 @@ import {
 } from 'lucide-react'
 
 const MobileNavigation = ({ 
-  setShowCustomContentChatbot, 
   handleGenerateContent, 
   generating = false, 
   fetchingFreshData = false,
@@ -405,7 +404,7 @@ const MobileNavigation = ({
             >
               <div className="w-8 h-8 rounded-full mr-3 overflow-hidden">
                 <img
-                  src="/emily_logo.png"
+                  src="/emily_icon.png"
                   alt="Emily"
                   className="w-full h-full object-cover"
                 />
@@ -549,7 +548,7 @@ const MobileNavigation = ({
                 <div className="flex items-center">
                   <div className="w-10 h-10 rounded-full mr-3 overflow-hidden">
                     <img
-                      src="/emily_logo.png"
+                      src="/emily_icon.png"
                       alt="Emily"
                       className="w-full h-full object-cover"
                     />

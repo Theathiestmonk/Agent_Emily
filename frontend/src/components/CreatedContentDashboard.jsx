@@ -577,7 +577,6 @@ function CreatedContentDashboard() {
       <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <SideNavbar />
       <MobileNavigation
-        setShowCustomContentChatbot={() => {}}
         handleGenerateContent={() => {}}
         generating={false}
         fetchingFreshData={false}
@@ -600,41 +599,110 @@ function CreatedContentDashboard() {
               </div>
 
               {/* Filters */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                {/* Channel Filter */}
-                <select
-                  value={filterChannel}
-                  onChange={(e) => setFilterChannel(e.target.value)}
-                  className={`px-3 py-2 rounded-lg border text-sm ${
-                    isDarkMode
-                      ? 'bg-gray-700 border-gray-600 text-gray-200'
-                      : 'bg-white border-gray-300 text-gray-700'
+              <div className="flex flex-wrap gap-2">
+                {/* All Button */}
+                <button
+                  onClick={() => {
+                    setFilterChannel('all')
+                    setFilterPlatform('all')
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterChannel === 'all' && filterPlatform === 'all'
+                      ? isDarkMode
+                        ? 'bg-green-600 text-white'
+                        : 'bg-green-500 text-white'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  <option value="all">All Channels</option>
-                  <option value="Social Media">Social Media</option>
-                  <option value="Blog">Blog</option>
-                  <option value="Email">Email</option>
-                </select>
+                  All
+                </button>
 
-                {/* Platform Filter */}
-                <select
-                  value={filterPlatform}
-                  onChange={(e) => setFilterPlatform(e.target.value)}
-                  className={`px-3 py-2 rounded-lg border text-sm ${
-                    isDarkMode
-                      ? 'bg-gray-700 border-gray-600 text-gray-200'
-                      : 'bg-white border-gray-300 text-gray-700'
+                {/* Instagram Button */}
+                <button
+                  onClick={() => {
+                    setFilterChannel('social media')
+                    setFilterPlatform('instagram')
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterPlatform === 'instagram'
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  <option value="all">All Platforms</option>
-                  <option value="Instagram">Instagram</option>
-                  <option value="Facebook">Facebook</option>
-                  <option value="LinkedIn">LinkedIn</option>
-                  <option value="YouTube">YouTube</option>
-                  <option value="Gmail">Gmail</option>
-                  <option value="WhatsApp">WhatsApp</option>
-                </select>
+                  Instagram
+                </button>
+
+                {/* Facebook Button */}
+                <button
+                  onClick={() => {
+                    setFilterChannel('social media')
+                    setFilterPlatform('facebook')
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterPlatform === 'facebook'
+                      ? 'bg-blue-600 text-white'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Facebook
+                </button>
+
+                {/* LinkedIn Button */}
+                <button
+                  onClick={() => {
+                    setFilterChannel('social media')
+                    setFilterPlatform('linkedin')
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterPlatform === 'linkedin'
+                      ? 'bg-blue-700 text-white'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  LinkedIn
+                </button>
+
+                {/* YouTube Button */}
+                <button
+                  onClick={() => {
+                    setFilterChannel('social media')
+                    setFilterPlatform('youtube')
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterPlatform === 'youtube'
+                      ? 'bg-red-600 text-white'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  YouTube
+                </button>
+
+                {/* Blogs Button */}
+                <button
+                  onClick={() => {
+                    setFilterChannel('blog')
+                    setFilterPlatform('all')
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterChannel === 'blog'
+                      ? 'bg-green-600 text-white'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Blogs
+                </button>
 
                 {/* Search */}
                 <div className="relative">

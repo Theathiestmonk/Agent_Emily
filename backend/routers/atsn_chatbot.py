@@ -316,22 +316,24 @@ async def health_check():
 @router.get("/conversations")
 async def get_atsn_conversations(
     current_user=Depends(get_current_user),
-    date: str = Query(None, description="Get conversations for specific date (YYYY-MM-DD)"),
-    all: bool = Query(False, description="Get all conversations instead of just today's")
+    limit: int = Query(20, description="Number of conversations to return", le=50),
+    date: str = Query(None, description="Date to filter conversations (YYYY-MM-DD format). If not provided, uses today's date")
 ):
-    """Get ATSN conversations for current user"""
+    """Get ATSN conversations for current user (filtered by date)"""
     try:
         user_id = current_user.id
-        logger.info(f"Fetching ATSN conversations for user {user_id}, date={date}, all={all}")
 
-        # Get conversations
-        query = supabase_client.table("atsn_conversations").select("*").eq("user_id", user_id)
+        # Use provided date or default to today
+        if date:
+            filter_date = date
+        else:
+            from datetime import datetime
+            filter_date = datetime.now().strftime("%Y-%m-%d")
 
-        if not all:
-            target_date = date if date else datetime.now().date().isoformat()
-            query = query.eq("conversation_date", target_date)
+        logger.info(f"Fetching ATSN conversations for user {user_id}, date={filter_date}, limit={limit}")
 
-        conversations_result = query.order("created_at", desc=True).execute()
+        # Get conversations filtered by date
+        conversations_result = supabase_client.table("atsn_conversations").select("*").eq("user_id", user_id).eq("conversation_date", filter_date).order("created_at", desc=True).limit(limit).execute()
         conversations = conversations_result.data if conversations_result.data else []
 
         # For each conversation, get the messages

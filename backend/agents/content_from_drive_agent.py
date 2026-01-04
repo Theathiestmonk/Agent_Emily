@@ -1480,20 +1480,6 @@ CRITICAL INSTRUCTIONS:
                         post_id = result.data[0]["id"]
                         saved_posts.append(post_id)
                         
-                        # Register with scheduler if scheduled
-                        if status == "scheduled":
-                            try:
-                                from scheduler.post_publisher import post_publisher
-                                scheduled_at = f"{post_record['scheduled_date']}T{post_record['scheduled_time']}"
-                                await post_publisher.register_scheduled_post(
-                                    post_id=post_id,
-                                    scheduled_at=scheduled_at,
-                                    platform=platform,
-                                    user_id=user_id
-                                )
-                                logger.info(f"Registered scheduled post {post_id} with scheduler")
-                            except Exception as e:
-                                logger.error(f"Failed to register scheduled post: {e}")
                         
                         logger.info(f"Saved post {idx + 1}/{len(generated_posts)}: {post_id}")
                     

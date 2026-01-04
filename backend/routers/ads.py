@@ -9,8 +9,6 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 import logging
 
-from agents.ads_creation_agent import AdsCreationAgent
-from agents.ads_media_agent import AdsMediaAgent
 
 # Initialize security
 security = HTTPBearer()
@@ -290,32 +288,9 @@ async def get_campaign(
 
 @router.post("/generate")
 async def generate_ads(current_user: dict = Depends(get_current_user)):
-    """Generate ads for the current user"""
-    try:
-        # Initialize ads creation agent with service role key to bypass RLS for token tracking
-        import os
-        ads_agent = AdsCreationAgent(
-            supabase_url=os.getenv("SUPABASE_URL"),
-            supabase_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY"),
-            openai_api_key=os.getenv("OPENAI_API_KEY")
-        )
-        
-        # Generate ads
-        result = await ads_agent.generate_ads_for_user(current_user["id"])
-        
-        if result["success"]:
-            return {
-                "message": "Ads generation started successfully",
-                "ads_generated": result["ads_generated"],
-                "campaign_id": result["campaign_id"],
-                "platforms_processed": result["platforms_processed"]
-            }
-        else:
-            raise HTTPException(status_code=500, detail=result["error"])
-            
-    except Exception as e:
-        logger.error(f"Error generating ads: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Generate ads for the current user - Service temporarily unavailable"""
+    logger.warning(f"Ads generation requested for user {current_user['id']}, but ads agent is disabled")
+    raise HTTPException(status_code=503, detail="Ads generation service is temporarily unavailable. Please create ads manually instead.")
 
 @router.get("/{ad_id}")
 async def get_ad(
@@ -638,31 +613,9 @@ async def generate_ad_media(
     ad_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Generate media for a specific ad"""
-    try:
-        # Initialize ads media agent
-        ads_media_agent = AdsMediaAgent(
-            supabase_url=os.getenv("SUPABASE_URL"),
-            supabase_key=os.getenv("SUPABASE_ANON_KEY"),
-            gemini_api_key=os.getenv("GEMINI_API_KEY")
-        )
-        
-        # Generate media for the ad
-        result = await ads_media_agent.generate_media_for_ad(current_user["id"], ad_id)
-        
-        if result["success"]:
-            return {
-                "message": "Media generation completed successfully",
-                "ad_id": ad_id,
-                "media_url": result["media_url"],
-                "metadata": result["metadata"]
-            }
-        else:
-            raise HTTPException(status_code=500, detail=result["error"])
-            
-    except Exception as e:
-        logger.error(f"Error generating ad media: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Generate media for a specific ad - Service temporarily unavailable"""
+    logger.warning(f"Ad media generation requested for ad {ad_id}, but ads media agent is disabled")
+    raise HTTPException(status_code=503, detail="Ad media generation service is temporarily unavailable. Please upload media manually instead.")
 
 @router.post("/{ad_id}/upload-image")
 async def upload_ad_image(
@@ -750,29 +703,6 @@ async def generate_campaign_media(
     campaign_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Generate media for all ads in a campaign"""
-    try:
-        # Initialize ads media agent
-        ads_media_agent = AdsMediaAgent(
-            supabase_url=os.getenv("SUPABASE_URL"),
-            supabase_key=os.getenv("SUPABASE_ANON_KEY"),
-            gemini_api_key=os.getenv("GEMINI_API_KEY")
-        )
-        
-        # Generate media for the campaign
-        result = await ads_media_agent.generate_media_for_campaign(current_user["id"], campaign_id)
-        
-        if result["success"]:
-            return {
-                "message": "Campaign media generation completed",
-                "campaign_id": campaign_id,
-                "processed_ads": result["processed_ads"],
-                "total_ads": result["total_ads"],
-                "errors": result.get("errors", [])
-            }
-        else:
-            raise HTTPException(status_code=500, detail=result["error"])
-            
-    except Exception as e:
-        logger.error(f"Error generating campaign media: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Generate media for all ads in a campaign - Service temporarily unavailable"""
+    logger.warning(f"Campaign media generation requested for campaign {campaign_id}, but ads media agent is disabled")
+    raise HTTPException(status_code=503, detail="Campaign media generation service is temporarily unavailable. Please upload media manually instead.")

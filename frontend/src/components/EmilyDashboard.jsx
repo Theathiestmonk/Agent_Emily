@@ -44,7 +44,6 @@ import LoadingBar from './LoadingBar'
 import MainContentLoader from './MainContentLoader'
 import ATSNChatbot from './ATSNChatbot'
 import RecentTasks from './RecentTasks'
-import CustomContentChatbot from './CustomContentChatbot'
 import ContentCard from './ContentCard'
 import { Sparkles, TrendingUp, Target, BarChart3, FileText, Calendar, PanelRight, PanelLeft, X, ChevronRight, RefreshCw, ChevronDown } from 'lucide-react'
 
@@ -180,82 +179,18 @@ function EmilyDashboard() {
   const [isPanelOpen, setIsPanelOpen] = useState(true)
   const [conversations, setConversations] = useState([])
   const [loadingConversations, setLoadingConversations] = useState(false)
-  const [atsnConversationToLoad, setAtsnConversationToLoad] = useState(null)
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return today
-  })
-  const hasSetInitialDate = useRef(false)
   const [messageFilter, setMessageFilter] = useState('all') // 'all', 'emily', 'chase', 'leo'
-  const [dateFilter, setDateFilter] = useState('today') // 'today', 'yesterday', '2_days_ago', etc.
-  const [showDateFilterDropdown, setShowDateFilterDropdown] = useState(false)
-  const [showCustomContentChatbot, setShowCustomContentChatbot] = useState(false)
   const [showMobileChatHistory, setShowMobileChatHistory] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference)
 
   // Listen for dark mode changes from other components (like SideNavbar)
   useStorageListener('darkMode', setIsDarkMode)
 
-  // Generate date filter options for past 7 days
-  const dateFilterOptions = React.useMemo(() => {
-    const options = []
-    const today = new Date()
-
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today)
-      date.setDate(today.getDate() - i)
-
-      const dateStr = date.toISOString().split('T')[0]
-      const displayText = i === 0 ? 'Today' :
-                         i === 1 ? 'Yesterday' :
-                         `${date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`
-
-      options.push({
-        value: dateStr,
-        label: displayText,
-        date: date
-      })
-    }
-
-    return options
-  }, [])
-
-  // Get selected date filter label
-  const getSelectedDateFilterLabel = () => {
-    const option = dateFilterOptions.find(opt => opt.value === dateFilter)
-    return option ? option.label : 'Select Date'
-  }
+// Date filtering removed - chatbot starts fresh
 
   const handleRefreshChat = async () => {
-    try {
-      const authToken = await getAuthToken()
-      if (!authToken) {
-        showError('Authentication required', 'Please log in again.')
-        return
-      }
-
-      // Clear the partial payload cache on the backend
-      const response = await fetch(`${API_BASE_URL}/chatbot/chat/v2/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        }
-      })
-
-      if (response.ok) {
-        // Clear the chat messages in the frontend
-        // ATSNChatbot handles chat clearing internally
-        showSuccess('Chat refreshed', 'The conversation has been reset to start fresh.')
-      } else {
-        const errorData = await response.json().catch(() => ({ detail: 'Failed to refresh chat' }))
-        showError('Failed to refresh chat', errorData.detail || 'Please try again.')
-      }
-    } catch (error) {
-      console.error('Error refreshing chat:', error)
-      showError('Error refreshing chat', error.message || 'Please try again.')
-    }
+    // ATSN chatbot handles its own state clearing
+    showSuccess('Chat refreshed', 'The conversation has been reset to start fresh.')
   }
 
   useEffect(() => {
@@ -286,85 +221,17 @@ function EmilyDashboard() {
     }
   }, [isPanelOpen, user])
 
-  // Set selectedDate to the most recent conversation date when conversations are first loaded
+  // Set selectedDate to today by default, don't override with most recent conversation date
   useEffect(() => {
     if (conversations.length > 0 && !hasSetInitialDate.current) {
-      const grouped = groupConversationsByDate(conversations)
-      if (grouped.length > 0) {
-        // Get the most recent date (first in sorted array)
-        const mostRecentDate = grouped[0].dateObj
-        setSelectedDate(new Date(mostRecentDate))
-        hasSetInitialDate.current = true
-      }
+      // Keep today's date as default, don't change to most recent conversation date
+      hasSetInitialDate.current = true
     }
   }, [conversations])
 
-  // Reload ATSN conversations when date filter changes
-  useEffect(() => {
-    console.log('Date filter changed to:', dateFilter)
-    if (user && dateFilter) {
-      console.log('Loading conversations for date:', dateFilter)
+// Date filtering removed - chatbot starts fresh
 
-      // First, clear any existing conversations to reset the chatbot
-      setAtsnConversationToLoad(null)
-
-      // Small delay to allow the chatbot to reset, then load new conversations
-      setTimeout(() => {
-        loadAtsnConversationsForDate().then(atsnConversations => {
-          console.log('Reloaded ATSN conversations for date filter:', dateFilter, 'conversations:', atsnConversations)
-
-          // Convert conversations to message format expected by ATSNChatbot
-          if (atsnConversations && atsnConversations.length > 0) {
-            let atsnMessages = []
-
-            // Process ATSN conversations
-            if (atsnConversations.length > 0) {
-              // Use the first conversation for this date (they should be ordered by creation time)
-              const conversation = atsnConversations[0]
-              console.log('Processing conversation:', conversation.id, 'with', conversation.messages?.length || 0, 'messages')
-              atsnMessages = conversation.messages.map(msg => ({
-                id: msg.id,
-                conversationId: conversation.id,
-                sender: msg.sender,
-                text: msg.text,
-                timestamp: msg.timestamp,
-                intent: msg.intent,
-                agent_name: msg.agent_name,
-                current_step: msg.current_step,
-                clarification_question: msg.clarification_question,
-                clarification_options: msg.clarification_options,
-                content_items: msg.content_items,
-                lead_items: msg.lead_items
-              }))
-            }
-
-            console.log('Setting ATSN conversation to load:', atsnMessages.length, 'messages')
-            setAtsnConversationToLoad([...atsnMessages])
-          } else {
-            console.log('No conversations found for date:', dateFilter)
-            setAtsnConversationToLoad([])
-          }
-        }).catch(error => {
-          console.error('Error loading conversations for date filter:', error)
-          setAtsnConversationToLoad([])
-        })
-      }, 100)
-    }
-  }, [dateFilter, user])
-
-  // Close date filter dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showDateFilterDropdown && !event.target.closest('.date-filter-dropdown-container')) {
-        setShowDateFilterDropdown(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showDateFilterDropdown])
+// Date filter dropdown removed - chatbot starts fresh
 
   // Apply dark mode to document body
   useEffect(() => {
@@ -392,7 +259,7 @@ function EmilyDashboard() {
         return
       }
 
-      const response = await fetch(`${API_BASE_URL}/chatbot/conversations?all=true`, {
+      const response = await fetch(`${API_BASE_URL}/atsn-chatbot/conversations?all=true`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -461,158 +328,9 @@ function EmilyDashboard() {
   }
 
   // Function to load ATSN conversations for the selected date filter
-  const loadAtsnConversationsForDate = async () => {
-    try {
-      const authToken = await getAuthToken()
-      if (!authToken) {
-        console.error('No auth token available')
-        return []
-      }
+// ATSN conversation loading removed - chatbot starts fresh
 
-      console.log('Fetching ATSN conversations for date:', dateFilter)
-      const response = await fetch(`${API_BASE_URL}/atsn/conversations?date=${dateFilter}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log('ATSN API response:', data)
-        console.log('Number of conversations returned:', data.conversations?.length || 0)
-        return data.conversations || []
-      } else {
-        const errorText = await response.text()
-        console.error('Failed to load ATSN conversations:', response.status, errorText)
-        return []
-      }
-    } catch (error) {
-      console.error('Error loading ATSN conversations:', error)
-      return []
-    }
-  }
-
-  // Function to load conversations for a specific date
-  const loadConversationsForDate = async (dateObj) => {
-    try {
-      const authToken = await getAuthToken()
-      if (!authToken) {
-        console.error('No auth token available')
-        return
-      }
-
-      // Update selected date in header (use the date object directly to avoid timezone issues)
-      setSelectedDate(new Date(dateObj))
-
-      // Calculate date range for the selected date
-      const startDate = new Date(dateObj)
-      startDate.setHours(0, 0, 0, 0)
-      const endDate = new Date(dateObj)
-      endDate.setHours(23, 59, 59, 999)
-
-      // Filter from already loaded conversations
-      const dateConversations = conversations.filter(conv => {
-        const convDate = new Date(conv.created_at)
-        return convDate >= startDate && convDate <= endDate
-      })
-
-      // Also load ATSN conversations for this date
-      const atsnConversations = await loadAtsnConversationsForDate()
-      console.log('Loaded ATSN conversations:', atsnConversations)
-
-      // Convert to message format and load in chatbot
-      const conversationMessages = dateConversations
-        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-        .map(conv => {
-          // Handle metadata - it might be None, dict, or string
-          let metadata = conv.metadata
-          if (typeof metadata === 'string') {
-            try {
-              metadata = JSON.parse(metadata)
-            } catch {
-              metadata = {}
-            }
-          }
-          if (!metadata) metadata = {}
-          
-          return {
-            id: `conv-${conv.id}`,
-            type: conv.message_type === 'user' ? 'user' : 'bot',
-            content: conv.content,
-            timestamp: conv.created_at,
-            isNew: false,
-            scheduledMessageId: metadata?.scheduled_message_id || null
-          }
-        })
-
-      // Remove duplicates based on scheduled_message_id
-      const seenScheduledIds = new Set()
-      const uniqueMessages = []
-      for (const msg of conversationMessages) {
-        if (msg.scheduledMessageId) {
-          if (seenScheduledIds.has(msg.scheduledMessageId)) {
-            continue
-          }
-          seenScheduledIds.add(msg.scheduledMessageId)
-        }
-        uniqueMessages.push(msg)
-      }
-
-      // Check if these are ATSN conversations and load them into ATSNChatbot
-      const hasAtsnConversations = dateConversations.some(conv => {
-        let metadata = conv.metadata
-        if (typeof metadata === 'string') {
-          try {
-            metadata = JSON.parse(metadata)
-          } catch {
-            metadata = {}
-          }
-        }
-        return metadata?.agent === 'atsn'
-      }) || atsnConversations.length > 0
-
-      if (hasAtsnConversations) {
-        // Load ATSN conversations into the chatbot
-        let atsnMessages = []
-
-        // Process new format ATSN conversations (from ATSN conversations table)
-        if (atsnConversations.length > 0) {
-          // Use the first conversation for this date (they should be ordered by creation time)
-          const conversation = atsnConversations[0]
-          atsnMessages = conversation.messages.map(msg => ({
-            id: msg.id,
-            conversationId: conversation.id,
-            sender: msg.sender,
-            text: msg.text,
-            timestamp: msg.timestamp,
-            intent: msg.intent,
-            agent_name: msg.agent_name,
-            current_step: msg.current_step,
-            clarification_question: msg.clarification_question,
-            clarification_options: msg.clarification_options,
-            content_items: msg.content_items,
-            lead_items: msg.lead_items
-          }))
-        }
-
-        // Always create a new array reference to ensure useEffect triggers
-        console.log('Setting ATSN conversation to load:', atsnMessages)
-        setAtsnConversationToLoad([...atsnMessages])
-        // Clear after a short delay to allow ATSNChatbot to load them
-        setTimeout(() => {
-          console.log('Clearing ATSN conversation to load')
-          setAtsnConversationToLoad(null)
-        }, 100)
-      } else {
-        // Regular chatbot conversations are loaded internally
-        // ATSNChatbot loads conversations internally via hooks
-      }
-    } catch (error) {
-      console.error('Error loading conversations for date:', error)
-    }
-  }
+// Conversation loading functions removed - chatbot starts fresh
 
   if (!user) {
     return (
@@ -712,7 +430,7 @@ function EmilyDashboard() {
                     }`}
                     title="Leo Messages"
                   >
-                    <img src="/leo_logo.jpg" alt="Leo" className="w-9 h-9 rounded-full object-cover" />
+                    <img src="/leo_logo.png" alt="Leo" className="w-9 h-9 rounded-full object-cover" />
                   </button>
                 </div>
 
@@ -724,48 +442,6 @@ function EmilyDashboard() {
                   {profile?.business_name || user?.user_metadata?.name || 'you'}
                 </div>
                 <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>|</span>
-                {/* Date Filter Dropdown */}
-                <div className="relative date-filter-dropdown-container">
-                  <button
-                    onClick={() => setShowDateFilterDropdown(!showDateFilterDropdown)}
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-sm transition-all hover:bg-opacity-80 ${
-                      isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                    title="Filter conversations by date"
-                  >
-                    <span>{getSelectedDateFilterLabel()}</span>
-                    <ChevronDown className={`w-3 h-3 transition-transform ${
-                      showDateFilterDropdown ? 'rotate-180' : ''
-                    }`} />
-                  </button>
-
-                  {showDateFilterDropdown && (
-                    <div className={`absolute top-full mt-1 w-48 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto ${
-                      isDarkMode
-                        ? 'bg-gray-800 border border-gray-700 shadow-gray-900/50'
-                        : 'bg-white border border-gray-200'
-                    }`}>
-                      {dateFilterOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setDateFilter(option.value)
-                            setShowDateFilterDropdown(false)
-                          }}
-                          className={`w-full text-left px-4 py-2 text-sm first:rounded-t-lg last:rounded-b-lg ${
-                            dateFilter === option.value
-                              ? 'bg-green-100 text-green-700 font-medium'
-                              : isDarkMode
-                              ? 'text-gray-200 hover:bg-gray-700'
-                              : 'text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
               </div>
               
               <div className="flex items-center gap-2">
@@ -803,8 +479,7 @@ function EmilyDashboard() {
               <div className="flex-1 h-full">
                 <div className="h-full relative pt-0.5 px-8 overflow-x-auto">
                   <ATSNChatbot
-                    key={`atsn-chatbot-${dateFilter}`}
-                    externalConversations={atsnConversationToLoad}
+                    key="atsn-chatbot-fresh"
                   />
                 </div>
               </div>
@@ -833,92 +508,6 @@ function EmilyDashboard() {
                         Reminders
                       </span>
                     </div>
-
-
-                    {/* Panel Content */}
-                    <div className="flex-1 overflow-y-auto p-4">
-                      {loadingConversations ? (
-                        <div className="flex items-center justify-center py-8">
-                          <div className={`text-sm ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                          }`}>Loading conversations...</div>
-                        </div>
-                      ) : conversations.length === 0 ? (
-                        <div className="flex items-center justify-center py-8">
-                          <div className={`text-sm ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                          }`}>No conversations yet</div>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {groupConversationsByDate(conversations).map(({ date, dateObj, lastConversation }) => {
-                            if (!lastConversation) return null
-                            
-                            const isUser = lastConversation.message_type === 'user'
-                            const preview = lastConversation.content?.substring(0, 50) + (lastConversation.content?.length > 50 ? '...' : '')
-                            const messageDate = new Date(lastConversation.created_at)
-                            const formattedDate = messageDate.toLocaleDateString('en-US', { 
-                              month: 'short', 
-                              day: 'numeric',
-                              year: messageDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-                            })
-                            
-                            // Check if this date is selected
-                            const isSelected = selectedDate && 
-                              selectedDate.toDateString() === new Date(dateObj).toDateString()
-                            
-                            return (
-                              <div key={date}>
-                                <div
-                                  onClick={() => {
-                                    setSelectedDate(new Date(dateObj))
-                                    loadConversationsForDate(dateObj)
-                                  }}
-                                  className={`p-2 rounded-lg cursor-pointer transition-colors ${
-                                    isSelected 
-                                      ? isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-                                      : isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm ${
-                                      isUser ? 'bg-pink-400' : 'bg-gradient-to-br from-pink-400 to-purple-500'
-                                    }`}>
-                                      {isUser ? (
-                                        profile?.logo_url ? (
-                                          <img src={profile.logo_url} alt="User" className="w-10 h-10 rounded-full object-cover" />
-                                        ) : (
-                                          <span className="text-white">U</span>
-                                        )
-                                      ) : (
-                                        <span className="text-white font-bold">E</span>
-                                      )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center justify-between mb-1">
-                                        <span className={`text-xs font-medium ${
-                                          isUser
-                                            ? 'text-pink-400'
-                                            : isDarkMode ? 'text-purple-300' : 'text-purple-700'
-                                        }`}>
-                                          {isUser ? 'You' : 'Emily'}
-                                        </span>
-                                        <span className={`text-xs ${
-                                          isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                                        }`}>{formattedDate}</span>
-                                      </div>
-                                      <p className={`text-xs line-clamp-2 ${
-                                        isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                                      }`}>{preview}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
                   </div>
                 )}
           </div>
@@ -926,91 +515,6 @@ function EmilyDashboard() {
       </div>
       </div>
 
-      {/* Custom Content Chatbot Modal */}
-      <CustomContentChatbot
-        isOpen={showCustomContentChatbot}
-        onClose={() => setShowCustomContentChatbot(false)}
-        onContentCreated={async (content) => {
-          console.log('onContentCreated called with content:', content)
-          setShowCustomContentChatbot(false)
-          
-          // Create chatbot message with post card
-          if (content && user?.id) {
-            try {
-              console.log('Creating chatbot message for post:', content)
-              
-              // Format scheduled date and time
-              const scheduledDate = content.scheduled_date || content.scheduled_at?.split('T')[0]
-              const scheduledTime = content.scheduled_time || content.scheduled_at?.split('T')[1]?.split('.')[0] || '12:00:00'
-              
-              let formattedDate = 'Not scheduled'
-              let formattedTime = ''
-              
-              if (scheduledDate) {
-                try {
-                  const dateObj = new Date(`${scheduledDate}T${scheduledTime}`)
-                  if (!isNaN(dateObj.getTime())) {
-                    formattedDate = dateObj.toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })
-                    formattedTime = dateObj.toLocaleTimeString('en-US', {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true
-                    })
-                  }
-                } catch (dateError) {
-                  console.error('Error formatting date:', dateError)
-                }
-              }
-              
-              const businessName = profile?.business_name || user?.user_metadata?.name || 'your business'
-              
-              // Create message content
-              const messageContent = `Generated this post for ${businessName}`
-              
-              // Create chatbot message with post data in metadata
-              const chatbotMessageData = {
-                user_id: user.id,
-                message_type: 'bot',
-                content: messageContent,
-                intent: 'post_generated',
-                metadata: {
-                  sender: 'leo',
-                  post_data: content,
-                  scheduled_date: formattedDate,
-                  scheduled_time: formattedTime,
-                  notification_type: 'post_generated'
-                }
-              }
-              
-              console.log('Inserting chatbot message:', chatbotMessageData)
-              
-              // Insert into Supabase
-              const { data, error } = await supabase
-                .from('chatbot_conversations')
-                .insert(chatbotMessageData)
-                .select()
-                .single()
-              
-              if (error) {
-                console.error('Error creating chatbot message:', error)
-                showError('Failed to create chatbot notification')
-              } else {
-                console.log('Chatbot message created successfully:', data)
-                // The realtime subscription should pick this up automatically
-              }
-            } catch (error) {
-              console.error('Error handling post creation:', error)
-              showError('Failed to create chatbot notification')
-            }
-          } else {
-            console.warn('onContentCreated called but content or user is missing:', { content, userId: user?.id })
-          }
-        }}
-      />
       
 
       {/* Mobile Chat History Panel - Full Screen */}
@@ -1062,7 +566,7 @@ function EmilyDashboard() {
                         <div
                           onClick={() => {
                             setSelectedDate(new Date(dateObj))
-                            loadConversationsForDate(dateObj)
+                            // Date selection only - no conversation loading
                             setShowMobileChatHistory(false)
                           }}
                           className={`p-3 rounded-lg cursor-pointer transition-colors ${

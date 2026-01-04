@@ -15,7 +15,6 @@ import json
 from supabase import create_client, Client
 from auth import get_admin_user, User
 from services.pricing_service import PricingService
-from services.embedding_worker import EmbeddingWorker
 import logging
 
 logger = logging.getLogger(__name__)
@@ -392,22 +391,6 @@ async def export_token_usage(
         raise HTTPException(status_code=500, detail=f"Error exporting token usage: {str(e)}")
 
 
-@router.post("/faq-embeddings/run")
-async def run_faq_embeddings(
-    current_user: User = Depends(get_admin_user),
-):
-    """Run FAQ embedding worker on demand."""
-    try:
-        worker = EmbeddingWorker(target="faqs", batch_size=50, poll_interval=0)
-        processed = worker.run_once()
-        if processed:
-            logger.info("Admin-triggered FAQ embedding run processed %s rows", processed)
-        else:
-            logger.info("Admin-triggered FAQ embedding run found no rows to process")
-        return {"processed": processed}
-    except Exception as e:
-        logger.error("Admin FAQ embedding run failed: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to run FAQ embedding worker")
 
 @router.get("/token-usage/users")
 async def get_users_with_usage(
