@@ -327,6 +327,7 @@ async def get_created_content(
                 "content_type": item.get("content_type", "post"),
                 "created_at": item.get("created_at"),
                 "status": item.get("status", "draft"),
+                "scheduled_at": item.get("scheduled_at"),  # Include scheduled_at field
                 "metadata": item.get("metadata", {}),
                 "archetype": item.get("archetype"),
                 "visual_metaphor": item.get("visual_metaphor"),
@@ -805,6 +806,7 @@ async def get_created_content_by_id(
             "content_type": content_item.get("content_type", "post"),
             "created_at": content_item.get("created_at"),
             "status": content_item.get("status", "draft"),
+            "scheduled_at": content_item.get("scheduled_at"),  # Include scheduled_at field
             "metadata": content_item.get("metadata", {}),
             "archetype": content_item.get("archetype"),
             "visual_metaphor": content_item.get("visual_metaphor"),

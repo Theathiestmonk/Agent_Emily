@@ -416,7 +416,13 @@ const ATSNContentModal = ({
       })
 
       if (!response.ok) {
-        const errorText = await response.text();
+        let errorText = '';
+        try {
+          const errorData = await response.json();
+          errorText = errorData.detail || errorData.message || JSON.stringify(errorData);
+        } catch (e) {
+          errorText = await response.text();
+        }
         console.error('API Error Response:', {
           status: response.status,
           statusText: response.statusText,
@@ -426,11 +432,20 @@ const ATSNContentModal = ({
         throw new Error(`Failed to save image: ${response.status} ${response.statusText} - ${errorText}`)
       }
 
-      const data = await response.json()
+      let data;
+      try {
+        data = await response.json()
+      } catch (e) {
+        console.error('Failed to parse response as JSON:', e)
+        throw new Error('Invalid response from server')
+      }
 
       if (data.success) {
+        // Check if this was a carousel image edit
+        const isCarouselImageEdit = carouselImages && carouselImages.length > 0 && carouselImages.includes(originalImageUrl)
+        
         // Update carousel images array if this was a carousel image edit
-        if (carouselImages && carouselImages.length > 0 && carouselImages.includes(originalImageUrl)) {
+        if (isCarouselImageEdit) {
           const updatedCarouselImages = carouselImages.map(img =>
             img === originalImageUrl ? editedImageUrl : img
           )
@@ -485,6 +500,13 @@ const ATSNContentModal = ({
           }
         }
 
+        // Refresh carousel images from database to ensure we have the latest data
+        // This is especially important for carousel posts to ensure all fields are updated
+        if (isCarouselImageEdit) {
+          console.log('Refreshing carousel images from database after edit...')
+          await fetchFreshCarouselImages()
+        }
+
         // Close edit modal first, then show success modal
         setShowImageEditModal(false)
 
@@ -503,7 +525,14 @@ const ATSNContentModal = ({
 
     } catch (error) {
       console.error('Error saving image:', error)
-      alert('Failed to save image. Please try again.')
+      const errorMessage = error.message || error.toString() || 'Failed to save image. Please try again.'
+      console.error('Full error details:', {
+        message: errorMessage,
+        originalImageUrl,
+        editedImageUrl,
+        postId: content?.id
+      })
+      alert(`Failed to save image: ${errorMessage}`)
     }
   }
 
@@ -872,28 +901,52 @@ const ATSNContentModal = ({
           }`}>
             <div className="flex items-center gap-3">
               {getPlatformIcon(content.platform)}
-              <span className={`font-semibold text-lg ${
-                isDarkMode ? 'text-gray-100' : 'text-gray-900'
-              }`}>
+              <span
+                className={`font-semibold text-lg ${
+                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                }`}
+              >
                 {(() => {
-                  const platform = content.platform || 'General';
-                  const status = content.status;
+                  const platform = content.platform || 'General'
+                  const status = content.status
+                  const scheduledAt = content.scheduled_at || content.scheduledAt
 
-                  let displayStatus = status ? status.charAt(0).toUpperCase() + status.slice(1) : 'No Status';
-
-                  // For scheduled content, show the scheduled date/time
-                  if (status === 'scheduled' && content.scheduled_at) {
+                  // For scheduled content, show two-line layout with smaller date/time
+                  if (status === 'scheduled' && scheduledAt) {
                     try {
-                      const scheduledDate = new Date(content.scheduled_at);
-                      const formattedDate = scheduledDate.toLocaleDateString();
-                      const formattedTime = scheduledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      displayStatus = `Scheduled: ${formattedDate} ${formattedTime}`;
+                      const scheduledDate = new Date(scheduledAt)
+                      const formattedDate = scheduledDate.toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })
+                      const formattedTime = scheduledDate.toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                      })
+
+                      return (
+                        <span className="flex flex-col leading-tight">
+                          <span>{platform} | Scheduled</span>
+                          <span className={`text-base font-normal mt-0.5 ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>
+                            at {formattedDate}, {formattedTime}
+                          </span>
+                        </span>
+                      )
                     } catch (error) {
-                      displayStatus = 'Scheduled';
+                      console.error('Error formatting scheduled date:', error, scheduledAt)
+                      return `${platform} | Scheduled`
                     }
                   }
 
-                  return `${platform} | ${displayStatus}`;
+                  const displayStatus = status
+                    ? status.charAt(0).toUpperCase() + status.slice(1)
+                    : 'No Status'
+
+                  return `${platform} | ${displayStatus}`
                 })()}
               </span>
             </div>

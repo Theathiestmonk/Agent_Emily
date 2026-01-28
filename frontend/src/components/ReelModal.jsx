@@ -241,10 +241,60 @@ const ReelModal = ({ content, onClose }) => {
               )}
             </div>
             <div>
-              <p className={`text-base ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-600'
-              }`}>
-                {displayContent.platform} • {displayContent.content_type}
+              <p
+                className={`text-base ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                }`}
+              >
+                {(() => {
+                  const platform = displayContent.platform || 'General'
+                  const contentType = displayContent.content_type || ''
+                  const status = displayContent.status
+
+                  // For scheduled content, show a two-line layout
+                  const scheduledAt = displayContent.scheduled_at || displayContent.scheduledAt
+                  if (status === 'scheduled' && scheduledAt) {
+                    try {
+                      const scheduledDate = new Date(scheduledAt)
+                      const formattedDate = scheduledDate.toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })
+                      const formattedTime = scheduledDate.toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                      })
+
+                      return (
+                        <span className="flex flex-col leading-tight">
+                          <span>
+                            {platform}
+                            {contentType && ` • ${contentType}`}
+                            {' • Scheduled'}
+                          </span>
+                          <span className={`text-base font-normal mt-0.5 ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>
+                            at {formattedDate}, {formattedTime}
+                          </span>
+                        </span>
+                      )
+                    } catch (error) {
+                      console.error('Error formatting scheduled date:', error, scheduledAt)
+                      return `${platform}${contentType ? ` • ${contentType}` : ''} • Scheduled`
+                    }
+                  }
+
+                  const parts = [platform]
+                  if (contentType) parts.push(contentType)
+                  if (status) {
+                    parts.push(status.charAt(0).toUpperCase() + status.slice(1))
+                  }
+
+                  return parts.join(' • ')
+                })()}
               </p>
             </div>
           </div>

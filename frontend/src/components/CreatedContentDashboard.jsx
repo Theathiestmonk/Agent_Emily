@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Play } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { contentAPI } from '../services/content'
@@ -58,10 +57,76 @@ import {
   Trash2,
   Clock,
   Send,
-  Layers
+  Layers,
+  Video,
+  Image as ImageIcon,
+  Play,
+  Square
 } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
+
+// Helper function to check if media is a video
+const checkIfVideoMedia = (contentItem) => {
+  if (!contentItem) return false
+  
+  const contentType = contentItem.content_type?.toLowerCase() || ''
+  const mediaUrl = contentItem.media_url
+  
+  if (!mediaUrl) return false
+  
+  const urlWithoutQuery = mediaUrl.split('?')[0].toLowerCase()
+  const videoExtensions = ['.mp4', '.mov', '.avi', '.webm', '.m4v']
+  
+  return videoExtensions.some(ext => urlWithoutQuery.endsWith(ext)) ||
+         mediaUrl.toLowerCase().includes('video') ||
+         contentType.includes('video') ||
+         contentType.includes('reel') ||
+         contentType.includes('short_video')
+}
+
+// Content type icons
+const getContentTypeIcon = (contentType, contentItem = null) => {
+  const type = contentType?.toLowerCase() || ''
+  
+  // Check if it's a video based on content type
+  const isVideoType = type.includes('reel') || 
+                     type.includes('short_video') || 
+                     type.includes('short video') ||
+                     type.includes('long_video') || 
+                     type.includes('long video') ||
+                     type === 'video' ||
+                     type === 'short_video or reel'
+  
+  // Also check if media is a video file
+  const isVideoMedia = contentItem ? checkIfVideoMedia(contentItem) : false
+  
+  // If it's a video type or has video media, show play icon
+  if (isVideoType || isVideoMedia) {
+    return <Play className="w-4 h-4 text-white" />
+  }
+  
+  switch (type) {
+    case 'story':
+      return <FileText className="w-4 h-4 text-white" />
+    case 'post':
+    case 'static_post':
+      return <Square className="w-4 h-4 text-white" />
+    case 'image':
+      return <ImageIcon className="w-4 h-4 text-white" />
+    case 'carousel':
+      return <Layers className="w-4 h-4 text-white" />
+    case 'email':
+      return <FileText className="w-4 h-4 text-white" />
+    case 'message':
+      return <MessageCircle className="w-4 h-4 text-white" />
+    case 'blog':
+      return <FileText className="w-4 h-4 text-white" />
+    default:
+      return <FileText className="w-4 h-4 text-white" />
+  }
+}
+
 
 // Platform icons with real logos
 const getPlatformIcon = (platformName) => {
@@ -1592,6 +1657,11 @@ function CreatedContentDashboard() {
                       }`}>
                         {contentItem.status ? contentItem.status.charAt(0).toUpperCase() + contentItem.status.slice(1) : 'Draft'}
                       </span>
+                    </div>
+
+                    {/* Content type indicator */}
+                    <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 rounded-full p-1.5">
+                      {getContentTypeIcon(contentItem.content_type || contentItem.post_type || contentItem.selected_content_type, contentItem)}
                     </div>
                   </div>
                 );
