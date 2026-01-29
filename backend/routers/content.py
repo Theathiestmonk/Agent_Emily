@@ -334,7 +334,7 @@ async def get_created_content(
                 "hook_type": item.get("hook_type"),
                 "call_to_action": item.get("call_to_action"),
                 "engagement_question": item.get("engagement_question"),
-                "media_url": item.get("images", [])[0] if item.get("images") and len(item.get("images", [])) > 0 else None,
+                "media_url": item.get("media_url") or (item.get("images", [])[0] if item.get("images") and len(item.get("images", [])) > 0 else None),
                 # Mock campaign data for compatibility
                 "content_campaigns": {
                     "platform": normalized_platform,
@@ -813,7 +813,7 @@ async def get_created_content_by_id(
             "hook_type": content_item.get("hook_type"),
             "call_to_action": content_item.get("call_to_action"),
             "engagement_question": content_item.get("engagement_question"),
-            "media_url": content_item.get("images", [])[0] if content_item.get("images") and len(content_item.get("images", [])) > 0 else None,
+            "media_url": content_item.get("media_url") or (content_item.get("images", [])[0] if content_item.get("images") and len(content_item.get("images", [])) > 0 else None),
             # Mock campaign data for compatibility
             "content_campaigns": {
                 "platform": content_item.get("platform", "General"),

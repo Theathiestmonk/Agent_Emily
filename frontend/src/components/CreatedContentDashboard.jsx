@@ -60,7 +60,6 @@ import {
   Layers,
   Video,
   Image as ImageIcon,
-  Play,
   Square
 } from 'lucide-react'
 
@@ -69,20 +68,96 @@ import { supabase } from '../lib/supabase'
 // Helper function to check if media is a video
 const checkIfVideoMedia = (contentItem) => {
   if (!contentItem) return false
-  
+
   const contentType = contentItem.content_type?.toLowerCase() || ''
   const mediaUrl = contentItem.media_url
-  
+
   if (!mediaUrl) return false
-  
+
   const urlWithoutQuery = mediaUrl.split('?')[0].toLowerCase()
   const videoExtensions = ['.mp4', '.mov', '.avi', '.webm', '.m4v']
-  
+
   return videoExtensions.some(ext => urlWithoutQuery.endsWith(ext)) ||
          mediaUrl.toLowerCase().includes('video') ||
          contentType.includes('video') ||
          contentType.includes('reel') ||
          contentType.includes('short_video')
+}
+
+
+// VideoThumbnail component to generate and display video thumbnails
+const VideoThumbnail = ({ src, alt, className, isDarkMode }) => {
+  const videoRef = useRef(null)
+  const [isLoaded, setIsLoaded] = useState(false)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    if (videoRef.current && src) {
+      videoRef.current.load()
+    }
+  }, [src])
+
+  if (!src || error) {
+    return (
+      <div className={`${className} flex flex-col items-center justify-center p-4 border transition-colors duration-200
+        ${isDarkMode 
+          ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700/50' 
+          : 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200'
+        }`}>
+        <div className="relative mb-3">
+          <Video className={`w-12 h-12 transition-colors duration-200 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+          <div className="absolute -top-1 -right-1">
+            <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow-sm">
+              <span className="text-[10px] text-white font-bold">!</span>
+            </div>
+          </div>
+        </div>
+        <div className="text-center">
+          <p className={`text-xs font-semibold mb-1 transition-colors duration-200 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            No Video Available
+          </p>
+          <p className={`text-[10px] line-clamp-2 px-2 italic transition-colors duration-200 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+            {alt || 'This post has no video file attached'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`${className} bg-black relative overflow-hidden`}>
+      <video
+        ref={videoRef}
+        src={src}
+        className={`w-full h-full object-cover transition-opacity duration-300 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+        muted
+        playsInline
+        preload="metadata"
+        crossOrigin="anonymous"
+        onLoadedData={(e) => {
+          e.target.currentTime = 0.1
+          setIsLoaded(true)
+        }}
+        onError={() => setError(true)}
+      />
+      {!isLoaded && (
+        <div className={`absolute inset-0 flex flex-col items-center justify-center backdrop-blur-sm transition-colors duration-200
+          ${isDarkMode ? 'bg-gray-800/50' : 'bg-gray-100/50'}`}>
+          <div className="relative">
+            <div className={`w-10 h-10 border-3 rounded-full animate-spin transition-colors duration-200
+              ${isDarkMode ? 'border-purple-500/20 border-t-purple-500' : 'border-purple-200 border-t-purple-600'}`}>
+            </div>
+            <Video className={`w-4 h-4 absolute inset-0 m-auto transition-colors duration-200 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+          </div>
+          <span className={`mt-2 text-[10px] font-medium animate-pulse transition-colors duration-200 ${isDarkMode ? 'text-purple-300' : 'text-purple-700'}`}>
+            Loading preview...
+          </span>
+        </div>
+      )}
+      {/* Subtle overlay */}
+      <div className="absolute inset-0 bg-black/5 pointer-events-none" />
+    </div>
+  )
 }
 
 // Content type icons
@@ -101,9 +176,9 @@ const getContentTypeIcon = (contentType, contentItem = null) => {
   // Also check if media is a video file
   const isVideoMedia = contentItem ? checkIfVideoMedia(contentItem) : false
   
-  // If it's a video type or has video media, show play icon
+  // If it's a video type or has video media, show video icon
   if (isVideoType || isVideoMedia) {
-    return <Play className="w-4 h-4 text-white" />
+    return <Video className="w-4 h-4 text-white" />
   }
   
   switch (type) {
@@ -179,6 +254,7 @@ const getPlatformIcon = (platformName) => {
       return <MessageCircle className="w-4 h-4 text-white" />
   }
 }
+
 
 function CreatedContentDashboard() {
   const { user } = useAuth()
@@ -381,46 +457,49 @@ function CreatedContentDashboard() {
                       (contentItem.carousel_images && Array.isArray(contentItem.carousel_images) && contentItem.carousel_images.length > 0) ||
                       (contentItem.metadata && contentItem.metadata.total_images && contentItem.metadata.total_images > 1)
 
-    // For carousel, prioritize carousel images
-    if (isCarousel) {
-      if (contentItem.metadata?.carousel_images && Array.isArray(contentItem.metadata.carousel_images) && contentItem.metadata.carousel_images.length > 0) {
-        mediaUrl = typeof contentItem.metadata.carousel_images[0] === 'string' 
-          ? contentItem.metadata.carousel_images[0] 
-          : (contentItem.metadata.carousel_images[0].url || contentItem.metadata.carousel_images[0])
-      } else if (contentItem.carousel_images && Array.isArray(contentItem.carousel_images) && contentItem.carousel_images.length > 0) {
-        mediaUrl = typeof contentItem.carousel_images[0] === 'string' 
-          ? contentItem.carousel_images[0] 
-          : (contentItem.carousel_images[0].url || contentItem.carousel_images[0])
-      } else if (contentItem.metadata?.images && Array.isArray(contentItem.metadata.images) && contentItem.metadata.images.length > 0) {
-        mediaUrl = typeof contentItem.metadata.images[0] === 'string' 
-          ? contentItem.metadata.images[0] 
-          : (contentItem.metadata.images[0].url || contentItem.metadata.images[0])
-      } else if (contentItem.images && Array.isArray(contentItem.images) && contentItem.images.length > 0) {
-        mediaUrl = typeof contentItem.images[0] === 'object' && contentItem.images[0].image_url 
-          ? contentItem.images[0].image_url 
-          : (typeof contentItem.images[0] === 'string' ? contentItem.images[0] : contentItem.images[0])
+    // Try to find the best media URL
+    if (contentItem.media_url) {
+      mediaUrl = contentItem.media_url
+    } else if (contentItem.video_url) {
+      mediaUrl = contentItem.video_url
+    } else if (contentItem.images && Array.isArray(contentItem.images) && contentItem.images.length > 0) {
+      mediaUrl = typeof contentItem.images[0] === 'object' ? contentItem.images[0].url || contentItem.images[0].image_url : contentItem.images[0]
+    } else if (contentItem.image_url) {
+      mediaUrl = contentItem.image_url
+    } else if (contentItem.primary_image_url) {
+      mediaUrl = contentItem.primary_image_url
+    } else if (contentItem.metadata) {
+      mediaUrl = contentItem.metadata.media_url || 
+                 contentItem.metadata.video_url || 
+                 contentItem.metadata.image_url || 
+                 (Array.isArray(contentItem.metadata.carousel_images) && contentItem.metadata.carousel_images[0]) ||
+                 (Array.isArray(contentItem.metadata.images) && contentItem.metadata.images[0])
+      
+      // Handle carousel images in metadata specifically
+      if (!mediaUrl && isCarousel) {
+        if (contentItem.metadata.carousel_images && contentItem.metadata.carousel_images.length > 0) {
+          const first = contentItem.metadata.carousel_images[0]
+          mediaUrl = typeof first === 'string' ? first : (first.url || first.image_url)
+        }
       }
     }
 
-    // For non-carousel content, check media_url first
-    if (!mediaUrl && contentItem.media_url) {
-      mediaUrl = contentItem.media_url
-      const urlWithoutQuery = contentItem.media_url.split('?')[0].toLowerCase()
+    // Determine if it's a video based on URL and content type
+    if (mediaUrl) {
+      const urlWithoutQuery = String(mediaUrl).split('?')[0].toLowerCase()
       const videoExtensions = ['.mp4', '.mov', '.avi', '.webm', '.m4v']
 
       isVideo = videoExtensions.some(ext => urlWithoutQuery.endsWith(ext)) ||
-                contentItem.media_url.toLowerCase().includes('video') ||
+                String(mediaUrl).toLowerCase().includes('video') ||
                 contentType.includes('video') ||
                 contentType.includes('reel') ||
                 contentType.includes('short_video')
-    } else if (!mediaUrl && contentItem.images && Array.isArray(contentItem.images) && contentItem.images.length > 0) {
-      mediaUrl = typeof contentItem.images[0] === 'object' && contentItem.images[0].image_url 
-        ? contentItem.images[0].image_url 
-        : (typeof contentItem.images[0] === 'string' ? contentItem.images[0] : contentItem.images[0])
-    } else if (!mediaUrl && contentItem.image_url) {
-      mediaUrl = contentItem.image_url
-    } else if (!mediaUrl && contentItem.metadata && contentItem.metadata.image_url) {
-      mediaUrl = contentItem.metadata.image_url
+    } else {
+      // If no media URL yet, but content type is video/reel, we'll mark as video
+      // and let VideoThumbnail handle the empty src (showing "Preview unavailable")
+      isVideo = contentType.includes('video') ||
+                contentType.includes('reel') ||
+                contentType.includes('short_video')
     }
 
     return { mediaUrl, isVideo }
@@ -809,38 +888,9 @@ function CreatedContentDashboard() {
   }
 
   const getBestImageUrl = (content) => {
-    console.log('🔍 getBestImageUrl - Content object:', {
-      hasImages: !!content.images,
-      imagesType: typeof content.images,
-      imagesIsArray: Array.isArray(content.images),
-      imagesLength: content.images?.length || 0,
-      imagesValue: content.images,
-      firstImage: content.images?.[0],
-      media_url: content.media_url,
-      primary_image_url: content.primary_image_url,
-      rawDataImages: content.raw_data?.images,
-      content_id: content.id,
-      platform: content.platform
-    })
-
-    if (content.images && Array.isArray(content.images) && content.images.length > 0) {
-      console.log('✅ Using content.images[0]:', content.images[0])
-      return content.images[0]
-    }
-    if (content.media_url) {
-      console.log('✅ Using content.media_url:', content.media_url)
-      return content.media_url
-    }
-    if (content.primary_image_url) {
-      console.log('✅ Using content.primary_image_url:', content.primary_image_url)
-      return content.primary_image_url
-    }
-    if (content.raw_data?.images && Array.isArray(content.raw_data.images) && content.raw_data.images.length > 0) {
-      console.log('✅ Using content.raw_data.images[0]:', content.raw_data.images[0])
-      return content.raw_data.images[0]
-    }
-    console.log('❌ No image URL found in any location')
-    return ''
+    // Reuse the robust getMediaInfo logic but return only the URL
+    const { mediaUrl } = getMediaInfo(content)
+    return mediaUrl || ''
   }
 
   if (!user) {
@@ -1490,6 +1540,15 @@ function CreatedContentDashboard() {
                 const hasMedia = mediaUrl && mediaUrl.trim()
                 const thumbnailUrl = getThumbnailUrl(mediaUrl)
 
+                // Check if this is reel or video content that should show video
+                const isReelOrVideoContent = contentItem.content_type?.toLowerCase() === 'reel' ||
+                                           contentItem.content_type?.toLowerCase() === 'short_video' ||
+                                           contentItem.content_type?.toLowerCase() === 'short video' ||
+                                           contentItem.content_type?.toLowerCase() === 'short_video or reel' ||
+                                           contentItem.content_type?.toLowerCase() === 'video' ||
+                                           contentItem.content_type?.toLowerCase() === 'long_video' ||
+                                           contentItem.content_type?.toLowerCase() === 'long video'
+
                 // Show all posts, even without media (text-only posts are valid)
                 return (
                   <div
@@ -1497,18 +1556,14 @@ function CreatedContentDashboard() {
                     className="relative aspect-square group cursor-pointer overflow-hidden bg-gray-200"
                     onClick={() => handlePreview(contentItem)}
                   >
-                    {hasMedia ? (
+                    {hasMedia || isReelOrVideoContent ? (
                       <>
-                        {isVideo ? (
-                          <video
-                            src={mediaUrl}
+                        {isVideo || isReelOrVideoContent ? (
+                          <VideoThumbnail
+                            src={mediaUrl || contentItem.media_url}
+                            alt={contentItem.title || 'Video content'}
                             className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-                            muted
-                            poster={mediaUrl} // Use video as poster to show first frame
-                            preload="none" // Don't preload to save bandwidth
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                            }}
+                            isDarkMode={isDarkMode}
                           />
                         ) : (
                           <img
@@ -1572,28 +1627,20 @@ function CreatedContentDashboard() {
                       </div>
                     )}
 
-                    {/* Video Play Button Overlay */}
-                    {isVideo && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
-                        <div className="bg-white/90 rounded-full p-3 shadow-lg group-hover:scale-110 transition-transform">
-                          <Play className="w-6 h-6 text-purple-600 fill-purple-600" />
-                        </div>
-                      </div>
-                    )}
 
                     {/* Action Buttons Overlay */}
                     <div className={`absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex flex-col items-center justify-center ${
                       isDarkMode ? 'group-hover:bg-opacity-60' : ''
-                    }`}>
+                    }`} style={{ pointerEvents: 'none' }}>
                       {/* Title Display */}
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white text-center p-2 mb-2">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white text-center p-2 mb-2" style={{ pointerEvents: 'none' }}>
                         <div className="text-sm font-medium truncate max-w-full">
                           {contentItem.title || `Content for ${contentItem.platform}`}
                         </div>
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-2">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-2" style={{ pointerEvents: 'auto' }}>
                         {contentItem.status !== 'published' && (
                           <>
                             <button
