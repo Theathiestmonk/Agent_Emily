@@ -306,6 +306,18 @@ class SocialMediaService {
 
   // OAuth connection methods (for future implementation)
   async connectWithOAuth(platform) {
+    // Open popup immediately to avoid popup blocker
+    const popup = window.open(
+      'about:blank',
+      'oauth-connection',
+      'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+    )
+
+    if (!popup) {
+      alert(`Popup blocked! Please allow popups for this site to connect your ${platform} account.`)
+      throw new Error('Popup blocked')
+    }
+
     try {
       const headers = await this.getAuthHeaders()
       
@@ -320,16 +332,13 @@ class SocialMediaService {
       console.log(`${platform} OAuth response:`, result)
 
       if (!response.ok) {
+        popup.close()
         throw new Error(result.detail || `Failed to initiate ${platform} OAuth`)
       }
 
-      // Open OAuth URL in new window
+      // Update OAuth URL in existing window
       if (result.auth_url) {
-        const popup = window.open(
-          result.auth_url,
-          'oauth-connection',
-          'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
-        )
+        popup.location.href = result.auth_url
         
         // Listen for popup messages (for OAuth completion)
         const messageHandler = (event) => {
@@ -400,11 +409,13 @@ class SocialMediaService {
           }
         }, 1000)
       } else {
+        popup.close()
         throw new Error('No OAuth URL received from server')
       }
 
       return result
     } catch (error) {
+      if (popup) popup.close()
       console.error(`Error initiating ${platform} OAuth:`, error)
       throw error
     }

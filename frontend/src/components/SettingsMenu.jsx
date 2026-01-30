@@ -420,13 +420,29 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
   }
 
   const handleGoogleConnect = async () => {
+    // Open popup immediately to avoid popup blocker
+    const popup = window.open(
+      'about:blank',
+      'google-oauth',
+      'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+    )
+
+    if (!popup) {
+      alert('Popup blocked! Please allow popups for this site to connect your Google account.')
+      return
+    }
+
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
       const baseUrl = API_BASE_URL.replace(/\/+$/, '')
       
-      const authToken = localStorage.getItem('authToken') || 
+      // Get auth token from Supabase session for better reliability
+      const { data: { session } } = await supabase.auth.getSession()
+      const authToken = session?.access_token || 
+                        localStorage.getItem('authToken') || 
                         localStorage.getItem('token') || 
                         localStorage.getItem('access_token')
+
       const headers = {
         'Content-Type': 'application/json',
         ...(authToken && { 'Authorization': `Bearer ${authToken}` })
@@ -438,12 +454,9 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
       })
       const reconnectData = await response.json()
       
-      if (reconnectData.success) {
-        const popup = window.open(
-          reconnectData.auth_url,
-          'google-oauth',
-          'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
-        )
+      if (reconnectData.success && reconnectData.auth_url) {
+        // Update the popup location
+        popup.location.href = reconnectData.auth_url
         
         const messageHandler = (event) => {
           const allowedOrigins = [
@@ -480,22 +493,48 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
             startStatusPolling('google')
           }
         }, 1000)
+      } else {
+        popup.close()
+        console.error('Failed to get Google auth URL:', reconnectData.error)
+        alert(`Failed to start Google connection: ${reconnectData.error || 'Unknown error'}`)
+        setLoading(false)
+        setSelectedPlatform('')
       }
     } catch (error) {
+      popup.close()
       console.error('Failed to start Google connection:', error)
+      alert('Failed to start Google connection. Please try again.')
+      setLoading(false)
+      setSelectedPlatform('')
     }
   }
 
   const handleWhatsAppConnect = async () => {
+    // Open popup immediately to avoid popup blocker
+    const popup = window.open(
+      'about:blank',
+      'whatsapp-oauth',
+      'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+    )
+
+    if (!popup) {
+      alert('Popup blocked! Please allow popups for this site to connect your WhatsApp account.')
+      return
+    }
+
     try {
       console.log('Starting WhatsApp connection...')
 
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
       const baseUrl = API_BASE_URL.replace(/\/+$/, '')
 
-      const authToken = localStorage.getItem('authToken') ||
-                        localStorage.getItem('token') ||
+      // Get auth token from Supabase session for better reliability
+      const { data: { session } } = await supabase.auth.getSession()
+      const authToken = session?.access_token || 
+                        localStorage.getItem('authToken') || 
+                        localStorage.getItem('token') || 
                         localStorage.getItem('access_token')
+      
       console.log('Auth token found:', !!authToken)
 
       const headers = {
@@ -511,23 +550,22 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
       })
 
       console.log('Response status:', response.status)
-      console.log('Response ok:', response.ok)
 
       const initiateData = await response.json()
-        console.log('Response data:', initiateData)
+      console.log('Response data:', initiateData)
 
-        if (!response.ok) {
-          console.error('WhatsApp initiation failed:', initiateData)
-          alert(`WhatsApp connection failed: ${initiateData.detail || 'Unknown error'}\n\nPlease check your browser console for more details and ensure WHATSAPP_APP_ID and WHATSAPP_APP_SECRET are set in your environment variables.`)
-          return
-        }
+      if (!response.ok) {
+        popup.close()
+        console.error('WhatsApp initiation failed:', initiateData)
+        alert(`WhatsApp connection failed: ${initiateData.detail || 'Unknown error'}`)
+        setLoading(false)
+        setSelectedPlatform('')
+        return
+      }
 
-      if (initiateData.success) {
-        const popup = window.open(
-          initiateData.auth_url,
-          'whatsapp-oauth',
-          'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
-        )
+      if (initiateData.success && initiateData.auth_url) {
+        // Update the popup location
+        popup.location.href = initiateData.auth_url
 
         const messageHandler = (event) => {
           const allowedOrigins = [
@@ -564,9 +602,18 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
             startStatusPolling('whatsapp')
           }
         }, 1000)
+      } else {
+        popup.close()
+        alert('Failed to initiate WhatsApp connection. No auth URL received.')
+        setLoading(false)
+        setSelectedPlatform('')
       }
     } catch (error) {
+      popup.close()
       console.error('Failed to start WhatsApp connection:', error)
+      alert('Failed to start WhatsApp connection. Please try again.')
+      setLoading(false)
+      setSelectedPlatform('')
     }
   }
 

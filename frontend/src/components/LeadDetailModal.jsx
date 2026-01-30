@@ -32,6 +32,8 @@ import {
 import { leadsAPI } from '../services/leads'
 import { useNotifications } from '../contexts/NotificationContext'
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+
 const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
   const { showSuccess, showError } = useNotifications()
   const [activeTab, setActiveTab] = useState('timeline')
@@ -68,6 +70,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
   const [newRemark, setNewRemark] = useState('')
   const [addingRemark, setAddingRemark] = useState(false)
   const [showAddRemarkSection, setShowAddRemarkSection] = useState(false)
+  const [syncingGmail, setSyncingGmail] = useState(false)
 
   const fetchConversations = useCallback(async () => {
     if (conversationsLoaded) return // Don't fetch if already loaded
@@ -291,6 +294,49 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
       showError('Error', 'Failed to send message')
     } finally {
       setSendingMessage(false)
+    }
+  }
+
+  const handleGmailSync = async () => {
+    try {
+      setSyncingGmail(true)
+      showSuccess('Syncing Gmail', 'Fetching recent emails from your Gmail inbox...')
+
+      const response = await fetch(`${API_BASE_URL}/connections/google/gmail/sync-inbox`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          days_back: 7, // Sync last 7 days
+          max_emails: 50 // Max 50 emails per sync
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to sync Gmail')
+      }
+
+      const result = await response.json()
+
+      if (result.success) {
+        showSuccess('Gmail Sync Complete',
+          `Processed ${result.stats.emails_processed} emails, stored ${result.stats.emails_stored} conversations`
+        )
+        // Refresh conversations to show new emails
+        setConversationsLoaded(false)
+        fetchConversations()
+      } else {
+        throw new Error('Sync failed')
+      }
+
+    } catch (error) {
+      console.error('Error syncing Gmail:', error)
+      showError('Gmail Sync Failed', error.message || 'Failed to sync Gmail inbox')
+    } finally {
+      setSyncingGmail(false)
     }
   }
 
@@ -1027,28 +1073,51 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
             </button>
 
         {/* Tabs */}
-            <div className={`border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} flex space-x-1 px-6 bg-transparent`}>
-          {[
-            { id: 'timeline', label: 'Timeline', icon: Clock },
-            { id: 'conversations', label: 'Conversations', icon: MessageCircle },
-            { id: 'email', label: 'Email', icon: MailIcon }
-          ].map(tab => {
-            const Icon = tab.icon
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? `border-purple-600 ${isDarkMode ? 'text-white' : 'text-purple-700'}`
-                    : `border-transparent ${isDarkMode ? 'text-gray-400 hover:text-purple-400' : 'text-gray-600 hover:text-purple-600'}`
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span className="font-medium">{tab.label}</span>
-              </button>
-            )
-          })}
+            <div className={`border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} flex space-x-1 px-6 bg-transparent justify-between items-center`}>
+          <div className="flex space-x-1">
+            {[
+              { id: 'timeline', label: 'Timeline', icon: Clock },
+              { id: 'conversations', label: 'Conversations', icon: MessageCircle },
+              { id: 'email', label: 'Email', icon: MailIcon }
+            ].map(tab => {
+              const Icon = tab.icon
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
+                    activeTab === tab.id
+                      ? `border-purple-600 ${isDarkMode ? 'text-white' : 'text-purple-700'}`
+                      : `border-transparent ${isDarkMode ? 'text-gray-400 hover:text-purple-400' : 'text-gray-600 hover:text-purple-600'}`
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="font-medium">{tab.label}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Gmail Sync Button */}
+          <button
+            onClick={handleGmailSync}
+            disabled={syncingGmail}
+            className={`flex items-center space-x-2 px-4 py-2 ${
+              isDarkMode
+                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-600'
+                : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
+            } border rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+            title="Sync Gmail inbox for new email conversations"
+          >
+            {syncingGmail ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            <span className="text-sm font-medium">
+              {syncingGmail ? 'Syncing...' : 'Sync Gmail'}
+            </span>
+          </button>
         </div>
 
         {/* Content */}

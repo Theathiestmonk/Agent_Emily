@@ -45,8 +45,7 @@ from routers.calendar import router as calendar_router
 from routers.profile import router as profile_router
 from routers import document_parser
 from routers import smart_search
-# Scheduler removed - using pg_cron instead
-# from services.scheduler import start_analytics_scheduler, stop_analytics_scheduler, get_scheduler_status, trigger_analytics_collection_now
+from services.scheduler import start_analytics_scheduler, stop_analytics_scheduler, get_scheduler_status, trigger_analytics_collection_now
 from services.image_editor_service import image_editor_service
 from utils.daily_cache_manager import daily_cache
 
@@ -256,9 +255,45 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Failed to start monthly deleted content cleanup scheduler: {e}")
         logger.info("Continuing without monthly cleanup")
-    
-    # Analytics scheduler removed - using pg_cron instead
-    # Analytics collection now handled by pg_cron scheduled job
+
+    # Start analytics collection scheduler
+    try:
+        start_analytics_scheduler()
+        logger.info("Analytics collection scheduler started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start analytics scheduler: {e}")
+        logger.info("Continuing without analytics scheduler")
+
+    # Start Gmail sync scheduler (runs every 15 minutes in background thread - non-blocking)
+    try:
+        from jobs.gmail_sync_job import GmailSyncJob
+        import threading
+
+        def run_gmail_sync_background():
+            """Run Gmail sync in background thread to avoid blocking other requests"""
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                job = GmailSyncJob()
+                loop.run_until_complete(job.sync_all_users_gmail())
+            except Exception as e:
+                logger.error(f"Error in background Gmail sync: {e}")
+            finally:
+                loop.close()
+
+        # Schedule to run every 15 minutes in background thread
+        scheduler.add_job(
+            func=lambda: threading.Thread(target=run_gmail_sync_background).start(),
+            trigger='interval',
+            minutes=15,  # Run every 15 minutes
+            id='gmail_sync_job',
+            max_instances=1  # Only one instance at a time
+        )
+
+        logger.info("Gmail sync scheduler started successfully - runs every 15 minutes in background thread")
+    except Exception as e:
+        logger.error(f"Failed to start Gmail sync scheduler: {e}")
+        logger.info("Continuing without Gmail sync scheduler")
     
 
 @app.on_event("shutdown")
@@ -277,7 +312,12 @@ async def shutdown_event():
     except Exception as e:
         logger.error(f"Error stopping daily cache cleanup scheduler: {e}")
     
-    # Analytics scheduler removed - using pg_cron instead
+    # Stop analytics scheduler
+    try:
+        stop_analytics_scheduler()
+        logger.info("Analytics scheduler stopped successfully")
+    except Exception as e:
+        logger.error(f"Error stopping analytics scheduler: {e}")
     
     logger.info("Shutdown complete")
 
@@ -973,13 +1013,12 @@ async def run_content_generation_with_progress(user_id: str, generate_images: bo
         # Update progress
         await update_progress(user_id, "starting", 5, "Initializing content generation...")
         
-        # Content generation functionality has been removed
-        # This endpoint is no longer supported
-        result = {
-            "success": False,
-            "error": "Content generation functionality has been removed",
-            "message": "Please use the ATSN chatbot for content creation"
-        }
+        # Use ContentCreationAgent directly
+        from agents.content_creation_agent import ContentCreationAgent
+        content_agent = ContentCreationAgent(supabase_url, supabase_key, openai_api_key, update_progress)
+        
+        # Run the actual content generation
+        result = await content_agent.run_weekly_generation(user_id)
 
         # Increment usage after successful content generation
         if result and result.get('success'):
@@ -1495,7 +1534,32 @@ def verify_internal_secret(secret: Optional[str] = None):
             detail="Invalid or missing internal secret"
         )
 
-# Scheduler status endpoint removed - using pg_cron instead
+@app.get("/api/internal/analytics/scheduler-status")
+async def get_analytics_scheduler_status(
+    x_cron_secret: Optional[str] = None
+):
+    """
+    Get current status of the analytics collection scheduler.
+    
+    Protected endpoint - requires X-Cron-Secret header.
+    
+    Returns:
+        Current scheduler status and next run time
+    """
+    verify_internal_secret(x_cron_secret)
+    
+    try:
+        status_info = get_scheduler_status()
+        return {
+            "success": True,
+            "data": status_info
+        }
+    except Exception as e:
+        logger.error(f"Failed to get scheduler status: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve scheduler status: {str(e)}"
+        )
 
 
 @app.post("/api/internal/analytics/trigger-collection")
@@ -1521,8 +1585,7 @@ async def trigger_analytics_collection(
     
     try:
         # Run collection in background
-        from services.analytics_collector import collect_daily_analytics
-        background_tasks.add_task(collect_daily_analytics)
+        background_tasks.add_task(trigger_analytics_collection_now)
         
         logger.info("📊 Manual analytics collection triggered")
         

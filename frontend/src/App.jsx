@@ -212,23 +212,14 @@ function AppContent() {
             </ProtectedRoute>
           } 
         />
-        <Route 
-          path="/social" 
+        <Route
+          path="/social"
           element={
             <ProtectedRoute>
               <SocialMediaDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        {/* Temporarily hidden - Analytics dashboard */}
-        {/* <Route
-          path="/analytics" 
-          element={
-            <ProtectedRoute>
-              <AnalyticsDashboard />
-            </ProtectedRoute>
-          } 
-        /> */}
         <Route
           path="/leads"
           element={

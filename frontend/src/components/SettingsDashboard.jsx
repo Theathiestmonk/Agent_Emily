@@ -597,6 +597,18 @@ const SettingsDashboard = () => {
   }
 
   const handleGoogleConnect = async () => {
+    // Open popup immediately to avoid popup blocker
+    const popup = window.open(
+      'about:blank',
+      'google-oauth',
+      'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+    )
+
+    if (!popup) {
+      alert('Popup blocked! Please allow popups for this site to connect your Google account.')
+      return
+    }
+
     try {
       setLoading(true)
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
@@ -614,12 +626,9 @@ const SettingsDashboard = () => {
       })
       const reconnectData = await response.json()
       
-      if (reconnectData.success) {
-        const popup = window.open(
-          reconnectData.auth_url,
-          'google-oauth',
-          'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
-        )
+      if (reconnectData.success && reconnectData.auth_url) {
+        // Update popup location
+        popup.location.href = reconnectData.auth_url
         
         // Listen for popup messages (for OAuth completion)
         const messageHandler = (event) => {
@@ -667,9 +676,11 @@ const SettingsDashboard = () => {
         
         setSuccess('Google connection window opened. Please complete the authorization.')
       } else {
-        setError('Failed to initiate Google connection')
+        popup.close()
+        setError(reconnectData.error || 'Failed to initiate Google connection')
       }
     } catch (error) {
+      if (popup) popup.close()
       setError(`Failed to start Google connection: ${error.message}`)
     } finally {
       setLoading(false)

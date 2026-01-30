@@ -603,7 +603,11 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
                     'token_expires_at': token_expires_iso,
                     'updated_at': now_iso,
                     'is_active': True,
-                    'connection_status': 'active'
+                    'connection_status': 'active',
+                    'metadata': {
+                        'gmail_sync_enabled': True,
+                        'gmail_sync_status': 'active'
+                    }
                 }
                 # Only update page_name if name is available
                 if name:
@@ -634,7 +638,11 @@ async def handle_google_callback(code: str = None, state: str = None, error: str
                     'connection_status': 'active',
                     'connected_at': now_iso,
                     'created_at': now_iso,
-                    'updated_at': now_iso
+                    'updated_at': now_iso,
+                    'metadata': {
+                        'gmail_sync_enabled': True,
+                        'gmail_sync_status': 'active'
+                    }
                 }
                 
                 # Remove None values to avoid issues
@@ -741,17 +749,54 @@ async def get_gmail_messages(limit: int = 10, current_user: User = Depends(get_c
             return {"messages": [], "error": "No active Google connection found"}
         
         conn = connection.data[0]
-        
+
         # Decrypt tokens
         access_token = decrypt_token(conn['access_token_encrypted'])
         refresh_token = decrypt_token(conn['refresh_token_encrypted']) if conn.get('refresh_token_encrypted') else None
-        
+
         # Create credentials
         credentials = get_google_credentials_from_token(access_token, refresh_token)
-        
-        # Build Gmail service
+
+        # Check if access token needs refresh and handle it
+        try:
+            # Test if token works by making a small API call
+            test_service = build('gmail', 'v1', credentials=credentials)
+            # This will trigger token refresh if needed
+            test_call = test_service.users().getProfile(userId='me').execute()
+
+            # If token was refreshed, save the new access token
+            if hasattr(credentials, 'token') and credentials.token != access_token:
+                print(f"🔄 Access token refreshed for user {current_user.id}")
+                # Encrypt and save new access token
+                encrypted_new_token = encrypt_token(credentials.token)
+                supabase_admin.table('platform_connections').update({
+                    'access_token_encrypted': encrypted_new_token,
+                    'last_token_refresh': datetime.now().isoformat()
+                }).eq('id', conn['id']).execute()
+
+        except Exception as token_error:
+            print(f"⚠️ Token refresh needed for user {current_user.id}: {token_error}")
+            # Try to refresh the token manually
+            try:
+                from google.auth.transport.requests import Request as GoogleRequest
+                credentials.refresh(GoogleRequest())
+
+                # Save the refreshed token
+                encrypted_new_token = encrypt_token(credentials.token)
+                supabase_admin.table('platform_connections').update({
+                    'access_token_encrypted': encrypted_new_token,
+                    'last_token_refresh': datetime.now().isoformat()
+                }).eq('id', conn['id']).execute()
+
+                print(f"✅ Token manually refreshed for user {current_user.id}")
+
+            except Exception as refresh_error:
+                print(f"❌ Failed to refresh token for user {current_user.id}: {refresh_error}")
+                return {"messages": [], "error": f"Token refresh failed: {str(refresh_error)}"}
+
+        # Build Gmail service with refreshed credentials
         service = build('gmail', 'v1', credentials=credentials)
-        
+
         # Get messages
         print(f"🔍 Fetching Gmail messages with limit: {limit}")
         try:
@@ -940,15 +985,55 @@ async def send_gmail_message(
             )
         
         conn = connection.data[0]
-        
+
         # Decrypt tokens
         access_token = decrypt_token(conn['access_token_encrypted'])
         refresh_token = decrypt_token(conn['refresh_token_encrypted']) if conn.get('refresh_token_encrypted') else None
-        
+
         # Create credentials
         credentials = get_google_credentials_from_token(access_token, refresh_token)
-        
-        # Build Gmail service
+
+        # Check if access token needs refresh and handle it
+        try:
+            # Test if token works by making a small API call
+            test_service = build('gmail', 'v1', credentials=credentials)
+            # This will trigger token refresh if needed
+            test_call = test_service.users().getProfile(userId='me').execute()
+
+            # If token was refreshed, save the new access token
+            if hasattr(credentials, 'token') and credentials.token != access_token:
+                logger.info(f"🔄 Access token refreshed for user {current_user.id}")
+                # Encrypt and save new access token
+                encrypted_new_token = encrypt_token(credentials.token)
+                supabase_admin.table('platform_connections').update({
+                    'access_token_encrypted': encrypted_new_token,
+                    'last_token_refresh': datetime.now().isoformat()
+                }).eq('id', conn['id']).execute()
+
+        except Exception as token_error:
+            logger.warning(f"⚠️ Token refresh needed for user {current_user.id}: {token_error}")
+            # Try to refresh the token manually
+            try:
+                from google.auth.transport.requests import Request as GoogleRequest
+                credentials.refresh(GoogleRequest())
+
+                # Save the refreshed token
+                encrypted_new_token = encrypt_token(credentials.token)
+                supabase_admin.table('platform_connections').update({
+                    'access_token_encrypted': encrypted_new_token,
+                    'last_token_refresh': datetime.now().isoformat()
+                }).eq('id', conn['id']).execute()
+
+                logger.info(f"✅ Token manually refreshed for user {current_user.id}")
+
+            except Exception as refresh_error:
+                logger.error(f"❌ Failed to refresh token for user {current_user.id}: {refresh_error}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Token refresh failed: {str(refresh_error)}"
+                )
+
+        # Build Gmail service with refreshed credentials
         service = build('gmail', 'v1', credentials=credentials)
         
         # Create proper HTML email message
@@ -1258,6 +1343,658 @@ async def google_router_test():
             "/connections/google/callback"
         ]
     }
+
+async def sync_gmail_inbox_for_user(
+    user_id: str,
+    user_email: str,
+    days_back: int = 2,
+    max_emails: int = 50
+) -> Dict[str, Any]:
+    """Sync Gmail inbox for a specific user (used by both API and background job)"""
+    try:
+        logger.info(f"🔄 Starting Gmail inbox sync for user: {user_id}")
+
+        # Get user's Google connection
+        connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', user_id).execute()
+
+        if not connection.data:
+            return {
+                "success": False,
+                "error": "No active Google connection found",
+                "emails_processed": 0,
+                "emails_stored": 0
+            }
+
+        conn = connection.data[0]
+
+        # Check if Gmail sync is enabled for this user
+        metadata = conn.get('metadata') or {}
+        # Default to False for production safety
+        gmail_sync_enabled = metadata.get('gmail_sync_enabled', False)
+        if not gmail_sync_enabled:
+            logger.info(f"📧 Gmail sync not enabled for user {user_id}")
+            return {
+                "success": False,
+                "error": "Gmail sync not enabled for this user",
+                "emails_processed": 0,
+                "emails_stored": 0
+            }
+
+        # Decrypt tokens
+        access_token = decrypt_token(conn['access_token_encrypted'])
+        refresh_token = decrypt_token(conn['refresh_token_encrypted']) if conn.get('refresh_token_encrypted') else None
+
+        # Create credentials
+        credentials = get_google_credentials_from_token(access_token, refresh_token)
+
+        # Check if access token needs refresh and handle it
+        try:
+            # Test if token works by making a small API call
+            test_service = build('gmail', 'v1', credentials=credentials)
+            # This will trigger token refresh if needed
+            test_call = test_service.users().getProfile(userId='me').execute()
+
+            # If token was refreshed, save the new access token
+            if hasattr(credentials, 'token') and credentials.token != access_token:
+                logger.info(f"🔄 Access token refreshed for user {user_id}")
+                # Encrypt and save new access token
+                encrypted_new_token = encrypt_token(credentials.token)
+                supabase_admin.table('platform_connections').update({
+                    'access_token_encrypted': encrypted_new_token,
+                    'last_token_refresh': datetime.now().isoformat()
+                }).eq('id', conn['id']).execute()
+
+        except Exception as token_error:
+            error_str = str(token_error).lower()
+            logger.warning(f"⚠️ Token validation failed for user {user_id}: {token_error}")
+
+            # Check if this is a 401 Unauthorized error
+            if '401' in error_str or 'unauthorized' in error_str or 'invalid_grant' in error_str:
+                logger.error(f"🚫 401 Unauthorized error for user {user_id} - token likely expired or invalid")
+
+                # Debug: Check OAuth credentials
+                debug_client_id = os.getenv('GOOGLE_CLIENT_ID')
+                debug_client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+                logger.info(f"🔍 OAuth Debug - Client ID: {debug_client_id[:20] if debug_client_id else 'NOT SET'}...")
+                logger.info(f"🔍 OAuth Debug - Client Secret: {'SET' if debug_client_secret else 'NOT SET'}")
+                logger.info(f"🔍 OAuth Debug - Redirect URI: {os.getenv('GOOGLE_REDIRECT_URI', 'NOT SET')}")
+
+                # Try to refresh the token manually if refresh token exists
+                if refresh_token:
+                    try:
+                        from google.auth.transport.requests import Request as GoogleRequest
+                        credentials.refresh(GoogleRequest())
+
+                        # Save the refreshed token
+                        encrypted_new_token = encrypt_token(credentials.token)
+                        supabase_admin.table('platform_connections').update({
+                            'access_token_encrypted': encrypted_new_token,
+                            'last_token_refresh': datetime.now().isoformat()
+                        }).eq('id', conn['id']).execute()
+
+                        logger.info(f"✅ Token manually refreshed for user {user_id}")
+
+                    except Exception as refresh_error:
+                        refresh_error_str = str(refresh_error).lower()
+                        logger.error(f"❌ Failed to refresh token for user {user_id}: {refresh_error}")
+
+                        # If refresh token is invalid, mark connection as inactive
+                        if 'invalid_grant' in refresh_error_str or '401' in refresh_error_str:
+                            logger.error(f"🚫 Refresh token invalid for user {user_id} - deactivating connection")
+                            supabase_admin.table('platform_connections').update({
+                                'is_active': False,
+                                'metadata': {
+                                    **metadata,
+                                    'deactivation_reason': 'Invalid refresh token',
+                                    'deactivated_at': datetime.now().isoformat()
+                                }
+                            }).eq('id', conn['id']).execute()
+
+                        return {
+                            "success": False,
+                            "error": f"Token refresh failed: {str(refresh_error)}",
+                            "emails_processed": 0,
+                            "emails_stored": 0
+                        }
+                else:
+                    logger.error(f"🚫 No refresh token available for user {user_id}")
+                    # Deactivate connection since we can't refresh without refresh token
+                    supabase_admin.table('platform_connections').update({
+                        'is_active': False,
+                        'metadata': {
+                            **metadata,
+                            'deactivation_reason': 'No refresh token available',
+                            'deactivated_at': datetime.now().isoformat()
+                        }
+                    }).eq('id', conn['id']).execute()
+
+                    return {
+                        "success": False,
+                        "error": "No refresh token available and access token expired",
+                        "emails_processed": 0,
+                        "emails_stored": 0
+                    }
+            else:
+                # For other token errors, continue and try to use the service anyway
+                logger.warning(f"⚠️ Non-401 token error for user {user_id}, proceeding: {token_error}")
+
+        # Build Gmail service with refreshed credentials
+        service = build('gmail', 'v1', credentials=credentials)
+
+        # User email is passed as parameter (from JWT token)
+
+        # Calculate date filter (emails from the last N days)
+        days_ago = datetime.now() - timedelta(days=days_back)
+        date_filter = days_ago.strftime('%Y/%m/%d')
+
+        # Query for inbound emails (exclude sent emails)
+        query = f"after:{date_filter}"
+        if user_email:
+            query += f" -from:{user_email}"
+        logger.info(f"📧 Gmail query for user {user_id}: {query}")
+        logger.info(f"📧 Searching for emails from last {days_back} days, excluding emails from {user_email}")
+
+        # Get messages
+        try:
+            results = service.users().messages().list(
+                userId='me',
+                q=query,
+                maxResults=max_emails
+            ).execute()
+        except Exception as api_error:
+            error_str = str(api_error).lower()
+            if '401' in error_str or 'unauthorized' in error_str:
+                logger.error(f"🚫 401 error during Gmail API call for user {user_id}: {api_error}")
+                # Mark connection as inactive due to auth issues
+                supabase_admin.table('platform_connections').update({
+                    'is_active': False,
+                    'metadata': {
+                        **metadata,
+                        'deactivation_reason': '401 during API call',
+                        'deactivated_at': datetime.now().isoformat()
+                    }
+                }).eq('id', conn['id']).execute()
+                return {
+                    "success": False,
+                    "error": f"Gmail API authentication failed: {str(api_error)}",
+                    "emails_processed": 0,
+                    "emails_stored": 0
+                }
+            else:
+                raise api_error
+
+        messages = results.get('messages', [])
+        logger.info(f"📧 Found {len(messages)} inbound emails to process for user {user_id}")
+
+        # Get user's leads for email matching
+        leads_result = supabase_admin.table('leads').select('id, email, name').eq('user_id', user_id).execute()
+        user_leads = leads_result.data or []
+        lead_emails = [lead['email'] for lead in user_leads if lead.get('email')]
+        logger.info(f"📧 User has {len(user_leads)} leads with {len(lead_emails)} email addresses: {lead_emails[:5]}{'...' if len(lead_emails) > 5 else ''}")
+
+        processed_count = 0
+        stored_count = 0
+
+        # Process each message
+        for message in messages:
+            try:
+                # Get full message details
+                try:
+                    msg = service.users().messages().get(
+                        userId='me',
+                        id=message['id'],
+                        format='full'
+                    ).execute()
+                except Exception as msg_api_error:
+                    error_str = str(msg_api_error).lower()
+                    if '401' in error_str or 'unauthorized' in error_str:
+                        logger.error(f"🚫 401 error getting message {message['id']} for user {user_id}: {msg_api_error}")
+                        # Stop processing this user due to auth issues
+                        supabase_admin.table('platform_connections').update({
+                            'is_active': False,
+                            'metadata': {
+                                **metadata,
+                                'deactivation_reason': '401 during message retrieval',
+                                'deactivated_at': datetime.now().isoformat()
+                            }
+                        }).eq('id', conn['id']).execute()
+                        return {
+                            "success": False,
+                            "error": f"Gmail API authentication failed during message retrieval: {str(msg_api_error)}",
+                            "emails_processed": processed_count,
+                            "emails_stored": stored_count
+                        }
+                    else:
+                        logger.warning(f"⚠️ Error getting message {message['id']} for user {user_id}: {msg_api_error}")
+                        continue
+
+                # Extract email data
+                email_data = extract_email_data(msg)
+                if not email_data:
+                    continue
+
+                # Check if this email is from a lead
+                lead = find_lead_by_email(email_data['from'], user_id)
+                if not lead:
+                    logger.info(f"📧 Email from '{email_data['from']}' not associated with any lead for user {user_id}, skipping. Subject: '{email_data.get('subject', 'No subject')}'")
+                    continue
+
+                # Check if this email is already stored (avoid duplicates)
+                # Check both by message_id and by lead_id + message_id combination
+                existing_conversation = supabase_admin.table('lead_conversations').select('id').eq('lead_id', lead['id']).eq('message_id', message['id']).execute()
+                if existing_conversation.data:
+                    logger.debug(f"📧 Email {message['id']} already stored for lead {lead['id']}, skipping")
+                    continue
+
+                # Store email in lead conversations
+                conversation_data = {
+                    'lead_id': lead['id'],
+                    'message_type': 'email',
+                    'content': email_data['body'],
+                    'sender': email_data['from'],
+                    'direction': 'inbound',
+                    'message_id': message['id'],
+                    'status': 'received',
+                    'metadata': {
+                        'subject': email_data['subject'],
+                        'thread_id': msg.get('threadId'),
+                        'labels': msg.get('labelIds', []),
+                        'date': email_data['date'],
+                        'to': email_data.get('to', []),
+                        'cc': email_data.get('cc', []),
+                        'bcc': email_data.get('bcc', [])
+                    }
+                }
+
+                supabase_admin.table('lead_conversations').insert(conversation_data).execute()
+                stored_count += 1
+                logger.info(f"📧 Stored email from {email_data['from']} for lead {lead['id']} (user {user_id})")
+
+            except Exception as msg_error:
+                logger.error(f"❌ Error processing message {message['id']} for user {user_id}: {msg_error}")
+                continue
+
+            processed_count += 1
+
+        # Update last sync timestamp
+        supabase_admin.table("platform_connections").update({
+            'metadata': {
+                **metadata,
+                'gmail_last_sync': datetime.now().isoformat(),
+                'gmail_sync_status': 'completed'
+            }
+        }).eq('id', conn['id']).execute()
+
+        logger.info(f"✅ Gmail inbox sync completed for user {user_id}: {processed_count} processed, {stored_count} stored")
+
+        return {
+            "success": True,
+            "emails_processed": processed_count,
+            "emails_stored": stored_count,
+            "total_emails_found": len(messages)
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Error syncing Gmail inbox for user {user_id}: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "emails_processed": 0,
+            "emails_stored": 0
+        }
+
+@router.post("/gmail/sync-inbox")
+async def sync_gmail_inbox(
+    days_back: int = 2,
+    max_emails: int = 50,
+    current_user: User = Depends(get_current_user)
+):
+    """Sync Gmail inbox and store inbound emails in lead conversations"""
+    result = await sync_gmail_inbox_for_user(current_user.id, current_user.email, days_back, max_emails)
+
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=result.get("error", "Failed to sync Gmail inbox")
+        )
+
+    return {
+        "success": True,
+        "message": f"Gmail inbox sync completed successfully",
+        "stats": {
+            "emails_processed": result["emails_processed"],
+            "emails_stored": result["emails_stored"],
+            "total_emails_found": result["total_emails_found"]
+        }
+    }
+
+def extract_email_data(message):
+    """Extract email data from Gmail API message"""
+    try:
+        payload = message['payload']
+        headers = payload['headers']
+
+        # Extract headers
+        subject = ''
+        sender = ''
+        to = []
+        cc = []
+        bcc = []
+        date = ''
+
+        for header in headers:
+            name = header['name'].lower()
+            value = header['value']
+
+            if name == 'subject':
+                subject = value
+            elif name == 'from':
+                sender = value
+            elif name == 'to':
+                to = [email.strip() for email in value.split(',')]
+            elif name == 'cc':
+                cc = [email.strip() for email in value.split(',')]
+            elif name == 'bcc':
+                bcc = [email.strip() for email in value.split(',')]
+            elif name == 'date':
+                date = value
+
+        # Extract email body
+        body = get_email_body(payload)
+
+        # Extract sender email (remove name part if present)
+        import re
+        email_match = re.search(r'<([^>]+)>', sender)
+        if email_match:
+            sender_email = email_match.group(1)
+        else:
+            sender_email = sender.strip()
+
+        return {
+            'subject': subject,
+            'from': sender_email,
+            'to': to,
+            'cc': cc,
+            'bcc': bcc,
+            'body': body,
+            'date': date
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Error extracting email data: {e}")
+        return None
+
+def get_email_body(payload):
+    """Extract email body from Gmail payload and remove quoted content"""
+    try:
+        body_text = ""
+
+        if 'parts' in payload:
+            # Multipart message
+            for part in payload['parts']:
+                if part['mimeType'] == 'text/plain':
+                    if 'data' in part['body']:
+                        body_text = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
+                        break
+                elif part['mimeType'] == 'text/html':
+                    if 'data' in part['body']:
+                        body_text = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
+                        break
+        else:
+            # Single part message
+            if 'data' in payload['body']:
+                body_text = base64.urlsafe_b64decode(payload['body']['data']).decode('utf-8')
+
+        if not body_text or body_text == "No content available":
+            return "No content available"
+
+        # Remove quoted content (email replies)
+        # Common patterns for quoted content:
+        # 1. Lines starting with ">"
+        # 2. "On [date] [person] wrote:"
+        # 3. "-----Original Message-----"
+
+        import re
+
+        # Split by lines and find the first quoted content marker
+        lines = body_text.split('\n')
+        clean_lines = []
+
+        for i, line in enumerate(lines):
+            # Stop if we encounter quoted content markers
+            if line.strip().startswith('>') or \
+               re.search(r'^On\s+.*wrote:', line.strip()) or \
+               '-----Original Message-----' in line or \
+               '----- Forwarded Message -----' in line or \
+               re.search(r'^From:\s+', line.strip()) and i > 0:  # Additional headers in replies
+                break
+
+            # Skip empty lines at the beginning
+            if not line.strip() and len(clean_lines) == 0:
+                continue
+
+            clean_lines.append(line)
+
+        # Join the clean lines
+        clean_body = '\n'.join(clean_lines).strip()
+
+        # If we ended up with empty content, return the original (might not have quoted content)
+        if not clean_body:
+            clean_body = body_text.strip()
+
+        # Log the cleaned content for debugging (first 200 chars)
+        logger.debug(f"📧 Cleaned email content: {clean_body[:200]}{'...' if len(clean_body) > 200 else ''}")
+
+        return clean_body
+
+    except Exception as e:
+        logger.error(f"❌ Error extracting email body: {e}")
+        return "Error extracting content"
+
+def find_lead_by_email(email, user_id):
+    """Find a lead by email address"""
+    try:
+        # Search for lead with matching email
+        lead = supabase_admin.table('leads').select('*').eq('user_id', user_id).eq('email', email).execute()
+
+        if lead.data:
+            return lead.data[0]
+
+        # Also check if email is in lead metadata or additional emails
+        leads = supabase_admin.table('leads').select('*').eq('user_id', user_id).execute()
+
+        for lead in leads.data or []:
+            # Check metadata for additional emails
+            if lead.get('metadata'):
+                metadata = lead['metadata']
+                if isinstance(metadata, dict):
+                    additional_emails = metadata.get('additional_emails', [])
+                    if email in additional_emails:
+                        return lead
+
+        return None
+
+    except Exception as e:
+        logger.error(f"❌ Error finding lead by email {email}: {e}")
+        return None
+
+@router.get("/gmail/sync-status")
+async def get_gmail_sync_status(current_user: User = Depends(get_current_user)):
+    """Get Gmail sync status and last sync time"""
+    try:
+        connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user.id).execute()
+
+        if not connection.data:
+            return {
+                "connected": False,
+                "sync_enabled": False,
+                "last_sync": None,
+                "status": "not_connected"
+            }
+
+        conn = connection.data[0]
+        metadata = conn.get('metadata')
+
+        # Handle case where metadata column doesn't exist yet
+        if metadata is None:
+            return {
+                "connected": True,
+                "sync_enabled": False,
+                "last_sync": None,
+                "status": "migration_needed",
+                "message": "Run setup_gmail_sync.sql in Supabase SQL editor to enable Gmail sync"
+            }
+
+        return {
+            "connected": True,
+            "sync_enabled": metadata.get('gmail_sync_enabled', False),
+            "last_sync": metadata.get('gmail_last_sync'),
+            "status": metadata.get('gmail_sync_status', 'never_synced')
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Error getting Gmail sync status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get sync status: {str(e)}"
+        )
+
+@router.post("/gmail/test-sync")
+async def test_gmail_sync(current_user: User = Depends(get_current_user)):
+    """Manually trigger Gmail sync for testing (bypasses rate limiting)"""
+    try:
+        logger.info(f"🧪 Manual Gmail sync test triggered for user {current_user.id}")
+
+        # Force sync regardless of rate limiting
+        result = await sync_gmail_inbox_for_user(
+            user_id=current_user.id,
+            user_email=current_user.email,
+            days_back=2,  # Check last 2 days
+            max_emails=10  # Max 10 emails for testing
+        )
+
+        return {
+            "success": result["success"],
+            "message": f"Test sync completed: {result['emails_processed']} emails processed, {result['emails_stored']} emails stored",
+            "stats": result
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Error in manual Gmail sync test: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Test sync failed: {str(e)}"
+        )
+
+@router.post("/gmail/sync/enable")
+async def enable_gmail_sync(current_user: User = Depends(get_current_user)):
+    """Enable automatic Gmail sync for the user"""
+    try:
+        connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user.id).execute()
+
+        if not connection.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active Google connection found"
+            )
+
+        conn = connection.data[0]
+        metadata = conn.get('metadata') or {}
+
+        # Update metadata to enable sync
+        updated_metadata = {
+            **metadata,
+            'gmail_sync_enabled': True
+        }
+
+        # Handle case where metadata column doesn't exist yet
+        try:
+            supabase_admin.table('platform_connections').update({
+                'metadata': updated_metadata
+            }).eq('id', conn['id']).execute()
+        except Exception as e:
+            if "does not exist" in str(e):
+                logger.warning(f"📧 metadata column doesn't exist yet, skipping enable sync for user {current_user.id}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Database migration needed: Run setup_gmail_sync.sql in Supabase SQL editor first"
+                )
+            else:
+                raise e
+
+        supabase_admin.table('platform_connections').update({
+            'metadata': updated_metadata
+        }).eq('id', conn['id']).execute()
+
+        logger.info(f"✅ Enabled Gmail sync for user {current_user.id}")
+
+        return {
+            "success": True,
+            "message": "Gmail sync enabled successfully",
+            "sync_enabled": True
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error enabling Gmail sync for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to enable Gmail sync: {str(e)}"
+        )
+
+@router.post("/gmail/sync/disable")
+async def disable_gmail_sync(current_user: User = Depends(get_current_user)):
+    """Disable automatic Gmail sync for the user"""
+    try:
+        connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user.id).execute()
+
+        if not connection.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active Google connection found"
+            )
+
+        conn = connection.data[0]
+        metadata = conn.get('metadata') or {}
+
+        # Update metadata to disable sync
+        updated_metadata = {
+            **metadata,
+            'gmail_sync_enabled': False
+        }
+
+        # Handle case where metadata column doesn't exist yet
+        try:
+            supabase_admin.table('platform_connections').update({
+                'metadata': updated_metadata
+            }).eq('id', conn['id']).execute()
+        except Exception as e:
+            if "does not exist" in str(e):
+                logger.warning(f"📧 metadata column doesn't exist yet, skipping disable sync for user {current_user.id}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Database migration needed: Run setup_gmail_sync.sql in Supabase SQL editor first"
+                )
+            else:
+                raise e
+
+        logger.info(f"✅ Disabled Gmail sync for user {current_user.id}")
+
+        return {
+            "success": True,
+            "message": "Gmail sync disabled successfully",
+            "sync_enabled": False
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error disabling Gmail sync for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to disable Gmail sync: {str(e)}"
+        )
 
 @router.get("/debug/config")
 async def debug_google_config():
