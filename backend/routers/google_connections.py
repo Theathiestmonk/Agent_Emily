@@ -1047,7 +1047,39 @@ async def send_gmail_message(
         
         print(f"📧 Email body contains HTML: {has_html_tags}")
         print(f"📧 Body preview: {body[:200]}...")
-        
+
+        # EMERGENCY FIX: Check if body contains raw JSON and extract HTML content
+        if body.strip().startswith('```json') or (body.strip().startswith('{') and '"body"' in body and '"subject"' in body):
+            print("📧 EMERGENCY: Body contains raw JSON response, attempting to extract HTML content")
+            try:
+                # Clean markdown and extract JSON
+                clean_body = body.strip()
+                if clean_body.startswith('```json'):
+                    clean_body = clean_body[7:]
+                if clean_body.startswith('```'):
+                    clean_body = clean_body[3:]
+                if clean_body.endswith('```'):
+                    clean_body = clean_body[:-3]
+                clean_body = clean_body.strip()
+
+                # Parse JSON and extract body content
+                import json
+                json_data = json.loads(clean_body)
+                extracted_body = json_data.get('body', '')
+
+                if extracted_body and ('<p>' in extracted_body or '<br>' in extracted_body):
+                    print("📧 EMERGENCY: Successfully extracted HTML content from JSON")
+                    body = extracted_body
+                    has_html_tags = bool(html_pattern.search(body))
+                else:
+                    print("📧 EMERGENCY: Could not extract valid HTML from JSON, using fallback")
+                    body = f"<p>Dear valued customer,</p><p>Thank you for contacting us!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
+                    has_html_tags = True
+            except Exception as e:
+                print(f"📧 EMERGENCY: Failed to parse JSON: {e}, using fallback")
+                body = f"<p>Dear valued customer,</p><p>Thank you for contacting us!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
+                has_html_tags = True
+
         # Create multipart message
         msg = MIMEMultipart('alternative')
         msg['To'] = to

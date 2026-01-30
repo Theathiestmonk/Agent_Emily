@@ -1922,7 +1922,9 @@ async def send_message_to_lead(
         elif request.message_type == "email":
             if not lead_data.get("email"):
                 raise HTTPException(status_code=400, detail="Lead has no email address")
-            
+
+            import sys
+
             # Check for Google connection
             connection = supabase_admin.table('platform_connections').select('*').eq('platform', 'google').eq('is_active', True).eq('user_id', current_user["id"]).execute()
             
@@ -2315,85 +2317,82 @@ Return a JSON object with:
                 request_metadata={"lead_id": lead_id}
             )
         
+        # FORCE DEBUG: Write to stderr to ensure visibility
+        import sys
+        sys.stderr.write(f"GENERATE-EMAIL: Starting for lead {lead_id}\n")
+        sys.stderr.flush()
+
         try:
             # Clean the AI response first - remove markdown code blocks
             raw_content = response.choices[0].message.content.strip()
+            sys.stderr.write(f"GENERATE-EMAIL: Raw response starts with: {raw_content[:100]}...\n")
+            sys.stderr.flush()
+
             # Remove markdown code blocks if present
             if raw_content.startswith('```json'):
                 raw_content = raw_content[7:]  # Remove ```json
+                sys.stderr.write("GENERATE-EMAIL: Removed ```json prefix\n")
             if raw_content.startswith('```'):
                 raw_content = raw_content[3:]  # Remove ```
+                sys.stderr.write("GENERATE-EMAIL: Removed ``` prefix\n")
             if raw_content.endswith('```'):
                 raw_content = raw_content[:-3]  # Remove trailing ```
-            raw_content = raw_content.strip()
+                sys.stderr.write("GENERATE-EMAIL: Removed trailing ```\n")
 
-            email_data = json.loads(raw_content)
-            subject = email_data.get("subject", f"Thank you for your interest in {business_name}")
-            body = email_data.get("body", f"Thank you {lead_name} for your interest!")
+            raw_content = raw_content.strip()
+            sys.stderr.write(f"GENERATE-EMAIL: After cleaning: {raw_content[:100]}...\n")
+            sys.stderr.flush()
+
+            # Try to parse JSON normally first
+            try:
+                email_data = json.loads(raw_content)
+                sys.stderr.write(f"GENERATE-EMAIL: JSON parsed. Body: {email_data.get('body')[:100]}...\n")
+                sys.stderr.flush()
+            except json.JSONDecodeError as parse_error:
+                sys.stderr.write(f"GENERATE-EMAIL: JSON parsing failed: {parse_error}\n")
+                sys.stderr.flush()
+                raise parse_error
+
+            subject = email_data.get("subject", f"Thank you for contacting {business_name}")
+            body = email_data.get("body", f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>")
 
             # Validate and clean the email body
-            subject = str(subject or f"Thank you for your interest in {business_name}").strip()
-            body = str(body or f"Thank you {lead_name} for your interest!").strip()
+            subject = str(subject or f"Thank you for contacting {business_name}").strip()
+            body = str(body or f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>").strip()
+
+            sys.stderr.write(f"GENERATE-EMAIL: Final - Subject: {subject}, Body starts with: {body[:100]}...\n")
+            sys.stderr.flush()
 
             # Additional validation: ensure email body doesn't contain raw JSON
             body_stripped = body.strip()
             if body_stripped.startswith('{') and body_stripped.endswith('}'):
                 try:
-                    # Try to parse as JSON - if successful, it's raw JSON and invalid
                     json.loads(body_stripped)
-                    logger.warning(f"Email body contains raw JSON structure, using fallback")
-                    body = f"<p>Dear {lead_name},</p><p>Thank you for your interest in {business_name}!</p><p>We look forward to connecting with you.</p>"
+                    sys.stderr.write("GENERATE-EMAIL: Body contains raw JSON, using fallback\n")
+                    sys.stderr.flush()
+                    body = f"<p>Dear {lead_name},</p><p>Thank you for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
                 except json.JSONDecodeError:
-                    # If it looks like JSON but isn't valid JSON, still check for JSON-like content
                     if ('"body"' in body_stripped or '"subject"' in body_stripped or
                         "'body'" in body_stripped or "'subject'" in body_stripped):
-                        logger.warning(f"Email body appears to contain JSON-like structure, using fallback")
-                        body = f"<p>Dear {lead_name},</p><p>Thank you for your interest in {business_name}!</p><p>We look forward to connecting with you.</p>"
+                        sys.stderr.write("GENERATE-EMAIL: Body appears to contain JSON-like structure, using fallback\n")
+                        sys.stderr.flush()
+                        body = f"<p>Dear {lead_name},</p><p>Thank you for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
 
-        except json.JSONDecodeError as json_error:
-            logger.warning(f"JSON parsing failed: {json_error}")
-            content = response.choices[0].message.content or ""
+        except Exception as e:
+            sys.stderr.write(f"GENERATE-EMAIL: Exception: {e}\n")
+            sys.stderr.flush()
+            subject = f"Thank you for contacting {business_name}"
+            body = f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
 
-            # Clean content - remove markdown and JSON if present
-            content = content.strip()
-            if content.startswith('```'):
-                # Remove markdown code blocks
-                lines = content.split('\n')
-                # Find the actual content between code blocks
-                start_idx = -1
-                end_idx = -1
-                for i, line in enumerate(lines):
-                    if line.strip().startswith('```'):
-                        if start_idx == -1:
-                            start_idx = i
-                        else:
-                            end_idx = i
-                            break
-                if start_idx != -1 and end_idx != -1:
-                    content = '\n'.join(lines[start_idx + 1:end_idx])
-                elif content.startswith('```'):
-                    content = content[3:]
-                    if content.endswith('```'):
-                        content = content[:-3]
+        # FINAL VALIDATION: Ensure we never return raw JSON
+        if body.strip().startswith('```json') or (body.strip().startswith('{') and '"body"' in body):
+            sys.stderr.write("GENERATE-EMAIL: CRITICAL - Body still contains raw JSON, forcing fallback\n")
+            sys.stderr.flush()
+            body = f"<p>Dear {lead_name},</p><p>Thank you for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
 
-            content = content.strip()
+        sys.stderr.write(f"GENERATE-EMAIL: Returning - Subject: {subject}, Body starts with: {body[:50]}...\n")
+        sys.stderr.flush()
 
-            # Check if content is still JSON and extract body if possible
-            try:
-                if content.startswith('{') and '"body"' in content:
-                    json_content = json.loads(content)
-                    content = json_content.get('body', content)
-            except:
-                pass  # Keep original content if JSON parsing fails
-
-            subject = f"Thank you for your interest in {business_name}"
-            body = content if content else f"Thank you {lead_name} for your interest!"
-
-            # Final validation: ensure we don't have raw JSON in email body
-            if body.startswith('{') and ('"body"' in body or '"subject"' in body):
-                logger.warning(f"Content still appears to be JSON, using fallback")
-                body = f"<p>Dear {lead_name},</p><p>Thank you for your interest in {business_name}!</p><p>We look forward to connecting with you.</p>"
-        
         return {
             "success": True,
             "subject": subject,

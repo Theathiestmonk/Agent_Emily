@@ -70,7 +70,6 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
   const [newRemark, setNewRemark] = useState('')
   const [addingRemark, setAddingRemark] = useState(false)
   const [showAddRemarkSection, setShowAddRemarkSection] = useState(false)
-  const [syncingGmail, setSyncingGmail] = useState(false)
 
   const fetchConversations = useCallback(async () => {
     if (conversationsLoaded) return // Don't fetch if already loaded
@@ -294,49 +293,6 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
       showError('Error', 'Failed to send message')
     } finally {
       setSendingMessage(false)
-    }
-  }
-
-  const handleGmailSync = async () => {
-    try {
-      setSyncingGmail(true)
-      showSuccess('Syncing Gmail', 'Fetching recent emails from your Gmail inbox...')
-
-      const response = await fetch(`${API_BASE_URL}/connections/google/gmail/sync-inbox`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          days_back: 7, // Sync last 7 days
-          max_emails: 50 // Max 50 emails per sync
-        })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to sync Gmail')
-      }
-
-      const result = await response.json()
-
-      if (result.success) {
-        showSuccess('Gmail Sync Complete',
-          `Processed ${result.stats.emails_processed} emails, stored ${result.stats.emails_stored} conversations`
-        )
-        // Refresh conversations to show new emails
-        setConversationsLoaded(false)
-        fetchConversations()
-      } else {
-        throw new Error('Sync failed')
-      }
-
-    } catch (error) {
-      console.error('Error syncing Gmail:', error)
-      showError('Gmail Sync Failed', error.message || 'Failed to sync Gmail inbox')
-    } finally {
-      setSyncingGmail(false)
     }
   }
 
@@ -1097,27 +1053,6 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
               )
             })}
           </div>
-
-          {/* Gmail Sync Button */}
-          <button
-            onClick={handleGmailSync}
-            disabled={syncingGmail}
-            className={`flex items-center space-x-2 px-4 py-2 ${
-              isDarkMode
-                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-600'
-                : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
-            } border rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
-            title="Sync Gmail inbox for new email conversations"
-          >
-            {syncingGmail ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            <span className="text-sm font-medium">
-              {syncingGmail ? 'Syncing...' : 'Sync Gmail'}
-            </span>
-          </button>
         </div>
 
         {/* Content */}
@@ -1231,9 +1166,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                         <div className={`relative z-10 w-8 h-8 rounded-full ${event.color} flex items-center justify-center flex-shrink-0`}>
                           <Icon className="w-4 h-4" />
                         </div>
-                        <div className="flex-1 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-4 border border-purple-200">
+                        <div className={`flex-1 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gradient-to-r from-pink-50 to-purple-50 border-purple-200'} rounded-lg p-4 border`}>
                           <div className="flex items-center justify-between mb-1">
-                            <h4 className="font-normal text-gray-900">{event.title}</h4>
+                            <h4 className={`font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{event.title}</h4>
                             <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(event.timestamp)}</span>
                           </div>
                           <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -1253,16 +1188,16 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                           </p>
                           {/* Show remarks content for remark-type entries */}
                           {event.type === 'remark' && event.remarks && (
-                            <div className="mt-3 p-3 bg-white/60 rounded-lg border border-blue-200">
-                              <p className="text-sm text-gray-700 font-medium">
+                            <div className={`mt-3 p-3 ${isDarkMode ? 'bg-gray-800/50 border-gray-600' : 'bg-white/60 border-blue-200'} rounded-lg border`}>
+                              <p className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'} font-medium`}>
                                 {event.remarks}
                               </p>
                             </div>
                           )}
                           {/* Show remarks for status changes if they exist */}
                           {event.type === 'status_change' && event.remarksText && (
-                            <div className="mt-3 p-3 bg-white/60 rounded-lg border border-blue-200">
-                              <p className="text-sm text-gray-700 font-medium">
+                            <div className={`mt-3 p-3 ${isDarkMode ? 'bg-gray-800/50 border-gray-600' : 'bg-white/60 border-blue-200'} rounded-lg border`}>
+                              <p className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'} font-medium`}>
                                 {event.remarksText}
                               </p>
                             </div>
@@ -1346,17 +1281,19 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                       <div
                         key={conv.id}
                         className={`p-4 rounded-lg border w-[90%] ${
-                          conv.sender === 'agent' ? 'bg-gradient-to-r from-pink-100 to-purple-100 ml-auto border-purple-200' : 'bg-gray-50 mr-auto border-gray-200'
+                          conv.sender === 'agent' 
+                            ? `${isDarkMode ? 'bg-purple-900/30 border-purple-800' : 'bg-gradient-to-r from-pink-100 to-purple-100 border-purple-200'} ml-auto` 
+                            : `${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} mr-auto`
                         }`}
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-900">
+                          <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
                             {conv.sender === 'agent' ? 'You' : lead.name || 'Lead'}
                           </span>
                           <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(conv.created_at)}</span>
                         </div>
                         <div 
-                          className="text-sm text-gray-700 email-content prose prose-sm max-w-none"
+                          className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} email-content prose prose-sm max-w-none`}
                           dangerouslySetInnerHTML={{ __html: parseEmailContent(conv.content) }}
                           style={{
                             wordWrap: 'break-word',
@@ -1394,16 +1331,18 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                       <div
                         key={conv.id}
                         className={`p-4 rounded-lg border w-[90%] ${
-                          conv.sender === 'agent' ? 'bg-gradient-to-r from-pink-100 to-purple-100 ml-auto border-purple-200' : 'bg-gray-50 mr-auto border-gray-200'
+                          conv.sender === 'agent' 
+                            ? `${isDarkMode ? 'bg-purple-900/30 border-purple-800' : 'bg-gradient-to-r from-pink-100 to-purple-100 border-purple-200'} ml-auto` 
+                            : `${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} mr-auto`
                         }`}
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-900">
+                          <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
                             {conv.sender === 'agent' ? 'You' : lead.name || 'Lead'}
                           </span>
                           <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(conv.created_at)}</span>
                         </div>
-                        <p className="text-sm text-gray-700">{conv.content}</p>
+                        <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{conv.content}</p>
                         {conv.status && (
                           <div className="mt-2">
                             <span className={`text-xs px-2 py-1 rounded ${
@@ -1431,7 +1370,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
               <style>{`
                 .email-content p {
                   margin: 0.5rem 0;
-                  color: #374151;
+                  color: ${isDarkMode ? '#D1D5DB' : '#374151'};
                 }
                 .email-content p:first-child {
                   margin-top: 0;
@@ -1449,6 +1388,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                 .email-content ul, .email-content ol {
                   margin: 0.5rem 0;
                   padding-left: 1.5rem;
+                  color: ${isDarkMode ? '#D1D5DB' : '#374151'};
                 }
                 .email-content li {
                   margin: 0.25rem 0;
@@ -1458,6 +1398,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                 }
                 .email-content strong, .email-content b {
                   font-weight: 600;
+                  color: ${isDarkMode ? '#F3F4F6' : '#111827'};
                 }
                 .email-content em, .email-content i {
                   font-style: italic;
@@ -1465,16 +1406,16 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                 /* Style date and time input icons to be white */
                 input[type="date"]::-webkit-calendar-picker-indicator,
                 input[type="time"]::-webkit-calendar-picker-indicator {
-                  filter: invert(1);
+                  filter: ${isDarkMode ? 'invert(1)' : 'none'};
                   cursor: pointer;
                 }
                 input[type="date"]::-webkit-inner-spin-button,
                 input[type="time"]::-webkit-inner-spin-button {
-                  filter: invert(1);
+                  filter: ${isDarkMode ? 'invert(1)' : 'none'};
                 }
                 input[type="date"]::-moz-calendar-picker-indicator,
                 input[type="time"]::-moz-calendar-picker-indicator {
-                  filter: invert(1);
+                  filter: ${isDarkMode ? 'invert(1)' : 'none'};
                   cursor: pointer;
                 }
               `}</style>
@@ -1517,7 +1458,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                       Email Template
                     </label>
                     <select
@@ -1526,7 +1467,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                         setSelectedTemplate(e.target.value)
                         setGeneratedEmail(null)
                       }}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100' : 'border-gray-300'}`}
                     >
                       {emailTemplates.map(template => (
                         <option key={template.id} value={template.id}>
@@ -1548,7 +1489,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                       }}
                       className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
                     />
-                    <label htmlFor="useCustomPrompt" className="text-sm font-medium text-gray-700">
+                    <label htmlFor="useCustomPrompt" className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                       Use Custom Prompt
                     </label>
                   </div>
@@ -1556,7 +1497,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                   {/* Custom Prompt Input */}
                   {useCustomPrompt && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                         Custom Prompt Instructions
                       </label>
                       <textarea
@@ -1564,7 +1505,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                         onChange={(e) => setCustomPrompt(e.target.value)}
                         placeholder="Describe exactly what you want in the email, e.g., 'A friendly follow-up email asking about their interest in our premium plan, mentioning the 30-day free trial, and asking for a call to discuss their needs'"
                         rows={4}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100 placeholder-gray-400' : 'border-gray-300'}`}
                       />
                     </div>
                   )}
@@ -1572,7 +1513,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                   {/* Custom Template Input */}
                   {selectedTemplate === 'custom' && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                         Custom Template Instructions
                       </label>
                       <textarea
@@ -1580,7 +1521,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                         onChange={(e) => setCustomTemplate(e.target.value)}
                         placeholder="Describe the type of email you want to generate, e.g., 'A follow-up email about our premium service offering'"
                         rows={4}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100 placeholder-gray-400' : 'border-gray-300'}`}
                       />
                     </div>
                   )}
@@ -1608,8 +1549,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
 
               {/* Previous Emails Section */}
               {previousEmails.length > 0 && !generatedEmail && (
-                <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
-                  <h3 className="text-lg font-normal text-gray-900 mb-4 flex items-center space-x-2">
+                <div className={`${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-6 border shadow-sm`}>
+                  <h3 className={`text-lg font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} mb-4 flex items-center space-x-2`}>
                     <MailIcon className="w-5 h-5 text-purple-600" />
                     <span>Use Previous Email as Template</span>
                   </h3>
@@ -1620,13 +1561,13 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                         onClick={() => handleUsePreviousEmail(email)}
                         className={`w-full text-left p-3 rounded-lg border transition-all ${
                           selectedPreviousEmail === email.id
-                            ? 'bg-purple-50 border-purple-300'
-                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                            ? `${isDarkMode ? 'bg-purple-900/30 border-purple-500' : 'bg-purple-50 border-purple-300'}`
+                            : `${isDarkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`
                         }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900 truncate">{email.subject}</p>
+                            <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} truncate`}>{email.subject}</p>
                             <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-1 line-clamp-2`}>{email.body.replace(/<[^>]*>/g, '').substring(0, 100)}...</p>
                           </div>
                           <span className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-700'} ml-2`}>{new Date(email.date).toLocaleDateString()}</span>
@@ -1639,9 +1580,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
 
               {/* Generated Email Preview */}
               {generatedEmail && (
-                <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+                <div className={`${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-6 border shadow-sm`}>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-normal text-gray-900 flex items-center space-x-2">
+                    <h3 className={`text-lg font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} flex items-center space-x-2`}>
                       <FileText className="w-5 h-5 text-purple-600" />
                       <span>{isEditing ? 'Edit Email' : 'Email Preview'}</span>
                     </h3>
@@ -1653,7 +1594,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                             setEditableSubject(generatedEmail.subject)
                             setEditableBody(generatedEmail.body)
                           }}
-                          className="px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 rounded-lg border border-purple-200"
+                          className={`px-3 py-1.5 text-sm ${isDarkMode ? 'text-purple-400 hover:bg-purple-900/30 border-purple-800' : 'text-purple-600 hover:bg-purple-50 border-purple-200'} rounded-lg border`}
                         >
                           Edit
                         </button>
@@ -1665,7 +1606,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                           setEditableBody('')
                           setIsEditing(false)
                         }}
-                        className="text-gray-400 hover:text-gray-600"
+                        className={`${isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
                       >
                         <X className="w-5 h-5" />
                       </button>
@@ -1674,7 +1615,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
 
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                         Subject
                       </label>
                       {isEditing ? (
@@ -1682,18 +1623,18 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                           type="text"
                           value={editableSubject}
                           onChange={(e) => setEditableSubject(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100' : 'border-gray-300'}`}
                           placeholder="Email subject"
                         />
                       ) : (
-                        <div className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-900">
+                        <div className={`px-4 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-lg`}>
                           {generatedEmail.subject}
                         </div>
                       )}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                         Body
                       </label>
                       {isEditing ? (
@@ -1701,12 +1642,12 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                           value={editableBody}
                           onChange={(e) => setEditableBody(e.target.value)}
                           rows={12}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100' : 'border-gray-300'}`}
                           placeholder="Email body (HTML supported)"
                         />
                       ) : (
                         <div 
-                          className="px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 max-h-96 overflow-y-auto email-preview"
+                          className={`px-4 py-3 ${isDarkMode ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-white border-gray-200 text-gray-900'} border rounded-lg max-h-96 overflow-y-auto email-preview`}
                           style={{ 
                             lineHeight: '1.6',
                             fontSize: '14px'
@@ -1719,7 +1660,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                       <style>{`
                         .email-preview p {
                           margin: 0.75rem 0;
-                          color: #374151;
+                          color: ${isDarkMode ? '#D1D5DB' : '#374151'};
                         }
                         .email-preview p:first-child {
                           margin-top: 0;
@@ -1734,6 +1675,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                         .email-preview ul, .email-preview ol {
                           margin: 0.75rem 0;
                           padding-left: 1.5rem;
+                          color: ${isDarkMode ? '#D1D5DB' : '#374151'};
                         }
                         .email-preview li {
                           margin: 0.5rem 0;
@@ -1759,7 +1701,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                             setEditableSubject(generatedEmail.subject)
                             setEditableBody(generatedEmail.body)
                           }}
-                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                          className={`px-4 py-2 border rounded-lg ${isDarkMode ? 'border-gray-500 text-gray-300 hover:bg-gray-600' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
                         >
                           Cancel
                         </button>
@@ -1810,7 +1752,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
 
               {/* No Email Generated State */}
               {!generatedEmail && (
-                <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
+                <div className={`text-center py-12 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'} rounded-lg border`}>
                   <MailIcon className={`w-16 h-16 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'} mx-auto mb-4`} />
                   <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mb-2`}>No email generated yet</p>
                   <p className={`text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-700'}`}>Select a template and click "Generate Email" to create a personalized email for this lead</p>
