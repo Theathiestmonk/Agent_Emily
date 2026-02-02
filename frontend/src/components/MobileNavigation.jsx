@@ -410,15 +410,15 @@ const MobileNavigation = ({
               onClick={() => navigate('/')}
               className="flex items-center hover:opacity-80 transition-opacity duration-200"
             >
-              <div className="w-8 h-8 rounded-full mr-3 overflow-hidden">
+              <div className="w-8 h-8 rounded-full mr-3 overflow-hidden bg-white p-1">
                 <img
-                  src="/emily_icon.png"
-                  alt="Emily"
-                  className="w-full h-full object-cover"
+                  src="/logo_.png"
+                  alt="ATSN AI logo"
+                  className="w-full h-full object-contain"
                 />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-gray-900">Emily</h1>
+                <h1 className="text-lg font-bold text-gray-900 tracking-wide">atsn ai</h1>
               </div>
             </button>
 

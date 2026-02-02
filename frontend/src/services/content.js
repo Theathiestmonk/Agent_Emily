@@ -312,6 +312,58 @@ class ContentAPI {
     }
   }
 
+  // Approve post content (set status to 'approved')
+  async approvePostContent(postId) {
+    try {
+      const authToken = await this.getAuthToken()
+      
+      const response = await fetch(buildApiUrl(`/content/post-contents/${postId}/approve`), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}, ${errorText}`)
+      }
+
+      const data = await response.json()
+      return { success: true, data }
+    } catch (error) {
+      console.error('Error approving post content:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Discard post content (delete from database and storage)
+  async discardPostContent(postId) {
+    try {
+      const authToken = await this.getAuthToken()
+      
+      const response = await fetch(buildApiUrl(`/content/post-contents/${postId}`), {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}, ${errorText}`)
+      }
+
+      const data = await response.json()
+      return { success: true, data }
+    } catch (error) {
+      console.error('Error discarding post content:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
   // Helper method to get auth token
   async getAuthToken() {
     const { data: { session } } = await supabase.auth.getSession()

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
-import { Send, ArrowRight, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone, Heart, X, Download, Minimize2 } from 'lucide-react'
+import { Send, ArrowRight, ArrowLeft, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone, Heart, X, Download, Minimize2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import ContentCard from './ContentCard'
@@ -3163,14 +3163,15 @@ const ATSNChatbot = ({ externalConversations = null, onMinimize = null }) => {
           {onMinimize && (
             <button
               onClick={onMinimize}
-              className={`p-2 rounded-md transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
                 isDarkMode
                   ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200'
                   : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'
               }`}
-              title="Minimize chat"
+              title="Back to dashboard"
             >
-              <Minimize2 className="w-4 h-4" />
+              <ArrowLeft className="w-4 h-4" />
+              <span className="text-sm font-medium">Back to dashboard</span>
             </button>
           )}
         </div>

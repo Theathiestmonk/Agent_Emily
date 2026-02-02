@@ -1710,3 +1710,111 @@ async def get_post_contents(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch post contents: {str(e)}"
         )
+
+@router.put("/post-contents/{post_id}/approve")
+async def approve_post_content(
+    post_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Approve a post content by setting status to 'approved'"""
+    try:
+        business_id = current_user.id
+        logger.info(f"Approving post_content: post_id={post_id}, business_id={business_id}")
+        
+        # Verify the post belongs to the user
+        check_response = supabase_admin.table("post_contents").select("id").eq("id", post_id).eq("business_id", business_id).execute()
+        
+        if not check_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post content not found or access denied"
+            )
+        
+        # Update status to 'approved'
+        update_response = supabase_admin.table("post_contents").update({
+            "status": "approved"
+        }).eq("id", post_id).eq("business_id", business_id).execute()
+        
+        if not update_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to approve post content"
+            )
+        
+        logger.info(f"Successfully approved post_content: {post_id}")
+        return {
+            "success": True,
+            "message": "Post content approved successfully",
+            "data": update_response.data[0]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error approving post content: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to approve post content: {str(e)}"
+        )
+
+@router.delete("/post-contents/{post_id}")
+async def discard_post_content(
+    post_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Discard (delete) a post content and its associated image"""
+    try:
+        import aiohttp
+        import re
+        
+        business_id = current_user.id
+        logger.info(f"Discarding post_content: post_id={post_id}, business_id={business_id}")
+        
+        # First, get the post content to retrieve image URL
+        get_response = supabase_admin.table("post_contents").select("*").eq("id", post_id).eq("business_id", business_id).execute()
+        
+        if not get_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post content not found or access denied"
+            )
+        
+        post_content = get_response.data[0]
+        image_url = post_content.get("generated_image_url")
+        
+        # Delete the image from Supabase Storage if it exists
+        if image_url:
+            try:
+                # Extract bucket and path from URL
+                # Supabase storage URLs typically look like: https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
+                storage_match = re.search(r'/storage/v1/object/public/([^/]+)/(.+)', image_url)
+                if storage_match:
+                    bucket_name = storage_match.group(1)
+                    file_path = storage_match.group(2)
+                    
+                    logger.info(f"Deleting image from storage: bucket={bucket_name}, path={file_path}")
+                    
+                    # Delete from Supabase Storage
+                    storage_response = supabase_admin.storage.from_(bucket_name).remove([file_path])
+                    logger.info(f"Storage deletion response: {storage_response}")
+            except Exception as img_error:
+                logger.warning(f"Failed to delete image from storage (continuing with DB deletion): {str(img_error)}")
+                # Continue with database deletion even if image deletion fails
+        
+        # Delete the post content from database
+        delete_response = supabase_admin.table("post_contents").delete().eq("id", post_id).eq("business_id", business_id).execute()
+        
+        logger.info(f"Successfully discarded post_content: {post_id}")
+        return {
+            "success": True,
+            "message": "Post content discarded successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error discarding post content: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to discard post content: {str(e)}"
+        )

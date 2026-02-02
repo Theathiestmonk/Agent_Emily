@@ -1,8 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
+import { contentAPI } from '../services/content'
+import { leadsAPI } from '../services/leads'
 import { onboardingAPI } from '../services/onboarding'
+import { connectionsAPI } from '../services/connections'
+import { socialMediaService } from '../services/socialMedia'
 import { supabase } from '../lib/supabase'
 import { loadTauriAPI } from '../utils/tauri'
 import SideNavbar from './SideNavbar'
@@ -48,13 +52,13 @@ import MainContentLoader from './MainContentLoader'
 import ATSNChatbot from './ATSNChatbot'
 import RecentTasks from './RecentTasks'
 import ContentCard from './ContentCard'
-import AgentCards from './AgentCards'
 import NewPostModal from './NewPostModal'
 import AddLeadModal from './AddLeadModal'
 import ContentCreateIndicator from './ContentCreateIndicator'
 import ATSNContentModal from './ATSNContentModal'
 import ReelModal from './ReelModal'
-import { Sparkles, TrendingUp, Target, BarChart3, FileText, PanelRight, PanelLeft, X, ChevronRight, RefreshCw, Send, Upload } from 'lucide-react'
+import PostContentCard from './PostContentCard'
+import { Sparkles, TrendingUp, Target, BarChart3, FileText, X, ChevronRight, ChevronLeft, RefreshCw, Send, Upload, CheckCircle, Mail, Phone, Facebook, Instagram, Users, LogIn, Globe, Calendar, MessageSquare } from 'lucide-react'
 
 // Voice Orb Component with animated border (spring-like animation)
 const VoiceOrb = ({ isSpeaking }) => {
@@ -185,22 +189,11 @@ function EmilyDashboard() {
   const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [isPanelOpen, setIsPanelOpen] = useState(true)
   const [conversations, setConversations] = useState([])
   const [loadingConversations, setLoadingConversations] = useState(false)
   const [messageFilter, setMessageFilter] = useState('all') // 'all', 'emily', 'chase', 'leo'
   const [showMobileChatHistory, setShowMobileChatHistory] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference)
-  const [overdueLeadsCount, setOverdueLeadsCount] = useState(0)
-  const [overdueLeadsLoading, setOverdueLeadsLoading] = useState(true)
-  const [todayCalendarEntries, setTodayCalendarEntries] = useState([])
-  const [calendarEntriesLoading, setCalendarEntriesLoading] = useState(true)
-  const [upcomingCalendarCount, setUpcomingCalendarCount] = useState(0)
-  const [upcomingCalendarLoading, setUpcomingCalendarLoading] = useState(true)
-  const [scheduledPostsCount, setScheduledPostsCount] = useState(0)
-  const [scheduledPostsLoading, setScheduledPostsLoading] = useState(true)
-  const [todaysNewLeadsCount, setTodaysNewLeadsCount] = useState(0)
-  const [todaysNewLeadsLoading, setTodaysNewLeadsLoading] = useState(true)
   const [showChatbot, setShowChatbot] = useState(false)
   const [showNewPostModal, setShowNewPostModal] = useState(false)
   const [showAddLeadModal, setShowAddLeadModal] = useState(false)
@@ -210,6 +203,17 @@ function EmilyDashboard() {
   const [showGeneratedReelModal, setShowGeneratedReelModal] = useState(false)
   const [generatedContent, setGeneratedContent] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [suggestedPosts, setSuggestedPosts] = useState([])
+  const [suggestedLoading, setSuggestedLoading] = useState(false)
+  const [currentPostIndex, setCurrentPostIndex] = useState(0)
+  const [todaysLeads, setTodaysLeads] = useState([])
+  const [todaysLeadsLoading, setTodaysLeadsLoading] = useState(false)
+  const [followUpLeads, setFollowUpLeads] = useState([])
+  const [followUpLeadsLoading, setFollowUpLeadsLoading] = useState(false)
+  const [performancePlatforms, setPerformancePlatforms] = useState([])
+  const [performanceData, setPerformanceData] = useState({})
+  const [performanceLoading, setPerformanceLoading] = useState(false)
+  const [currentPerformanceIndex, setCurrentPerformanceIndex] = useState(0)
 
   // Today's conversations only (no historical data)
 
@@ -254,11 +258,6 @@ function EmilyDashboard() {
     try {
       // Clear all caches
       const cacheKeys = [
-        `overdue_leads_count_${user?.id}`,
-        `today_calendar_entries_${user?.id}`,
-        `upcoming_calendar_count_${user?.id}`,
-        `scheduled_posts_count_${user?.id}`,
-        `todays_new_leads_count_${user?.id}`,
         `today_conversations_${user?.id}`
       ]
 
@@ -267,14 +266,13 @@ function EmilyDashboard() {
       })
 
       // Refetch all data
-      if (user) {
+    if (user) {
         await Promise.all([
-          fetchOverdueLeadsCount(true),
-          fetchTodayCalendarEntries(true),
-          fetchUpcomingCalendarCount(true),
-          fetchScheduledPostsCount(true),
-          fetchTodaysNewLeadsCount(true),
-          fetchTodayConversations(true)
+          fetchTodayConversations(true),
+          fetchSuggestedPosts(),
+          fetchTodaysLeads(),
+          fetchFollowUpLeads(true),
+          fetchPerformancePlatforms()
         ])
       }
 
@@ -282,6 +280,492 @@ function EmilyDashboard() {
     } catch (error) {
       console.error('Error refreshing data:', error)
       showError('Refresh failed', 'There was an error refreshing the data.')
+    }
+  }
+
+  const fetchSuggestedPosts = useCallback(async () => {
+    if (!user) return
+
+    setSuggestedLoading(true)
+    try {
+      const result = await contentAPI.getPostContents(12, 0)
+      if (result.error) {
+        throw new Error(result.error)
+      }
+
+      setSuggestedPosts(result.data || [])
+    } catch (error) {
+      console.error('Error fetching suggested posts:', error)
+      showError('Failed to load suggested content')
+    } finally {
+      setSuggestedLoading(false)
+    }
+  }, [user, showError])
+
+  const fetchTodaysLeads = useCallback(async () => {
+    if (!user) return
+
+    setTodaysLeadsLoading(true)
+    try {
+      // Fetch recent leads from backend then filter for today client-side (keeps behavior consistent with LeadsDashboard)
+      const response = await leadsAPI.getLeads({ limit: 500 })
+      const resultData = response.data || response
+      let fetchedLeads = []
+      if (Array.isArray(resultData)) {
+        fetchedLeads = resultData
+      } else if (resultData && resultData.leads) {
+        fetchedLeads = resultData.leads
+      }
+
+      const today = new Date()
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999)
+
+      const todays = fetchedLeads.filter(lead => {
+        if (!lead.created_at) return false
+        const created = new Date(lead.created_at)
+        return created >= startOfDay && created <= endOfDay
+      }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+
+      // Augment each lead with welcome_email_sent flag by checking recent outbound email conversations
+      const augmented = await Promise.all(todays.map(async (lead) => {
+        try {
+          const convResp = await leadsAPI.getConversations(lead.id, { message_type: 'email', limit: 5 })
+          const convs = convResp.data || []
+          const createdAt = lead.created_at ? new Date(lead.created_at) : null
+          const welcomeSent = convs.some(conv => {
+            if (!conv) return false
+            const isOutbound = conv.direction === 'outbound' && conv.sender === 'agent'
+            if (!isOutbound) return false
+            const content = (conv.content || '').toLowerCase()
+            const created = conv.created_at ? new Date(conv.created_at) : null
+            const nearCreation = createdAt && created && Math.abs(created - createdAt) < 1000 * 60 * 5 // within 5 minutes
+            return content.includes('welcome') || nearCreation
+          })
+          return { ...lead, welcome_email_sent: welcomeSent }
+        } catch (err) {
+          console.error('Error checking conversations for lead', lead.id, err)
+          return { ...lead, welcome_email_sent: false }
+        }
+      }))
+
+      setTodaysLeads(augmented)
+    } catch (err) {
+      console.error('Error fetching todays leads:', err)
+      setTodaysLeads([])
+    } finally {
+      setTodaysLeadsLoading(false)
+    }
+  }, [user])
+
+  // Fetch leads that need follow-up with caching
+  const fetchFollowUpLeads = useCallback(async (forceRefresh = false) => {
+    if (!user) return
+
+    const CACHE_KEY = `followup_leads_${user.id}`
+    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+    setFollowUpLeadsLoading(true)
+    try {
+      // Check if we have cached data from today
+      if (!forceRefresh) {
+        const cachedData = localStorage.getItem(CACHE_KEY)
+        if (cachedData) {
+          const { leads: cachedLeads, timestamp, date } = JSON.parse(cachedData)
+          const cacheAge = Date.now() - timestamp
+          const today = new Date().toDateString()
+          const cacheDate = new Date(date).toDateString()
+
+          // Use cached data if it's from today and less than 24 hours old
+          if (cacheDate === today && cacheAge < CACHE_EXPIRATION_MS) {
+            console.log('Using cached follow-up leads:', cachedLeads.length, 'leads')
+            setFollowUpLeads(cachedLeads)
+            setFollowUpLeadsLoading(false)
+            return
+          }
+        }
+      }
+
+      // Fetch fresh data from API
+      console.log('Fetching fresh follow-up leads from API')
+      const response = await leadsAPI.getLeads({ limit: 500 })
+      const resultData = response.data || response
+      let fetchedLeads = []
+      if (Array.isArray(resultData)) {
+        fetchedLeads = resultData
+      } else if (resultData && resultData.leads) {
+        fetchedLeads = resultData.leads
+      }
+
+      const today = new Date()
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+      // Filter leads that have follow_up_at and it's overdue or today
+      const followUps = fetchedLeads.filter(lead => {
+        if (!lead.follow_up_at) return false
+        const followUpDate = new Date(lead.follow_up_at)
+        const followUpDateOnly = new Date(followUpDate.getFullYear(), followUpDate.getMonth(), followUpDate.getDate())
+        // Include leads where follow_up_at is today or in the past
+        return followUpDateOnly <= startOfToday
+      }).sort((a, b) => {
+        // Sort by follow_up_at, oldest first
+        const dateA = new Date(a.follow_up_at)
+        const dateB = new Date(b.follow_up_at)
+        return dateA - dateB
+      })
+
+      // Augment with welcome_email_sent flag
+      const augmented = await Promise.all(followUps.map(async (lead) => {
+        try {
+          const convResp = await leadsAPI.getConversations(lead.id, { message_type: 'email', limit: 5 })
+          const convs = convResp.data || []
+          const createdAt = lead.created_at ? new Date(lead.created_at) : null
+          const welcomeSent = convs.some(conv => {
+            if (!conv) return false
+            const isOutbound = conv.direction === 'outbound' && conv.sender === 'agent'
+            if (!isOutbound) return false
+            const content = (conv.content || '').toLowerCase()
+            const created = conv.created_at ? new Date(conv.created_at) : null
+            const nearCreation = createdAt && created && Math.abs(created - createdAt) < 1000 * 60 * 5
+            return content.includes('welcome') || nearCreation
+          })
+          return { ...lead, welcome_email_sent: welcomeSent }
+        } catch (err) {
+          console.error('Error checking conversations for lead', lead.id, err)
+          return { ...lead, welcome_email_sent: false }
+        }
+      }))
+
+      // Cache the follow-up leads with current timestamp and date
+      const cacheData = {
+        leads: augmented,
+        timestamp: Date.now(),
+        date: new Date().toISOString()
+      }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
+
+      console.log('Cached fresh follow-up leads:', augmented.length, 'leads')
+      setFollowUpLeads(augmented)
+    } catch (err) {
+      console.error('Error fetching follow-up leads:', err)
+      setFollowUpLeads([])
+    } finally {
+      setFollowUpLeadsLoading(false)
+    }
+  }, [user])
+
+  // Filter suggested posts for today
+  const todaysSuggestedPosts = useMemo(() => {
+    const today = new Date()
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999)
+
+    return suggestedPosts.filter(post => {
+      if (!post.created_at) return false
+      const created = new Date(post.created_at)
+      return created >= startOfDay && created <= endOfDay
+    }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  }, [suggestedPosts])
+
+  // Reset index when posts change
+  useEffect(() => {
+    setCurrentPostIndex(0)
+  }, [todaysSuggestedPosts.length])
+
+  const nextPost = () => {
+    setCurrentPostIndex((prev) => (prev + 1) % todaysSuggestedPosts.length)
+  }
+
+  const prevPost = () => {
+    setCurrentPostIndex((prev) => (prev - 1 + todaysSuggestedPosts.length) % todaysSuggestedPosts.length)
+  }
+
+  const goToPost = (index) => {
+    setCurrentPostIndex(index)
+  }
+
+  const handleCopyCaption = useCallback(async (caption) => {
+    if (!caption) return
+
+    try {
+      await navigator.clipboard.writeText(caption)
+      showSuccess('Caption copied', 'Paste it anywhere you like')
+    } catch (error) {
+      console.error('Error copying caption:', error)
+      showError('Copy failed', 'Unable to copy caption')
+    }
+  }, [showSuccess, showError])
+
+  const handleApprovePost = useCallback(async (postId) => {
+    try {
+      const result = await contentAPI.approvePostContent(postId)
+      if (result.success) {
+        showSuccess('Post approved', 'The post has been marked as approved')
+        // Refresh the suggested posts
+        await fetchSuggestedPosts()
+      } else {
+        showError('Approval failed', result.error || 'Failed to approve post')
+      }
+    } catch (error) {
+      console.error('Error approving post:', error)
+      showError('Approval failed', 'Unable to approve post')
+    }
+  }, [showSuccess, showError, fetchSuggestedPosts])
+
+  const handleDiscardPost = useCallback(async (postId) => {
+    try {
+      const result = await contentAPI.discardPostContent(postId)
+      if (result.success) {
+        showSuccess('Post discarded', 'The post has been deleted')
+        // Refresh the suggested posts
+        await fetchSuggestedPosts()
+      } else {
+        showError('Discard failed', result.error || 'Failed to discard post')
+      }
+    } catch (error) {
+      console.error('Error discarding post:', error)
+      showError('Discard failed', 'Unable to discard post')
+    }
+  }, [showSuccess, showError, fetchSuggestedPosts])
+
+  // Fetch connected platforms for performance metrics
+  const fetchPerformancePlatforms = useCallback(async () => {
+    if (!user) return
+
+    setPerformanceLoading(true)
+    try {
+      const response = await connectionsAPI.getConnections()
+      const connections = response.data || []
+      
+      // Filter active connections for social media platforms
+      const socialPlatforms = ['facebook', 'instagram', 'linkedin', 'twitter', 'youtube']
+      const activeConnections = connections.filter(conn => 
+        conn.connection_status === 'active' && 
+        socialPlatforms.includes(conn.platform?.toLowerCase())
+      )
+      
+      // Deduplicate by platform - keep only the first connection for each platform
+      const platformMap = new Map()
+      activeConnections.forEach(conn => {
+        const platform = conn.platform?.toLowerCase()
+        if (platform && !platformMap.has(platform)) {
+          platformMap.set(platform, {
+            platform: platform,
+            name: conn.page_name || conn.platform,
+            connectionId: conn.id
+          })
+        }
+      })
+      
+      const activePlatforms = Array.from(platformMap.values())
+      setPerformancePlatforms(activePlatforms)
+      
+      // Fetch metrics for each platform
+      if (activePlatforms.length > 0) {
+        await fetchPlatformMetrics(activePlatforms)
+      }
+    } catch (error) {
+      console.error('Error fetching performance platforms:', error)
+      setPerformancePlatforms([])
+    } finally {
+      setPerformanceLoading(false)
+    }
+  }, [user])
+
+  // Fetch metrics for each platform from real APIs (same as happenings dashboard)
+  const fetchPlatformMetrics = async (platforms) => {
+    const metricsData = {}
+    const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
+    
+    // Get auth token
+    const { data: { session } } = await supabase.auth.getSession()
+    const authToken = session?.access_token
+    
+    if (!authToken) {
+      console.error('No auth token available')
+      return
+    }
+    
+    try {
+      // Fetch latest posts from API (same endpoint as happenings dashboard)
+      const postsResponse = await fetch(`${API_BASE_URL}/api/social-media/latest-posts`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      let postsByPlatform = {}
+      if (postsResponse.ok) {
+        const postsData = await postsResponse.json()
+        postsByPlatform = postsData.posts || {}
+      }
+      
+      // Fetch platform stats for followers/page likes (same endpoint as happenings dashboard)
+      const statsResponse = await fetch(`${API_BASE_URL}/social-media/platform-stats`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      let platformStats = {}
+      if (statsResponse.ok) {
+        platformStats = await statsResponse.json()
+      }
+      
+      // Process each platform
+      for (const platform of platforms) {
+        const platformKey = platform.platform.toLowerCase()
+        const platformPosts = postsByPlatform[platformKey] || []
+        
+        // Get recent 5 posts
+        const recentPostsList = platformPosts.slice(0, 5)
+        const recentPosts = recentPostsList.length
+        
+        // Calculate total likes and comments from recent posts
+        const recentLikes = recentPostsList.reduce((sum, post) => {
+          return sum + (post.likes_count || post.like_count || post.reactions_count || 0)
+        }, 0)
+        
+        const recentComments = recentPostsList.reduce((sum, post) => {
+          return sum + (post.comments_count || post.comment_count || 0)
+        }, 0)
+        
+        // Get followers/page likes from platform stats
+        const stats = platformStats[platformKey] || {}
+        // Facebook returns fan_count, Instagram returns followers_count
+        const followers = stats.followers_count || stats.fan_count || stats.page_likes || stats.subscribers_count || 0
+        
+        metricsData[platform.platform] = {
+          followers: followers,
+          recentLikes: recentLikes,
+          recentComments: recentComments,
+          recentPosts: recentPosts
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching platform metrics:', error)
+      // Fallback to database
+      for (const platform of platforms) {
+        try {
+          const postsResponse = await supabase
+            .from('post_snapshots')
+            .select('*')
+            .eq('platform', platform.platform)
+            .order('created_at', { ascending: false })
+            .limit(5)
+
+          const recentPosts = postsResponse.data || []
+          const totalLikes = recentPosts.reduce((sum, post) => sum + (post.likes_count || 0), 0)
+          const totalComments = recentPosts.reduce((sum, post) => sum + (post.comments_count || 0), 0)
+          
+          const insightsResponse = await supabase
+            .from('social_insights')
+            .select('followers_count, subscribers_count, page_likes')
+            .eq('platform', platform.platform)
+            .order('insight_date', { ascending: false })
+            .limit(1)
+            .single()
+
+          metricsData[platform.platform] = {
+            followers: insightsResponse.data?.followers_count || insightsResponse.data?.subscribers_count || insightsResponse.data?.page_likes || 0,
+            recentLikes: totalLikes,
+            recentComments: totalComments,
+            recentPosts: recentPosts.length
+          }
+        } catch (fallbackError) {
+          console.error(`Fallback error for ${platform.platform}:`, fallbackError)
+          metricsData[platform.platform] = {
+            followers: 0,
+            recentLikes: 0,
+            recentComments: 0,
+            recentPosts: 0
+          }
+        }
+      }
+    }
+    
+    setPerformanceData(metricsData)
+  }
+
+  useEffect(() => {
+    if (user) {
+      fetchSuggestedPosts()
+      fetchTodaysLeads()
+      fetchFollowUpLeads()
+      fetchPerformancePlatforms()
+    }
+  }, [user, fetchSuggestedPosts, fetchTodaysLeads, fetchFollowUpLeads, fetchPerformancePlatforms])
+
+  // Reset performance index when platforms change
+  useEffect(() => {
+    setCurrentPerformanceIndex(0)
+  }, [performancePlatforms.length])
+
+  const nextPerformance = () => {
+    setCurrentPerformanceIndex((prev) => (prev + 1) % performancePlatforms.length)
+  }
+
+  const prevPerformance = () => {
+    setCurrentPerformanceIndex((prev) => (prev - 1 + performancePlatforms.length) % performancePlatforms.length)
+  }
+
+  const goToPerformance = (index) => {
+    setCurrentPerformanceIndex(index)
+  }
+
+  // Get platform display name
+  const getPlatformDisplayName = (platform) => {
+    const names = {
+      facebook: 'Facebook',
+      instagram: 'Instagram',
+      linkedin: 'LinkedIn',
+      twitter: 'X (Twitter)',
+      youtube: 'YouTube'
+    }
+    return names[platform] || platform
+  }
+
+  // Get followers label based on platform
+  const getFollowersLabel = (platform) => {
+    const labels = {
+      facebook: 'Page Likes',
+      instagram: 'Followers',
+      linkedin: 'Followers',
+      twitter: 'Followers',
+      youtube: 'Subscribers'
+    }
+    return labels[platform] || 'Followers'
+  }
+
+  // Channel icon helper for lead cards
+  const getChannelIcon = (platform) => {
+    if (!platform) return <Users className="w-3.5 h-3.5" />
+    const p = platform.toLowerCase()
+    switch (p) {
+      case 'facebook':
+        return <Facebook className="w-3.5 h-3.5" />
+      case 'instagram':
+        return <Instagram className="w-3.5 h-3.5" />
+      case 'email':
+        return <Mail className="w-3.5 h-3.5" />
+      case 'phone_call':
+      case 'phone':
+      case 'phone call':
+        return <Phone className="w-3.5 h-3.5" />
+      case 'walk_ins':
+      case 'walk-ins':
+      case 'walkin':
+        return <LogIn className="w-3.5 h-3.5" />
+      case 'website':
+        return <Globe className="w-3.5 h-3.5" />
+      case 'referral':
+        return <Users className="w-3.5 h-3.5" />
+      default:
+        return <Users className="w-3.5 h-3.5" />
     }
   }
 
@@ -443,92 +927,6 @@ function EmilyDashboard() {
     }
   }
 
-  // Fetch overdue leads count
-  const fetchOverdueLeadsCount = async (forceRefresh = false) => {
-    if (!user) return
-
-    const CACHE_KEY = `overdue_leads_count_${user.id}`
-    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
-
-    try {
-      // Check if we have cached data from today
-      if (!forceRefresh) {
-        const cachedData = localStorage.getItem(CACHE_KEY)
-        if (cachedData) {
-          const { count, timestamp } = JSON.parse(cachedData)
-          const cacheAge = Date.now() - timestamp
-
-          // Use cached data if it's less than 24 hours old
-          if (cacheAge < CACHE_EXPIRATION_MS) {
-            console.log('Using cached overdue leads count:', count)
-            setOverdueLeadsCount(count)
-            setOverdueLeadsLoading(false)
-            return
-          }
-        }
-      }
-
-      setOverdueLeadsLoading(true)
-
-      // Get all leads using Supabase directly (like todaysNewLeadsCount)
-      const { data: allLeads, error } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('user_id', user.id)
-
-      if (error) {
-        console.error('Error fetching leads for overdue count:', error)
-        setOverdueLeadsCount(0)
-        return
-      }
-
-      console.log('Total leads fetched for overdue count:', allLeads.length)
-      console.log('All leads sample:', allLeads.slice(0, 10))
-      console.log('Leads with follow_up_at:', allLeads.filter(l => l.follow_up_at))
-      console.log('Sample leads with follow_up_at:', allLeads.filter(l => l.follow_up_at).slice(0, 10))
-
-      // Count leads with overdue follow-ups (follow-up date shows "ago" or "Yesterday")
-      const overdueCount = allLeads.filter(lead => {
-        if (!lead.follow_up_at) return false
-
-        const date = new Date(lead.follow_up_at)
-        const now = new Date()
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-        const followUpDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-        const diffInDays = Math.floor((followUpDate - today) / (1000 * 60 * 60 * 24))
-
-        const isOverdue = diffInDays < 0
-        if (isOverdue) {
-          console.log('Overdue lead found:', {
-            id: lead.id,
-            name: lead.name,
-            follow_up_at: lead.follow_up_at,
-            diffInDays: diffInDays,
-            followUpDate: followUpDate.toISOString(),
-            today: today.toISOString()
-          })
-        }
-
-        return isOverdue
-      }).length
-
-      // Cache the result with current timestamp
-      const cacheData = {
-        count: overdueCount,
-        timestamp: Date.now()
-      }
-      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
-
-      console.log('Overdue leads count:', overdueCount)
-      setOverdueLeadsCount(overdueCount)
-    } catch (error) {
-      console.error('Error fetching overdue leads count:', error)
-      setOverdueLeadsCount(0)
-    } finally {
-      setOverdueLeadsLoading(false)
-    }
-  }
-
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -550,9 +948,9 @@ function EmilyDashboard() {
     }
   }, [user])
 
-  // Fetch today's conversations when panel opens
+  // Fetch today's conversations when user is available
   useEffect(() => {
-    if (isPanelOpen && user) {
+    if (user) {
       fetchTodayConversations()
       // Set up daily cache flush at midnight
       const now = new Date()
@@ -560,377 +958,17 @@ function EmilyDashboard() {
       const timeUntilMidnight = tomorrow.getTime() - now.getTime()
 
       const midnightTimer = setTimeout(() => {
-        console.log('Midnight reached - clearing conversation cache')
-        const CACHE_KEY = `today_conversations_${user.id}`
-        localStorage.removeItem(CACHE_KEY)
-        // Refresh conversations for the new day
+        console.log('Midnight reached - clearing conversation and follow-up leads cache')
+        const CONVERSATION_CACHE_KEY = `today_conversations_${user.id}`
+        const FOLLOWUP_CACHE_KEY = `followup_leads_${user.id}`
+        localStorage.removeItem(CONVERSATION_CACHE_KEY)
+        localStorage.removeItem(FOLLOWUP_CACHE_KEY)
+        // Refresh conversations and follow-up leads for the new day
         fetchTodayConversations(true)
+        fetchFollowUpLeads(true)
       }, timeUntilMidnight)
 
       return () => clearTimeout(midnightTimer)
-    }
-  }, [isPanelOpen, user])
-
-  // Fetch today's calendar entries
-  const fetchTodayCalendarEntries = async (forceRefresh = false) => {
-    if (!user) return
-
-    const CACHE_KEY = `today_calendar_entries_${user.id}`
-    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
-
-    try {
-      // Check if we have cached data from today
-      if (!forceRefresh) {
-        const cachedData = localStorage.getItem(CACHE_KEY)
-        if (cachedData) {
-          const { entries, timestamp, date } = JSON.parse(cachedData)
-          const cacheAge = Date.now() - timestamp
-          const today = new Date().toDateString()
-          const cacheDate = new Date(date).toDateString()
-
-          // Use cached data if it's from today and less than 24 hours old
-          if (cacheDate === today && cacheAge < CACHE_EXPIRATION_MS) {
-            console.log('Using cached today calendar entries:', entries)
-            setTodayCalendarEntries(entries)
-            setCalendarEntriesLoading(false)
-            return
-          }
-        }
-      }
-
-      setCalendarEntriesLoading(true)
-      const token = await supabase.auth.getSession().then(res => res.data.session?.access_token)
-      
-      if (!token) return
-
-      // Get today's date in YYYY-MM-DD format
-      const today = new Date()
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-
-      // Fetch all calendars for the user
-      const calendarsResponse = await fetch(`${API_BASE_URL}/calendars`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (calendarsResponse.ok) {
-        const calendars = await calendarsResponse.json()
-        
-        // Fetch entries for each calendar and filter for today
-        let todayEntries = []
-        for (const calendar of calendars) {
-          const entriesResponse = await fetch(`${API_BASE_URL}/calendars/${calendar.id}`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          })
-          
-          if (entriesResponse.ok) {
-            const calendarData = await entriesResponse.json()
-            const entries = calendarData.entries || []
-            
-            // Filter for today's entries
-            const todaysEntries = entries.filter(entry => {
-              const entryDate = new Date(entry.entry_date)
-              const entryDateStr = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`
-              return entryDateStr === todayStr
-            })
-            
-            todayEntries = [...todayEntries, ...todaysEntries]
-          }
-        }
-        
-        // Cache the data
-        const cacheData = {
-          entries: todayEntries,
-          timestamp: Date.now(),
-          date: today.toISOString()
-        }
-        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
-        
-        console.log('Today calendar entries:', todayEntries)
-        setTodayCalendarEntries(todayEntries)
-      }
-    } catch (error) {
-      console.error('Error fetching today calendar entries:', error)
-      setTodayCalendarEntries([])
-    } finally {
-      setCalendarEntriesLoading(false)
-    }
-  }
-
-  // Fetch upcoming calendar content for next 7 days
-  const fetchUpcomingCalendarCount = async (forceRefresh = false) => {
-    if (!user) return
-
-    const CACHE_KEY = `upcoming_calendar_count_${user.id}`
-    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
-
-    try {
-      // Check if we have cached data
-      if (!forceRefresh) {
-        const cachedData = localStorage.getItem(CACHE_KEY)
-        if (cachedData) {
-          const { count, timestamp } = JSON.parse(cachedData)
-          const cacheAge = Date.now() - timestamp
-
-          // Use cached data if less than 24 hours old
-          if (cacheAge < CACHE_EXPIRATION_MS) {
-            console.log('Using cached upcoming calendar count:', count)
-            setUpcomingCalendarCount(count)
-            setUpcomingCalendarLoading(false)
-            return
-          }
-        }
-      }
-
-      setUpcomingCalendarLoading(true)
-      const token = await supabase.auth.getSession().then(res => res.data.session?.access_token)
-
-      if (!token) return
-
-      // Get date range for next 7 days
-      const today = new Date()
-      const nextWeek = new Date(today)
-      nextWeek.setDate(today.getDate() + 7)
-
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-      const nextWeekStr = `${nextWeek.getFullYear()}-${String(nextWeek.getMonth() + 1).padStart(2, '0')}-${String(nextWeek.getDate()).padStart(2, '0')}`
-
-      // Fetch all calendars for the user
-      const calendarsResponse = await fetch(`${API_BASE_URL}/calendars`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (calendarsResponse.ok) {
-        const calendars = await calendarsResponse.json()
-
-        // Fetch entries for each calendar and filter for next 7 days
-        let upcomingCount = 0
-        for (const calendar of calendars) {
-          const entriesResponse = await fetch(`${API_BASE_URL}/calendars/${calendar.id}`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          })
-
-          if (entriesResponse.ok) {
-            const calendarData = await entriesResponse.json()
-            const entries = calendarData.entries || []
-
-            // Filter for entries in the next 7 days (excluding today)
-            const upcomingEntries = entries.filter(entry => {
-              const entryDate = new Date(entry.entry_date)
-              const entryDateStr = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`
-              return entryDateStr > todayStr && entryDateStr <= nextWeekStr
-            })
-
-            upcomingCount += upcomingEntries.length
-          }
-        }
-
-        // Cache the result with current timestamp
-        const cacheData = {
-          count: upcomingCount,
-          timestamp: Date.now()
-        }
-        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
-
-        console.log('Upcoming calendar content count (next 7 days):', upcomingCount)
-        setUpcomingCalendarCount(upcomingCount)
-      }
-    } catch (error) {
-      console.error('Error fetching upcoming calendar count:', error)
-      setUpcomingCalendarCount(0)
-    } finally {
-      setUpcomingCalendarLoading(false)
-    }
-  }
-
-  // Fetch scheduled posts count from created_content table
-  const fetchScheduledPostsCount = async (forceRefresh = false) => {
-    if (!user) return
-
-    const CACHE_KEY = `scheduled_posts_count_${user.id}`
-    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
-
-    try {
-      // Check if we have cached data
-      if (!forceRefresh) {
-        const cachedData = localStorage.getItem(CACHE_KEY)
-        if (cachedData) {
-          const { count, timestamp } = JSON.parse(cachedData)
-          const cacheAge = Date.now() - timestamp
-
-          // Use cached data if less than 24 hours old
-          if (cacheAge < CACHE_EXPIRATION_MS) {
-            console.log('Using cached scheduled posts count:', count)
-            setScheduledPostsCount(count)
-            setScheduledPostsLoading(false)
-            return
-          }
-        }
-      }
-
-      setScheduledPostsLoading(true)
-
-      // Fetch scheduled posts from content_posts table (joined with content_campaigns for user filtering)
-      const { data, error } = await supabase
-        .from('content_posts')
-        .select('id, content_campaigns!inner(*)')
-        .eq('content_campaigns.user_id', user.id)
-        .eq('status', 'scheduled')
-        .gte('scheduled_date', new Date().toISOString().split('T')[0]) // From today onwards
-
-      if (error) {
-        console.error('Error fetching scheduled posts:', error)
-        setScheduledPostsCount(0)
-      } else {
-        const count = data?.length || 0
-
-        // Cache the result with current timestamp
-        const cacheData = {
-          count: count,
-          timestamp: Date.now()
-        }
-        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
-
-        console.log('Scheduled posts count:', count)
-        console.log('Scheduled posts data:', data)
-        setScheduledPostsCount(count)
-      }
-    } catch (error) {
-      console.error('Error fetching scheduled posts count:', error)
-      setScheduledPostsCount(0)
-    } finally {
-      setScheduledPostsLoading(false)
-    }
-  }
-
-  // Fetch today's new leads count
-  const fetchTodaysNewLeadsCount = async (forceRefresh = false) => {
-    if (!user) return
-
-    const CACHE_KEY = `todays_new_leads_count_${user.id}`
-    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
-
-    try {
-      // Check if we have cached data
-      if (!forceRefresh) {
-        const cachedData = localStorage.getItem(CACHE_KEY)
-        if (cachedData) {
-          const { count, timestamp, date } = JSON.parse(cachedData)
-          const cacheAge = Date.now() - timestamp
-          const today = new Date().toDateString()
-
-          // Use cached data if it's from today and less than 24 hours old
-          if (date === today && cacheAge < CACHE_EXPIRATION_MS) {
-            console.log('Using cached todays new leads count:', count)
-            setTodaysNewLeadsCount(count)
-            setTodaysNewLeadsLoading(false)
-            return
-          }
-        }
-      }
-
-      setTodaysNewLeadsLoading(true)
-
-      // Get today's date range
-      const today = new Date()
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999)
-
-      // Fetch leads created today from Supabase
-      const { data, error } = await supabase
-        .from('leads')
-        .select('id')
-        .eq('user_id', user.id)
-        .gte('created_at', startOfDay.toISOString())
-        .lte('created_at', endOfDay.toISOString())
-
-      if (error) {
-        console.error('Error fetching todays new leads:', error)
-        setTodaysNewLeadsCount(0)
-      } else {
-        const count = data?.length || 0
-
-        // Cache the result with current timestamp and date
-        const cacheData = {
-          count: count,
-          timestamp: Date.now(),
-          date: today.toDateString()
-        }
-        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
-
-        console.log('Todays new leads count:', count)
-        setTodaysNewLeadsCount(count)
-      }
-    } catch (error) {
-      console.error('Error fetching todays new leads count:', error)
-      setTodaysNewLeadsCount(0)
-    } finally {
-      setTodaysNewLeadsLoading(false)
-    }
-  }
-
-  // Fetch overdue leads count periodically (cached for 24 hours)
-  useEffect(() => {
-    if (user) {
-      fetchOverdueLeadsCount()
-      // Refresh every 24 hours
-      const interval = setInterval(() => fetchOverdueLeadsCount(true), 24 * 60 * 60 * 1000)
-      return () => clearInterval(interval)
-    }
-  }, [user])
-
-  // Fetch today's calendar entries
-  useEffect(() => {
-    if (user) {
-      fetchTodayCalendarEntries()
-      // Refresh every 24 hours
-      const interval = setInterval(() => fetchTodayCalendarEntries(true), 24 * 60 * 60 * 1000)
-      return () => clearInterval(interval)
-    }
-  }, [user])
-
-  // Fetch upcoming calendar content count
-  useEffect(() => {
-    if (user) {
-      fetchUpcomingCalendarCount()
-      // Refresh every 24 hours
-      const interval = setInterval(() => fetchUpcomingCalendarCount(true), 24 * 60 * 60 * 1000)
-      return () => clearInterval(interval)
-    }
-  }, [user])
-
-  // Fetch scheduled posts count
-  useEffect(() => {
-    if (user) {
-      fetchScheduledPostsCount()
-      // Refresh every 24 hours
-      const interval = setInterval(() => fetchScheduledPostsCount(true), 24 * 60 * 60 * 1000)
-      return () => clearInterval(interval)
-    }
-  }, [user])
-
-  // Fetch today's new leads count
-  useEffect(() => {
-    if (user) {
-      fetchTodaysNewLeadsCount()
-      // Refresh every hour for more frequent updates on new leads
-      const interval = setInterval(() => fetchTodaysNewLeadsCount(true), 60 * 60 * 1000)
-      return () => clearInterval(interval)
     }
   }, [user])
 
@@ -1135,7 +1173,7 @@ function EmilyDashboard() {
       <SideNavbar />
       
       {/* Main Content */}
-      <div className={`md:ml-48 xl:ml-64 flex flex-col overflow-hidden pt-16 md:pt-0 bg-transparent ${
+      <div data-main-content="true" className={`md:ml-48 xl:ml-64 flex flex-col overflow-hidden pt-16 md:pt-0 bg-transparent ${
         isDarkMode ? 'md:bg-gray-900' : 'md:bg-white'
       }`} style={{ height: '100vh', overflow: 'hidden' }}>
         {/* Header */}
@@ -1145,71 +1183,11 @@ function EmilyDashboard() {
           <div className="px-4 lg:px-6 py-3 lg:py-4">
             <div className="flex justify-between items-center">
               <div className="hidden md:flex items-center gap-3">
-                {/* Agent Filter Icons */}
-                <div className="flex items-center gap-1">
-                  {/* All Messages */}
-                  <button
-                    onClick={() => setMessageFilter('all')}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                      messageFilter === 'all'
-                        ? 'bg-gray-600 text-white ring-2 ring-gray-300'
-                        : isDarkMode
-                        ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                    title="All Messages"
-                  >
-                    All
-                  </button>
-
-                  {/* Emily */}
-                  <button
-                    onClick={() => setMessageFilter('emily')}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all border-2 border-gray-300 ${
-                      messageFilter === 'emily'
-                        ? 'ring-2 ring-purple-300'
-                        : 'hover:opacity-80'
-                    }`}
-                    title="Emily Messages"
-                  >
-                    <img src="/emily_icon.png" alt="Emily" className="w-9 h-9 rounded-full object-cover" />
-                  </button>
-
-                  {/* Chase */}
-                  <button
-                    onClick={() => setMessageFilter('chase')}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all border-2 border-gray-300 ${
-                      messageFilter === 'chase'
-                        ? 'ring-2 ring-blue-300'
-                        : 'hover:opacity-80'
-                    }`}
-                    title="Chase Messages"
-                  >
-                    <img src="/chase_logo.png" alt="Chase" className="w-9 h-9 rounded-full object-cover" />
-                  </button>
-
-                  {/* Leo */}
-                  <button
-                    onClick={() => setMessageFilter('leo')}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all border-2 border-gray-300 ${
-                      messageFilter === 'leo'
-                        ? 'ring-2 ring-green-300'
-                        : 'hover:opacity-80'
-                    }`}
-                    title="Leo Messages"
-                  >
-                    <img src="/leo_logo.png" alt="Leo" className="w-9 h-9 rounded-full object-cover" />
-                  </button>
-                </div>
-
-
-                <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>|</span>
                 <div className={`text-sm lg:text-base ${
                   isDarkMode ? 'text-gray-100' : 'text-gray-900'
                 }`}>
                   {profile?.business_name || user?.user_metadata?.name || 'you'}
                 </div>
-                <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>|</span>
               </div>
               
               <div className="flex items-center gap-2">
@@ -1228,26 +1206,6 @@ function EmilyDashboard() {
                   }`} />
                 </button>
 
-                {/* Panel Toggle Button */}
-                <button
-                  onClick={() => setIsPanelOpen(!isPanelOpen)}
-                  className={`p-2 rounded-md transition-colors border ${
-                    isDarkMode
-                      ? 'hover:bg-gray-700 border-gray-600 text-gray-300'
-                      : 'hover:bg-gray-100 border-gray-200'
-                  }`}
-                  title={isPanelOpen ? "Close Panel" : "Open Panel"}
-                >
-                  {isPanelOpen ? (
-                    <PanelLeft className={`w-5 h-5 ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`} />
-                  ) : (
-                    <PanelRight className={`w-5 h-5 ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`} />
-                  )}
-                </button>
               </div>
             </div>
           </div>
@@ -1265,164 +1223,502 @@ function EmilyDashboard() {
                 }`}>
                   {showChatbot ? (
                     <div className="h-full pt-0.5 px-8">
-                  <ATSNChatbot
-                    key="atsn-chatbot-fresh"
+                      <ATSNChatbot
+                        key="atsn-chatbot-fresh"
                         onMinimize={() => setShowChatbot(false)}
                       />
                     </div>
                   ) : (
-                    <AgentCards
-                      isDarkMode={isDarkMode}
-                      onInputClick={() => setShowChatbot(true)}
-                      upcomingCalendarCount={upcomingCalendarCount}
-                      upcomingCalendarLoading={upcomingCalendarLoading}
-                      scheduledPostsCount={scheduledPostsCount}
-                      scheduledPostsLoading={scheduledPostsLoading}
-                      overdueLeadsCount={overdueLeadsCount}
-                      overdueLeadsLoading={overdueLeadsLoading}
-                      todaysNewLeadsCount={todaysNewLeadsCount}
-                      todaysNewLeadsLoading={todaysNewLeadsLoading}
-                      todayCalendarEntries={todayCalendarEntries}
-                      calendarEntriesLoading={calendarEntriesLoading}
-                      navigate={navigate}
-                    />
+                    <div className="h-full w-full px-8 py-6 overflow-y-auto">
+                      <div className="flex items-center gap-3 mb-4">
+                        {suggestedLoading && (
+                          <span className="text-xs text-gray-400 uppercase tracking-widest">Loading...</span>
+                        )}
+                      </div>
+
+                      {suggestedLoading ? (
+                        <div className="flex items-center justify-center h-full">
+                          <div className={`text-sm ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>
+                            Fetching suggested post...
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                          {/* Column 1: Suggested post */}
+                          <div className="col-span-1">
+                            <div className="mb-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                    Suggested posts
+                                  </h3>
+                                  <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    {todaysSuggestedPosts.length} post{todaysSuggestedPosts.length !== 1 ? 's' : ''}
+                                  </p>
+                                </div>
+                                {/* Navigation Arrows */}
+                                {todaysSuggestedPosts.length > 1 && (
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={prevPost}
+                                      className={`p-2 rounded-full ${
+                                        isDarkMode
+                                          ? 'bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700'
+                                          : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-md'
+                                      } transition-colors`}
+                                      aria-label="Previous post"
+                                    >
+                                      <ChevronLeft className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={nextPost}
+                                      className={`p-2 rounded-full ${
+                                        isDarkMode
+                                          ? 'bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700'
+                                          : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-md'
+                                      } transition-colors`}
+                                      aria-label="Next post"
+                                    >
+                                      <ChevronRight className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {todaysSuggestedPosts && todaysSuggestedPosts.length > 0 ? (
+                              <div className="relative">
+                                {/* Slider Container */}
+                                <div className="relative overflow-hidden">
+                                  <div
+                                    className="flex transition-transform duration-300 ease-in-out"
+                                    style={{
+                                      transform: `translateX(-${currentPostIndex * 100}%)`
+                                    }}
+                                  >
+                                    {todaysSuggestedPosts.map((post) => (
+                                      <div
+                                        key={post.id}
+                                        className="w-full flex-shrink-0"
+                                      >
+                                        <PostContentCard
+                                          post={post}
+                                          isDarkMode={isDarkMode}
+                                          onCopy={(caption) => handleCopyCaption(caption)}
+                                          statusLabelOverride="Suggested"
+                                          onApprove={handleApprovePost}
+                                          onDiscard={handleDiscardPost}
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Slide Indicators */}
+                                {todaysSuggestedPosts.length > 1 && (
+                                  <div className="flex justify-center gap-2 mt-4">
+                                    {todaysSuggestedPosts.map((_, index) => (
+                                      <button
+                                        key={index}
+                                        onClick={() => goToPost(index)}
+                                        className={`rounded-full transition-all duration-300 ${
+                                          index === currentPostIndex
+                                            ? `w-8 h-2 ${isDarkMode ? 'bg-blue-500' : 'bg-blue-600'} shadow-lg`
+                                            : `w-2 h-2 ${isDarkMode ? 'bg-gray-600 hover:bg-gray-500' : 'bg-gray-300 hover:bg-gray-400'}`
+                                        }`}
+                                        aria-label={`Go to post ${index + 1}`}
+                                        title={`Post ${index + 1} of ${todaysSuggestedPosts.length}`}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="p-6 rounded-lg border border-dashed text-center text-sm text-gray-500">
+                                No suggested posts available for today.
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Columns 2-5: leads + placeholders */}
+                          <div className="col-span-4 grid grid-cols-4 gap-4">
+                            {/* Column 2: Today's leads */}
+                            <div className="col-span-1">
+                              <div className="mb-3">
+                                <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                  Leads for today
+                                </h3>
+                                <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  {todaysLeads.length} lead{todaysLeads.length !== 1 ? 's' : ''}
+                                </p>
+                              </div>
+                              <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto">
+                                {todaysLeadsLoading ? (
+                                  <div className={`p-4 rounded-lg border text-sm text-center ${
+                                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                                  }`}>
+                                    Loading leads...
+                                  </div>
+                                ) : todaysLeads && todaysLeads.length > 0 ? (
+                                  todaysLeads.slice(0, 6).map((lead) => {
+                                    const channel = lead.source_platform || lead.platform || lead.channel || lead.metadata?.source || 'Unknown'
+                                    const remarks = lead.remarks || lead.latest_remark || lead.metadata?.remarks || lead.note || ''
+
+                                    return (
+                                      <div
+                                        key={lead.id}
+                                        onClick={() => navigate('/leads')}
+                                        className={`p-3 rounded-lg border cursor-pointer ${
+                                          isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-white border-gray-200 text-gray-700'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <div className="font-medium truncate">{lead.name || 'No name'}</div>
+                                          <div className="text-xs text-gray-400">{new Date(lead.created_at).toLocaleTimeString()}</div>
+                                        </div>
+                                        <div className="text-xs text-gray-500 mt-1 truncate">
+                                          {lead.email || lead.phone || 'No contact info'}
+                                        </div>
+
+                                        {/* Channel badge and remarks */}
+                                        <div className="mt-2 flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2">
+                                            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium inline-flex items-center gap-2 ${
+                                              isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-700'
+                                            }`}>
+                                              {getChannelIcon(channel)}
+                                              <span className="truncate">{channel}</span>
+                                            </span>
+                                          </div>
+                                          <div className="text-xs text-gray-400 truncate max-w-[140px]">
+                                            {remarks ? remarks : <span className="italic text-gray-500">No remarks</span>}
+                                          </div>
+                                        </div>
+
+                                        {/* Bottom section: automatic welcome email indicator */}
+                                        {lead.welcome_email_sent && (
+                                          <div className="mt-3 pt-3 border-t">
+                                            <div className={`text-sm px-3 py-2 rounded-b ${isDarkMode ? 'bg-green-900/20 text-green-200 border-green-800' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+                                              <div className="flex items-center gap-2">
+                                                <Mail className="w-4 h-4" />
+                                                <span className="font-medium">Automatic welcome email sent</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })
+                                ) : (
+                                  <div className={`p-4 rounded-lg border text-sm text-center ${
+                                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                                  }`}>
+                                    No leads for today
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Column 3: Ideas placeholder */}
+                            <div className={`p-6 rounded-lg border border-dashed flex items-center justify-center ${
+                              isDarkMode ? 'border-gray-700 bg-gray-800 text-gray-300' : 'border-gray-200 bg-white text-gray-600'
+                            }`}>
+                              <div className="text-sm text-center">
+                                <div className="font-normal mb-1">Ideas</div>
+                                <div className="text-xs">Content ideas & inspiration</div>
+                              </div>
+                            </div>
+
+                            {/* Column 4: Performance slider */}
+                            <div className="col-span-1">
+                              <div className="mb-3">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                      Performance
+                                    </h3>
+                                    <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                      {performancePlatforms.length > 0 && performancePlatforms[currentPerformanceIndex]
+                                        ? getPlatformDisplayName(performancePlatforms[currentPerformanceIndex].platform)
+                                        : 'No platforms'}
+                                    </p>
+                                  </div>
+                                  {/* Navigation Arrows */}
+                                  {performancePlatforms.length > 1 && (
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={prevPerformance}
+                                        className={`p-2 rounded-full ${
+                                          isDarkMode
+                                            ? 'bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700'
+                                            : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-md'
+                                        } transition-colors`}
+                                        aria-label="Previous platform"
+                                      >
+                                        <ChevronLeft className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={nextPerformance}
+                                        className={`p-2 rounded-full ${
+                                          isDarkMode
+                                            ? 'bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700'
+                                            : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-md'
+                                        } transition-colors`}
+                                        aria-label="Next platform"
+                                      >
+                                        <ChevronRight className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              {performanceLoading ? (
+                                <div className={`p-6 rounded-lg border text-sm text-center ${
+                                  isDarkMode ? 'text-gray-400 border-gray-700' : 'text-gray-600 border-gray-200'
+                                }`}>
+                                  Loading...
+                                </div>
+                              ) : performancePlatforms.length > 0 ? (
+                                <div className="relative">
+                                  {/* Slider Container */}
+                                  <div className="relative overflow-hidden">
+                                    <div
+                                      className="flex transition-transform duration-300 ease-in-out"
+                                      style={{
+                                        transform: `translateX(-${currentPerformanceIndex * 100}%)`
+                                      }}
+                                    >
+                                      {performancePlatforms.map((platform) => {
+                                        const metrics = performanceData[platform.platform] || {
+                                          followers: 0,
+                                          recentLikes: 0,
+                                          recentComments: 0,
+                                          recentPosts: 0
+                                        }
+                                        const platformIcon = getChannelIcon(platform.platform)
+
+                                        return (
+                                          <div key={platform.platform} className="w-full flex-shrink-0">
+                                            <div className={`p-4 rounded-lg border ${
+                                              isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'
+                                            }`}>
+                                              <div className="space-y-3">
+                                                {/* Platform header */}
+                                                <div className="flex items-center gap-2 mb-3">
+                                                  <div className="text-white">
+                                                    {platformIcon}
+                                                  </div>
+                                                  <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                    {getPlatformDisplayName(platform.platform)}
+                                                  </span>
+                                                </div>
+
+                                                {/* Followers/Page Likes */}
+                                                <div className={`p-3 rounded-lg ${
+                                                  isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'
+                                                }`}>
+                                                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mb-1`}>
+                                                    {getFollowersLabel(platform.platform)}
+                                                  </div>
+                                                  <div className={`text-lg font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                    {metrics.followers.toLocaleString()}
+                                                  </div>
+                                                </div>
+
+                                                {/* Recent Post Likes */}
+                                                <div className={`p-3 rounded-lg ${
+                                                  isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'
+                                                }`}>
+                                                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mb-1`}>
+                                                    Likes on recent posts
+                                                  </div>
+                                                  <div className={`text-lg font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                    {metrics.recentLikes.toLocaleString()}
+                                                  </div>
+                                                  {metrics.recentPosts > 0 && (
+                                                    <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                                      ({metrics.recentPosts} post{metrics.recentPosts !== 1 ? 's' : ''})
+                                                    </div>
+                                                  )}
+                                                </div>
+
+                                                {/* Recent Post Comments */}
+                                                <div className={`p-3 rounded-lg ${
+                                                  isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'
+                                                }`}>
+                                                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mb-1`}>
+                                                    Comments on recent posts
+                                                  </div>
+                                                  <div className={`text-lg font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                    {metrics.recentComments.toLocaleString()}
+                                                  </div>
+                                                  {metrics.recentPosts > 0 && (
+                                                    <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                                      ({metrics.recentPosts} post{metrics.recentPosts !== 1 ? 's' : ''})
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+
+                                  {/* Slide Indicators */}
+                                  {performancePlatforms.length > 1 && (
+                                    <div className="flex justify-center gap-2 mt-4">
+                                      {performancePlatforms.map((_, index) => (
+                                        <button
+                                          key={index}
+                                          onClick={() => goToPerformance(index)}
+                                          className={`rounded-full transition-all duration-300 ${
+                                            index === currentPerformanceIndex
+                                              ? `w-8 h-2 ${isDarkMode ? 'bg-blue-500' : 'bg-blue-600'} shadow-lg`
+                                              : `w-2 h-2 ${isDarkMode ? 'bg-gray-600 hover:bg-gray-500' : 'bg-gray-300 hover:bg-gray-400'}`
+                                          }`}
+                                          aria-label={`Go to ${performancePlatforms[index]?.platform} performance`}
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className={`p-6 rounded-lg border border-dashed text-sm text-center ${
+                                  isDarkMode ? 'text-gray-400 border-gray-700' : 'text-gray-600 border-gray-200'
+                                }`}>
+                                  No connected platforms
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Column 5: Reminders */}
+                            <div className="col-span-1">
+                              <div className="mb-3">
+                                <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                  Reminders
+                                </h3>
+                                <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  {followUpLeads.length} reminder{followUpLeads.length !== 1 ? 's' : ''}
+                                </p>
+                              </div>
+                              <div
+                                onClick={() => navigate('/leads?filter=overdue_followups')}
+                                className={`p-4 rounded-lg border cursor-pointer transition-colors ${
+                                  isDarkMode 
+                                    ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200' 
+                                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <Calendar className={`w-5 h-5 flex-shrink-0 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-xl font-semibold">
+                                      {followUpLeadsLoading ? (
+                                        <span className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>...</span>
+                                      ) : (
+                                        followUpLeads.length
+                                      )}
+                                    </div>
+                                    <div className="text-xs">
+                                      Lead{followUpLeads.length !== 1 ? 's' : ''} to follow up
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* Right Side Panel - Part of main content - STICKY */}
-              <div
-                className={`hidden md:flex sticky top-0 self-start transition-all duration-300 ease-in-out overflow-hidden h-full ${
-                  isDarkMode
-                    ? 'bg-gray-900'
-                    : isDarkMode ? 'bg-gray-800' : 'bg-white'
-                } ${
-                  isPanelOpen ? 'w-48 xl:w-64' : 'w-0'
-                }`}
-              >
-                {isPanelOpen && (
-                  <div className="w-full h-full flex flex-col">
-                    {/* Panel Header */}
-                    <div className={`p-3 lg:p-4 border-b flex items-center justify-between flex-shrink-0 ${
-                      isDarkMode
-                        ? 'border-gray-700'
-                        : 'border-gray-200'
+        </div>
+      </div>
+      </div>
+
+      {/* Quick Actions - aligned to main content area */}
+      {!showChatbot && (
+        <div className="fixed bottom-6 left-0 right-0 z-50 p-4 pointer-events-auto">
+          <div className="md:ml-48 xl:ml-64 flex justify-center">
+            <div className="w-full max-w-7xl px-8">
+              <div className="flex justify-center gap-4 flex-wrap">
+                <div
+                  onClick={() => setShowNewPostModal(true)}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                    isDarkMode
+                      ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                      : 'bg-white border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex flex-col items-center text-center space-y-2">
+                    <div className="w-6 h-6 flex items-center justify-center">
+                      {isDarkMode ? (
+                        <img src="/new_post_icon_white.png" alt="New post" className="w-6 h-6" />
+                      ) : (
+                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className={`text-sm font-medium ${
+                      isDarkMode ? 'text-gray-200' : 'text-gray-700'
                     }`}>
-                      <span className={`text-lg font-normal ${
-                        isDarkMode ? 'text-gray-100' : 'text-gray-800'
-                      }`}>
-                        Reminders
-                      </span>
+                      Design a new post
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => setShowAddLeadModal(true)}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                    isDarkMode
+                      ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                      : 'bg-white border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex flex-col items-center text-center space-y-2">
+                    <div className="w-6 h-6 flex items-center justify-center">
+                      <Upload className={`w-6 h-6 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
                     </div>
+                    <span className={`text-sm font-medium ${
+                      isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                    }`}>
+                      Upload a new lead
+                    </span>
+                  </div>
+                </div>
 
-                    {/* Panel Content - Scrollable */}
-                    <div className="flex-1 p-3 lg:p-4 overflow-y-auto min-h-0">
-
+                <div
+                  onClick={() => setShowChatbot(true)}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                    isDarkMode
+                      ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                      : 'bg-white border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex flex-col items-center text-center space-y-2">
+                    <div className="w-6 h-6 flex items-center justify-center">
+                      <MessageSquare className={`w-6 h-6 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
                     </div>
+                    <span className={`text-sm font-medium ${
+                      isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                    }`}>
+                      Talk to your AI teammates
+                    </span>
                   </div>
-                )}
-          </div>
-        </div>
-      </div>
-      </div>
-
-      {/* Quick Actions - only show when not showing chatbot */}
-      {!showChatbot && (
-        <div className="fixed bottom-20 left-0 right-0 z-10 p-4">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex justify-center gap-4 mb-4 flex-wrap">
-              <div
-                onClick={() => setShowNewPostModal(true)}
-                className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-lg ${
-                            isDarkMode
-                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
-                    : 'bg-white border-gray-200 hover:bg-gray-50'
-                          }`}
-                        >
-                <div className="flex flex-col items-center text-center space-y-2">
-                  <div className={`p-3 rounded-lg ${
-                    isDarkMode ? 'bg-blue-900/50' : 'bg-blue-100'
-                  }`}>
-                    <svg className={`w-6 h-6 ${
-                      isDarkMode ? 'text-blue-400' : 'text-blue-600'
-                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </div>
-                            <span className={`text-sm font-medium ${
-                              isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                            }`}>
-                    Design a new post
-                            </span>
-                          </div>
-                        </div>
-
-
-              <div
-                onClick={() => setShowAddLeadModal(true)}
-                className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-lg ${
-                  isDarkMode
-                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
-                    : 'bg-white border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex flex-col items-center text-center space-y-2">
-                  <div className={`p-3 rounded-lg ${
-                    isDarkMode ? 'bg-purple-900/50' : 'bg-purple-100'
-                  }`}>
-                    <Upload className={`w-6 h-6 ${
-                      isDarkMode ? 'text-purple-400' : 'text-purple-600'
-                    }`} />
-                  </div>
-                  <span className={`text-sm font-medium ${
-                    isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                                    }`}>
-                    Upload a new lead
-                  </span>
-                                    </div>
-                                  </div>
-
-                        </div>
-                    </div>
-                  </div>
-                )}
-
-      {/* Input Bar at bottom of dashboard - only show when not showing chatbot */}
-      {!showChatbot && (
-        <div className="fixed bottom-0 left-0 right-0 z-10 p-4">
-          <div className="max-w-2xl mx-auto">
-            <div className="relative">
-              <div
-                onClick={() => setShowChatbot(true)}
-                className={`w-full px-6 pr-14 py-4 text-base rounded-[20px] backdrop-blur-sm cursor-pointer transition-all hover:shadow-lg ${
-                  isDarkMode
-                    ? 'bg-gray-700/80 border-0 hover:bg-gray-600/80 text-gray-100'
-                    : 'bg-white/80 border border-white/20 hover:bg-gray-50/80 text-gray-900'
-                }`}
-              >
-                <span className={`${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  Talk to your AI teammates
-                </span>
-          </div>
-              <div className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-7 h-7 transition-all flex items-center justify-center cursor-pointer ${
-                isDarkMode
-                  ? 'text-green-400 hover:text-green-300'
-                  : 'text-blue-600 hover:text-blue-700'
-              }`}>
-                <Send className="w-5 h-5 transform rotate-45" />
-        </div>
-      </div>
-
-            <div className={`mt-2 text-xs text-center ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-500'
-            }`}>
-              Click to start a conversation
-      </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
+
+
 
       {/* Mobile Today's Conversations Panel - Full Screen */}
       {showMobileChatHistory && (
