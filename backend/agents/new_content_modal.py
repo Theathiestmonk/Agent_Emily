@@ -198,9 +198,6 @@ class NewContentModalAgent:
             elif content_type == 'short_video or reel':
                 return await self._generate_short_video(platform, content_idea, post_type, media_option,
                                                        business_context, profile_assets, user_id, uploaded_files)
-            elif content_type == 'long_video':
-                return await self._generate_long_video(platform, content_idea, post_type, media_option,
-                                                      business_context, profile_assets, user_id)
             elif content_type == 'blog':
                 return await self._generate_blog_post(content_idea, post_type, media_option,
                                                     business_context, profile_assets, user_id)
@@ -571,8 +568,9 @@ Return a JSON object with this exact structure:
                         'content_data': content_data
                     }
 
-        # Generate caption using LLM (for Generate or Without media options)
-        prompt = f"""Create a short video script for {platform} about: {content_idea}
+        # Generate video script and caption using LLM (for Generate or Without media options)
+        # First, generate the video script
+        script_prompt = f"""You are a professional short-form video script writer creating viral content for {platform} Reels.
 
 BUSINESS CONTEXT:
 - Business: {business_context.get('business_name', 'Business')}
@@ -581,40 +579,131 @@ BUSINESS CONTEXT:
 - Brand Voice: {business_context.get('brand_voice', 'Professional and friendly')}
 - Post Type: {post_type}
 
-Create a social media caption and hashtags for the video content.
+CONTENT IDEA: {content_idea}
 
-Note: Do NOT generate a script since the user has already uploaded their own video.
+Create a complete 15-30 second video script optimized for virality that includes:
 
-Return a JSON object with this exact structure:
-{{
-    "title": "Video title",
-    "caption": "Instagram caption for the video",
-    "hashtags": ["hashtag1", "hashtag2"]
-}}
+1. HOOK (0:00-0:03): Attention-grabbing opening that stops the scroll
+2. VALUE (0:03-0:15): Main content/benefit delivered clearly
+3. PROOF (0:15-0:25): Social proof, example, or demonstration
+4. CTA (0:25-0:30): Clear call-to-action
 
-{JSON_ONLY_INSTRUCTION}"""
+FORMAT REQUIREMENTS:
+- Use timestamp format: MM:SS - [Visual/Voiceover] Content
+- Example: "0:00 - [Visual: Quick cut] Hook text here"
+- Keep each segment concise and punchy
+- Make it scroll-stopping and engaging
+- Optimize for {platform} algorithm
+
+Return ONLY the script in this format:
+0:00 - [Visual: ...] Hook content
+0:03 - [Voiceover: ...] Main value content
+0:15 - [Visual: ...] Proof/demonstration
+0:25 - [Voiceover: ...] Call-to-action
+
+Make it viral-worthy and engaging!"""
 
         if not openai_client:
             return {'success': False, 'error': 'OpenAI client not available'}
 
-        response = openai_client.chat.completions.create(
+        # Generate script
+        script_response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000,
-            temperature=0.8
+            messages=[{"role": "user", "content": script_prompt}],
+            max_tokens=800,
+            temperature=0.9
         )
 
-        content_json = self._parse_json_response(response.choices[0].message.content)
-        if not content_json:
-            return {'success': False, 'error': 'Failed to parse LLM response'}
+        generated_script = script_response.choices[0].message.content.strip()
 
-        content_data = {
-            'title': content_json.get('title', f"Video about {content_idea[:50]}"),
-            'content': content_json.get('caption', ''),
-            # No script stored for uploaded videos since users provide their own video content
-            'hashtags': content_json.get('hashtags', []),
-            'images': []
-        }
+        # Now generate caption based on the script
+        caption_prompt = f"""Based on this short video script, create a compelling title and Instagram caption for the reel.
+
+VIDEO SCRIPT:
+{generated_script}
+
+BUSINESS CONTEXT:
+- Business: {business_context.get('business_name', 'Business')}
+- Industry: {business_context.get('industry', 'General')}
+- Target Audience: {business_context.get('target_audience', 'General audience')}
+- Brand Voice: {business_context.get('brand_voice', 'Professional and friendly')}
+- Post Type: {post_type}
+
+TASK:
+Create a viral-worthy Instagram Reel title and caption that will:
+1. Hook viewers in the first 3 words
+2. Use trending hashtags and emojis naturally
+3. Include a strong call-to-action
+4. Be optimized for Instagram's algorithm
+
+FORMAT (Return ONLY this format):
+TITLE: [Compelling 1-5 word title]
+CAPTION: [Scroll-stopping caption with emojis, 100-150 characters]
+
+Make it authentic, engaging, and optimized for maximum engagement!"""
+
+        try:
+            caption_response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": caption_prompt}],
+                max_tokens=300,
+                temperature=0.9
+            )
+            caption_result = caption_response.choices[0].message.content.strip()
+
+            # Parse title and caption
+            title = ""
+            caption = ""
+            for line in caption_result.split('\n'):
+                line = line.strip()
+                if line.startswith('TITLE:'):
+                    title = line.replace('TITLE:', '').strip()
+                elif line.startswith('CAPTION:'):
+                    caption = line.replace('CAPTION:', '').strip()
+
+            # Extract hashtags from caption or generate them
+            hashtags = []
+            if caption:
+                # Extract hashtags from caption
+                hashtag_matches = re.findall(r'#(\w+)', caption)
+                hashtags = hashtag_matches[:10]  # Limit to 10 hashtags
+
+            # If no hashtags found, generate some
+            if not hashtags:
+                hashtag_prompt = f"""Generate 5-8 relevant hashtags for a {platform} reel about: {content_idea}
+                
+Return only hashtags separated by spaces, no # symbols needed.
+Example: marketing socialmedia business tips"""
+                
+                hashtag_response = openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": hashtag_prompt}],
+                    max_tokens=100,
+                    temperature=0.7
+                )
+                hashtag_text = hashtag_response.choices[0].message.content.strip()
+                hashtags = [tag.strip() for tag in hashtag_text.split() if tag.strip()][:10]
+
+            content_data = {
+                'title': title if title else f"Reel: {content_idea[:30]}",
+                'content': caption if caption else generated_script[:200] + "...",
+                'short_video_script': generated_script,  # Store the script
+                'hashtags': hashtags,
+                'images': []
+            }
+
+            logger.info(f"✅ Generated reel script and caption: '{title}'")
+
+        except Exception as caption_error:
+            logger.warning(f"Failed to generate reel caption: {caption_error}")
+            # Fallback: use script as content
+            content_data = {
+                'title': f"Reel: {content_idea[:30]}",
+                'content': generated_script[:200] + "...",
+                'short_video_script': generated_script,  # Store the script
+                'hashtags': [],
+                'images': []
+            }
 
         # Generate video thumbnail if needed
         if media_option == 'Generate':

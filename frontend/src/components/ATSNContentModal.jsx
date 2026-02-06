@@ -790,7 +790,18 @@ const ATSNContentModal = ({
     setAiEditInstruction('')
   }
 
+  const handleTryAgain = () => {
+    // Reset to instruction form
+    setShowAIResult(false)
+    setAiEditedContent('')
+    setAiEditInstruction('')
+  }
+
   const handleCancelAIEdit = () => {
+    // Prevent closing if AI is currently processing
+    if (aiEditing) {
+      return
+    }
     setShowAIEditModal(false)
     setShowAIResult(false)
     setAiEditedContent('')
@@ -878,12 +889,23 @@ const ATSNContentModal = ({
     }
   }
 
+  // Check if any processing is happening
+  const isProcessing = isEditing || aiEditing || imageEditing || uploadingUserImage
+
+  const handleClose = () => {
+    // Prevent closing if editing or processing
+    if (isProcessing) {
+      return
+    }
+    onClose()
+  }
+
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm z-30"
       onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose()
+        if (e.target === e.currentTarget && !isProcessing) {
+          handleClose()
         }
       }}
     >
@@ -951,13 +973,16 @@ const ATSNContentModal = ({
               </span>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
+              disabled={isProcessing}
               className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                isDarkMode
-                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                  : 'bg-gray-100 hover:bg-gray-200 text-gray-500'
+                isProcessing
+                  ? 'opacity-50 cursor-not-allowed'
+                  : isDarkMode
+                    ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-500'
               }`}
-              title="Close"
+              title={isProcessing ? 'Cannot close while editing or processing' : 'Close'}
             >
               <X className="w-5 h-5" />
             </button>
@@ -1572,7 +1597,12 @@ const ATSNContentModal = ({
       {showAIEditModal && (
         <div
           className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm z-[60]"
-          onClick={handleCancelAIEdit}
+          onClick={(e) => {
+            // Prevent closing if AI is processing
+            if (!aiEditing && e.target === e.currentTarget) {
+              handleCancelAIEdit()
+            }
+          }}
         >
           <div
             className="fixed inset-0 flex items-center justify-center p-4"
@@ -1612,11 +1642,15 @@ const ATSNContentModal = ({
                   </div>
                   <button
                     onClick={handleCancelAIEdit}
+                    disabled={aiEditing}
                     className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                      isDarkMode
-                        ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                        : 'bg-gray-100 hover:bg-gray-200 text-gray-500'
+                      aiEditing
+                        ? 'opacity-50 cursor-not-allowed'
+                        : isDarkMode
+                          ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-500'
                     }`}
+                    title={aiEditing ? 'Cannot close while AI is processing' : 'Close'}
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -1743,11 +1777,14 @@ const ATSNContentModal = ({
                 <div className="flex flex-wrap items-center justify-between gap-3 mt-6 pt-4">
                   <div className="flex items-center gap-3">
                   <button
-                    onClick={handleCancelAIEdit}
+                    onClick={showAIResult ? handleTryAgain : handleCancelAIEdit}
+                    disabled={aiEditing}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      isDarkMode
-                        ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
-                        : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                      aiEditing
+                        ? 'opacity-50 cursor-not-allowed'
+                        : isDarkMode
+                          ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
+                          : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
                     }`}
                   >
                     {showAIResult ? 'Try Again' : 'Cancel'}
@@ -1790,7 +1827,12 @@ const ATSNContentModal = ({
       {showImageEditModal && (
         <div
           className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm z-[60]"
-          onClick={() => setShowImageEditModal(false)}
+          onClick={(e) => {
+            // Prevent closing if image editing is processing
+            if (!imageEditing && e.target === e.currentTarget) {
+              setShowImageEditModal(false)
+            }
+          }}
         >
           <div
             className="fixed inset-0 flex items-center justify-center p-4"
@@ -1829,12 +1871,21 @@ const ATSNContentModal = ({
                     </div>
                   </div>
                   <button
-                    onClick={() => setShowImageEditModal(false)}
+                    onClick={() => {
+                      // Prevent closing if image editing is processing
+                      if (!imageEditing) {
+                        setShowImageEditModal(false)
+                      }
+                    }}
+                    disabled={imageEditing}
                     className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                      isDarkMode
-                        ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-                        : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                      imageEditing
+                        ? 'opacity-50 cursor-not-allowed'
+                        : isDarkMode
+                          ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+                          : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
                     }`}
+                    title={imageEditing ? 'Cannot close while image is being edited' : 'Close'}
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -2047,11 +2098,19 @@ const ATSNContentModal = ({
                   </div>
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={() => setShowImageEditModal(false)}
+                      onClick={() => {
+                        // Prevent closing if image editing is processing
+                        if (!imageEditing) {
+                          setShowImageEditModal(false)
+                        }
+                      }}
+                      disabled={imageEditing}
                       className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                        isDarkMode
-                          ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
-                          : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                        imageEditing
+                          ? 'opacity-50 cursor-not-allowed'
+                          : isDarkMode
+                            ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
+                            : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
                       }`}
                     >
                       Cancel

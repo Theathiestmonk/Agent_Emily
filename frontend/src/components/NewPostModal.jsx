@@ -57,10 +57,13 @@ const NewPostModal = ({ isOpen, onClose, onSubmit, isDarkMode }) => {
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i]
       
-      // Skip conditional steps if conditions aren't met
+        // Skip conditional steps if conditions aren't met
       if (step.conditional) {
-        if (step.id === 'Image_type' && formData.media !== 'Generate') {
-          continue
+        if (step.id === 'Image_type') {
+          // Image_type only for Generate media, but not for reel/video
+          if (formData.media !== 'Generate' || formData.content_type === 'short_video or reel') {
+            continue
+          }
         }
         if (step.id === 'files' && formData.media !== 'Upload') {
           continue
@@ -72,7 +75,7 @@ const NewPostModal = ({ isOpen, onClose, onSubmit, isDarkMode }) => {
       for (let j = 0; j < i; j++) {
         const prevStep = steps[j]
         if (prevStep.conditional) {
-          if (prevStep.id === 'Image_type' && formData.media !== 'Generate') continue
+          if (prevStep.id === 'Image_type' && (formData.media !== 'Generate' || formData.content_type === 'short_video or reel')) continue
           if (prevStep.id === 'files' && formData.media !== 'Upload') continue
         }
         if (!formData[prevStep.field] && prevStep.field !== 'files') {
@@ -140,15 +143,15 @@ const NewPostModal = ({ isOpen, onClose, onSubmit, isDarkMode }) => {
           newData.media = ''
         }
       } else if (field === 'content_type') {
-        const isVideoType = value === 'short_video or reel' || value === 'long_video'
-        const wasVideoType = prev.content_type === 'short_video or reel' || prev.content_type === 'long_video'
+        const isVideoType = value === 'short_video or reel'
+        const wasVideoType = prev.content_type === 'short_video or reel'
         
-        if (isVideoType !== wasVideoType || (isVideoType && prev.media === 'Generate')) {
+        if (isVideoType !== wasVideoType) {
           newData.media = ''
           newData.Image_type = ''
           setUploadedFiles([])
           setUploadProgress({})
-        } else if (prev.media === 'Generate') {
+        } else if (prev.media === 'Generate' && value !== 'short_video or reel') {
           newData.Image_type = ''
         }
       } else if (field === 'media') {
@@ -395,7 +398,8 @@ const NewPostModal = ({ isOpen, onClose, onSubmit, isDarkMode }) => {
       newErrors.content_idea = 'Please provide a content idea'
     }
     if (!formData.Post_type) newErrors.Post_type = 'Please select a post type'
-    if (formData.media === 'Generate' && !formData.Image_type) {
+    // Image_type only required for Generate media, but not for reel/video
+    if (formData.media === 'Generate' && !formData.Image_type && formData.content_type !== 'short_video or reel') {
       newErrors.Image_type = 'Please select an image type'
     }
     if (formData.media === 'Upload') {
@@ -452,7 +456,7 @@ const NewPostModal = ({ isOpen, onClose, onSubmit, isDarkMode }) => {
         media: formData.media,
         content_idea: formData.content_idea.trim(),
         Post_type: formData.Post_type,
-        ...(formData.media === 'Generate' && { Image_type: formData.Image_type }),
+        ...(formData.media === 'Generate' && formData.content_type !== 'short_video or reel' && { Image_type: formData.Image_type }),
         ...(uploadedFileUrls.length > 0 && { uploaded_files: uploadedFileUrls })
       }
 
@@ -482,7 +486,6 @@ const NewPostModal = ({ isOpen, onClose, onSubmit, isDarkMode }) => {
     { label: 'Static Post', value: 'static_post' },
     { label: 'Carousel', value: 'carousel' },
     { label: 'Short Video/Reel', value: 'short_video or reel' },
-    { label: 'Long Video', value: 'long_video' },
     { label: 'Blog Post', value: 'blog' }
   ]
 
@@ -490,6 +493,12 @@ const NewPostModal = ({ isOpen, onClose, onSubmit, isDarkMode }) => {
     { label: 'Generate Media', value: 'Generate' },
     { label: 'Upload My Own', value: 'Upload' },
     { label: 'Text Only', value: 'Without media' }
+  ]
+
+  // Media options specifically for reel/video content
+  const videoMediaOptions = [
+    { label: 'Generate a video script', value: 'Generate' },
+    { label: 'Upload my own', value: 'Upload' }
   ]
 
   const postTypeOptions = [
@@ -553,13 +562,13 @@ const NewPostModal = ({ isOpen, onClose, onSubmit, isDarkMode }) => {
   }
 
   const getFilteredMediaOptions = () => {
-    let filtered = [...mediaOptions]
-    
-    if (formData.content_type === 'short_video or reel' || formData.content_type === 'long_video') {
-      filtered = filtered.filter(option => 
-        option.value === 'Upload' || option.value === 'Without media'
-      )
+    // For reel/video content type, show specific video media options
+    if (formData.content_type === 'short_video or reel') {
+      return videoMediaOptions
     }
+    
+    // For other content types, use regular media options
+    let filtered = [...mediaOptions]
     
     if (formData.platform === 'Instagram') {
       filtered = filtered.filter(option => option.value !== 'Without media')
