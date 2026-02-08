@@ -553,29 +553,30 @@ const PostSuggestionsDashboard = () => {
             </div>
 
             <div
-              className="overflow-x-auto pb-4 scrollbar-transparent"
+              className="pb-4"
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
             >
-                <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
-                  {getFilteredPosts().length > 0 ? (
-                    getFilteredPosts().map((post) => (
+              {getFilteredPosts().length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {getFilteredPosts().map((post) => (
+                    <div key={post.id} className="w-full">
                       <PostContentCard
-                        key={post.id}
                         post={post}
                         isDarkMode={isDarkMode}
                         onCopy={handleCopyMessage}
                       />
-                    ))
-                  ) : (
-                    <div className={`flex items-center justify-center py-8 ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                    }`}>
-                      Loading suggested content...
                     </div>
-                  )}
+                  ))}
                 </div>
-              </div>
+              ) : (
+                <div className={`flex items-center justify-center py-8 ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  Loading suggested content...
+                </div>
+              )}
+            </div>
           </div>
           )}
 
