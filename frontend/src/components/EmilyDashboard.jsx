@@ -298,25 +298,31 @@ function EmilyDashboard() {
 
   const handleRefreshAllData = async () => {
     try {
-      // Clear all caches
+      // Clear all caches (per-user)
       const cacheKeys = [
-        `today_conversations_${user?.id}`
+        `today_conversations_${user?.id}`,
+        `suggested_posts_${user?.id}`,
+        `created_content_${user?.id}`,
+        `todays_leads_${user?.id}`,
+        `followup_leads_${user?.id}`,
+        `scheduled_count_${user?.id}`,
+        `week_entries_${user?.id}`
       ]
 
       cacheKeys.forEach(key => {
-        localStorage.removeItem(key)
+        try { localStorage.removeItem(key) } catch (e) { /* ignore */ }
       })
 
       // Refetch all data
       if (user) {
         await Promise.all([
           fetchTodayConversations(true),
-          fetchSuggestedPosts(),
-          fetchCreatedContent(),
-          fetchTodaysLeads(),
+          fetchSuggestedPosts(true),
+          fetchCreatedContent(true),
+          fetchTodaysLeads(true),
           fetchFollowUpLeads(true),
-          fetchScheduledCount()
-          ,fetchWeekEntries()
+          fetchScheduledCount(true),
+          fetchWeekEntries(true)
         ])
       }
 
@@ -329,11 +335,31 @@ function EmilyDashboard() {
     }
   }
 
-  const fetchSuggestedPosts = useCallback(async () => {
+  const fetchSuggestedPosts = useCallback(async (forceRefresh = false) => {
     if (!user) return
+
+    const CACHE_KEY = `suggested_posts_${user.id}`
+    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
 
     setSuggestedLoading(true)
     try {
+      // Try cache first
+      if (!forceRefresh) {
+        const cached = localStorage.getItem(CACHE_KEY)
+        if (cached) {
+          const { posts: cachedPosts, timestamp, date } = JSON.parse(cached)
+          const age = Date.now() - timestamp
+          const today = new Date().toDateString()
+          const cacheDate = new Date(date).toDateString()
+          if (cacheDate === today && age < CACHE_EXPIRATION_MS) {
+            console.log('Using cached suggested posts:', cachedPosts.length)
+            setSuggestedPosts(cachedPosts)
+            setSuggestedLoading(false)
+            return
+          }
+        }
+      }
+
       const result = await contentAPI.getPostContents(12, 0)
       if (result.error) {
         throw new Error(result.error)
@@ -389,6 +415,17 @@ function EmilyDashboard() {
       ensureFront(sorted, 'youtube')
 
       setSuggestedPosts(sorted)
+
+      // Cache results
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          posts: sorted,
+          timestamp: Date.now(),
+          date: new Date().toISOString()
+        }))
+      } catch (e) {
+        console.warn('Failed to cache suggested posts', e)
+      }
     } catch (error) {
       console.error('Error fetching suggested posts:', error)
       showError('Failed to load suggested content')
@@ -397,11 +434,31 @@ function EmilyDashboard() {
     }
   }, [user, showError])
 
-  const fetchTodaysLeads = useCallback(async () => {
+  const fetchTodaysLeads = useCallback(async (forceRefresh = false) => {
     if (!user) return
+
+    const CACHE_KEY = `todays_leads_${user.id}`
+    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
 
     setTodaysLeadsLoading(true)
     try {
+      // Try cache first
+      if (!forceRefresh) {
+        const cached = localStorage.getItem(CACHE_KEY)
+        if (cached) {
+          const { leads: cachedLeads, timestamp, date } = JSON.parse(cached)
+          const age = Date.now() - timestamp
+          const today = new Date().toDateString()
+          const cacheDate = new Date(date).toDateString()
+          if (cacheDate === today && age < CACHE_EXPIRATION_MS) {
+            console.log('Using cached todays leads:', (cachedLeads || []).length)
+            setTodaysLeads(cachedLeads || [])
+            setTodaysLeadsLoading(false)
+            return
+          }
+        }
+      }
+
       // Fetch recent leads from backend then filter for today client-side (keeps behavior consistent with LeadsDashboard)
       const response = await leadsAPI.getLeads({ limit: 500 })
       const resultData = response.data || response
@@ -445,6 +502,17 @@ function EmilyDashboard() {
       }))
 
       setTodaysLeads(augmented)
+
+      // Cache today's leads
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          leads: augmented,
+          timestamp: Date.now(),
+          date: new Date().toISOString()
+        }))
+      } catch (e) {
+        console.warn('Failed to cache todays leads', e)
+      }
     } catch (err) {
       console.error('Error fetching todays leads:', err)
       setTodaysLeads([])
@@ -1009,8 +1077,29 @@ function EmilyDashboard() {
 
   const fetchCreatedContent = useCallback(async (forceRefresh = false) => {
     if (!user) return
+
+    const CACHE_KEY = `created_content_${user.id}`
+    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
+
     setCreatedLoading(true)
     try {
+      // Try cache first
+      if (!forceRefresh) {
+        const cached = localStorage.getItem(CACHE_KEY)
+        if (cached) {
+          const { items: cachedItems, timestamp, date } = JSON.parse(cached)
+          const age = Date.now() - timestamp
+          const today = new Date().toDateString()
+          const cacheDate = new Date(date).toDateString()
+          if (cacheDate === today && age < CACHE_EXPIRATION_MS) {
+            console.log('Using cached created content:', (cachedItems || []).length)
+            setCreatedContent(cachedItems || [])
+            setCreatedLoading(false)
+            return
+          }
+        }
+      }
+
       const { data, error } = await supabase
         .from('created_content')
         .select('*')
@@ -1023,7 +1112,17 @@ function EmilyDashboard() {
         console.error('Error fetching created content:', error)
         setCreatedContent([])
       } else {
-        setCreatedContent(Array.isArray(data) ? data : [])
+        const items = Array.isArray(data) ? data : []
+        setCreatedContent(items)
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({
+            items,
+            timestamp: Date.now(),
+            date: new Date().toISOString()
+          }))
+        } catch (e) {
+          console.warn('Failed to cache created content', e)
+        }
       }
     } catch (err) {
       console.error('Error fetching created content:', err)
@@ -1033,10 +1132,31 @@ function EmilyDashboard() {
     }
   }, [user])
 
-  const fetchScheduledCount = useCallback(async () => {
+  const fetchScheduledCount = useCallback(async (forceRefresh = false) => {
     if (!user) return
+
+    const CACHE_KEY = `scheduled_count_${user.id}`
+    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
+
     setScheduledLoading(true)
     try {
+      // Try cache first
+      if (!forceRefresh) {
+        const cached = localStorage.getItem(CACHE_KEY)
+        if (cached) {
+          const { count: cachedCount, timestamp, date } = JSON.parse(cached)
+          const age = Date.now() - timestamp
+          const today = new Date().toDateString()
+          const cacheDate = new Date(date).toDateString()
+          if (cacheDate === today && age < CACHE_EXPIRATION_MS) {
+            console.log('Using cached scheduled count:', cachedCount)
+            setScheduledCount(cachedCount || 0)
+            setScheduledLoading(false)
+            return
+          }
+        }
+      }
+
       const today = new Date()
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
       const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).toISOString()
@@ -1055,9 +1175,28 @@ function EmilyDashboard() {
         setScheduledCount(0)
       } else if (typeof count === 'number') {
         setScheduledCount(count)
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({
+            count,
+            timestamp: Date.now(),
+            date: new Date().toISOString()
+          }))
+        } catch (e) {
+          console.warn('Failed to cache scheduled count', e)
+        }
       } else {
         // Fallback to length of data array
-        setScheduledCount(Array.isArray(data) ? data.length : 0)
+        const fallback = Array.isArray(data) ? data.length : 0
+        setScheduledCount(fallback)
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({
+            count: fallback,
+            timestamp: Date.now(),
+            date: new Date().toISOString()
+          }))
+        } catch (e) {
+          console.warn('Failed to cache scheduled count', e)
+        }
       }
     } catch (err) {
       console.error('Error fetching scheduled count:', err)
@@ -1067,10 +1206,31 @@ function EmilyDashboard() {
     }
   }, [user])
 
-  const fetchWeekEntries = useCallback(async () => {
+  const fetchWeekEntries = useCallback(async (forceRefresh = false) => {
     if (!user) return
+
+    const CACHE_KEY = `week_entries_${user.id}`
+    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
+
     setWeekLoading(true)
     try {
+      // Try cache first
+      if (!forceRefresh) {
+        const cached = localStorage.getItem(CACHE_KEY)
+        if (cached) {
+          const { counts: cachedCounts, timestamp, date } = JSON.parse(cached)
+          const age = Date.now() - timestamp
+          const today = new Date().toDateString()
+          const cacheDate = new Date(date).toDateString()
+          if (cacheDate === today && age < CACHE_EXPIRATION_MS) {
+            console.log('Using cached week entries')
+            setWeekCounts(cachedCounts || [0,0,0,0,0,0,0])
+            setWeekLoading(false)
+            return
+          }
+        }
+      }
+
       const tokenResp = await supabase.auth.getSession()
       const token = tokenResp.data?.session?.access_token
       // Fetch calendars
@@ -1111,6 +1271,17 @@ function EmilyDashboard() {
         }
       })
       setWeekCounts(counts)
+
+      // Cache counts
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          counts,
+          timestamp: Date.now(),
+          date: new Date().toISOString()
+        }))
+      } catch (e) {
+        console.warn('Failed to cache week entries', e)
+      }
     } catch (err) {
       console.error('Error fetching week entries:', err)
       setWeekCounts([0,0,0,0,0,0,0])
