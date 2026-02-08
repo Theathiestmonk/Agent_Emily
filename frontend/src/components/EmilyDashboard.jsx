@@ -1238,15 +1238,6 @@ function EmilyDashboard() {
                         )}
                       </div>
 
-                      {suggestedLoading ? (
-                        <div className="flex items-center justify-center h-full">
-                          <div className={`text-sm ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`}>
-                            Fetching suggested post...
-                          </div>
-                        </div>
-                      ) : (
                         <>
                           {/* Simple centered greeting above columns */}
                           <div className="mb-8 pb-4">
@@ -1522,7 +1513,6 @@ function EmilyDashboard() {
                           </div>
                         </div>
                         </>
-                      )}
                     </div>
                   )}
                 </div>
