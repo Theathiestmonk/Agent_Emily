@@ -5,7 +5,6 @@ import { useNotifications } from '../contexts/NotificationContext'
 import { contentAPI } from '../services/content'
 import { leadsAPI } from '../services/leads'
 import { onboardingAPI } from '../services/onboarding'
-import { connectionsAPI } from '../services/connections'
 import { socialMediaService } from '../services/socialMedia'
 import { supabase } from '../lib/supabase'
 import { loadTauriAPI } from '../utils/tauri'
@@ -210,10 +209,6 @@ function EmilyDashboard() {
   const [todaysLeadsLoading, setTodaysLeadsLoading] = useState(false)
   const [followUpLeads, setFollowUpLeads] = useState([])
   const [followUpLeadsLoading, setFollowUpLeadsLoading] = useState(false)
-  const [performancePlatforms, setPerformancePlatforms] = useState([])
-  const [performanceData, setPerformanceData] = useState({})
-  const [performanceLoading, setPerformanceLoading] = useState(false)
-  const [currentPerformanceIndex, setCurrentPerformanceIndex] = useState(0)
 
   // Today's conversations only (no historical data)
 
@@ -271,8 +266,7 @@ function EmilyDashboard() {
           fetchTodayConversations(true),
           fetchSuggestedPosts(),
           fetchTodaysLeads(),
-          fetchFollowUpLeads(true),
-          fetchPerformancePlatforms()
+          fetchFollowUpLeads(true)
         ])
       }
 
@@ -528,218 +522,13 @@ function EmilyDashboard() {
     }
   }, [showSuccess, showError, fetchSuggestedPosts])
 
-  // Fetch connected platforms for performance metrics
-  const fetchPerformancePlatforms = useCallback(async () => {
-    if (!user) return
-
-    setPerformanceLoading(true)
-    try {
-      const response = await connectionsAPI.getConnections()
-      const connections = response.data || []
-      
-      // Filter active connections for social media platforms
-      const socialPlatforms = ['facebook', 'instagram', 'linkedin', 'twitter', 'youtube']
-      const activeConnections = connections.filter(conn => 
-        conn.connection_status === 'active' && 
-        socialPlatforms.includes(conn.platform?.toLowerCase())
-      )
-      
-      // Deduplicate by platform - keep only the first connection for each platform
-      const platformMap = new Map()
-      activeConnections.forEach(conn => {
-        const platform = conn.platform?.toLowerCase()
-        if (platform && !platformMap.has(platform)) {
-          platformMap.set(platform, {
-            platform: platform,
-            name: conn.page_name || conn.platform,
-            connectionId: conn.id
-          })
-        }
-      })
-      
-      const activePlatforms = Array.from(platformMap.values())
-      setPerformancePlatforms(activePlatforms)
-      
-      // Fetch metrics for each platform
-      if (activePlatforms.length > 0) {
-        await fetchPlatformMetrics(activePlatforms)
-      }
-    } catch (error) {
-      console.error('Error fetching performance platforms:', error)
-      setPerformancePlatforms([])
-    } finally {
-      setPerformanceLoading(false)
-    }
-  }, [user])
-
-  // Fetch metrics for each platform from real APIs (same as happenings dashboard)
-  const fetchPlatformMetrics = async (platforms) => {
-    const metricsData = {}
-    const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
-    
-    // Get auth token
-    const { data: { session } } = await supabase.auth.getSession()
-    const authToken = session?.access_token
-    
-    if (!authToken) {
-      console.error('No auth token available')
-      return
-    }
-    
-    try {
-      // Fetch latest posts from API (same endpoint as happenings dashboard)
-      const postsResponse = await fetch(`${API_BASE_URL}/api/social-media/latest-posts`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      let postsByPlatform = {}
-      if (postsResponse.ok) {
-        const postsData = await postsResponse.json()
-        postsByPlatform = postsData.posts || {}
-      }
-      
-      // Fetch platform stats for followers/page likes (same endpoint as happenings dashboard)
-      const statsResponse = await fetch(`${API_BASE_URL}/social-media/platform-stats`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      let platformStats = {}
-      if (statsResponse.ok) {
-        platformStats = await statsResponse.json()
-      }
-      
-      // Process each platform
-      for (const platform of platforms) {
-        const platformKey = platform.platform.toLowerCase()
-        const platformPosts = postsByPlatform[platformKey] || []
-        
-        // Get recent 5 posts
-        const recentPostsList = platformPosts.slice(0, 5)
-        const recentPosts = recentPostsList.length
-        
-        // Calculate total likes and comments from recent posts
-        const recentLikes = recentPostsList.reduce((sum, post) => {
-          return sum + (post.likes_count || post.like_count || post.reactions_count || 0)
-        }, 0)
-        
-        const recentComments = recentPostsList.reduce((sum, post) => {
-          return sum + (post.comments_count || post.comment_count || 0)
-        }, 0)
-        
-        // Get followers/page likes from platform stats
-        const stats = platformStats[platformKey] || {}
-        // Facebook returns fan_count, Instagram returns followers_count
-        const followers = stats.followers_count || stats.fan_count || stats.page_likes || stats.subscribers_count || 0
-        
-        metricsData[platform.platform] = {
-          followers: followers,
-          recentLikes: recentLikes,
-          recentComments: recentComments,
-          recentPosts: recentPosts
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching platform metrics:', error)
-      // Fallback to database
-      for (const platform of platforms) {
-        try {
-          const postsResponse = await supabase
-            .from('post_snapshots')
-            .select('*')
-            .eq('platform', platform.platform)
-            .order('created_at', { ascending: false })
-            .limit(5)
-
-          const recentPosts = postsResponse.data || []
-          const totalLikes = recentPosts.reduce((sum, post) => sum + (post.likes_count || 0), 0)
-          const totalComments = recentPosts.reduce((sum, post) => sum + (post.comments_count || 0), 0)
-          
-          const insightsResponse = await supabase
-            .from('social_insights')
-            .select('followers_count, subscribers_count, page_likes')
-            .eq('platform', platform.platform)
-            .order('insight_date', { ascending: false })
-            .limit(1)
-            .single()
-
-          metricsData[platform.platform] = {
-            followers: insightsResponse.data?.followers_count || insightsResponse.data?.subscribers_count || insightsResponse.data?.page_likes || 0,
-            recentLikes: totalLikes,
-            recentComments: totalComments,
-            recentPosts: recentPosts.length
-          }
-        } catch (fallbackError) {
-          console.error(`Fallback error for ${platform.platform}:`, fallbackError)
-          metricsData[platform.platform] = {
-            followers: 0,
-            recentLikes: 0,
-            recentComments: 0,
-            recentPosts: 0
-          }
-        }
-      }
-    }
-    
-    setPerformanceData(metricsData)
-  }
-
   useEffect(() => {
     if (user) {
       fetchSuggestedPosts()
       fetchTodaysLeads()
       fetchFollowUpLeads()
-      fetchPerformancePlatforms()
     }
-  }, [user, fetchSuggestedPosts, fetchTodaysLeads, fetchFollowUpLeads, fetchPerformancePlatforms])
-
-  // Reset performance index when platforms change
-  useEffect(() => {
-    setCurrentPerformanceIndex(0)
-  }, [performancePlatforms.length])
-
-  const nextPerformance = () => {
-    setCurrentPerformanceIndex((prev) => (prev + 1) % performancePlatforms.length)
-  }
-
-  const prevPerformance = () => {
-    setCurrentPerformanceIndex((prev) => (prev - 1 + performancePlatforms.length) % performancePlatforms.length)
-  }
-
-  const goToPerformance = (index) => {
-    setCurrentPerformanceIndex(index)
-  }
-
-  // Get platform display name
-  const getPlatformDisplayName = (platform) => {
-    const names = {
-      facebook: 'Facebook',
-      instagram: 'Instagram',
-      linkedin: 'LinkedIn',
-      twitter: 'X (Twitter)',
-      youtube: 'YouTube'
-    }
-    return names[platform] || platform
-  }
-
-  // Get followers label based on platform
-  const getFollowersLabel = (platform) => {
-    const labels = {
-      facebook: 'Page Likes',
-      instagram: 'Followers',
-      linkedin: 'Followers',
-      twitter: 'Followers',
-      youtube: 'Subscribers'
-    }
-    return labels[platform] || 'Followers'
-  }
+  }, [user, fetchSuggestedPosts, fetchTodaysLeads, fetchFollowUpLeads])
 
   // Channel icon helper for lead cards
   const getChannelIcon = (platform) => {
@@ -1342,288 +1131,92 @@ function EmilyDashboard() {
                           </div>
 
                           {/* Columns 2-5: leads + placeholders */}
-                          <div className="col-span-4 grid grid-cols-4 gap-4">
-                            {/* Column 2: Today's leads */}
+                          <div className="col-span-4 grid grid-cols-3 gap-4">
+                            {/* Column 2: Ideas placeholder */}
                             <div className="col-span-1">
-                              <div className="mb-3">
-                                <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                  Leads for today
-                                </h3>
-                                <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                  {todaysLeads.length} lead{todaysLeads.length !== 1 ? 's' : ''}
-                                </p>
+                              <div className="mb-3 opacity-0">
+                                <h3 className="text-sm font-normal">Ideas</h3>
+                                <p className="text-xs">Placeholder</p>
                               </div>
-                              <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto">
-                                {todaysLeadsLoading ? (
-                                  <div className={`p-4 rounded-lg border text-sm text-center ${
-                                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                                  }`}>
-                                    Loading leads...
-                                  </div>
-                                ) : todaysLeads && todaysLeads.length > 0 ? (
-                                  todaysLeads.slice(0, 6).map((lead) => {
-                                    const channel = lead.source_platform || lead.platform || lead.channel || lead.metadata?.source || 'Unknown'
-                                    const remarks = lead.remarks || lead.latest_remark || lead.metadata?.remarks || lead.note || ''
+                              <div className={`p-6 rounded-lg border border-dashed flex items-center justify-center h-[calc(100%-3.5rem)] ${
+                                isDarkMode ? 'border-gray-700 bg-gray-800 text-gray-300' : 'border-gray-200 bg-white text-gray-600'
+                              }`}>
+                                <div className="text-sm text-center">
+                                  <div className="font-normal mb-1">Ideas</div>
+                                  <div className="text-xs">Content ideas & inspiration</div>
+                                </div>
+                              </div>
+                            </div>
 
-                                    return (
-                                      <div
-                                        key={lead.id}
-                                        onClick={() => navigate('/leads')}
-                                        className={`p-3 rounded-lg border cursor-pointer ${
-                                          isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-white border-gray-200 text-gray-700'
-                                        }`}
-                                      >
-                                        <div className="flex items-center justify-between">
-                                          <div className="font-medium truncate">{lead.name || 'No name'}</div>
-                                          <div className="text-xs text-gray-400">{new Date(lead.created_at).toLocaleTimeString()}</div>
-                                        </div>
-                                        <div className="text-xs text-gray-500 mt-1 truncate">
-                                          {lead.email || lead.phone || 'No contact info'}
-                                        </div>
-
-                                        {/* Channel badge and remarks */}
-                                        <div className="mt-2 flex items-center justify-between gap-2">
-                                          <div className="flex items-center gap-2">
-                                            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium inline-flex items-center gap-2 ${
-                                              isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-700'
-                                            }`}>
-                                              {getChannelIcon(channel)}
-                                              <span className="truncate">{channel}</span>
-                                            </span>
-                                          </div>
-                                          <div className="text-xs text-gray-400 truncate max-w-[140px]">
-                                            {remarks ? remarks : <span className="italic text-gray-500">No remarks</span>}
-                                          </div>
-                                        </div>
-
-                                        {/* Bottom section: automatic welcome email indicator */}
-                                        {lead.welcome_email_sent && (
-                                          <div className="mt-3 pt-3 border-t">
-                                            <div className={`text-sm px-3 py-2 rounded-b ${isDarkMode ? 'bg-green-900/20 text-green-200 border-green-800' : 'bg-green-50 text-green-700 border border-green-200'}`}>
-                                              <div className="flex items-center gap-2">
-                                                <Mail className="w-4 h-4" />
-                                                <span className="font-medium">Automatic welcome email sent</span>
-                                              </div>
-                                            </div>
-                                          </div>
+                            {/* Column 3-4: Stats (Reminders + Leads) */}
+                            <div className="col-span-2 grid grid-cols-2 gap-4">
+                              {/* Inner Column 1: Leads Reminders */}
+                              <div className="col-span-1">
+                                <div className="mb-3">
+                                  <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                    Reminders
+                                  </h3>
+                                  <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    {followUpLeads.length} reminder{followUpLeads.length !== 1 ? 's' : ''}
+                                  </p>
+                                </div>
+                                <div
+                                  onClick={() => navigate('/leads?filter=overdue_followups')}
+                                  className={`p-4 rounded-xl aspect-square flex flex-col justify-center border cursor-pointer transition-colors ${
+                                    isDarkMode 
+                                      ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200' 
+                                      : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                                  }`}
+                                >
+                                  <div className="flex flex-col items-center gap-3 text-center">
+                                    <Calendar className={`w-8 h-8 flex-shrink-0 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                                    <div className="flex flex-col items-center gap-1">
+                                      <div className="text-2xl font-semibold">
+                                        {followUpLeadsLoading ? (
+                                          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>...</span>
+                                        ) : (
+                                          followUpLeads.length
                                         )}
                                       </div>
-                                    )
-                                  })
-                                ) : (
-                                  <div className={`p-4 rounded-lg border text-sm text-center ${
-                                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                                  }`}>
-                                    No leads for today
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Column 3: Ideas placeholder */}
-                            <div className={`p-6 rounded-lg border border-dashed flex items-center justify-center ${
-                              isDarkMode ? 'border-gray-700 bg-gray-800 text-gray-300' : 'border-gray-200 bg-white text-gray-600'
-                            }`}>
-                              <div className="text-sm text-center">
-                                <div className="font-normal mb-1">Ideas</div>
-                                <div className="text-xs">Content ideas & inspiration</div>
-                              </div>
-                            </div>
-
-                            {/* Column 4: Performance slider */}
-                            <div className="col-span-1">
-                              <div className="mb-3">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                      Performance
-                                    </h3>
-                                    <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                      {performancePlatforms.length > 0 && performancePlatforms[currentPerformanceIndex]
-                                        ? getPlatformDisplayName(performancePlatforms[currentPerformanceIndex].platform)
-                                        : 'No platforms'}
-                                    </p>
-                                  </div>
-                                  {/* Navigation Arrows */}
-                                  {performancePlatforms.length > 1 && (
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        onClick={prevPerformance}
-                                        className={`p-2 rounded-full ${
-                                          isDarkMode
-                                            ? 'bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700'
-                                            : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-md'
-                                        } transition-colors`}
-                                        aria-label="Previous platform"
-                                      >
-                                        <ChevronLeft className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        onClick={nextPerformance}
-                                        className={`p-2 rounded-full ${
-                                          isDarkMode
-                                            ? 'bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700'
-                                            : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-md'
-                                        } transition-colors`}
-                                        aria-label="Next platform"
-                                      >
-                                        <ChevronRight className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              {performanceLoading ? (
-                                <div className={`p-6 rounded-lg border text-sm text-center ${
-                                  isDarkMode ? 'text-gray-400 border-gray-700' : 'text-gray-600 border-gray-200'
-                                }`}>
-                                  Loading...
-                                </div>
-                              ) : performancePlatforms.length > 0 ? (
-                                <div className="relative">
-                                  {/* Slider Container */}
-                                  <div className="relative overflow-hidden">
-                                    <div
-                                      className="flex transition-transform duration-300 ease-in-out"
-                                      style={{
-                                        transform: `translateX(-${currentPerformanceIndex * 100}%)`
-                                      }}
-                                    >
-                                      {performancePlatforms.map((platform) => {
-                                        const metrics = performanceData[platform.platform] || {
-                                          followers: 0,
-                                          recentLikes: 0,
-                                          recentComments: 0,
-                                          recentPosts: 0
-                                        }
-                                        const platformIcon = getChannelIcon(platform.platform)
-
-                                        return (
-                                          <div key={platform.platform} className="w-full flex-shrink-0">
-                                            <div className={`p-4 rounded-lg border ${
-                                              isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'
-                                            }`}>
-                                              <div className="space-y-3">
-                                                {/* Platform header */}
-                                                <div className="flex items-center gap-2 mb-3">
-                                                  <div className="text-white">
-                                                    {platformIcon}
-                                                  </div>
-                                                  <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                                    {getPlatformDisplayName(platform.platform)}
-                                                  </span>
-                                                </div>
-
-                                                {/* Followers/Page Likes */}
-                                                <div className={`p-3 rounded-lg ${
-                                                  isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'
-                                                }`}>
-                                                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mb-1`}>
-                                                    {getFollowersLabel(platform.platform)}
-                                                  </div>
-                                                  <div className={`text-lg font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                                    {metrics.followers.toLocaleString()}
-                                                  </div>
-                                                </div>
-
-                                                {/* Recent Post Likes */}
-                                                <div className={`p-3 rounded-lg ${
-                                                  isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'
-                                                }`}>
-                                                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mb-1`}>
-                                                    Likes on recent posts
-                                                  </div>
-                                                  <div className={`text-lg font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                                    {metrics.recentLikes.toLocaleString()}
-                                                  </div>
-                                                  {metrics.recentPosts > 0 && (
-                                                    <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                                      ({metrics.recentPosts} post{metrics.recentPosts !== 1 ? 's' : ''})
-                                                    </div>
-                                                  )}
-                                                </div>
-
-                                                {/* Recent Post Comments */}
-                                                <div className={`p-3 rounded-lg ${
-                                                  isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'
-                                                }`}>
-                                                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mb-1`}>
-                                                    Comments on recent posts
-                                                  </div>
-                                                  <div className={`text-lg font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                                    {metrics.recentComments.toLocaleString()}
-                                                  </div>
-                                                  {metrics.recentPosts > 0 && (
-                                                    <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                                      ({metrics.recentPosts} post{metrics.recentPosts !== 1 ? 's' : ''})
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        )
-                                      })}
+                                      <div className="text-xs">
+                                        Lead{followUpLeads.length !== 1 ? 's' : ''} to follow up
+                                      </div>
                                     </div>
                                   </div>
-
-                                  {/* Slide Indicators */}
-                                  {performancePlatforms.length > 1 && (
-                                    <div className="flex justify-center gap-2 mt-4">
-                                      {performancePlatforms.map((_, index) => (
-                                        <button
-                                          key={index}
-                                          onClick={() => goToPerformance(index)}
-                                          className={`rounded-full transition-all duration-300 ${
-                                            index === currentPerformanceIndex
-                                              ? `w-8 h-2 ${isDarkMode ? 'bg-blue-500' : 'bg-blue-600'} shadow-lg`
-                                              : `w-2 h-2 ${isDarkMode ? 'bg-gray-600 hover:bg-gray-500' : 'bg-gray-300 hover:bg-gray-400'}`
-                                          }`}
-                                          aria-label={`Go to ${performancePlatforms[index]?.platform} performance`}
-                                        />
-                                      ))}
-                                    </div>
-                                  )}
                                 </div>
-                              ) : (
-                                <div className={`p-6 rounded-lg border border-dashed text-sm text-center ${
-                                  isDarkMode ? 'text-gray-400 border-gray-700' : 'text-gray-600 border-gray-200'
-                                }`}>
-                                  No connected platforms
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Column 5: Reminders */}
-                            <div className="col-span-1">
-                              <div className="mb-3">
-                                <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                  Reminders
-                                </h3>
-                                <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                  {followUpLeads.length} reminder{followUpLeads.length !== 1 ? 's' : ''}
-                                </p>
                               </div>
-                              <div
-                                onClick={() => navigate('/leads?filter=overdue_followups')}
-                                className={`p-4 rounded-lg border cursor-pointer transition-colors ${
-                                  isDarkMode 
-                                    ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200' 
-                                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
-                                }`}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <Calendar className={`w-5 h-5 flex-shrink-0 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-                                  <div className="flex items-center gap-2">
-                                    <div className="text-xl font-semibold">
-                                      {followUpLeadsLoading ? (
-                                        <span className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>...</span>
-                                      ) : (
-                                        followUpLeads.length
-                                      )}
-                                    </div>
-                                    <div className="text-xs">
-                                      Lead{followUpLeads.length !== 1 ? 's' : ''} to follow up
+                              
+                              {/* Inner Column 2: New Leads Today */}
+                              <div className="col-span-1">
+                                <div className="mb-3">
+                                  <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                    New Leads
+                                  </h3>
+                                  <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    {todaysLeads.length} received today
+                                  </p>
+                                </div>
+                                <div
+                                  onClick={() => navigate('/leads')}
+                                  className={`p-4 rounded-xl aspect-square flex flex-col justify-center border cursor-pointer transition-colors ${
+                                    isDarkMode 
+                                      ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200' 
+                                      : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                                  }`}
+                                >
+                                  <div className="flex flex-col items-center gap-3 text-center">
+                                    <Users className={`w-8 h-8 flex-shrink-0 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                                    <div className="flex flex-col items-center gap-1">
+                                      <div className="text-2xl font-semibold">
+                                        {todaysLeadsLoading ? (
+                                          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>...</span>
+                                        ) : (
+                                          todaysLeads.length
+                                        )}
+                                      </div>
+                                      <div className="text-xs">
+                                        Lead{todaysLeads.length !== 1 ? 's' : ''} received
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
@@ -1901,4 +1494,3 @@ function EmilyDashboard() {
 }
 
 export default EmilyDashboard
-
