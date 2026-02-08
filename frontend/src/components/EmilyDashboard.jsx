@@ -176,7 +176,7 @@ const VoiceOrb = ({ isSpeaking }) => {
           <span className="text-white font-bold text-4xl">E</span>
         </div>
       </div>
-    </div>
+                                </div>
   )
 }
 
@@ -188,6 +188,47 @@ function EmilyDashboard() {
   const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [welcomeIndex, setWelcomeIndex] = useState(0)
+  const welcomeVariants = useMemo(() => {
+    const name = profile?.business_name || user?.user_metadata?.name || 'there'
+    return [
+      `Hello ${name}, how are you doing today?`,
+      `Hi ${name}! How's everything going today?`,
+      `Good day ${name} — how are you feeling today?`,
+      `Hello ${name}, hope you're having a great day! How are you?`,
+      `Hey ${name}, how's your day so far?`,
+      `Hi ${name}! What can I help you with today?`,
+      `Hello ${name}, ready to make today productive? How are you?`,
+      `Good to see you ${name}! How's today treating you?`,
+      `Hey ${name}, hope all is well — how are you today?`,
+      `Hello ${name}! What's new today? How are you doing?`
+    ]
+  }, [profile, user])
+  
+  // Split greeting into two lines intelligently
+  const splitGreeting = (text) => {
+    if (!text) return ['', '']
+    // Try splitting at common punctuation first
+    const punct = ['?', '!', '.', ',']
+    for (const p of punct) {
+      const idx = text.indexOf(p)
+      if (idx > -1 && idx < text.length - 1) {
+        const first = text.slice(0, idx + 1).trim()
+        const rest = text.slice(idx + 1).trim()
+        if (rest) return [first, rest]
+      }
+    }
+    // Fallback: split near middle on nearest space
+    const mid = Math.floor(text.length / 2)
+    const left = text.lastIndexOf(' ', mid)
+    const right = text.indexOf(' ', mid + 1)
+    let splitIdx = -1
+    if (left === -1) splitIdx = right
+    else if (right === -1) splitIdx = left
+    else splitIdx = (mid - left <= right - mid) ? left : right
+    if (splitIdx === -1) return [text, '']
+    return [text.slice(0, splitIdx).trim(), text.slice(splitIdx).trim()]
+  }
   const [conversations, setConversations] = useState([])
   const [loadingConversations, setLoadingConversations] = useState(false)
   const [messageFilter, setMessageFilter] = useState('all') // 'all', 'emily', 'chase', 'leo'
@@ -209,6 +250,12 @@ function EmilyDashboard() {
   const [todaysLeadsLoading, setTodaysLeadsLoading] = useState(false)
   const [followUpLeads, setFollowUpLeads] = useState([])
   const [followUpLeadsLoading, setFollowUpLeadsLoading] = useState(false)
+  const [scheduledCount, setScheduledCount] = useState(0)
+  const [scheduledLoading, setScheduledLoading] = useState(false)
+  const [weekCounts, setWeekCounts] = useState([0,0,0,0,0,0,0])
+  const [weekLoading, setWeekLoading] = useState(false)
+  const [createdContent, setCreatedContent] = useState([])
+  const [createdLoading, setCreatedLoading] = useState(false)
 
   // Today's conversations only (no historical data)
 
@@ -261,15 +308,20 @@ function EmilyDashboard() {
       })
 
       // Refetch all data
-    if (user) {
+      if (user) {
         await Promise.all([
           fetchTodayConversations(true),
           fetchSuggestedPosts(),
+          fetchCreatedContent(),
           fetchTodaysLeads(),
-          fetchFollowUpLeads(true)
+          fetchFollowUpLeads(true),
+          fetchScheduledCount()
+          ,fetchWeekEntries()
         ])
       }
 
+      // Refresh welcome variant
+      setWelcomeIndex(Math.floor(Math.random() * welcomeVariants.length))
       showSuccess('Data refreshed', 'All data has been updated with fresh information.')
     } catch (error) {
       console.error('Error refreshing data:', error)
@@ -286,8 +338,57 @@ function EmilyDashboard() {
       if (result.error) {
         throw new Error(result.error)
       }
+      // Normalize platform values and prioritize: Instagram, Facebook, LinkedIn, YouTube
+      const normalizePlatform = (post) => {
+        const candidates = [
+          post.platform,
+          post.content_campaigns?.platform,
+          post.channel,
+          post.metadata?.platform,
+          post.source_platform,
+          (post.platform || '').toString(),
+          (post.content_campaigns?.platform || '').toString()
+        ].filter(Boolean).map(s => s.toString().toLowerCase())
 
-      setSuggestedPosts(result.data || [])
+        const joined = candidates.join(' ')
+        if (joined.includes('insta') || joined.includes('instagram')) return 'instagram'
+        if (joined.includes('facebook') || joined.includes('fb')) return 'facebook'
+        if (joined.includes('linkedin')) return 'linkedin'
+        if (joined.includes('youtube') || joined.includes('yt')) return 'youtube'
+        return candidates[0] || ''
+      }
+
+      const priority = { instagram: 1, facebook: 2, linkedin: 3, youtube: 4 }
+
+      const sorted = (result.data || []).slice().sort((a, b) => {
+        const pa = normalizePlatform(a)
+        const pb = normalizePlatform(b)
+        const ia = priority[pa] || 99
+        const ib = priority[pb] || 99
+        if (ia !== ib) return ia - ib
+        // fallback to created_at desc
+        const da = a.created_at ? new Date(a.created_at) : new Date(0)
+        const db = b.created_at ? new Date(b.created_at) : new Date(0)
+        return db - da
+      })
+      
+      // Ensure highest-priority platforms appear at the front.
+      // If any Instagram posts exist, move the first one to index 0.
+      const ensureFront = (arr, platformKey) => {
+        const idx = arr.findIndex(p => normalizePlatform(p) === platformKey)
+        if (idx > 0) {
+          const [item] = arr.splice(idx, 1)
+          arr.unshift(item)
+        }
+      }
+
+      // Apply for Instagram first, then Facebook, then LinkedIn, then YouTube
+      ensureFront(sorted, 'instagram')
+      ensureFront(sorted, 'facebook')
+      ensureFront(sorted, 'linkedin')
+      ensureFront(sorted, 'youtube')
+
+      setSuggestedPosts(sorted)
     } catch (error) {
       console.error('Error fetching suggested posts:', error)
       showError('Failed to load suggested content')
@@ -525,8 +626,11 @@ function EmilyDashboard() {
   useEffect(() => {
     if (user) {
       fetchSuggestedPosts()
+      fetchCreatedContent()
       fetchTodaysLeads()
       fetchFollowUpLeads()
+      fetchScheduledCount()
+      fetchWeekEntries()
     }
   }, [user, fetchSuggestedPosts, fetchTodaysLeads, fetchFollowUpLeads])
 
@@ -783,6 +887,36 @@ function EmilyDashboard() {
     return session?.access_token
   }
 
+  // Helper to extract an image URL from a created_content row (tries common fields)
+  const getImageUrl = (item) => {
+    if (!item) return null
+    if (item.media_url && typeof item.media_url === 'string') return item.media_url
+    if (item.image_url) return item.image_url
+    if (item.primary_image_url) return item.primary_image_url
+    if (item.images && Array.isArray(item.images) && item.images.length > 0) {
+      const first = item.images[0]
+      return typeof first === 'string' ? first : (first.url || first.image_url || null)
+    }
+    if (item.metadata) {
+      if (item.metadata.media_url) return item.metadata.media_url
+      if (Array.isArray(item.metadata.carousel_images) && item.metadata.carousel_images.length > 0) {
+        const first = item.metadata.carousel_images[0]
+        return typeof first === 'string' ? first : (first.url || first.image_url || null)
+      }
+    }
+    return null
+  }
+
+  const isVideoUrl = (url, contentItem = null) => {
+    if (!url && !contentItem) return false
+    const contentType = contentItem?.content_type?.toLowerCase() || ''
+    if (contentType.includes('video') || contentType.includes('reel') || contentType.includes('short_video')) return true
+    if (!url) return false
+    const urlWithoutQuery = String(url).split('?')[0].toLowerCase()
+    const videoExtensions = ['.mp4', '.mov', '.avi', '.webm', '.m4v']
+    return videoExtensions.some(ext => urlWithoutQuery.endsWith(ext)) || urlWithoutQuery.includes('/video') || urlWithoutQuery.includes('video')
+  }
+
   const fetchTodayConversations = async (forceRefresh = false) => {
     if (!user) return
 
@@ -872,6 +1006,118 @@ function EmilyDashboard() {
       setLoadingConversations(false)
     }
   }
+
+  const fetchCreatedContent = useCallback(async (forceRefresh = false) => {
+    if (!user) return
+    setCreatedLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('created_content')
+        .select('*')
+        .eq('user_id', user.id)
+        .neq('status', 'deleted')
+        .order('created_at', { ascending: false })
+        .limit(12)
+
+      if (error) {
+        console.error('Error fetching created content:', error)
+        setCreatedContent([])
+      } else {
+        setCreatedContent(Array.isArray(data) ? data : [])
+      }
+    } catch (err) {
+      console.error('Error fetching created content:', err)
+      setCreatedContent([])
+    } finally {
+      setCreatedLoading(false)
+    }
+  }, [user])
+
+  const fetchScheduledCount = useCallback(async () => {
+    if (!user) return
+    setScheduledLoading(true)
+    try {
+      const today = new Date()
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).toISOString()
+
+      // Query Supabase created_content table for scheduled posts today
+      const { data, error, count } = await supabase
+        .from('created_content')
+        .select('id', { count: 'exact', head: false })
+        .eq('user_id', user.id)
+        .neq('status', 'deleted')
+        .gte('scheduled_at', startOfDay)
+        .lte('scheduled_at', endOfDay)
+
+      if (error) {
+        console.error('Error fetching scheduled count:', error)
+        setScheduledCount(0)
+      } else if (typeof count === 'number') {
+        setScheduledCount(count)
+      } else {
+        // Fallback to length of data array
+        setScheduledCount(Array.isArray(data) ? data.length : 0)
+      }
+    } catch (err) {
+      console.error('Error fetching scheduled count:', err)
+      setScheduledCount(0)
+    } finally {
+      setScheduledLoading(false)
+    }
+  }, [user])
+
+  const fetchWeekEntries = useCallback(async () => {
+    if (!user) return
+    setWeekLoading(true)
+    try {
+      const tokenResp = await supabase.auth.getSession()
+      const token = tokenResp.data?.session?.access_token
+      // Fetch calendars
+      const calRes = await fetch(`${API_BASE_URL}/calendars`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!calRes.ok) {
+        setWeekCounts([0,0,0,0,0,0,0])
+        return
+      }
+      const calendars = await calRes.json()
+      let allEntries = []
+      if (Array.isArray(calendars) && calendars.length > 0) {
+        const promises = calendars.map(c => fetch(`${API_BASE_URL}/calendars/${c.id}`, { headers: { Authorization: `Bearer ${token}` } }))
+        const responses = await Promise.all(promises)
+        for (const r of responses) {
+          if (r.ok) {
+            const d = await r.json()
+            allEntries = allEntries.concat(d.entries || [])
+          }
+        }
+      }
+
+      // Compute current week (Sunday-Saturday)
+      const now = new Date()
+      const day = now.getDay()
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day)
+      const counts = [0,0,0,0,0,0,0]
+      allEntries.forEach(e => {
+        const ed = new Date(e.entry_date)
+        // normalize date only
+        const edDate = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate())
+        for (let i=0;i<7;i++) {
+          const d = new Date(start.getFullYear(), start.getMonth(), start.getDate()+i)
+          if (edDate.getTime() === d.getTime()) {
+            counts[i] = counts[i] + 1
+          }
+        }
+      })
+      setWeekCounts(counts)
+    } catch (err) {
+      console.error('Error fetching week entries:', err)
+      setWeekCounts([0,0,0,0,0,0,0])
+    } finally {
+      setWeekLoading(false)
+    }
+  }, [user])
 
   // Group conversations by date and get only the last conversation per date
   const groupConversationsByDate = (conversations) => {
@@ -965,40 +1211,7 @@ function EmilyDashboard() {
       <div data-main-content="true" className={`md:ml-48 xl:ml-64 flex flex-col overflow-hidden pt-16 md:pt-0 bg-transparent ${
         isDarkMode ? 'md:bg-gray-900' : 'md:bg-white'
       }`} style={{ height: '100vh', overflow: 'hidden' }}>
-        {/* Header */}
-        <div className={`hidden md:block shadow-sm border-b z-30 flex-shrink-0 ${
-          isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-        }`}>
-          <div className="px-4 lg:px-6 py-3 lg:py-4">
-            <div className="flex justify-between items-center">
-              <div className="hidden md:flex items-center gap-3">
-                <div className={`text-sm lg:text-base ${
-                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                }`}>
-                  {profile?.business_name || user?.user_metadata?.name || 'you'}
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                {/* Refresh Button */}
-                <button
-                  onClick={handleRefreshAllData}
-                  className={`p-2 rounded-md transition-colors border ${
-                    isDarkMode
-                      ? 'hover:bg-gray-700 border-gray-600 text-gray-300'
-                      : 'hover:bg-gray-100 border-gray-200'
-                  }`}
-                  title="Refresh all data"
-                >
-                  <RefreshCw className={`w-5 h-5 ${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`} />
-                </button>
-
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* (header removed) */}
 
         {/* Main Content Area */}
         <div className={`flex-1 flex bg-transparent ${
@@ -1034,13 +1247,30 @@ function EmilyDashboard() {
                           </div>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        <>
+                          {/* Simple centered greeting above columns */}
+                          <div className="mb-8 pb-4">
+                            <div className="w-full flex items-center justify-center">
+                              {(() => {
+                                const [l1, l2] = splitGreeting(welcomeVariants[welcomeIndex])
+                                return (
+                                  <div className="text-center">
+                                    <div className={`text-4xl leading-tight font-thin ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{l1}</div>
+                                    {l2 && <div className={`text-4xl leading-tight font-thin ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{l2}</div>}
+                                    <div className={`mx-auto mt-3 h-[2px] w-20 rounded ${isDarkMode ? 'bg-gray-600' : 'bg-pink-200'}`} />
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                           {/* Column 1: Suggested post */}
                           <div className="col-span-1">
                             <div className="mb-3">
                               <div className="flex items-center justify-between">
                                 <div>
-                                  <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                  <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
                                     Suggested posts
                                   </h3>
                                   <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -1098,30 +1328,15 @@ function EmilyDashboard() {
                                           statusLabelOverride="Suggested"
                                           onApprove={handleApprovePost}
                                           onDiscard={handleDiscardPost}
+                                          hideBottomNav={true}
                                         />
                                       </div>
                                     ))}
                                   </div>
                                 </div>
+                                {/* scheduled card moved to Reminders column */}
 
-                                {/* Slide Indicators */}
-                                {todaysSuggestedPosts.length > 1 && (
-                                  <div className="flex justify-center gap-2 mt-4">
-                                    {todaysSuggestedPosts.map((_, index) => (
-                                      <button
-                                        key={index}
-                                        onClick={() => goToPost(index)}
-                                        className={`rounded-full transition-all duration-300 ${
-                                          index === currentPostIndex
-                                            ? `w-8 h-2 ${isDarkMode ? 'bg-blue-500' : 'bg-blue-600'} shadow-lg`
-                                            : `w-2 h-2 ${isDarkMode ? 'bg-gray-600 hover:bg-gray-500' : 'bg-gray-300 hover:bg-gray-400'}`
-                                        }`}
-                                        aria-label={`Go to post ${index + 1}`}
-                                        title={`Post ${index + 1} of ${todaysSuggestedPosts.length}`}
-                                      />
-                                    ))}
-                                  </div>
-                                )}
+                                {/* Slide indicators removed per request */}
                               </div>
                             ) : (
                               <div className="p-6 rounded-lg border border-dashed text-center text-sm text-gray-500">
@@ -1132,98 +1347,181 @@ function EmilyDashboard() {
 
                           {/* Columns 2-5: leads + placeholders */}
                           <div className="col-span-4 grid grid-cols-3 gap-4">
-                            {/* Column 2: Ideas placeholder */}
+                            {/* Column 2: Created content grid (3x4 images, 3 columns x 4 rows) */}
                             <div className="col-span-1">
-                              <div className="mb-3 opacity-0">
-                                <h3 className="text-sm font-normal">Ideas</h3>
-                                <p className="text-xs">Placeholder</p>
+                              <div className="mb-3">
+                                <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                  Your creations
+                                </h3>
+                                <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  {createdContent.length} item{createdContent.length !== 1 ? 's' : ''}
+                                </p>
                               </div>
-                              <div className={`p-6 rounded-lg border border-dashed flex items-center justify-center h-[calc(100%-3.5rem)] ${
-                                isDarkMode ? 'border-gray-700 bg-gray-800 text-gray-300' : 'border-gray-200 bg-white text-gray-600'
-                              }`}>
-                                <div className="text-sm text-center">
-                                  <div className="font-normal mb-1">Ideas</div>
-                                  <div className="text-xs">Content ideas & inspiration</div>
-                                </div>
+
+                              <div className="rounded-lg">
+                                {createdLoading ? (
+                                  <div className={`p-6 rounded-lg border text-center ${isDarkMode ? 'border-gray-700 bg-gray-800 text-gray-300' : 'border-gray-200 bg-white text-gray-600'}`}>
+                                    Loading...
+                                  </div>
+                                ) : createdContent && createdContent.length > 0 ? (
+                                  <div className="grid grid-cols-3 gap-2">
+                                    {createdContent.slice(0, 12).map((item) => {
+                                      const img = getImageUrl(item)
+                                      const video = isVideoUrl(img, item)
+                                      return (
+                                        <div
+                                          key={item.id}
+                                          className="aspect-square overflow-hidden rounded-md bg-gray-100 cursor-pointer"
+                                          onClick={() => {
+                                            setGeneratedContent(item)
+                                            const modalType = openModalForContentType(item)
+                                            if (modalType === 'reel') {
+                                              setShowGeneratedReelModal(true)
+                                            } else {
+                                              setShowGeneratedContentModal(true)
+                                            }
+                                          }}
+                                        >
+                                          {video && img ? (
+                                            <video
+                                              src={img}
+                                              muted
+                                              playsInline
+                                              preload="metadata"
+                                              className="w-full h-full object-cover"
+                                              onLoadedData={(e) => {
+                                                try { e.currentTarget.currentTime = 0.1 } catch (err) { /* ignore */ }
+                                              }}
+                                              onError={(e) => { e.currentTarget.style.display = 'none' }}
+                                            />
+                                          ) : img ? (
+                                            <img
+                                              src={img}
+                                              alt={item.title || 'Post'}
+                                              className="w-full h-full object-cover"
+                                              onError={(e) => { e.target.style.display = 'none' }}
+                                            />
+                                          ) : (
+                                            <div className={`w-full h-full flex items-center justify-center ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                                              <div className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>No image</div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className={`p-6 rounded-lg border border-dashed text-center text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    No created images yet
+                                  </div>
+                                )}
                               </div>
                             </div>
 
-                            {/* Column 3-4: Stats (Reminders + Leads) */}
+                            {/* Column 3-4: Stats (Reminders + Scheduled + New Leads) */}
                             <div className="col-span-2 grid grid-cols-2 gap-4">
-                              {/* Inner Column 1: Leads Reminders */}
-                              <div className="col-span-1">
-                                <div className="mb-3">
-                                  <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                    Reminders
-                                  </h3>
-                                  <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                    {followUpLeads.length} reminder{followUpLeads.length !== 1 ? 's' : ''}
-                                  </p>
-                                </div>
-                                <div
-                                  onClick={() => navigate('/leads?filter=overdue_followups')}
-                                  className={`p-4 rounded-xl aspect-square flex flex-col justify-center border cursor-pointer transition-colors ${
-                                    isDarkMode 
-                                      ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200' 
-                                      : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
-                                  }`}
-                                >
-                                  <div className="flex flex-col items-center gap-3 text-center">
-                                    <Calendar className={`w-8 h-8 flex-shrink-0 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-                                    <div className="flex flex-col items-center gap-1">
-                                      <div className="text-2xl font-semibold">
-                                        {followUpLeadsLoading ? (
-                                          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>...</span>
-                                        ) : (
-                                          followUpLeads.length
-                                        )}
+                              {/* Left column: stack Reminders above Scheduled */}
+                              <div className="col-span-1 flex flex-col gap-4">
+                                <div>
+                                  <div className="mb-3">
+                                    <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                      New Leads
+                                    </h3>
+                                  </div>
+                                  <div
+                                    onClick={() => navigate('/leads')}
+                                    className={`p-4 rounded-xl flex items-center gap-3 justify-start border cursor-pointer transition-colors ${
+                                      isDarkMode
+                                        ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200'
+                                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                                    }`}
+                                  >
+                                    <Users className="w-6 h-6 flex-shrink-0 text-pink-400" />
+                                    <div className="flex items-baseline gap-3">
+                                      <div className="text-2xl font-semibold text-pink-400">
+                                        {todaysLeadsLoading ? '...' : todaysLeads.length}
                                       </div>
-                                      <div className="text-xs">
-                                        Lead{followUpLeads.length !== 1 ? 's' : ''} to follow up
+                                      <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        {todaysLeads.length === 1 ? 'lead received today' : 'leads received today'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div className="mb-3">
+                                    <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                      Reminders
+                                    </h3>
+                                  </div>
+                                  <div
+                                    onClick={() => navigate('/leads?filter=overdue_followups')}
+                                    className={`p-4 rounded-xl flex items-center gap-3 justify-start border cursor-pointer transition-colors ${
+                                      isDarkMode
+                                        ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200'
+                                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                                    }`}
+                                  >
+                                    <Calendar className="w-6 h-6 flex-shrink-0 text-pink-400" />
+                                    <div className="flex items-baseline gap-3">
+                                      <div className="text-2xl font-semibold text-pink-400">
+                                        {followUpLeadsLoading ? '...' : followUpLeads.length}
+                                      </div>
+                                      <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        {followUpLeads.length === 1 ? 'lead to follow up today' : 'leads to follow up today'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* Scheduled posts quick card - placed directly below Reminders */}
+                                <div>
+                                  <div
+                                    onClick={() => navigate('/content?filter=scheduled')}
+                                    className={`mt-3 p-4 rounded-xl flex items-center gap-3 justify-start border cursor-pointer transition-colors ${
+                                      isDarkMode
+                                        ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200'
+                                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                                    }`}
+                                  >
+                                    <FileText className="w-6 h-6 flex-shrink-0 text-pink-400" />
+                                    <div className="flex items-baseline gap-3">
+                                      <div className="text-2xl font-semibold text-pink-400">
+                                        {scheduledLoading ? '...' : scheduledCount}
+                                      </div>
+                                      <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        {scheduledCount === 1 ? 'post scheduled today' : 'posts scheduled today'}
                                       </div>
                                     </div>
                                   </div>
                                 </div>
                               </div>
-                              
-                              {/* Inner Column 2: New Leads Today */}
+
+                              {/* Right column: Weekly calendar strip */}
                               <div className="col-span-1">
                                 <div className="mb-3">
-                                  <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                    New Leads
+                                  <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                    This week
                                   </h3>
-                                  <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                    {todaysLeads.length} received today
-                                  </p>
                                 </div>
-                                <div
-                                  onClick={() => navigate('/leads')}
-                                  className={`p-4 rounded-xl aspect-square flex flex-col justify-center border cursor-pointer transition-colors ${
-                                    isDarkMode 
-                                      ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200' 
-                                      : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
-                                  }`}
-                                >
-                                  <div className="flex flex-col items-center gap-3 text-center">
-                                    <Users className={`w-8 h-8 flex-shrink-0 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-                                    <div className="flex flex-col items-center gap-1">
-                                      <div className="text-2xl font-semibold">
-                                        {todaysLeadsLoading ? (
-                                          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>...</span>
-                                        ) : (
-                                          todaysLeads.length
-                                        )}
+                                <div className={`p-3 rounded-xl border ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
+                                  <div className="grid grid-cols-7 gap-2 text-center">
+                                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, i) => (
+                                      <div key={d} className="text-xs">
+                                        <div className={`font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>{d}</div>
+                                        <div className="mt-1">
+                                          <div className="text-sm font-semibold text-pink-400">
+                                            {weekLoading ? '...' : weekCounts[i]}
+                                          </div>
+                                        </div>
                                       </div>
-                                      <div className="text-xs">
-                                        Lead{todaysLeads.length !== 1 ? 's' : ''} received
-                                      </div>
-                                    </div>
+                                    ))}
                                   </div>
                                 </div>
                               </div>
                             </div>
                           </div>
                         </div>
+                        </>
                       )}
                     </div>
                   )}
@@ -1250,13 +1548,9 @@ function EmilyDashboard() {
                 >
                   <div className="flex flex-col items-center text-center space-y-2">
                     <div className="w-6 h-6 flex items-center justify-center">
-                      {isDarkMode ? (
-                        <img src="/new_post_icon_white.png" alt="New post" className="w-6 h-6" />
-                      ) : (
-                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                      )}
+                      <svg className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-[#9e005d]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
                     </div>
                     <span className={`text-sm font-medium ${
                       isDarkMode ? 'text-gray-200' : 'text-gray-700'
@@ -1275,8 +1569,8 @@ function EmilyDashboard() {
                   }`}
                 >
                   <div className="flex flex-col items-center text-center space-y-2">
-                    <div className="w-6 h-6 flex items-center justify-center">
-                      <Upload className={`w-6 h-6 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                      <div className="w-6 h-6 flex items-center justify-center">
+                      <Upload className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-[#9e005d]'}`} />
                     </div>
                     <span className={`text-sm font-medium ${
                       isDarkMode ? 'text-gray-200' : 'text-gray-700'
@@ -1295,8 +1589,8 @@ function EmilyDashboard() {
                   }`}
                 >
                   <div className="flex flex-col items-center text-center space-y-2">
-                    <div className="w-6 h-6 flex items-center justify-center">
-                      <MessageSquare className={`w-6 h-6 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
+                      <div className="w-6 h-6 flex items-center justify-center">
+                      <MessageSquare className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-[#9e005d]'}`} />
                     </div>
                     <span className={`text-sm font-medium ${
                       isDarkMode ? 'text-gray-200' : 'text-gray-700'

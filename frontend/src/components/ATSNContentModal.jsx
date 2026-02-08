@@ -910,7 +910,7 @@ const ATSNContentModal = ({
       }}
     >
       <div
-        className="fixed inset-0 flex items-center justify-center p-4"
+        className="fixed inset-0 flex items-center justify-center p-4 md:pl-48 xl:pl-64"
       >
         <div className={`relative max-w-6xl w-full rounded-2xl shadow-2xl overflow-hidden ${
           isDarkMode ? 'bg-gray-800' : 'bg-white'
@@ -924,7 +924,7 @@ const ATSNContentModal = ({
             <div className="flex items-center gap-3">
               {getPlatformIcon(content.platform)}
               <span
-                className={`font-semibold text-lg ${
+                className={`font-normal text-lg ${
                   isDarkMode ? 'text-gray-100' : 'text-gray-900'
                 }`}
               >
@@ -1605,7 +1605,7 @@ const ATSNContentModal = ({
           }}
         >
           <div
-            className="fixed inset-0 flex items-center justify-center p-4"
+            className="fixed inset-0 flex items-center justify-center p-4 md:pl-48 xl:pl-64"
             onClick={(e) => e.stopPropagation()}
           >
             <div className={`relative max-w-2xl w-full rounded-2xl shadow-2xl overflow-hidden ${
@@ -1835,7 +1835,7 @@ const ATSNContentModal = ({
           }}
         >
           <div
-            className="fixed inset-0 flex items-center justify-center p-4"
+            className="fixed inset-0 flex items-center justify-center p-4 md:pl-48 xl:pl-64"
             onClick={(e) => e.stopPropagation()}
           >
             <div className={`relative max-w-2xl w-full h-[80vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col ${
@@ -2168,7 +2168,7 @@ const ATSNContentModal = ({
 
       {/* Success Modal */}
       {showSuccessModal && (
-        <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 flex items-center justify-center p-4 md:pl-48 xl:pl-64 z-50">
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setShowSuccessModal(false)}

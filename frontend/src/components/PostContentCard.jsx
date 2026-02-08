@@ -3,7 +3,7 @@ import { Facebook, Instagram, Linkedin, Youtube, Twitter, Building2, Copy, Eye, 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-const PostContentCard = ({ post, isDarkMode, onCopy, statusLabelOverride, onApprove, onDiscard }) => {
+const PostContentCard = ({ post, isDarkMode, onCopy, statusLabelOverride, onApprove, onDiscard, hideBottomNav = false }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   
   // Parse generated_image_url (single URL from post_contents table)
@@ -128,8 +128,8 @@ const PostContentCard = ({ post, isDarkMode, onCopy, statusLabelOverride, onAppr
 
   return (
     <div
-      className={`flex-shrink-0 w-80 rounded-xl shadow-2xl border overflow-hidden ${
-        isDarkMode ? 'bg-gray-900 border-gray-800 shadow-black/30' : 'bg-white border-gray-200'
+      className={`w-full rounded-xl border overflow-hidden ${
+        isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
       }`}
     >
       <div
@@ -165,13 +165,13 @@ const PostContentCard = ({ post, isDarkMode, onCopy, statusLabelOverride, onAppr
             }}
           />
 
-          {hasMultipleImages && (
+          {!hideBottomNav && hasMultipleImages && (
             <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded-full text-xs font-medium">
               {currentImageIndex + 1} / {images.length}
             </div>
           )}
 
-          {hasMultipleImages && (
+          {!hideBottomNav && hasMultipleImages && (
             <>
               <button
                 onClick={prevImage}
@@ -188,15 +188,13 @@ const PostContentCard = ({ post, isDarkMode, onCopy, statusLabelOverride, onAppr
             </>
           )}
 
-          {hasMultipleImages && (
+          {!hideBottomNav && hasMultipleImages && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
               {images.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setCurrentImageIndex(index)}
-                  className={`w-2 h-2 rounded-full transition-all ${
-                    index === currentImageIndex ? 'bg-white w-6' : 'bg-white/50 hover:bg-white/75'
-                  }`}
+                  className={`w-2 h-2 rounded-full transition-all ${index === currentImageIndex ? 'bg-white w-6' : 'bg-white/50 hover:bg-white/75'}`}
                 />
               ))}
             </div>

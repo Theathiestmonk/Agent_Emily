@@ -149,26 +149,11 @@ const SideNavbar = () => {
     }
   }, [user])
 
-// Custom Discussions Icon Component
-const DiscussionsIcon = ({ className, isDarkMode }) => (
-  <img
-    src="/discussions.svg"
-    alt="Discussions"
-    className={className}
-    style={{
-      width: '24px',
-      height: '24px',
-      objectFit: 'contain',
-      filter: isDarkMode ? 'brightness(0) invert(1)' : 'none'
-    }}
-  />
-)
-
 const navigationItems = [
   {
-    name: 'Discussions',
+    name: 'Workplace',
     href: '/dashboard',
-    icon: DiscussionsIcon
+    icon: Home
   },
   {
     name: 'Suggestions',
@@ -305,13 +290,11 @@ const navigationItems = [
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <img
-              src="/logo_.png"
+              src={isDarkMode ? '/logo_.png' : '/logo_light_mode.png'}
               alt="ATSN AI Logo"
               className="w-8 h-8 lg:w-10 lg:h-10 object-contain"
             />
-            <h1 className={`text-xl lg:text-2xl font-bold ${
-              isDarkMode ? 'text-gray-200' : 'text-gray-600'
-            }`}>atsn ai</h1>
+            <h1 className={`text-2xl lg:text-3xl font-normal ${isDarkMode ? 'text-white' : 'text-[#9e005d]'}`}>atsn ai</h1>
           </div>
         </div>
       </div>
