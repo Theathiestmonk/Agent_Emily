@@ -382,9 +382,9 @@ const ReelModal = ({ content, onClose }) => {
       return
     }
 
-    // Validate file size (max 100MB)
-    if (file.size > 100 * 1024 * 1024) {
-      showError('File Too Large', 'File size must be less than 100MB')
+    // Validate file size (max 300MB)
+    if (file.size > 300 * 1024 * 1024) {
+      showError('File Too Large', 'File size must be less than 300MB')
       if (fileInputRef.current) { fileInputRef.current.value = '' }
       return
     }
@@ -392,6 +392,18 @@ const ReelModal = ({ content, onClose }) => {
     setUploading(true)
 
     try {
+      // Refresh session first to ensure we have a valid token
+      const { data: { session: currentSession } } = await supabase.auth.getSession()
+      
+      if (currentSession) {
+        try {
+          await supabase.auth.refreshSession()
+          console.log('✅ Session refreshed successfully')
+        } catch (refreshErr) {
+          console.warn('⚠️ Could not refresh session:', refreshErr)
+        }
+      }
+
       // Get current user
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
@@ -403,22 +415,51 @@ const ReelModal = ({ content, onClose }) => {
 
       // Generate unique filename
       const fileExt = file.name.split('.').pop()
-      const fileName = `${user.id}/reels/${Date.now()}.${fileExt}`
+      const fileName = `${user.id}/reels/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
 
-      // Upload to Supabase storage
-      const { data, error } = await supabase.storage
-        .from('user-uploads')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false
-        })
+      console.log(`📤 Uploading to Supabase: user-uploads/${fileName}`)
+      console.log(`📊 File size: ${(file.size / (1024 * 1024)).toFixed(2)} MB`)
 
-      if (error) {
-        console.error('Upload error:', error)
-        showError('Upload Failed', 'Failed to upload video: ' + error.message)
-        setUploading(false)
-        if (fileInputRef.current) { fileInputRef.current.value = '' }
-        return
+      // Direct Supabase upload with retry logic for reliability
+      let retries = 3
+      let lastError = null
+      let uploadSuccess = false
+
+      while (retries > 0 && !uploadSuccess) {
+        try {
+          const { data, error } = await supabase.storage
+            .from('user-uploads')
+            .upload(fileName, file, {
+              cacheControl: '3600',
+              upsert: false,
+              contentType: file.type
+            })
+
+          if (error) {
+            // Don't retry on certain errors (e.g., file already exists, auth errors)
+            if (error.message?.includes('already exists') || 
+                error.message?.includes('duplicate') ||
+                error.statusCode === 401 ||
+                error.statusCode === 403) {
+              throw error
+            }
+            lastError = error
+            throw error
+          }
+
+          uploadSuccess = true
+          console.log('✅ Upload successful')
+        } catch (error) {
+          retries--
+          if (retries === 0) {
+            console.error('❌ Upload failed after all retries:', error)
+            throw lastError || error
+          }
+          // Exponential backoff: wait longer between retries
+          const waitTime = 2000 * (3 - retries) // 2s, 4s, 6s
+          console.log(`⚠️ Upload failed, retrying in ${waitTime/1000}s... (${retries} attempts remaining)`)
+          await new Promise(resolve => setTimeout(resolve, waitTime))
+        }
       }
 
       // Get public URL
@@ -473,11 +514,90 @@ const ReelModal = ({ content, onClose }) => {
       if (fileInputRef.current) { fileInputRef.current.value = '' }
 
     } catch (error) {
-      console.error('Upload failed:', error)
-      showError('Upload Failed', 'Upload failed: ' + error.message)
+      console.error('❌ Upload failed:', error)
+      showError('Upload Failed', 'Upload failed: ' + (error.message || 'Please check your connection and try again.'))
       if (fileInputRef.current) { fileInputRef.current.value = '' }
     } finally {
       setUploading(false)
+    }
+  }
+
+  // Backend upload fallback function for large files
+  const uploadVideoViaBackend = async (file) => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || localStorage.getItem('authToken')
+      
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+
+      const response = await fetch(`${API_BASE_URL}/upload-file`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = `Upload failed: ${response.status}`
+        try {
+          const errorJson = JSON.parse(errorText)
+          errorMessage = errorJson.detail || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
+      }
+
+      const result = await response.json()
+
+      // Update the content record with the video URL
+      console.log('Updating content with media_url:', result.url)
+      const { error: updateError } = await supabase
+        .from('created_content')
+        .update({
+          media_url: result.url,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', content.id)
+
+      if (updateError) {
+        console.error('Update error:', updateError)
+        showError('Update Failed', 'Video uploaded but failed to update content: ' + updateError.message)
+        setUploading(false)
+        if (fileInputRef.current) { fileInputRef.current.value = '' }
+        return
+      }
+
+      // Refresh the content data
+      const { data: refreshedData, error: refreshError } = await supabase
+        .from('created_content')
+        .select('*')
+        .eq('id', content.id)
+        .single()
+
+      if (refreshError) {
+        console.error('Error refreshing content:', refreshError)
+      } else if (refreshedData) {
+        console.log('Refreshed content data:', refreshedData)
+        setDbContent(refreshedData)
+      }
+
+      showSuccess('Upload Successful', 'Reel uploaded successfully!')
+      setUploading(false)
+      if (fileInputRef.current) { fileInputRef.current.value = '' }
+    } catch (error) {
+      console.error('Backend upload failed:', error)
+      showError('Upload Failed', 'Upload failed: ' + error.message)
+      setUploading(false)
+      if (fileInputRef.current) { fileInputRef.current.value = '' }
+      throw error
     }
   }
 

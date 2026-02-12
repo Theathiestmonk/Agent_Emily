@@ -8,6 +8,7 @@ import logging
 import re
 import uuid
 import base64
+import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import google.generativeai as genai
@@ -890,7 +891,9 @@ Make it visually appealing and brand-consistent."""
 
             # Generate image
             gemini_image_model = 'gemini-2.5-flash-image'
-            image_response = genai.GenerativeModel(gemini_image_model).generate_content(contents=contents)
+            model = genai.GenerativeModel(gemini_image_model)
+            # Wrap blocking call in asyncio.to_thread to avoid blocking the event loop
+            image_response = await asyncio.to_thread(model.generate_content, contents=contents)
 
             if image_response.candidates and len(image_response.candidates) > 0:
                 candidate = image_response.candidates[0]
@@ -932,7 +935,9 @@ Business: {business_context.get('business_name', 'Business')}
 Style: Clean, professional, visually appealing for social media carousel"""
 
             gemini_image_model = 'gemini-2.5-flash-image'
-            image_response = genai.GenerativeModel(gemini_image_model).generate_content(contents=[prompt])
+            model = genai.GenerativeModel(gemini_image_model)
+            # Wrap blocking call in asyncio.to_thread to avoid blocking the event loop
+            image_response = await asyncio.to_thread(model.generate_content, contents=[prompt])
 
             if image_response.candidates and len(image_response.candidates) > 0:
                 candidate = image_response.candidates[0]
@@ -974,7 +979,9 @@ Style: Click-worthy, professional, optimized for 9:16 aspect ratio
 Design: Bold text overlay, vibrant colors, compelling visuals"""
 
             gemini_image_model = 'gemini-2.5-flash-image'
-            image_response = genai.GenerativeModel(gemini_image_model).generate_content(contents=[prompt])
+            model = genai.GenerativeModel(gemini_image_model)
+            # Wrap blocking call in asyncio.to_thread to avoid blocking the event loop
+            image_response = await asyncio.to_thread(model.generate_content, contents=[prompt])
 
             if image_response.candidates and len(image_response.candidates) > 0:
                 candidate = image_response.candidates[0]
@@ -1016,7 +1023,9 @@ Style: High-quality, professional, suitable for blog header
 Format: Landscape, visually appealing, brand-consistent"""
 
             gemini_image_model = 'gemini-2.5-flash-image'
-            image_response = genai.GenerativeModel(gemini_image_model).generate_content(contents=[prompt])
+            model = genai.GenerativeModel(gemini_image_model)
+            # Wrap blocking call in asyncio.to_thread to avoid blocking the event loop
+            image_response = await asyncio.to_thread(model.generate_content, contents=[prompt])
 
             if image_response.candidates and len(image_response.candidates) > 0:
                 candidate = image_response.candidates[0]
@@ -1111,6 +1120,14 @@ Format: Landscape, visually appealing, brand-consistent"""
 
             if content_data.get('media_url'):
                 db_data['media_url'] = content_data['media_url']
+                # For videos, also store in metadata to help frontend recognize it
+                if content_type == 'short_video or reel' or content_data.get('media_url', '').endswith('.mp4'):
+                    if 'metadata' not in db_data:
+                        db_data['metadata'] = {}
+                    if not isinstance(db_data['metadata'], dict):
+                        db_data['metadata'] = {}
+                    db_data['metadata']['media_type'] = 'video'
+                    db_data['metadata']['is_video'] = True
 
             if content_data.get('carousel_images'):
                 db_data['carousel_images'] = content_data['carousel_images']

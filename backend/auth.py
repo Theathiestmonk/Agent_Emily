@@ -42,35 +42,70 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             )
         
         # Verify token with Supabase
-        response = supabase.auth.get_user(token)
-        print(f"🔍 Auth - Supabase response: {response}")
-        
-        if not response.user:
-            print(f"🔍 Auth - No user found in response: {response}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token"
+        try:
+            response = supabase.auth.get_user(token)
+            print(f"🔍 Auth - Supabase response: {response}")
+            
+            if not response.user:
+                print(f"🔍 Auth - No user found in response: {response}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token"
+                )
+            
+            # Convert created_at to string if it's a datetime object
+            created_at_str = response.user.created_at
+            if hasattr(created_at_str, 'isoformat'):
+                created_at_str = created_at_str.isoformat()
+            else:
+                created_at_str = str(created_at_str)
+            
+            return User(
+                id=response.user.id,
+                email=response.user.email,
+                name=response.user.user_metadata.get("name", response.user.email),
+                created_at=created_at_str
             )
-        
-        # Convert created_at to string if it's a datetime object
-        created_at_str = response.user.created_at
-        if hasattr(created_at_str, 'isoformat'):
-            created_at_str = created_at_str.isoformat()
-        else:
-            created_at_str = str(created_at_str)
-        
-        return User(
-            id=response.user.id,
-            email=response.user.email,
-            name=response.user.user_metadata.get("name", response.user.email),
-            created_at=created_at_str
-        )
+        except Exception as supabase_error:
+            # Handle Supabase-specific errors
+            error_str = str(supabase_error).lower()
+            print(f"🔍 Auth - Supabase error: {supabase_error}")
+            print(f"🔍 Auth - Exception type: {type(supabase_error)}")
+            
+            # Check for expired token
+            if "expired" in error_str or "token is expired" in error_str or "invalid claims" in error_str:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token expired. Please refresh your session and try again."
+                )
+            # Re-raise the original exception to be handled by outer try-except
+            raise supabase_error
+            
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
         print(f"🔍 Auth - Exception occurred: {e}")
         print(f"🔍 Auth - Exception type: {type(e)}")
+        
+        # Provide more specific error messages
+        error_detail = "Could not validate credentials"
+        error_str = str(e).lower()
+        
+        if "expired" in error_str or "token is expired" in error_str:
+            error_detail = "Token expired. Please refresh your session and try again."
+        elif "timeout" in error_str or "timed out" in error_str:
+            error_detail = "Authentication timeout. Please check your internet connection and try again."
+        elif "ssl" in error_str or "handshake" in error_str:
+            error_detail = "Connection error. Please check your internet connection and try again."
+        elif "connection" in error_str:
+            error_detail = "Cannot connect to authentication service. Please try again."
+        elif "invalid" in error_str and "token" in error_str:
+            error_detail = "Invalid or expired token. Please log in again."
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials"
+            detail=error_detail
         )
 
 def get_admin_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
