@@ -246,13 +246,14 @@ const Page = () => {
               </h2>
             </div>
 
-            <div className="flex flex-col lg:flex-row items-center gap-12">
-              <div className="lg:w-1/2 flex flex-col items-center lg:items-start text-center lg:text-left">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-8 lg:gap-y-6 items-center">
+              {/* Description & Tech Cards */}
+              <div className="order-1 lg:order-1 lg:col-start-1 flex flex-col items-center lg:items-start text-center lg:text-left">
                 <p className="text-lg text-gray-300 mb-8 leading-relaxed font-normal">
                   ARGO (Autonomous Robot for Goods and Operations) is our first in line robotic agent.
                   Designed to move from one point to another intelligently, it handles dynamic movements and perturbations with ease.
                 </p>
-                <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-8">
+                <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-2 lg:mb-8 w-full">
                   <div className="bg-gray-800/50 p-4 sm:p-6 rounded-2xl border border-gray-700">
                     <h4 className="text-pink-400 font-medium mb-1">Payload</h4>
                     <p className="text-white text-xl sm:text-2xl">15 kg</p>
@@ -264,7 +265,23 @@ const Page = () => {
                     <p className="text-gray-400 text-xs sm:text-sm">Obstacle avoidance</p>
                   </div>
                 </div>
+              </div>
 
+              {/* ARGO Image */}
+              <div className="order-2 lg:order-2 lg:col-start-2 lg:row-span-2">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-pink-500/20 blur-3xl rounded-full"></div>
+                  <img
+                    src="/argo.png"
+                    alt="ARGO Autonomous Robot"
+                    className="relative z-10 w-full h-auto rounded-3xl shadow-2xl"
+                    onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1546776310-eef45dd6d414?auto=format&fit=crop&q=80&w=800"; }}
+                  />
+                </div>
+              </div>
+
+              {/* Feature List */}
+              <div className="order-3 lg:order-3 lg:col-start-1 flex flex-col items-center lg:items-start text-center lg:text-left">
                 <div className="space-y-3">
                   <div className="flex items-start">
                     <span className="hidden lg:block text-pink-500 mr-3 mt-1 flex-shrink-0 text-xl leading-none">•</span>
@@ -278,17 +295,6 @@ const Page = () => {
                     <span className="hidden lg:block text-pink-500 mr-3 mt-1 flex-shrink-0 text-xl leading-none">•</span>
                     <p className="text-gray-300">The silent companion humans always needed</p>
                   </div>
-                </div>
-              </div>
-              <div className="lg:w-1/2">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-pink-500/20 blur-3xl rounded-full"></div>
-                  <img
-                    src="/argo.png"
-                    alt="ARGO Autonomous Robot"
-                    className="relative z-10 w-full h-auto rounded-3xl shadow-2xl"
-                    onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1546776310-eef45dd6d414?auto=format&fit=crop&q=80&w=800"; }}
-                  />
                 </div>
               </div>
             </div>
