@@ -48,6 +48,26 @@ class NewContentModalAgent:
         self.supabase = supabase
         self.openai_client = openai_client
 
+    async def _get_image_base64(self, image_url: str) -> Optional[Dict[str, str]]:
+        """Download an image from a URL and return its base64 representation and media type."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(image_url, timeout=30.0)
+                if response.status_code == 200:
+                    image_content = response.content
+                    base64_image = base64.b64encode(image_content).decode('utf-8')
+                    media_type = response.headers.get('content-type', 'image/jpeg')
+                    return {
+                        "base64": base64_image,
+                        "media_type": media_type
+                    }
+                else:
+                    logger.error(f"Failed to download image from {image_url}: Status {response.status_code}")
+                    return None
+        except Exception as e:
+            logger.error(f"Error downloading image from {image_url}: {e}")
+            return None
+
     async def create_content_from_modal(self, form_data: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         """
         Create content based on NewPostModal form data
@@ -260,6 +280,15 @@ Return a JSON object with this exact structure:
                     if not openai_client:
                         return {'success': False, 'error': 'OpenAI client not available'}
 
+                    # Get base64 for image
+                    image_data = await self._get_image_base64(media_url)
+                    
+                    if not image_data:
+                        logger.warning(f"Failed to get base64 for image {media_url}, falling back to URL")
+                        image_url_payload = {"url": media_url}
+                    else:
+                        image_url_payload = {"url": f"data:{image_data['media_type']};base64,{image_data['base64']}"}
+
                     response = openai_client.chat.completions.create(
                         model="gpt-4o",
                         messages=[{
@@ -268,7 +297,7 @@ Return a JSON object with this exact structure:
                                 {"type": "text", "text": prompt},
                                 {
                                     "type": "image_url",
-                                    "image_url": {"url": media_url}
+                                    "image_url": image_url_payload
                                 }
                             ]
                         }],
@@ -410,10 +439,18 @@ Return a JSON object with this exact structure:
             
             # Add image URLs to the message
             for img_url in carousel_images[:4]:  # Limit to first 4 images for API efficiency
-                messages[0]["content"].append({
-                    "type": "image_url",
-                    "image_url": {"url": img_url}
-                })
+                image_data = await self._get_image_base64(img_url)
+                if image_data:
+                    messages[0]["content"].append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{image_data['media_type']};base64,{image_data['base64']}"}
+                    })
+                else:
+                    logger.warning(f"Failed to get base64 for image {img_url}, falling back to URL")
+                    messages[0]["content"].append({
+                        "type": "image_url",
+                        "image_url": {"url": img_url}
+                    })
 
             response = openai_client.chat.completions.create(
                 model="gpt-4o",
