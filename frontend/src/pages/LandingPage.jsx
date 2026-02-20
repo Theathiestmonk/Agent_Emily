@@ -226,7 +226,7 @@ const Page = () => {
 
           <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2">
             <button
-              onClick={() => scrollToSection('features')}
+              onClick={() => scrollToSection('argo')}
               className="text-gray-400 hover:text-white transition-colors animate-bounce"
             >
               <ChevronDown size={24} />
@@ -245,27 +245,27 @@ const Page = () => {
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-8 lg:gap-y-2 items-start">
-              {/* Description - Order 1 on mobile */}
-              <div className="order-1 flex flex-col items-center lg:items-start text-center lg:text-left">
-                <p className="text-xl lg:text-2xl xl:text-3xl text-gray-300 mb-0 lg:mb-8 leading-relaxed font-normal">
+            <div className="flex flex-col lg:grid lg:grid-cols-2 lg:gap-x-12 items-start">
+
+              {/* Left column: Description + Features stacked together on desktop */}
+              <div className="lg:col-start-1 flex flex-col items-center lg:items-start text-center lg:text-left w-full">
+                {/* Description - always first */}
+                <p className="text-xl lg:text-2xl xl:text-3xl text-gray-300 mb-6 lg:mb-4 leading-relaxed font-normal">
                   ARGO (Autonomous Robot for Goods and Operations) is our first in line robotic agent.
                   Designed to move from one point to another intelligently, it handles dynamic movements and perturbations with ease.
                 </p>
-              </div>
 
-              {/* ARGO Image - Order 2 on mobile, spans 2 rows on desktop */}
-              <div className="order-2 lg:col-start-2 lg:row-span-2 flex justify-center items-center">
-                <img
-                  src="/argo.png"
-                  alt="ARGO Autonomous Robot"
-                  className="w-full h-auto max-w-lg mx-auto object-contain drop-shadow-[0_20px_50px_rgba(236,72,153,0.3)]"
-                  onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1546776310-eef45dd6d414?auto=format&fit=crop&q=80&w=800"; }}
-                />
-              </div>
+                {/* Image - visible only on mobile between description and features */}
+                <div className="lg:hidden w-full flex justify-center items-center my-6">
+                  <img
+                    src="/argo.png"
+                    alt="ARGO Autonomous Robot"
+                    className="w-full h-auto max-w-lg mx-auto object-contain drop-shadow-[0_20px_50px_rgba(236,72,153,0.3)]"
+                    onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1546776310-eef45dd6d414?auto=format&fit=crop&q=80&w=800"; }}
+                  />
+                </div>
 
-              {/* Features - Order 3 on mobile */}
-              <div className="order-3 flex flex-col items-center lg:items-start text-center lg:text-left">
+                {/* Features */}
                 <div className="space-y-4">
                   <div className="flex items-center space-x-3">
                     <span className="hidden lg:inline-block text-pink-500 text-2xl lg:text-3xl">•</span>
@@ -280,6 +280,16 @@ const Page = () => {
                     <p className="text-gray-300 text-lg lg:text-xl xl:text-2xl">The silent companion humans always needed</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Right column: Image - visible only on desktop */}
+              <div className="hidden lg:flex lg:col-start-2 justify-center items-center">
+                <img
+                  src="/argo.png"
+                  alt="ARGO Autonomous Robot"
+                  className="w-full h-auto max-w-lg mx-auto object-contain drop-shadow-[0_20px_50px_rgba(236,72,153,0.3)]"
+                  onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1546776310-eef45dd6d414?auto=format&fit=crop&q=80&w=800"; }}
+                />
               </div>
             </div>
 
