@@ -125,3 +125,18 @@ input[type="radio"] {
   color: #21c45d;
 }
 
+
+/* Shiny effect animation for logo */
+@keyframes shiny {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.animate-shiny {
+  background-size: 200% auto;
+  animation: shiny 4s linear infinite;
+}

@@ -22,7 +22,7 @@ const Page = () => {
 
   useEffect(() => {
     const handleScroll = () => {
-      const sections = ['hero', 'features', 'agents', 'pricing'];
+      const sections = ['hero', 'argo', 'features', 'agents', 'pricing'];
       const scrollPosition = window.scrollY + 100;
 
       for (const section of sections) {
@@ -98,10 +98,16 @@ const Page = () => {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4 sm:space-x-6 lg:space-x-8">
-                <div className="text-xl sm:text-2xl md:text-3xl font-normal bg-gradient-to-r from-pink-400 to-white bg-clip-text text-transparent">
+                <div className="text-xl sm:text-2xl md:text-3xl font-normal bg-gradient-to-r from-pink-500 via-white to-pink-500 bg-clip-text text-transparent animate-shiny">
                   atsn ai
                 </div>
                 <div className="hidden md:flex items-center space-x-6 lg:space-x-8">
+                  <button
+                    onClick={() => scrollToSection('argo')}
+                    className={`text-sm sm:text-base transition-colors font-normal ${activeSection === 'argo' ? 'text-pink-400' : 'text-gray-300 hover:text-white'}`}
+                  >
+                    Argo
+                  </button>
                   <button
                     onClick={() => scrollToSection('features')}
                     className={`text-sm sm:text-base transition-colors font-normal ${activeSection === 'features' ? 'text-pink-400' : 'text-gray-300 hover:text-white'}`}
@@ -151,6 +157,12 @@ const Page = () => {
           <div className="fixed inset-0 z-40 md:hidden bg-gray-900/95 backdrop-blur-xl">
             <div className="flex flex-col items-center justify-center h-full space-y-6 sm:space-y-8">
               <button
+                onClick={() => scrollToSection('argo')}
+                className="text-lg sm:text-xl text-gray-300 hover:text-white transition-colors font-normal"
+              >
+                Argo
+              </button>
+              <button
                 onClick={() => scrollToSection('features')}
                 className="text-lg sm:text-xl text-gray-300 hover:text-white transition-colors font-normal"
               >
@@ -185,12 +197,12 @@ const Page = () => {
         )}
 
         {/* Hero Section */}
-        <section id="hero" className="relative min-h-[60vh] sm:min-h-[70vh] md:min-h-screen flex items-center justify-center py-8 sm:py-12 md:py-0 overflow-hidden">
+        <section id="hero" className="relative min-h-[50vh] lg:min-h-screen flex items-center justify-center pt-20 overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-pink-900/40 via-purple-900/40 to-blue-900/40"></div>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(236,72,153,0.15),transparent_60%)]"></div>
 
           {/* Robot Background Image */}
-          <div className="absolute inset-0 z-0 flex items-center justify-center opacity-30 pointer-events-none">
+          <div className="absolute inset-0 z-0 flex items-center justify-center opacity-30 pointer-events-none lg:pt-12">
             <img
               src="/argo.png"
               alt=""
@@ -200,32 +212,16 @@ const Page = () => {
             <div className="absolute inset-0 bg-gray-900/40"></div>
           </div>
 
-          <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 text-center pt-12 sm:pt-0">
-            <h1 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-normal mb-3 sm:mb-4 md:mb-6 lg:mb-8 leading-tight px-2">
-              <div className="block">
-                <span className="bg-gradient-to-r from-white to-pink-400 bg-clip-text text-transparent">
-                  Intelligent Motion. Autonomous Future
-                </span>
-              </div>
+          <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center text-center">
+            <h1 className="w-full text-center text-3xl xs:text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold mb-4 sm:mb-6 leading-tight tracking-tight transition-all duration-300 bg-gradient-to-r from-white to-pink-400 bg-clip-text text-transparent pb-1">
+              <span>
+                Intelligent Motion <br /> Autonomous Future
+              </span>
             </h1>
 
-            <p className="text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl text-gray-300 mb-4 sm:mb-6 md:mb-8 lg:mb-10 xl:mb-12 max-w-3xl mx-auto leading-relaxed px-4 font-normal">
-              Let’s Build the future together
+            <p className="w-full max-w-3xl mx-auto text-center text-base xs:text-lg sm:text-xl text-gray-300 mb-8 sm:mb-10 md:mb-12 leading-relaxed px-6 font-medium transition-all duration-300">
+              Let's Build the Future Together
             </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-6 px-4">
-              <a
-                href="/signup"
-                className="group bg-pink-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-full text-base sm:text-lg font-normal hover:bg-pink-700 transition-all duration-300 transform hover:scale-105 flex items-center space-x-2"
-              >
-                <span>Get Started</span>
-                <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform" />
-              </a>
-              <button className="flex items-center space-x-2 text-sm sm:text-base text-gray-300 hover:text-white transition-colors font-normal">
-                <Play className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>Watch Demo</span>
-              </button>
-            </div>
           </div>
 
           <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2">
@@ -238,62 +234,50 @@ const Page = () => {
           </div>
         </section>
 
-        <section id="argo" className="py-12 sm:py-16 lg:py-20 bg-gray-900 border-t border-gray-800" >
-          <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        <section id="argo" className="relative py-12 sm:py-16 lg:py-20 bg-gray-900 border-t border-gray-800 overflow-hidden" >
+          <div className="absolute inset-0 bg-gradient-to-br from-pink-900/30 via-purple-900/30 to-blue-900/30"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(236,72,153,0.15),transparent_70%)]"></div>
+
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
             <div className="text-center mb-10 sm:mb-12 lg:mb-16">
               <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-normal mb-8 text-white text-center">
                 Meet ARGO
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-8 lg:gap-y-6 items-center">
-              {/* Description & Tech Cards */}
-              <div className="order-1 lg:order-1 lg:col-start-1 flex flex-col items-center lg:items-start text-center lg:text-left">
-                <p className="text-lg text-gray-300 mb-8 leading-relaxed font-normal">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-8 lg:gap-y-2 items-start">
+              {/* Description - Order 1 on mobile */}
+              <div className="order-1 flex flex-col items-center lg:items-start text-center lg:text-left">
+                <p className="text-xl lg:text-2xl xl:text-3xl text-gray-300 mb-0 lg:mb-8 leading-relaxed font-normal">
                   ARGO (Autonomous Robot for Goods and Operations) is our first in line robotic agent.
                   Designed to move from one point to another intelligently, it handles dynamic movements and perturbations with ease.
                 </p>
-                <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-2 lg:mb-8 w-full">
-                  <div className="bg-gray-800/50 p-4 sm:p-6 rounded-2xl border border-gray-700">
-                    <h4 className="text-pink-400 font-medium mb-1">Payload</h4>
-                    <p className="text-white text-xl sm:text-2xl">15 kg</p>
-                    <p className="text-gray-400 text-xs sm:text-sm">Carries tirelessly</p>
-                  </div>
-                  <div className="bg-gray-800/50 p-4 sm:p-6 rounded-2xl border border-gray-700">
-                    <h4 className="text-pink-400 font-medium mb-1">Intelligence</h4>
-                    <p className="text-white text-xl sm:text-2xl">Autonomous</p>
-                    <p className="text-gray-400 text-xs sm:text-sm">Obstacle avoidance</p>
-                  </div>
-                </div>
               </div>
 
-              {/* ARGO Image */}
-              <div className="order-2 lg:order-2 lg:col-start-2 lg:row-span-2">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-pink-500/20 blur-3xl rounded-full"></div>
-                  <img
-                    src="/argo.png"
-                    alt="ARGO Autonomous Robot"
-                    className="relative z-10 w-full h-auto rounded-3xl shadow-2xl"
-                    onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1546776310-eef45dd6d414?auto=format&fit=crop&q=80&w=800"; }}
-                  />
-                </div>
+              {/* ARGO Image - Order 2 on mobile, spans 2 rows on desktop */}
+              <div className="order-2 lg:col-start-2 lg:row-span-2 flex justify-center items-center">
+                <img
+                  src="/argo.png"
+                  alt="ARGO Autonomous Robot"
+                  className="w-full h-auto max-w-lg mx-auto object-contain drop-shadow-[0_20px_50px_rgba(236,72,153,0.3)]"
+                  onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1546776310-eef45dd6d414?auto=format&fit=crop&q=80&w=800"; }}
+                />
               </div>
 
-              {/* Feature List */}
-              <div className="order-3 lg:order-3 lg:col-start-1 flex flex-col items-center lg:items-start text-center lg:text-left">
-                <div className="space-y-3">
-                  <div className="flex items-start">
-                    <span className="hidden lg:block text-pink-500 mr-3 mt-1 flex-shrink-0 text-xl leading-none">•</span>
-                    <p className="text-gray-300">Seamless integration with human environments</p>
+              {/* Features - Order 3 on mobile */}
+              <div className="order-3 flex flex-col items-center lg:items-start text-center lg:text-left">
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <span className="hidden lg:inline-block text-pink-500 text-2xl lg:text-3xl">•</span>
+                    <p className="text-gray-300 text-lg lg:text-xl xl:text-2xl">Seamless integration with human environments</p>
                   </div>
-                  <div className="flex items-start">
-                    <span className="hidden lg:block text-pink-500 mr-3 mt-1 flex-shrink-0 text-xl leading-none">•</span>
-                    <p className="text-gray-300">Handles dynamic movements and perturbations</p>
+                  <div className="flex items-center space-x-3">
+                    <span className="hidden lg:inline-block text-pink-500 text-2xl lg:text-3xl">•</span>
+                    <p className="text-gray-300 text-lg lg:text-xl xl:text-2xl">Handles dynamic movements and perturbations</p>
                   </div>
-                  <div className="flex items-start">
-                    <span className="hidden lg:block text-pink-500 mr-3 mt-1 flex-shrink-0 text-xl leading-none">•</span>
-                    <p className="text-gray-300">The silent companion humans always needed</p>
+                  <div className="flex items-center space-x-3">
+                    <span className="hidden lg:inline-block text-pink-500 text-2xl lg:text-3xl">•</span>
+                    <p className="text-gray-300 text-lg lg:text-xl xl:text-2xl">The silent companion humans always needed</p>
                   </div>
                 </div>
               </div>
@@ -834,7 +818,7 @@ const Page = () => {
           <div className="max-w-6xl mx-auto px-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
               <div>
-                <div className="text-2xl font-normal text-white mb-4">
+                <div className="text-2xl font-normal bg-gradient-to-r from-pink-500 via-white to-pink-500 bg-clip-text text-transparent animate-shiny mb-4">
                   atsn ai
                 </div>
                 <p className="text-gray-300 mb-2 font-normal">
