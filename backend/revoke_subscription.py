@@ -120,7 +120,7 @@ def revoke_subscription_by_email(email: str):
         import traceback
         traceback.print_exc()
         return False
-
+        
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python revoke_subscription.py <email>")
@@ -130,4 +130,3 @@ if __name__ == "__main__":
     email = sys.argv[1]
     success = revoke_subscription_by_email(email)
     sys.exit(0 if success else 1)
-

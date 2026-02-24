@@ -37,6 +37,7 @@ from routers.leads import router as leads_router
 from routers.contact import router as contact_router
 from routers.whatsapp import router as whatsapp_router
 from routers.content_from_drive import router as content_from_drive_router
+from routers.drive_monitor import router as drive_monitor_router
 from routers.admin import router as admin_router
 from routers.analytics_insights import router as analytics_insights_router
 from routers.atsn_chatbot import router as atsn_chatbot_router
@@ -133,6 +134,7 @@ app.include_router(leads_router)
 app.include_router(contact_router)
 app.include_router(whatsapp_router)
 app.include_router(content_from_drive_router)
+app.include_router(drive_monitor_router)
 app.include_router(admin_router)
 app.include_router(analytics_insights_router)
 app.include_router(atsn_chatbot_router)
@@ -294,7 +296,35 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Failed to start Gmail sync scheduler: {e}")
         logger.info("Continuing without Gmail sync scheduler")
-    
+
+    # Start Google Drive monitor scheduler (runs every 5 minutes)
+    try:
+        from routers.drive_monitor import scan_all_users_drive
+        import threading
+
+        def run_drive_monitor_background():
+            """Run Drive monitor in background thread to avoid blocking other requests"""
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(scan_all_users_drive())
+            except Exception as e:
+                logger.error(f"Error in background Drive monitor: {e}")
+            finally:
+                loop.close()
+
+        scheduler.add_job(
+            func=lambda: threading.Thread(target=run_drive_monitor_background).start(),
+            trigger='interval',
+            minutes=5,
+            id='drive_monitor_job',
+            max_instances=1
+        )
+        logger.info("Google Drive monitor scheduler started successfully - runs every 5 minutes")
+    except Exception as e:
+        logger.error(f"Failed to start Drive monitor scheduler: {e}")
+        logger.info("Continuing without Drive monitor scheduler")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():

@@ -34,7 +34,7 @@ export const leadsAPI = {
     if (params.source_platform) queryParams.append('source_platform', params.source_platform)
     if (params.limit) queryParams.append('limit', params.limit)
     if (params.offset) queryParams.append('offset', params.offset)
-    
+
     const queryString = queryParams.toString()
     return api.get(`/leads${queryString ? `?${queryString}` : ''}`)
   },
@@ -60,7 +60,7 @@ export const leadsAPI = {
     const queryParams = new URLSearchParams()
     if (params.message_type) queryParams.append('message_type', params.message_type)
     if (params.limit) queryParams.append('limit', params.limit)
-    
+
     const queryString = queryParams.toString()
     return api.get(`/leads/${leadId}/conversations${queryString ? `?${queryString}` : ''}`)
   },
@@ -75,7 +75,7 @@ export const leadsAPI = {
     const queryParams = new URLSearchParams()
     if (params.message_type) queryParams.append('message_type', params.message_type)
     if (params.limit) queryParams.append('limit', params.limit)
-    
+
     const queryString = queryParams.toString()
     return api.get(`/leads/${leadId}/conversations${queryString ? `?${queryString}` : ''}`)
   },
@@ -158,7 +158,7 @@ export const leadsAPI = {
   importLeadsCSV: (file) => {
     const formData = new FormData()
     formData.append('file', file)
-    
+
     return api.post('/leads/import-csv', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -262,6 +262,28 @@ export const leadsAPI = {
       category: options.category || 'general',
       custom_template: options.customTemplate || null,
       custom_prompt: options.customPrompt || null
+    })
+  },
+
+  /**
+   * Get all distinct campaign names used across the user's leads
+   * @returns {Promise} API response with { names: string[] }
+   */
+  getCampaignNames: () => {
+    return api.get('/leads/campaign-names')
+  },
+
+  /**
+   * Update campaign assignment on a lead (instant, no remarks flow)
+   * @param {string} leadId - Lead ID
+   * @param {string|null} campaignId - Campaign ID (null for manual entries)
+   * @param {string|null} campaignName - Campaign display name (null to clear)
+   * @returns {Promise} API response
+   */
+  updateLeadCampaign: (leadId, campaignId, campaignName) => {
+    return api.patch(`/leads/${leadId}/campaign`, {
+      campaign_id: campaignId || null,
+      campaign_name: campaignName || null,
     })
   },
 

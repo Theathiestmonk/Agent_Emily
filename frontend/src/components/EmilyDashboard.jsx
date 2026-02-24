@@ -57,7 +57,7 @@ import ContentCreateIndicator from './ContentCreateIndicator'
 import ATSNContentModal from './ATSNContentModal'
 import ReelModal from './ReelModal'
 import PostContentCard from './PostContentCard'
-import { Sparkles, TrendingUp, Target, BarChart3, FileText, X, ChevronRight, ChevronLeft, RefreshCw, Send, Upload, CheckCircle, Mail, Phone, Facebook, Instagram, Users, LogIn, Globe, Calendar, MessageSquare } from 'lucide-react'
+import { Sparkles, TrendingUp, Target, BarChart3, FileText, X, ChevronRight, ChevronLeft, RefreshCw, Send, Upload, CheckCircle, Mail, Phone, Facebook, Instagram, Users, LogIn, Globe, Calendar, MessageSquare, Building2 } from 'lucide-react'
 
 // Voice Orb Component with animated border (spring-like animation)
 const VoiceOrb = ({ isSpeaking }) => {
@@ -73,30 +73,30 @@ const VoiceOrb = ({ isSpeaking }) => {
       const damping = 12
       const mass = 0.5
       const targetWidth = 8 + Math.random() * 4 // Vary between 8-12px based on "volume"
-      
+
       const animate = (currentTime) => {
         const deltaTime = (currentTime - lastTimeRef.current) / 16.67 // Normalize to ~60fps
         lastTimeRef.current = currentTime
-        
+
         setBorderWidth(prev => {
           const current = prev
           const diff = targetWidth - current
-          
+
           // Spring physics: F = -kx - bv
           const springForce = (stiffness / mass) * diff
           const dampingForce = (damping / mass) * velocityRef.current
           const acceleration = springForce - dampingForce
-          
+
           // Update velocity
           velocityRef.current += acceleration * (deltaTime * 0.01)
           velocityRef.current *= 0.95 // Additional damping
-          
+
           // Update position
           const newWidth = current + velocityRef.current * (deltaTime * 0.01)
-          
+
           return Math.max(0, newWidth)
         })
-        
+
         if (isSpeaking) {
           animationRef.current = requestAnimationFrame(animate)
         }
@@ -109,32 +109,32 @@ const VoiceOrb = ({ isSpeaking }) => {
       const damping = 12
       const mass = 0.5
       const targetWidth = 0
-      
+
       const animate = (currentTime) => {
         const deltaTime = (currentTime - lastTimeRef.current) / 16.67
         lastTimeRef.current = currentTime
-        
+
         setBorderWidth(prev => {
           if (prev < 0.1 && Math.abs(velocityRef.current) < 0.1) {
             velocityRef.current = 0
             return 0
           }
-          
+
           const current = prev
           const diff = targetWidth - current
-          
+
           const springForce = (stiffness / mass) * diff
           const dampingForce = (damping / mass) * velocityRef.current
           const acceleration = springForce - dampingForce
-          
+
           velocityRef.current += acceleration * (deltaTime * 0.01)
           velocityRef.current *= 0.95
-          
+
           const newWidth = current + velocityRef.current * (deltaTime * 0.01)
-          
+
           return Math.max(0, newWidth)
         })
-        
+
         if (borderWidth > 0.1 || Math.abs(velocityRef.current) > 0.1) {
           animationRef.current = requestAnimationFrame(animate)
         }
@@ -153,7 +153,7 @@ const VoiceOrb = ({ isSpeaking }) => {
   return (
     <div className="relative flex items-center justify-center">
       {/* Outer animated border container */}
-      <div 
+      <div
         className="absolute rounded-full border-2 flex items-center justify-center"
         style={{
           width: '290px',
@@ -165,7 +165,7 @@ const VoiceOrb = ({ isSpeaking }) => {
         }}
       >
         {/* Inner orb */}
-        <div 
+        <div
           className="rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center"
           style={{
             width: '280px',
@@ -176,7 +176,7 @@ const VoiceOrb = ({ isSpeaking }) => {
           <span className="text-white font-bold text-4xl">E</span>
         </div>
       </div>
-                                </div>
+    </div>
   )
 }
 
@@ -204,7 +204,7 @@ function EmilyDashboard() {
       `Hello ${name}! What's new today? How are you doing?`
     ]
   }, [profile, user])
-  
+
   // Split greeting into two lines intelligently
   const splitGreeting = (text) => {
     if (!text) return ['', '']
@@ -252,7 +252,7 @@ function EmilyDashboard() {
   const [followUpLeadsLoading, setFollowUpLeadsLoading] = useState(false)
   const [scheduledCount, setScheduledCount] = useState(0)
   const [scheduledLoading, setScheduledLoading] = useState(false)
-  const [weekCounts, setWeekCounts] = useState([0,0,0,0,0,0,0])
+  const [weekCounts, setWeekCounts] = useState([0, 0, 0, 0, 0, 0, 0])
   const [weekLoading, setWeekLoading] = useState(false)
   const [createdContent, setCreatedContent] = useState([])
   const [createdLoading, setCreatedLoading] = useState(false)
@@ -289,7 +289,7 @@ function EmilyDashboard() {
     setupTauriListener()
   }, [])
 
-// Date filtering removed - chatbot starts fresh
+  // Date filtering removed - chatbot starts fresh
 
   const handleRefreshChat = async () => {
     // ATSN chatbot handles its own state clearing
@@ -397,7 +397,7 @@ function EmilyDashboard() {
         const db = b.created_at ? new Date(b.created_at) : new Date(0)
         return db - da
       })
-      
+
       // Ensure highest-priority platforms appear at the front.
       // If any Instagram posts exist, move the first one to index 0.
       const ensureFront = (arr, platformKey) => {
@@ -738,36 +738,36 @@ function EmilyDashboard() {
 
     // Check if it's carousel content - carousel should always open ATSNContentModal
     const isCarousel = contentItem.post_type === 'carousel' ||
-                      contentItem.content_type?.toLowerCase() === 'carousel' ||
-                      contentItem.selected_content_type?.toLowerCase() === 'carousel' ||
-                      (contentItem.metadata && contentItem.metadata.carousel_images && contentItem.metadata.carousel_images.length > 0) ||
-                      (contentItem.carousel_images && Array.isArray(contentItem.carousel_images) && contentItem.carousel_images.length > 0) ||
-                      (contentItem.metadata && contentItem.metadata.total_images && contentItem.metadata.total_images > 1)
+      contentItem.content_type?.toLowerCase() === 'carousel' ||
+      contentItem.selected_content_type?.toLowerCase() === 'carousel' ||
+      (contentItem.metadata && contentItem.metadata.carousel_images && contentItem.metadata.carousel_images.length > 0) ||
+      (contentItem.carousel_images && Array.isArray(contentItem.carousel_images) && contentItem.carousel_images.length > 0) ||
+      (contentItem.metadata && contentItem.metadata.total_images && contentItem.metadata.total_images > 1)
 
     if (isCarousel) {
       return 'content' // Carousel opens ATSNContentModal
     }
 
     // Determine content type from various possible sources
-    const contentType = contentItem.content_type || 
-                       contentItem.raw_data?.content_type || 
-                       contentItem.selected_content_type
+    const contentType = contentItem.content_type ||
+      contentItem.raw_data?.content_type ||
+      contentItem.selected_content_type
 
     if (!contentType) {
       return 'content' // Default to content modal
     }
 
     const contentTypeLower = contentType.toLowerCase().trim()
-    
+
     // Check for short video/reel types - these should open ReelModal
     if (contentTypeLower === 'short_video or reel' ||
-        contentTypeLower === 'reel' ||
-        contentTypeLower === 'short_video' ||
-        contentTypeLower === 'short video' ||
-        (contentTypeLower.includes('reel') && !contentTypeLower.includes('long'))) {
+      contentTypeLower === 'reel' ||
+      contentTypeLower === 'short_video' ||
+      contentTypeLower === 'short video' ||
+      (contentTypeLower.includes('reel') && !contentTypeLower.includes('long'))) {
       return 'reel'
     }
-    
+
     // All other types (long_video, static_post, blog, etc.) should open ContentModal
     return 'content'
   }
@@ -835,7 +835,7 @@ function EmilyDashboard() {
           if (contentResponse.ok) {
             const contentData = await contentResponse.json()
             setGeneratedContent(contentData)
-            
+
             // Open the appropriate modal based on content type
             const modalType = openModalForContentType(contentData)
             if (modalType === 'reel') {
@@ -847,7 +847,7 @@ function EmilyDashboard() {
             // Fallback to response data if fetch fails
             const fallbackContent = result.content_data || {}
             setGeneratedContent(fallbackContent)
-            
+
             // Open the appropriate modal based on content type
             const modalType = openModalForContentType(fallbackContent)
             if (modalType === 'reel') {
@@ -861,7 +861,7 @@ function EmilyDashboard() {
           // Fallback to response data
           const fallbackContent = result.content_data || {}
           setGeneratedContent(fallbackContent)
-          
+
           // Open the appropriate modal based on content type
           const modalType = openModalForContentType(fallbackContent)
           if (modalType === 'reel') {
@@ -935,9 +935,9 @@ function EmilyDashboard() {
 
   // No conversation history loading - only today's conversations
 
-// Date filtering removed - chatbot starts fresh
+  // Date filtering removed - chatbot starts fresh
 
-// Date filter dropdown removed - chatbot starts fresh
+  // Date filter dropdown removed - chatbot starts fresh
 
   // Apply dark mode to document body
   useEffect(() => {
@@ -1224,7 +1224,7 @@ function EmilyDashboard() {
           const cacheDate = new Date(date).toDateString()
           if (cacheDate === today && age < CACHE_EXPIRATION_MS) {
             console.log('Using cached week entries')
-            setWeekCounts(cachedCounts || [0,0,0,0,0,0,0])
+            setWeekCounts(cachedCounts || [0, 0, 0, 0, 0, 0, 0])
             setWeekLoading(false)
             return
           }
@@ -1238,7 +1238,7 @@ function EmilyDashboard() {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (!calRes.ok) {
-        setWeekCounts([0,0,0,0,0,0,0])
+        setWeekCounts([0, 0, 0, 0, 0, 0, 0])
         return
       }
       const calendars = await calRes.json()
@@ -1258,13 +1258,13 @@ function EmilyDashboard() {
       const now = new Date()
       const day = now.getDay()
       const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day)
-      const counts = [0,0,0,0,0,0,0]
+      const counts = [0, 0, 0, 0, 0, 0, 0]
       allEntries.forEach(e => {
         const ed = new Date(e.entry_date)
         // normalize date only
         const edDate = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate())
-        for (let i=0;i<7;i++) {
-          const d = new Date(start.getFullYear(), start.getMonth(), start.getDate()+i)
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
           if (edDate.getTime() === d.getTime()) {
             counts[i] = counts[i] + 1
           }
@@ -1284,7 +1284,7 @@ function EmilyDashboard() {
       }
     } catch (err) {
       console.error('Error fetching week entries:', err)
-      setWeekCounts([0,0,0,0,0,0,0])
+      setWeekCounts([0, 0, 0, 0, 0, 0, 0])
     } finally {
       setWeekLoading(false)
     }
@@ -1294,15 +1294,15 @@ function EmilyDashboard() {
   const groupConversationsByDate = (conversations) => {
     const grouped = {}
     const dateMap = {} // Map dateKey to actual Date object for sorting
-    
+
     conversations.forEach(conv => {
       const date = new Date(conv.created_at)
-      const dateKey = date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+      const dateKey = date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
       })
-      
+
       if (!grouped[dateKey]) {
         grouped[dateKey] = []
         // Store the date object for sorting (use start of day)
@@ -1320,14 +1320,14 @@ function EmilyDashboard() {
 
     // Return only the last conversation for each date
     return sortedDates.map(date => {
-      const dateConversations = grouped[date].sort((a, b) => 
+      const dateConversations = grouped[date].sort((a, b) =>
         new Date(a.created_at) - new Date(b.created_at)
       )
       // Get the last conversation (most recent)
       const lastConversation = dateConversations[dateConversations.length - 1]
       // Also store the date object for filtering
       const dateObj = dateMap[date]
-      
+
       return {
         date,
         dateObj, // Store date object for filtering
@@ -1338,15 +1338,14 @@ function EmilyDashboard() {
   }
 
   // Function to load ATSN conversations for the selected date filter
-// ATSN conversation loading removed - chatbot starts fresh
+  // ATSN conversation loading removed - chatbot starts fresh
 
-// Conversation loading functions removed - chatbot starts fresh
+  // Conversation loading functions removed - chatbot starts fresh
 
   if (!user) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${
-        isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-      }`}>
+      <div className={`min-h-screen flex items-center justify-center ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
+        }`}>
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-4">Not Authenticated</h1>
           <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Please log in to access the dashboard.</p>
@@ -1357,13 +1356,12 @@ function EmilyDashboard() {
 
 
   return (
-    <div className={`h-screen overflow-hidden custom-scrollbar ${
-      isDarkMode ? 'bg-gray-900 dark-mode' : 'bg-white light-mode'
-    }`}>
+    <div className={`h-screen overflow-hidden custom-scrollbar ${isDarkMode ? 'bg-gray-900 dark-mode' : 'bg-white light-mode'
+      }`}>
       {/* Mobile Navigation */}
-      <MobileNavigation 
-        setShowCustomContentChatbot={() => {}} // Dashboard doesn't have these functions
-        handleGenerateContent={() => {}}
+      <MobileNavigation
+        setShowCustomContentChatbot={() => { }} // Dashboard doesn't have these functions
+        handleGenerateContent={() => { }}
         generating={false}
         fetchingFreshData={false}
         onOpenChatHistory={() => {
@@ -1374,323 +1372,304 @@ function EmilyDashboard() {
         }}
         showChatHistory={showMobileChatHistory}
       />
-      
+
       {/* Side Navbar */}
       <SideNavbar />
-      
+
       {/* Main Content */}
-      <div data-main-content="true" className={`md:ml-48 xl:ml-64 flex flex-col overflow-hidden pt-16 md:pt-0 bg-transparent ${
-        isDarkMode ? 'md:bg-gray-900' : 'md:bg-white'
-      }`} style={{ height: '100vh', overflow: 'hidden' }}>
+      <div data-main-content="true" className={`md:ml-48 xl:ml-64 flex flex-col overflow-hidden pt-16 md:pt-0 bg-transparent ${isDarkMode ? 'md:bg-gray-900' : 'md:bg-white'
+        }`} style={{ height: '100vh', overflow: 'hidden' }}>
         {/* (header removed) */}
 
         {/* Main Content Area */}
-        <div className={`flex-1 flex bg-transparent ${
-          isDarkMode ? 'md:bg-gray-800' : 'md:bg-gray-50'
-        }`} style={{ minHeight: 0, overflow: 'hidden' }}>
-            <div className="w-full h-full flex gap-2">
-                {/* Main Chat Area */}
-              <div className="flex-1 h-full overflow-hidden">
-                <div className={`h-full relative ${
-                  isDarkMode ? 'dark-mode' : 'light-mode'
+        <div className={`flex-1 flex bg-transparent ${isDarkMode ? 'md:bg-gray-800' : 'md:bg-gray-50'
+          }`} style={{ minHeight: 0, overflow: 'hidden' }}>
+          <div className="w-full h-full flex gap-2">
+            {/* Main Chat Area */}
+            <div className="flex-1 h-full overflow-hidden">
+              <div className={`h-full relative ${isDarkMode ? 'dark-mode' : 'light-mode'
                 }`}>
-                  {showChatbot ? (
-                    <div className="h-full pt-0.5 px-8">
-                      <ATSNChatbot
-                        key="atsn-chatbot-fresh"
-                        onMinimize={() => setShowChatbot(false)}
-                      />
+                {showChatbot ? (
+                  <div className="h-full pt-0.5 px-8">
+                    <ATSNChatbot
+                      key="atsn-chatbot-fresh"
+                      onMinimize={() => setShowChatbot(false)}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-full w-full px-8 py-6 overflow-y-auto">
+                    <div className="flex items-center gap-3 mb-4">
+                      {suggestedLoading && (
+                        <span className="text-xs text-gray-400 uppercase tracking-widest">Loading...</span>
+                      )}
                     </div>
-                  ) : (
-                    <div className="h-full w-full px-8 py-6 overflow-y-auto">
-                      <div className="flex items-center gap-3 mb-4">
-                        {suggestedLoading && (
-                          <span className="text-xs text-gray-400 uppercase tracking-widest">Loading...</span>
-                        )}
+
+                    <>
+                      <div className="mb-12">
+                        <div className="w-full flex flex-col items-center">
+                          {(() => {
+                            const [l1, l2] = splitGreeting(welcomeVariants[welcomeIndex])
+                            return (
+                              <div className="text-center group">
+                                <h1 className={`text-4xl md:text-5xl font-bold tracking-tight mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                                  {l1}
+                                </h1>
+                                {l2 && (
+                                  <h2 className={`text-3xl md:text-4xl font-semibold tracking-tight ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                    {l2}
+                                  </h2>
+                                )}
+                                <div className={`mx-auto mt-6 h-1 w-12 rounded-full transition-all duration-700 group-hover:w-24 ${isDarkMode ? 'bg-indigo-500/50' : 'bg-slate-200'}`} />
+                              </div>
+                            )
+                          })()}
+                        </div>
                       </div>
 
-                        <>
-                          {/* Simple centered greeting above columns */}
-                          <div className="mb-8 pb-4">
-                            <div className="w-full flex items-center justify-center">
-                              {(() => {
-                                const [l1, l2] = splitGreeting(welcomeVariants[welcomeIndex])
-                                return (
-                                  <div className="text-center">
-                                    <div className={`text-4xl leading-tight font-thin ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{l1}</div>
-                                    {l2 && <div className={`text-4xl leading-tight font-thin ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{l2}</div>}
-                                    <div className={`mx-auto mt-3 h-[2px] w-20 rounded ${isDarkMode ? 'bg-gray-600' : 'bg-pink-200'}`} />
-                                  </div>
-                                )
-                              })()}
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                          {/* Column 1: Suggested post */}
-                          <div className="col-span-1">
-                            <div className="mb-3">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                    Suggested posts
-                                  </h3>
-                                  <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                    {todaysSuggestedPosts.length} post{todaysSuggestedPosts.length !== 1 ? 's' : ''}
-                                  </p>
-                                </div>
-                                {/* Navigation Arrows */}
-                                {todaysSuggestedPosts.length > 1 && (
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={prevPost}
-                                      className={`p-2 rounded-full ${
-                                        isDarkMode
-                                          ? 'bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700'
-                                          : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-md'
-                                      } transition-colors`}
-                                      aria-label="Previous post"
-                                    >
-                                      <ChevronLeft className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={nextPost}
-                                      className={`p-2 rounded-full ${
-                                        isDarkMode
-                                          ? 'bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700'
-                                          : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-md'
-                                      } transition-colors`}
-                                      aria-label="Next post"
-                                    >
-                                      <ChevronRight className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                )}
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        {/* Column 1: Suggested post */}
+                        <div className="col-span-1">
+                          <div className="mb-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h3 className={`text-[15px] font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                                  Suggested Posts
+                                </h3>
+                                <p className={`text-[11px] font-bold uppercase tracking-widest mt-0.5 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                                  {todaysSuggestedPosts.length} New Recommendation{todaysSuggestedPosts.length !== 1 ? 's' : ''}
+                                </p>
                               </div>
-                            </div>
-                            {todaysSuggestedPosts && todaysSuggestedPosts.length > 0 ? (
-                              <div className="relative">
-                                {/* Slider Container */}
-                                <div className="relative overflow-hidden">
-                                  <div
-                                    className="flex transition-transform duration-300 ease-in-out"
-                                    style={{
-                                      transform: `translateX(-${currentPostIndex * 100}%)`
-                                    }}
+                              {todaysSuggestedPosts.length > 1 && (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={prevPost}
+                                    className={`p-1.5 rounded-lg border transition-all ${isDarkMode
+                                      ? 'border-white/10 bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                                      : 'border-black/[0.06] bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-50 shadow-sm'
+                                      }`}
                                   >
-                                    {todaysSuggestedPosts.map((post) => (
-                                      <div
-                                        key={post.id}
-                                        className="w-full flex-shrink-0"
-                                      >
-                                        <PostContentCard
-                                          post={post}
-                                          isDarkMode={isDarkMode}
-                                          onCopy={(caption) => handleCopyCaption(caption)}
-                                          statusLabelOverride="Suggested"
-                                          onApprove={handleApprovePost}
-                                          onDiscard={handleDiscardPost}
-                                          hideBottomNav={true}
-                                        />
-                                      </div>
-                                    ))}
-                                  </div>
+                                    <ChevronLeft className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={nextPost}
+                                    className={`p-1.5 rounded-lg border transition-all ${isDarkMode
+                                      ? 'border-white/10 bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                                      : 'border-black/[0.06] bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-50 shadow-sm'
+                                      }`}
+                                  >
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                  </button>
                                 </div>
-                                {/* scheduled card moved to Reminders column */}
+                              )}
+                            </div>
+                          </div>
+                          {todaysSuggestedPosts && todaysSuggestedPosts.length > 0 ? (
+                            <div className="relative">
+                              {/* Slider Container */}
+                              <div className="relative overflow-hidden">
+                                <div
+                                  className="flex transition-transform duration-300 ease-in-out"
+                                  style={{
+                                    transform: `translateX(-${currentPostIndex * 100}%)`
+                                  }}
+                                >
+                                  {todaysSuggestedPosts.map((post) => (
+                                    <div
+                                      key={post.id}
+                                      className="w-full flex-shrink-0"
+                                    >
+                                      <PostContentCard
+                                        post={post}
+                                        isDarkMode={isDarkMode}
+                                        onCopy={(caption) => handleCopyCaption(caption)}
+                                        statusLabelOverride="Suggested"
+                                        onApprove={handleApprovePost}
+                                        onDiscard={handleDiscardPost}
+                                        hideBottomNav={true}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              {/* scheduled card moved to Reminders column */}
 
-                                {/* Slide indicators removed per request */}
-                              </div>
-                            ) : (
-                              <div className="p-6 rounded-lg border border-dashed text-center text-sm text-gray-500">
-                                No suggested posts available for today.
-                              </div>
-                            )}
+                              {/* Slide indicators removed per request */}
+                            </div>
+                          ) : (
+                            <div className="p-6 rounded-lg border border-dashed text-center text-sm text-gray-500">
+                              No suggested posts available for today.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Columns 2-5: leads + placeholders */}
+                        <div className="col-span-4 grid grid-cols-3 gap-4">
+                          {/* Column 2: Created content grid (3x4 images, 3 columns x 4 rows) */}
+                          <div className="col-span-1">
+                            <div className="mb-4">
+                              <h3 className={`text-[15px] font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                                Your Creations
+                              </h3>
+                              <p className={`text-[11px] font-bold uppercase tracking-widest mt-0.5 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                                {createdContent.length} Recent Item{createdContent.length !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+
+                            <div className={`p-2 rounded-2xl border ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-white border-black/[0.06] shadow-sm'}`}>
+                              {createdLoading ? (
+                                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                                  <div className="w-5 h-5 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
+                                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Loading...</span>
+                                </div>
+                              ) : createdContent && createdContent.length > 0 ? (
+                                <div className="grid grid-cols-3 gap-1.5">
+                                  {createdContent.slice(0, 12).map((item) => {
+                                    const img = getImageUrl(item)
+                                    const video = isVideoUrl(img, item)
+                                    return (
+                                      <div
+                                        key={item.id}
+                                        className={`aspect-square overflow-hidden rounded-lg cursor-pointer transition-all hover:opacity-80 active:scale-95 ${isDarkMode ? 'bg-white/5' : 'bg-slate-50 border border-black/[0.04]'
+                                          }`}
+                                        onClick={() => {
+                                          setGeneratedContent(item)
+                                          const modalType = openModalForContentType(item)
+                                          if (modalType === 'reel') {
+                                            setShowGeneratedReelModal(true)
+                                          } else {
+                                            setShowGeneratedContentModal(true)
+                                          }
+                                        }}
+                                      >
+                                        {video && img ? (
+                                          <video src={img} muted playsInline className="w-full h-full object-cover" />
+                                        ) : img ? (
+                                          <img src={img} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                          <div className="w-full h-full flex items-center justify-center">
+                                            <Building2 className="w-4 h-4 text-slate-300" />
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="py-12 text-center">
+                                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">No Creations Yet</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
-                          {/* Columns 2-5: leads + placeholders */}
-                          <div className="col-span-4 grid grid-cols-3 gap-4">
-                            {/* Column 2: Created content grid (3x4 images, 3 columns x 4 rows) */}
+                          {/* Column 3-4: Stats (Reminders + Scheduled + New Leads) */}
+                          <div className="col-span-2 grid grid-cols-2 gap-4">
+                            {/* Left column: stack Reminders above Scheduled */}
+                            <div className="col-span-1 flex flex-col gap-4">
+                              <div>
+                                <div className="mb-3">
+                                  <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                    New Leads
+                                  </h3>
+                                </div>
+                                <div
+                                  onClick={() => navigate('/leads')}
+                                  className={`p-4 rounded-xl flex items-center gap-3 justify-start border cursor-pointer transition-colors ${isDarkMode
+                                    ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200'
+                                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                                    }`}
+                                >
+                                  <Users className="w-6 h-6 flex-shrink-0 text-pink-400" />
+                                  <div className="flex items-baseline gap-3">
+                                    <div className="text-2xl font-semibold text-pink-400">
+                                      {todaysLeadsLoading ? '...' : todaysLeads.length}
+                                    </div>
+                                    <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                      {todaysLeads.length === 1 ? 'lead received today' : 'leads received today'}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div>
+                                <div className="mb-3">
+                                  <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                    Reminders
+                                  </h3>
+                                </div>
+                                <div
+                                  onClick={() => navigate('/leads?filter=overdue_followups')}
+                                  className={`p-4 rounded-xl flex items-center gap-3 justify-start border cursor-pointer transition-colors ${isDarkMode
+                                    ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200'
+                                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                                    }`}
+                                >
+                                  <Calendar className="w-6 h-6 flex-shrink-0 text-pink-400" />
+                                  <div className="flex items-baseline gap-3">
+                                    <div className="text-2xl font-semibold text-pink-400">
+                                      {followUpLeadsLoading ? '...' : followUpLeads.length}
+                                    </div>
+                                    <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                      {followUpLeads.length === 1 ? 'lead to follow up today' : 'leads to follow up today'}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              {/* Scheduled posts quick card - placed directly below Reminders */}
+                              <div>
+                                <div
+                                  onClick={() => navigate('/content?filter=scheduled')}
+                                  className={`mt-3 p-4 rounded-xl flex items-center gap-3 justify-start border cursor-pointer transition-colors ${isDarkMode
+                                    ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200'
+                                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                                    }`}
+                                >
+                                  <FileText className="w-6 h-6 flex-shrink-0 text-pink-400" />
+                                  <div className="flex items-baseline gap-3">
+                                    <div className="text-2xl font-semibold text-pink-400">
+                                      {scheduledLoading ? '...' : scheduledCount}
+                                    </div>
+                                    <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                      {scheduledCount === 1 ? 'post scheduled today' : 'posts scheduled today'}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Right column: Weekly calendar strip */}
                             <div className="col-span-1">
                               <div className="mb-3">
                                 <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                  Your creations
+                                  This week
                                 </h3>
-                                <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                  {createdContent.length} item{createdContent.length !== 1 ? 's' : ''}
-                                </p>
                               </div>
-
-                              <div className="rounded-lg">
-                                {createdLoading ? (
-                                  <div className={`p-6 rounded-lg border text-center ${isDarkMode ? 'border-gray-700 bg-gray-800 text-gray-300' : 'border-gray-200 bg-white text-gray-600'}`}>
-                                    Loading...
-                                  </div>
-                                ) : createdContent && createdContent.length > 0 ? (
-                                  <div className="grid grid-cols-3 gap-2">
-                                    {createdContent.slice(0, 12).map((item) => {
-                                      const img = getImageUrl(item)
-                                      const video = isVideoUrl(img, item)
-                                      return (
-                                        <div
-                                          key={item.id}
-                                          className="aspect-square overflow-hidden rounded-md bg-gray-100 cursor-pointer"
-                                          onClick={() => {
-                                            setGeneratedContent(item)
-                                            const modalType = openModalForContentType(item)
-                                            if (modalType === 'reel') {
-                                              setShowGeneratedReelModal(true)
-                                            } else {
-                                              setShowGeneratedContentModal(true)
-                                            }
-                                          }}
-                                        >
-                                          {video && img ? (
-                                            <video
-                                              src={img}
-                                              muted
-                                              playsInline
-                                              preload="metadata"
-                                              className="w-full h-full object-cover"
-                                              onLoadedData={(e) => {
-                                                try { e.currentTarget.currentTime = 0.1 } catch (err) { /* ignore */ }
-                                              }}
-                                              onError={(e) => { e.currentTarget.style.display = 'none' }}
-                                            />
-                                          ) : img ? (
-                                            <img
-                                              src={img}
-                                              alt={item.title || 'Post'}
-                                              className="w-full h-full object-cover"
-                                              onError={(e) => { e.target.style.display = 'none' }}
-                                            />
-                                          ) : (
-                                            <div className={`w-full h-full flex items-center justify-center ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                                              <div className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>No image</div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )
-                                    })}
-                                  </div>
-                                ) : (
-                                  <div className={`p-6 rounded-lg border border-dashed text-center text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    No created images yet
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Column 3-4: Stats (Reminders + Scheduled + New Leads) */}
-                            <div className="col-span-2 grid grid-cols-2 gap-4">
-                              {/* Left column: stack Reminders above Scheduled */}
-                              <div className="col-span-1 flex flex-col gap-4">
-                                <div>
-                                  <div className="mb-3">
-                                    <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                      New Leads
-                                    </h3>
-                                  </div>
-                                  <div
-                                    onClick={() => navigate('/leads')}
-                                    className={`p-4 rounded-xl flex items-center gap-3 justify-start border cursor-pointer transition-colors ${
-                                      isDarkMode
-                                        ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200'
-                                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
-                                    }`}
-                                  >
-                                    <Users className="w-6 h-6 flex-shrink-0 text-pink-400" />
-                                    <div className="flex items-baseline gap-3">
-                                      <div className="text-2xl font-semibold text-pink-400">
-                                        {todaysLeadsLoading ? '...' : todaysLeads.length}
-                                      </div>
-                                      <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                                        {todaysLeads.length === 1 ? 'lead received today' : 'leads received today'}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <div className="mb-3">
-                                    <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                      Reminders
-                                    </h3>
-                                  </div>
-                                  <div
-                                    onClick={() => navigate('/leads?filter=overdue_followups')}
-                                    className={`p-4 rounded-xl flex items-center gap-3 justify-start border cursor-pointer transition-colors ${
-                                      isDarkMode
-                                        ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200'
-                                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
-                                    }`}
-                                  >
-                                    <Calendar className="w-6 h-6 flex-shrink-0 text-pink-400" />
-                                    <div className="flex items-baseline gap-3">
-                                      <div className="text-2xl font-semibold text-pink-400">
-                                        {followUpLeadsLoading ? '...' : followUpLeads.length}
-                                      </div>
-                                      <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                                        {followUpLeads.length === 1 ? 'lead to follow up today' : 'leads to follow up today'}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                                {/* Scheduled posts quick card - placed directly below Reminders */}
-                                <div>
-                                  <div
-                                    onClick={() => navigate('/content?filter=scheduled')}
-                                    className={`mt-3 p-4 rounded-xl flex items-center gap-3 justify-start border cursor-pointer transition-colors ${
-                                      isDarkMode
-                                        ? 'border-gray-700 bg-gray-800 hover:bg-gray-750 text-gray-200'
-                                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
-                                    }`}
-                                  >
-                                    <FileText className="w-6 h-6 flex-shrink-0 text-pink-400" />
-                                    <div className="flex items-baseline gap-3">
-                                      <div className="text-2xl font-semibold text-pink-400">
-                                        {scheduledLoading ? '...' : scheduledCount}
-                                      </div>
-                                      <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                                        {scheduledCount === 1 ? 'post scheduled today' : 'posts scheduled today'}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Right column: Weekly calendar strip */}
-                              <div className="col-span-1">
-                                <div className="mb-3">
-                                  <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                    This week
-                                  </h3>
-                                </div>
-                                <div className={`p-3 rounded-xl border ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
-                                  <div className="grid grid-cols-7 gap-2 text-center">
-                                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, i) => (
-                                      <div key={d} className="text-xs">
-                                        <div className={`font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>{d}</div>
-                                        <div className="mt-1">
-                                          <div className="text-sm font-semibold text-pink-400">
-                                            {weekLoading ? '...' : weekCounts[i]}
-                                          </div>
+                              <div className={`p-3 rounded-xl border ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
+                                <div className="grid grid-cols-7 gap-2 text-center">
+                                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
+                                    <div key={d} className="text-xs">
+                                      <div className={`font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>{d}</div>
+                                      <div className="mt-1">
+                                        <div className="text-sm font-semibold text-pink-400">
+                                          {weekLoading ? '...' : weekCounts[i]}
                                         </div>
                                       </div>
-                                    ))}
-                                  </div>
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                        </>
-                    </div>
-                  )}
-                </div>
+                      </div>
+                    </>
+                  </div>
+                )}
               </div>
+            </div>
 
+          </div>
         </div>
-      </div>
       </div>
 
       {/* Quick Actions - aligned to main content area */}
@@ -1701,11 +1680,10 @@ function EmilyDashboard() {
               <div className="flex justify-center gap-4 flex-wrap">
                 <div
                   onClick={() => setShowNewPostModal(true)}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                    isDarkMode
-                      ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                  }`}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer ${isDarkMode
+                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                    }`}
                 >
                   <div className="flex flex-col items-center text-center space-y-2">
                     <div className="w-6 h-6 flex items-center justify-center">
@@ -1713,9 +1691,8 @@ function EmilyDashboard() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
                     </div>
-                    <span className={`text-sm font-medium ${
-                      isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                    }`}>
+                    <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                      }`}>
                       Design a new post
                     </span>
                   </div>
@@ -1723,19 +1700,17 @@ function EmilyDashboard() {
 
                 <div
                   onClick={() => setShowAddLeadModal(true)}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                    isDarkMode
-                      ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                  }`}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer ${isDarkMode
+                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                    }`}
                 >
                   <div className="flex flex-col items-center text-center space-y-2">
-                      <div className="w-6 h-6 flex items-center justify-center">
+                    <div className="w-6 h-6 flex items-center justify-center">
                       <Upload className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-[#9e005d]'}`} />
                     </div>
-                    <span className={`text-sm font-medium ${
-                      isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                    }`}>
+                    <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                      }`}>
                       Upload a new lead
                     </span>
                   </div>
@@ -1743,19 +1718,17 @@ function EmilyDashboard() {
 
                 <div
                   onClick={() => setShowChatbot(true)}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                    isDarkMode
-                      ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                  }`}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer ${isDarkMode
+                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                    }`}
                 >
                   <div className="flex flex-col items-center text-center space-y-2">
-                      <div className="w-6 h-6 flex items-center justify-center">
+                    <div className="w-6 h-6 flex items-center justify-center">
                       <MessageSquare className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-[#9e005d]'}`} />
                     </div>
-                    <span className={`text-sm font-medium ${
-                      isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                    }`}>
+                    <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                      }`}>
                       Talk to your AI teammates
                     </span>
                   </div>
@@ -1770,29 +1743,24 @@ function EmilyDashboard() {
 
       {/* Mobile Today's Conversations Panel - Full Screen */}
       {showMobileChatHistory && (
-        <div className={`md:hidden fixed inset-0 z-50 ${
-          isDarkMode ? 'bg-gray-900' : 'bg-white'
-        }`}>
+        <div className={`md:hidden fixed inset-0 z-50 ${isDarkMode ? 'bg-gray-900' : 'bg-white'
+          }`}>
           <div className="flex flex-col h-full">
             {/* Header */}
-            <div className={`p-4 border-b flex items-center justify-between flex-shrink-0 ${
-              isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'
-            }`}>
-              <h2 className={`text-lg font-semibold ${
-                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+            <div className={`p-4 border-b flex items-center justify-between flex-shrink-0 ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'
               }`}>
+              <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                }`}>
                 Today's Conversations
               </h2>
               <button
                 onClick={() => setShowMobileChatHistory(false)}
-                className={`p-2 rounded-md transition-colors ${
-                  isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
-                }`}
+                className={`p-2 rounded-md transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
+                  }`}
                 title="Close"
               >
-                <X className={`w-5 h-5 ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                }`} />
+                <X className={`w-5 h-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                  }`} />
               </button>
             </div>
 
@@ -1800,17 +1768,15 @@ function EmilyDashboard() {
             <div className="flex-1 overflow-y-auto p-4">
               {loadingConversations ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
+                  <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`}>
                     Loading today's conversations...
                   </div>
                 </div>
               ) : conversations.length === 0 ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
+                  <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`}>
                     No conversations today
                   </div>
                 </div>
@@ -1822,7 +1788,7 @@ function EmilyDashboard() {
                       : null
 
                     if (!lastMessage) return null
-                    
+
                     const isUser = lastMessage.sender === 'user'
 
                     // Clean message text to remove stray characters
@@ -1838,50 +1804,44 @@ function EmilyDashboard() {
 
                     const preview = cleanText?.substring(0, 100) +
                       (cleanText?.length > 100 ? '...' : '')
-                    
+
                     return (
-                      <div key={conv.id} className={`p-3 rounded-lg border ${
-                        isDarkMode
-                          ? 'border-gray-700 bg-gray-800'
-                          : 'border-gray-200 bg-white'
-                      }`}>
-                          <div className="flex items-center gap-3">
-                            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm ${
-                            isUser
-                              ? 'bg-pink-400'
-                              : 'bg-gradient-to-br from-pink-400 to-purple-500'
+                      <div key={conv.id} className={`p-3 rounded-lg border ${isDarkMode
+                        ? 'border-gray-700 bg-gray-800'
+                        : 'border-gray-200 bg-white'
+                        }`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm ${isUser
+                            ? 'bg-pink-400'
+                            : 'bg-gradient-to-br from-pink-400 to-purple-500'
                             }`}>
-                              {isUser ? (
-                                profile?.logo_url ? (
-                                  <img src={profile.logo_url} alt="User" className="w-10 h-10 rounded-full object-cover" />
-                                ) : (
-                                  <span className="text-white">U</span>
-                                )
+                            {isUser ? (
+                              profile?.logo_url ? (
+                                <img src={profile.logo_url} alt="User" className="w-10 h-10 rounded-full object-cover" />
                               ) : (
-                                <span className="text-white font-bold">E</span>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between mb-1">
-                              <span className={`text-sm font-medium ${
-                                isUser ? 'text-pink-700' : 'text-purple-700'
-                              }`}>
+                                <span className="text-white">U</span>
+                              )
+                            ) : (
+                              <span className="text-white font-bold">E</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`text-sm font-medium ${isUser ? 'text-pink-700' : 'text-purple-700'
+                                }`}>
                                 {isUser ? 'You' : conv.primary_agent_name || 'Emily'}
-                                </span>
-                              <span className={`text-xs ${
-                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                              }`}>
+                              </span>
+                              <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                }`}>
                                 {conv.total_messages} messages
                               </span>
-                              </div>
-                            <p className={`text-sm line-clamp-2 ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
+                            </div>
+                            <p className={`text-sm line-clamp-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>
                               {preview || 'No preview available'}
                             </p>
-                            <p className={`text-xs mt-1 ${
-                              isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                            }`}>
+                            <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                              }`}>
                               {new Date(conv.created_at).toLocaleTimeString()}
                             </p>
                           </div>

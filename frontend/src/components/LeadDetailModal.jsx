@@ -54,6 +54,14 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
   const [followUpTime, setFollowUpTime] = useState('')
   const [updatingFollowUp, setUpdatingFollowUp] = useState(false)
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
+  // Campaign combobox state
+  const [selectedCampaignId, setSelectedCampaignId] = useState(lead.campaign_id || null)
+  const [selectedCampaignName, setSelectedCampaignName] = useState(lead.campaign_name || null)
+  const [campaignEditMode, setCampaignEditMode] = useState(false)
+  const [campaignInputValue, setCampaignInputValue] = useState('')
+  const [campaignSuggestions, setCampaignSuggestions] = useState([])
+  const [campaignUpdating, setCampaignUpdating] = useState(false)
+  const [campaignSuccess, setCampaignSuccess] = useState(false)
   const [emailTemplates, setEmailTemplates] = useState([])
   const [selectedTemplate, setSelectedTemplate] = useState('welcome')
   const [selectedCategory, setSelectedCategory] = useState('general')
@@ -74,7 +82,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
 
   const fetchConversations = useCallback(async () => {
     if (conversationsLoaded) return // Don't fetch if already loaded
-    
+
     try {
       setLoadingConversations(true)
       const response = await leadsAPI.getLeadConversations(lead.id, { limit: 200 })
@@ -102,11 +110,15 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
     }
     fetchEmailTemplates()
     fetchPreviousEmails()
+    fetchCampaigns()
+    // Sync campaign from lead prop
+    setSelectedCampaignId(lead.campaign_id || null)
+    setSelectedCampaignName(lead.campaign_name || null)
     // Reset conversations loaded state when lead changes
     setConversationsLoaded(false)
     setConversations([])
-  }, [lead.id, lead.follow_up_at])
-  
+  }, [lead.id, lead.follow_up_at, lead.campaign_id, lead.campaign_name])
+
   // Load conversations only when conversations tab is active
   useEffect(() => {
     if (activeTab === 'conversations' && !conversationsLoaded && lead.id) {
@@ -233,16 +245,66 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
     }
   }
 
-  // Close dropdown when clicking outside
+  // Fetch unique campaign names already used across this user's leads
+  const fetchCampaigns = async () => {
+    try {
+      const response = await leadsAPI.getCampaignNames()
+      setCampaignSuggestions(response.data?.names || [])
+    } catch (err) {
+      console.error('Could not load campaign names:', err)
+    }
+  }
+
+  // Save campaign (free-text) instantly via PATCH
+  const handleCampaignSave = async (name) => {
+    const trimmed = (name || '').trim() || null
+    setCampaignEditMode(false)
+    setCampaignInputValue('')
+    if (trimmed === selectedCampaignName) return
+    setCampaignUpdating(true)
+    setCampaignSuccess(false)
+    try {
+      await leadsAPI.updateLeadCampaign(lead.id, null, trimmed)
+      setSelectedCampaignId(null)
+      setSelectedCampaignName(trimmed)
+      setCampaignSuccess(true)
+      // add to local suggestions if it's new
+      if (trimmed && !campaignSuggestions.includes(trimmed)) {
+        setCampaignSuggestions(prev => [trimmed, ...prev].sort((a, b) => a.localeCompare(b)))
+      }
+      setTimeout(() => setCampaignSuccess(false), 2000)
+      if (onUpdate) onUpdate()
+    } catch (err) {
+      console.error('Error updating campaign:', err)
+    } finally {
+      setCampaignUpdating(false)
+    }
+  }
+
+  const handleCampaignKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleCampaignSave(campaignInputValue)
+    } else if (e.key === 'Escape') {
+      setCampaignEditMode(false)
+      setCampaignInputValue('')
+    }
+  }
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (statusDropdownOpen && !event.target.closest('.status-dropdown-container')) {
         setStatusDropdownOpen(false)
       }
+      if (campaignEditMode && !event.target.closest('.campaign-dropdown-container')) {
+        setCampaignEditMode(false)
+        setCampaignInputValue('')
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [statusDropdownOpen])
+  }, [statusDropdownOpen, campaignEditMode])
 
   const fetchStatusHistory = async () => {
     try {
@@ -307,7 +369,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
 
   const handleStatusUpdate = async () => {
     if (!pendingStatus) return
-    
+
     try {
       setUpdatingStatus(true)
       await leadsAPI.updateLeadStatus(lead.id, pendingStatus, statusRemarks || null)
@@ -350,7 +412,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
       // Don't update if either is missing
       return
     }
-    
+
     try {
       setUpdatingFollowUp(true)
       const isoDateTime = new Date(`${date}T${time}`).toISOString()
@@ -435,7 +497,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
     const diffInMinutes = Math.floor((now - date) / (1000 * 60))
     const diffInHours = Math.floor(diffInMinutes / 60)
     const diffInDays = Math.floor(diffInHours / 24)
-    
+
     if (diffInMinutes < 1) return 'Just now'
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`
     if (diffInHours < 24) return `${diffInHours}h ago`
@@ -447,7 +509,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
   // Parse email content - handle HTML and plain text
   const parseEmailContent = (content) => {
     if (!content) return ''
-    
+
     // Escape HTML to prevent XSS
     const escapeHtml = (text) => {
       const map = {
@@ -459,10 +521,10 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
       }
       return text.replace(/[&<>"']/g, (m) => map[m])
     }
-    
+
     // Check if content contains HTML tags
     const hasHtmlTags = /<[^>]+>/g.test(content)
-    
+
     if (hasHtmlTags) {
       // Content appears to be HTML - sanitize and return
       // Basic sanitization - remove script tags and dangerous attributes
@@ -471,7 +533,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
         .replace(/on\w+="[^"]*"/gi, '')
         .replace(/on\w+='[^']*'/gi, '')
         .replace(/javascript:/gi, '')
-      
+
       return sanitized
     } else {
       // Plain text - convert line breaks and preserve formatting
@@ -496,41 +558,41 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
 
   const getStatusConfig = (status) => {
     const configs = {
-      new: { 
+      new: {
         color: isDarkMode ? 'bg-blue-800 text-blue-300 border-blue-700' : 'bg-blue-100 text-blue-700 border-blue-200',
         bgColor: isDarkMode ? 'bg-blue-900/50' : 'bg-blue-50',
         borderColor: isDarkMode ? 'border-blue-700' : 'border-blue-200',
-        label: 'New' 
+        label: 'New'
       },
-      contacted: { 
+      contacted: {
         color: isDarkMode ? 'bg-purple-800 text-purple-300 border-purple-700' : 'bg-purple-100 text-purple-700 border-purple-200',
         bgColor: isDarkMode ? 'bg-purple-900/50' : 'bg-purple-50',
         borderColor: isDarkMode ? 'border-purple-700' : 'border-purple-200',
-        label: 'Contacted' 
+        label: 'Contacted'
       },
-      responded: { 
+      responded: {
         color: isDarkMode ? 'bg-green-800 text-green-300 border-green-700' : 'bg-green-100 text-green-700 border-green-200',
         bgColor: isDarkMode ? 'bg-green-900/50' : 'bg-green-50',
         borderColor: isDarkMode ? 'border-green-700' : 'border-green-200',
-        label: 'Responded' 
+        label: 'Responded'
       },
-      qualified: { 
+      qualified: {
         color: isDarkMode ? 'bg-orange-800 text-orange-300 border-orange-700' : 'bg-orange-100 text-orange-700 border-orange-200',
         bgColor: isDarkMode ? 'bg-orange-900/50' : 'bg-orange-50',
         borderColor: isDarkMode ? 'border-orange-700' : 'border-orange-200',
-        label: 'Qualified' 
+        label: 'Qualified'
       },
-      converted: { 
+      converted: {
         color: isDarkMode ? 'bg-emerald-800 text-emerald-300 border-emerald-700' : 'bg-emerald-100 text-emerald-700 border-emerald-200',
         bgColor: isDarkMode ? 'bg-emerald-900/50' : 'bg-emerald-50',
         borderColor: isDarkMode ? 'border-emerald-700' : 'border-emerald-200',
-        label: 'Converted' 
+        label: 'Converted'
       },
-      lost: { 
+      lost: {
         color: isDarkMode ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-200',
         bgColor: isDarkMode ? 'bg-gray-900/50' : 'bg-gray-50',
         borderColor: isDarkMode ? 'border-gray-700' : 'border-gray-200',
-        label: 'Lost' 
+        label: 'Lost'
       },
       invalid: {
         color: isDarkMode ? 'bg-red-800 text-red-300 border-red-700' : 'bg-red-100 text-red-700 border-red-200',
@@ -547,18 +609,18 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
       case 'facebook':
         return (
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" fill="#1877F2"/>
+            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" fill="#1877F2" />
           </svg>
         );
       case 'instagram':
         return (
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" fill="url(#instagram-gradient)"/>
+            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" fill="url(#instagram-gradient)" />
             <defs>
               <linearGradient id="instagram-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#833ab4"/>
-                <stop offset="50%" stopColor="#fd1d1d"/>
-                <stop offset="100%" stopColor="#fcb045"/>
+                <stop offset="0%" stopColor="#833ab4" />
+                <stop offset="50%" stopColor="#fd1d1d" />
+                <stop offset="100%" stopColor="#fcb045" />
               </linearGradient>
             </defs>
           </svg>
@@ -592,7 +654,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
       }
     } else {
       // Fallback: use old_status, new_status, and created_at (within 5 seconds to catch duplicates)
-      const isDuplicate = acc.some(item => 
+      const isDuplicate = acc.some(item =>
         item.old_status === current.old_status &&
         item.new_status === current.new_status &&
         Math.abs(new Date(item.created_at) - new Date(current.created_at)) < 5000 // Within 5 seconds
@@ -608,12 +670,12 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
   // Determine if lead is manual or from social media
   const isManualLead = lead.source_platform === 'manual'
   const isSocialMediaLead = ['facebook', 'instagram'].includes(lead.source_platform?.toLowerCase())
-  
+
   // Format Chase's message based on lead source
   const getChaseMessage = () => {
     const timeStr = formatTime(lead.created_at)
     const leadName = lead.name || 'Unknown'
-    
+
     if (isManualLead) {
       return {
         text: `Hi, I am Chase, your leads manager. You just entered a new lead manually for `,
@@ -660,7 +722,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
       const newStatus = history.new_status?.toLowerCase() || ''
       // Get remarks from reason column - handle both reason and remarks fields
       const remarks = (history.reason || history.remarks || '').trim()
-      
+
       // Debug: log remarks for each history entry
       if (remarks) {
         console.log('Found remarks in history:', {
@@ -672,17 +734,17 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
           created_at: history.created_at
         })
       }
-      
+
       // Check if this is a remark-only entry (same status, but has remarks)
       const isRemarkOnly = oldStatus === newStatus && remarks
-      
+
       // Format all status changes as Chase messages
       // Capitalize status names for display
       const capitalizeStatus = (status) => {
         if (!status) return ''
         return status.charAt(0).toUpperCase() + status.slice(1)
       }
-      
+
       // Build the message based on status change
       let statusText = ''
       if (newStatus === 'contacted') {
@@ -700,7 +762,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
       } else {
         statusText = capitalizeStatus(newStatus)
       }
-      
+
       // Format message: if remarks exist, show them first, otherwise show status
       // Ensure remarks is not empty after trimming
       const hasRemarks = remarks && remarks.trim().length > 0
@@ -716,22 +778,22 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
           : 'Added remark at '
 
         timelineEntries.push({
-            type: 'remark',
-            title: 'Chase',
-            description: {
+          type: 'remark',
+          title: 'Chase',
+          description: {
             text: messageText,
-              boldPart: '',
-              textAfter: '',
-              boldTime: timeStr,
-              textEnd: '.'
-            },
-            remarks: remarks.trim(),
+            boldPart: '',
+            textAfter: '',
+            boldTime: timeStr,
+            textEnd: '.'
+          },
+          remarks: remarks.trim(),
           remarksText: remarks.trim(),
-            timestamp: history.created_at,
-            icon: Bot,
-            color: 'text-purple-600 bg-purple-50',
-            oldStatus: history.old_status,
-            newStatus: history.new_status,
+          timestamp: history.created_at,
+          icon: Bot,
+          color: 'text-purple-600 bg-purple-50',
+          oldStatus: history.old_status,
+          newStatus: history.new_status,
           isChaseMessage: true,
           isStatusChangeWithRemark: isStatusChange
         })
@@ -746,7 +808,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
         const recipientName = lead.name || 'the lead'
         const messageContent = conv.content || ''
         const timeStr = formatTime(conv.created_at)
-        
+
         return {
           type: conv.message_type,
           title: 'Chase',
@@ -767,7 +829,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
           isChaseMessage: true
         }
       }
-      
+
       // Default format for other conversations
       return {
         type: conv.message_type,
@@ -827,34 +889,34 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
             `}</style>
             {/* Header Section */}
             <div className={`p-6 border-b ${isDarkMode ? 'border-gray-600' : statusConfig.borderColor}`}>
-            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center shadow-md">
-                {getPlatformIcon(lead.source_platform)}
-              </div>
-              <div>
+                  {getPlatformIcon(lead.source_platform)}
+                </div>
+                <div>
                   <h2 className={`text-2xl font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
-                  {lead.name || 'Unknown Lead'}
-                </h2>
-                {/* Contact Information */}
-                {(lead.email || lead.phone_number) && (
+                    {lead.name || 'Unknown Lead'}
+                  </h2>
+                  {/* Contact Information */}
+                  {(lead.email || lead.phone_number) && (
                     <div className={`flex flex-col gap-1.5 mt-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                    {lead.email && (
+                      {lead.email && (
                         <div className="flex items-center gap-1.5">
-                        <Mail className="w-3 h-3" />
-                        <span>{lead.email}</span>
-                      </div>
-                    )}
-                    {lead.phone_number && (
+                          <Mail className="w-3 h-3" />
+                          <span>{lead.email}</span>
+                        </div>
+                      )}
+                      {lead.phone_number && (
                         <div className="flex items-center gap-1.5">
-                        <Phone className="w-3 h-3" />
-                        <span>{lead.phone_number}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                          <Phone className="w-3 h-3" />
+                          <span>{lead.phone_number}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
             {/* Status and Follow-up Section */}
             <div className="p-6 space-y-4 flex-1 overflow-y-auto">
@@ -870,10 +932,10 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                     <span className="capitalize">{pendingStatus || selectedStatus}</span>
                     <ChevronDown className={`w-4 h-4 transition-transform ${statusDropdownOpen ? 'rotate-180' : ''}`} />
                   </button>
-                  
+
                   {/* Custom Dropdown with Glassmorphism */}
                   {statusDropdownOpen && (
-                    <div 
+                    <div
                       className="absolute top-full mt-2 left-0 w-full min-w-[160px] z-50"
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -896,15 +958,14 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                                 setStatusDropdownOpen(false)
                               }}
                               disabled={updatingStatus || showRemarksInput}
-                              className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors flex items-center space-x-2 ${
-                                (pendingStatus || selectedStatus) === option.value
-                                  ? isDarkMode
-                                    ? 'bg-purple-900/50 text-purple-300'
-                                    : 'bg-purple-100 text-purple-700'
-                                  : isDarkMode
+                              className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors flex items-center space-x-2 ${(pendingStatus || selectedStatus) === option.value
+                                ? isDarkMode
+                                  ? 'bg-purple-900/50 text-purple-300'
+                                  : 'bg-purple-100 text-purple-700'
+                                : isDarkMode
                                   ? 'text-gray-300 hover:bg-purple-900/30 hover:text-purple-300'
                                   : 'text-gray-700 hover:bg-purple-50 hover:text-purple-700'
-                              } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                             >
                               <span className="capitalize">{option.label}</span>
                             </button>
@@ -915,6 +976,114 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                   )}
                 </div>
                 {updatingStatus && <Loader2 className="w-4 h-4 animate-spin text-gray-600 mt-2" />}
+              </div>
+
+              {/* Campaign — inline free-text combobox */}
+              <div className="space-y-2">
+                <label className={`text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Campaign</label>
+                <div className="relative campaign-dropdown-container">
+
+                  {/* Pill / display mode */}
+                  {!campaignEditMode && (
+                    <button
+                      onClick={() => {
+                        if (!campaignUpdating) {
+                          setCampaignEditMode(true)
+                          setCampaignInputValue(selectedCampaignName || '')
+                        }
+                      }}
+                      disabled={campaignUpdating}
+                      className={`w-full px-3 py-1.5 ${isDarkMode
+                        ? 'bg-gray-700 border-gray-600'
+                        : `bg-white border ${statusConfig.borderColor}`
+                        } border rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:opacity-60 flex items-center justify-between transition-all`}
+                    >
+                      <span className={`truncate text-sm ${selectedCampaignName
+                        ? isDarkMode ? 'text-gray-100' : 'text-gray-800'
+                        : isDarkMode ? 'text-gray-400' : 'text-gray-400'
+                        }`}>
+                        {selectedCampaignName || 'No Campaign'}
+                      </span>
+                      <span className="flex-shrink-0 flex items-center ml-2">
+                        {campaignUpdating
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-500" />
+                          : campaignSuccess
+                            ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                            : <ChevronDown className={`w-3.5 h-3.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`} />
+                        }
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Edit mode — text input + suggestions */}
+                  {campaignEditMode && (
+                    <div>
+                      <input
+                        autoFocus
+                        type="text"
+                        value={campaignInputValue}
+                        onChange={(e) => setCampaignInputValue(e.target.value)}
+                        onKeyDown={handleCampaignKeyDown}
+                        placeholder="Type campaign name…"
+                        className={`w-full px-3 py-1.5 ${isDarkMode
+                          ? 'bg-gray-700 border-gray-500 text-gray-100 placeholder-gray-400'
+                          : `bg-white border ${statusConfig.borderColor} text-gray-900 placeholder-gray-400`
+                          } border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-opacity-50`}
+                      />
+
+                      {/* Suggestions dropdown */}
+                      <div
+                        className={`absolute top-full mt-1 left-0 right-0 z-50 ${isDarkMode
+                          ? 'bg-gray-800/97 border border-gray-600/50'
+                          : 'bg-white border border-gray-200'
+                          } rounded-lg shadow-xl overflow-hidden`}
+                      >
+                        <div className="py-1 max-h-44 overflow-y-auto">
+                          {/* Clear option */}
+                          <button
+                            onMouseDown={(e) => { e.preventDefault(); handleCampaignSave(null) }}
+                            className={`w-full text-left px-4 py-2 text-sm transition-colors ${!selectedCampaignName
+                              ? isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-50 text-purple-700'
+                              : isDarkMode ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-400 hover:bg-gray-50'
+                              }`}
+                          >
+                            No Campaign
+                          </button>
+
+                          {/* Filtered suggestions from existing leads */}
+                          {campaignSuggestions
+                            .filter(name => name && name.toLowerCase().includes(campaignInputValue.toLowerCase()))
+                            .map((name) => (
+                              <button
+                                key={name}
+                                onMouseDown={(e) => { e.preventDefault(); handleCampaignSave(name) }}
+                                className={`w-full text-left px-4 py-2 text-sm transition-colors ${selectedCampaignName === name
+                                  ? isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-50 text-purple-700'
+                                  : isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-50'
+                                  }`}
+                              >
+                                {name}
+                              </button>
+                            ))
+                          }
+
+                          {/* "Save as new" hint when typed value is novel */}
+                          {campaignInputValue.trim() &&
+                            !campaignSuggestions.some(n => n.toLowerCase() === campaignInputValue.trim().toLowerCase()) && (
+                              <button
+                                onMouseDown={(e) => { e.preventDefault(); handleCampaignSave(campaignInputValue) }}
+                                className={`w-full text-left px-4 py-2 text-sm italic transition-colors ${isDarkMode ? 'text-purple-400 hover:bg-gray-700' : 'text-purple-600 hover:bg-purple-50'
+                                  }`}
+                              >
+                                + Save &ldquo;{campaignInputValue.trim()}&rdquo;
+                              </button>
+                            )
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Follow-up Date & Time */}
@@ -938,21 +1107,21 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                     placeholder="Time"
                   />
                 </div>
-                  {followUpAt && (
-                    <button
-                      onClick={clearFollowUp}
-                      disabled={updatingFollowUp}
+                {followUpAt && (
+                  <button
+                    onClick={clearFollowUp}
+                    disabled={updatingFollowUp}
                     className={`w-full px-2 py-1.5 ${isDarkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-white hover:opacity-80 text-gray-700'} border ${statusConfig.borderColor} text-xs font-medium transition-colors disabled:opacity-50`}
-                      title="Clear follow-up"
-                    >
+                    title="Clear follow-up"
+                  >
                     Clear Follow-up
-                    </button>
-                  )}
+                  </button>
+                )}
                 {updatingFollowUp && <Loader2 className="w-4 h-4 animate-spin text-gray-600 mx-auto" />}
-                </div>
+              </div>
 
             </div>
-            
+
             {/* Remarks Input */}
             {showRemarksInput && pendingStatus && (
               <div className={`mt-3 ${isDarkMode ? 'bg-gray-700' : 'bg-white'} rounded-lg p-3 space-y-2 border ${isDarkMode ? 'border-gray-600' : statusConfig.borderColor}`}>
@@ -1015,9 +1184,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                     </>
                   )}
                 </button>
-          </div>
+              </div>
             )}
-        </div>
+          </div>
 
           {/* Right Column - Tabs and Content */}
           <div className={`w-2/3 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} flex flex-col relative`}>
@@ -1029,97 +1198,154 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
               <X className={`w-6 h-6 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} />
             </button>
 
-        {/* Tabs */}
+            {/* Tabs */}
             <div className={`border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} flex space-x-1 px-6 bg-transparent justify-between items-center`}>
-          <div className="flex space-x-1">
-            {[
-              { id: 'timeline', label: 'Timeline', icon: Clock },
-              { id: 'conversations', label: 'Conversations', icon: MessageCircle },
-              { id: 'email', label: 'Email', icon: MailIcon }
-            ].map(tab => {
-              const Icon = tab.icon
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
-                    activeTab === tab.id
-                      ? `border-purple-600 ${isDarkMode ? 'text-white' : 'text-purple-700'}`
-                      : `border-transparent ${isDarkMode ? 'text-gray-400 hover:text-purple-400' : 'text-gray-600 hover:text-purple-600'}`
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="font-medium">{tab.label}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
+              <div className="flex space-x-1">
+                {[
+                  { id: 'timeline', label: 'Timeline', icon: Clock },
+                  { id: 'conversations', label: 'Conversations', icon: MessageCircle },
+                  { id: 'email', label: 'Email', icon: MailIcon }
+                ].map(tab => {
+                  const Icon = tab.icon
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${activeTab === tab.id
+                        ? `border-purple-600 ${isDarkMode ? 'text-white' : 'text-purple-700'}`
+                        : `border-transparent ${isDarkMode ? 'text-gray-400 hover:text-purple-400' : 'text-gray-600 hover:text-purple-600'}`
+                        }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span className="font-medium">{tab.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'timeline' && (
-            <div className="space-y-4">
-              {loadingConversations ? (
-                <div className="flex flex-col items-start w-full mb-4">
-                  <div className="flex items-start gap-2 max-w-[90%] justify-start">
-                    {/* Chase Logo */}
-                    <div className="flex-shrink-0">
-                      <img
-                        src="/chase_logo.png"
-                        alt="Chase"
-                        className="w-8 h-8 object-contain rounded-full shadow-md"
-                      />
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {activeTab === 'timeline' && (
+                <div className="space-y-4">
+                  {loadingConversations ? (
+                    <div className="flex flex-col items-start w-full mb-4">
+                      <div className="flex items-start gap-2 max-w-[90%] justify-start">
+                        {/* Chase Logo */}
+                        <div className="flex-shrink-0">
+                          <img
+                            src="/chase_logo.png"
+                            alt="Chase"
+                            className="w-8 h-8 object-contain rounded-full shadow-md"
+                          />
+                        </div>
+                        {/* Message Bubble */}
+                        <div className={`px-4 py-3 rounded-lg ${isDarkMode ? 'bg-gray-700 text-gray-100' : 'bg-white text-black'} chatbot-bubble-shadow`}>
+                          <p className="text-sm leading-relaxed">
+                            Loading timeline...
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    {/* Message Bubble */}
-                    <div className={`px-4 py-3 rounded-lg ${isDarkMode ? 'bg-gray-700 text-gray-100' : 'bg-white text-black'} chatbot-bubble-shadow`}>
-                      <p className="text-sm leading-relaxed">
-                        Loading timeline...
-                      </p>
+                  ) : timeline.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Clock className={`w-12 h-12 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'} mx-auto mb-3`} />
+                      <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No timeline events yet</p>
                     </div>
-                  </div>
-                </div>
-              ) : timeline.length === 0 ? (
-                <div className="text-center py-12">
-                  <Clock className={`w-12 h-12 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'} mx-auto mb-3`} />
-                  <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No timeline events yet</p>
-                </div>
-              ) : (
-                <div className="relative">
-                  {timeline.map((event, index) => {
-                    const Icon = event.icon
-                    const isChaseMessage = event.type === 'lead_captured' || event.isChaseMessage
-                    
-                    if (isChaseMessage) {
-                      // Render Chase message as chatbot-style bubble
-                      return (
-                        <div key={index} className="flex flex-col items-start w-full mb-4">
-                          <div className="flex items-start gap-2 max-w-[90%] justify-start">
-                            {/* Chase Logo */}
-                            <div className="flex-shrink-0">
-                              <img
-                                src="/chase_logo.png"
-                                alt="Chase"
-                                className="w-8 h-8 object-contain rounded-full shadow-md"
-                              />
+                  ) : (
+                    <div className="relative">
+                      {timeline.map((event, index) => {
+                        const Icon = event.icon
+                        const isChaseMessage = event.type === 'lead_captured' || event.isChaseMessage
+
+                        if (isChaseMessage) {
+                          // Render Chase message as chatbot-style bubble
+                          return (
+                            <div key={index} className="flex flex-col items-start w-full mb-4">
+                              <div className="flex items-start gap-2 max-w-[90%] justify-start">
+                                {/* Chase Logo */}
+                                <div className="flex-shrink-0">
+                                  <img
+                                    src="/chase_logo.png"
+                                    alt="Chase"
+                                    className="w-8 h-8 object-contain rounded-full shadow-md"
+                                  />
+                                </div>
+                                {/* Message Bubble */}
+                                <div className={`px-4 py-3 rounded-lg ${isDarkMode ? 'bg-gray-700 text-gray-100' : 'bg-white text-black'} chatbot-bubble-shadow`}>
+                                  <p className="text-sm leading-relaxed">
+                                    {typeof event.description === 'object' ? (
+                                      <>
+                                        {event.description.text}
+                                        <strong>{event.description.boldPart}</strong>
+                                        {event.description.textAfter}
+                                        {event.description.boldMessage ? (
+                                          <div className={`mt-2 p-2 ${isDarkMode ? 'bg-gray-600 border-gray-500' : 'bg-gray-50 border-gray-200'} border rounded text-xs`}>
+                                            <div
+                                              className={isDarkMode ? 'text-gray-200' : 'text-gray-800'}
+                                              dangerouslySetInnerHTML={{ __html: event.description.boldMessage }}
+                                            />
+                                          </div>
+                                        ) : null}
+                                        {event.description.textAfter2}
+                                        {event.description.boldTime ? (
+                                          <strong>{event.description.boldTime}</strong>
+                                        ) : null}
+                                        {event.description.textEnd}
+                                      </>
+                                    ) : (
+                                      event.description
+                                    )}
+                                  </p>
+                                  {/* Show remarks content for remark-type Chase messages */}
+                                  {event.type === 'remark' && event.remarks && (
+                                    <div className={`mt-3 p-3 ${isDarkMode ? 'bg-gray-600 border-gray-500' : 'bg-gray-50 border-gray-200'} border rounded-lg`}>
+                                      <p className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'} font-medium`}>
+                                        {event.remarks}
+                                      </p>
+                                    </div>
+                                  )}
+                                  {event.timestamp && (
+                                    <div className="mt-2">
+                                      <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        {formatTimeAgo(event.timestamp)}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            {/* Message Bubble */}
-                            <div className={`px-4 py-3 rounded-lg ${isDarkMode ? 'bg-gray-700 text-gray-100' : 'bg-white text-black'} chatbot-bubble-shadow`}>
-                              <p className="text-sm leading-relaxed">
+                          )
+                        }
+
+                        // Render other timeline events in original style
+                        // Debug: log event data for status changes and remarks
+                        if ((event.type === 'status_change' || event.type === 'remark')) {
+                          console.log('Rendering timeline event:', {
+                            type: event.type,
+                            remarks: event.remarks,
+                            remarksText: event.remarksText,
+                            hasRemarks: !!(event.remarks || event.remarksText),
+                            fullEvent: event
+                          })
+                        }
+
+                        return (
+                          <div key={index} className="relative flex items-start space-x-4 mb-6">
+                            <div className={`relative z-10 w-8 h-8 rounded-full ${event.color} flex items-center justify-center flex-shrink-0`}>
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <div className={`flex-1 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gradient-to-r from-pink-50 to-purple-50 border-purple-200'} rounded-lg p-4 border`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <h4 className={`font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{event.title}</h4>
+                                <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(event.timestamp)}</span>
+                              </div>
+                              <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                                 {typeof event.description === 'object' ? (
                                   <>
                                     {event.description.text}
                                     <strong>{event.description.boldPart}</strong>
                                     {event.description.textAfter}
-                                    {event.description.boldMessage ? (
-                                      <div className={`mt-2 p-2 ${isDarkMode ? 'bg-gray-600 border-gray-500' : 'bg-gray-50 border-gray-200'} border rounded text-xs`}>
-                                        <div 
-                                          className={isDarkMode ? 'text-gray-200' : 'text-gray-800'}
-                                          dangerouslySetInnerHTML={{ __html: event.description.boldMessage }}
-                                        />
-                                      </div>
-                                    ) : null}
-                                    {event.description.textAfter2}
                                     {event.description.boldTime ? (
                                       <strong>{event.description.boldTime}</strong>
                                     ) : null}
@@ -1129,246 +1355,183 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                                   event.description
                                 )}
                               </p>
-                              {/* Show remarks content for remark-type Chase messages */}
+                              {/* Show remarks content for remark-type entries */}
                               {event.type === 'remark' && event.remarks && (
-                                <div className={`mt-3 p-3 ${isDarkMode ? 'bg-gray-600 border-gray-500' : 'bg-gray-50 border-gray-200'} border rounded-lg`}>
-                                  <p className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'} font-medium`}>
+                                <div className={`mt-3 p-3 ${isDarkMode ? 'bg-gray-800/50 border-gray-600' : 'bg-white/60 border-blue-200'} rounded-lg border`}>
+                                  <p className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'} font-medium`}>
                                     {event.remarks}
                                   </p>
                                 </div>
                               )}
-                              {event.timestamp && (
+                              {/* Show remarks for status changes if they exist */}
+                              {event.type === 'status_change' && event.remarksText && (
+                                <div className={`mt-3 p-3 ${isDarkMode ? 'bg-gray-800/50 border-gray-600' : 'bg-white/60 border-blue-200'} rounded-lg border`}>
+                                  <p className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'} font-medium`}>
+                                    {event.remarksText}
+                                  </p>
+                                </div>
+                              )}
+                              {event.status && (
                                 <div className="mt-2">
-                                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    {formatTimeAgo(event.timestamp)}
-                                  </div>
+                                  <span className={`text-xs px-2 py-1 rounded ${event.status === 'sent' ? 'bg-purple-100 text-purple-700' :
+                                    event.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                      event.status === 'read' ? 'bg-pink-100 text-pink-700' :
+                                        'bg-gray-100 text-gray-700'
+                                    }`}>
+                                    {event.status}
+                                  </span>
                                 </div>
                               )}
                             </div>
                           </div>
-                        </div>
-                      )
-                    }
-                    
-                    // Render other timeline events in original style
-                    // Debug: log event data for status changes and remarks
-                    if ((event.type === 'status_change' || event.type === 'remark')) {
-                      console.log('Rendering timeline event:', {
-                        type: event.type,
-                        remarks: event.remarks,
-                        remarksText: event.remarksText,
-                        hasRemarks: !!(event.remarks || event.remarksText),
-                        fullEvent: event
-                      })
-                    }
-                    
-                    return (
-                      <div key={index} className="relative flex items-start space-x-4 mb-6">
-                        <div className={`relative z-10 w-8 h-8 rounded-full ${event.color} flex items-center justify-center flex-shrink-0`}>
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        <div className={`flex-1 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gradient-to-r from-pink-50 to-purple-50 border-purple-200'} rounded-lg p-4 border`}>
-                          <div className="flex items-center justify-between mb-1">
-                            <h4 className={`font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{event.title}</h4>
-                            <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(event.timestamp)}</span>
-                          </div>
-                          <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {typeof event.description === 'object' ? (
-                              <>
-                                {event.description.text}
-                                <strong>{event.description.boldPart}</strong>
-                                {event.description.textAfter}
-                                {event.description.boldTime ? (
-                                  <strong>{event.description.boldTime}</strong>
-                                ) : null}
-                                {event.description.textEnd}
-                              </>
-                            ) : (
-                              event.description
-                            )}
-                          </p>
-                          {/* Show remarks content for remark-type entries */}
-                          {event.type === 'remark' && event.remarks && (
-                            <div className={`mt-3 p-3 ${isDarkMode ? 'bg-gray-800/50 border-gray-600' : 'bg-white/60 border-blue-200'} rounded-lg border`}>
-                              <p className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'} font-medium`}>
-                                {event.remarks}
-                              </p>
-                            </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'conversations' && (
+                <div className="space-y-6">
+                  {/* Send Message */}
+                  <div className={`${isDarkMode ? 'bg-gradient-to-r from-gray-700 to-gray-600 border-gray-600' : 'bg-gradient-to-r from-pink-50 to-purple-50 border-purple-200'} rounded-lg p-4 border`}>
+                    <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} mb-3`}>Send Message</h3>
+                    <div className="space-y-3">
+                      <textarea
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        placeholder="Type your message..."
+                        rows={3}
+                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100 placeholder-gray-400' : 'border-gray-300'}`}
+                      />
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleSendMessage('whatsapp')}
+                          disabled={sendingMessage || !newMessage.trim() || !lead.phone_number}
+                          className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                        >
+                          {sendingMessage ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <MessageSquare className="w-4 h-4" />
+                              <span>Send WhatsApp</span>
+                            </>
                           )}
-                          {/* Show remarks for status changes if they exist */}
-                          {event.type === 'status_change' && event.remarksText && (
-                            <div className={`mt-3 p-3 ${isDarkMode ? 'bg-gray-800/50 border-gray-600' : 'bg-white/60 border-blue-200'} rounded-lg border`}>
-                              <p className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'} font-medium`}>
-                                {event.remarksText}
-                              </p>
-                            </div>
+                        </button>
+                        <button
+                          onClick={() => handleSendMessage('email')}
+                          disabled={sendingMessage || !newMessage.trim() || !lead.email}
+                          className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                        >
+                          {sendingMessage ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <MailIcon className="w-4 h-4" />
+                              <span>Send Email</span>
+                            </>
                           )}
-                          {event.status && (
-                            <div className="mt-2">
-                              <span className={`text-xs px-2 py-1 rounded ${
-                                event.status === 'sent' ? 'bg-purple-100 text-purple-700' :
-                                event.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                                event.status === 'read' ? 'bg-pink-100 text-pink-700' :
-                                'bg-gray-100 text-gray-700'
-                              }`}>
-                                {event.status}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Email Conversations */}
+                  {emailConversations.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-normal text-white mb-4 flex items-center space-x-2">
+                        <MailIcon className="w-5 h-5" />
+                        <span>Email ({emailConversations.length})</span>
+                      </h3>
+                      <div className="space-y-3">
+                        {emailConversations.map((conv) => (
+                          <div
+                            key={conv.id}
+                            className={`p-4 rounded-lg border w-[90%] ${conv.sender === 'agent'
+                              ? `${isDarkMode ? 'bg-purple-900/30 border-purple-800' : 'bg-gradient-to-r from-pink-100 to-purple-100 border-purple-200'} ml-auto`
+                              : `${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} mr-auto`
+                              }`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                                {conv.sender === 'agent' ? 'You' : lead.name || 'Lead'}
                               </span>
+                              <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(conv.created_at)}</span>
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'conversations' && (
-            <div className="space-y-6">
-              {/* Send Message */}
-              <div className={`${isDarkMode ? 'bg-gradient-to-r from-gray-700 to-gray-600 border-gray-600' : 'bg-gradient-to-r from-pink-50 to-purple-50 border-purple-200'} rounded-lg p-4 border`}>
-                <h3 className={`text-sm font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} mb-3`}>Send Message</h3>
-                <div className="space-y-3">
-                  <textarea
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Type your message..."
-                    rows={3}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100 placeholder-gray-400' : 'border-gray-300'}`}
-                  />
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => handleSendMessage('whatsapp')}
-                      disabled={sendingMessage || !newMessage.trim() || !lead.phone_number}
-                      className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                    >
-                      {sendingMessage ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <MessageSquare className="w-4 h-4" />
-                          <span>Send WhatsApp</span>
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => handleSendMessage('email')}
-                      disabled={sendingMessage || !newMessage.trim() || !lead.email}
-                      className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                    >
-                      {sendingMessage ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <MailIcon className="w-4 h-4" />
-                          <span>Send Email</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Email Conversations */}
-              {emailConversations.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-normal text-white mb-4 flex items-center space-x-2">
-                    <MailIcon className="w-5 h-5" />
-                    <span>Email ({emailConversations.length})</span>
-                  </h3>
-                  <div className="space-y-3">
-                    {emailConversations.map((conv) => (
-                      <div
-                        key={conv.id}
-                        className={`p-4 rounded-lg border w-[90%] ${
-                          conv.sender === 'agent' 
-                            ? `${isDarkMode ? 'bg-purple-900/30 border-purple-800' : 'bg-gradient-to-r from-pink-100 to-purple-100 border-purple-200'} ml-auto` 
-                            : `${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} mr-auto`
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
-                            {conv.sender === 'agent' ? 'You' : lead.name || 'Lead'}
-                          </span>
-                          <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(conv.created_at)}</span>
-                        </div>
-                        <div 
-                          className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} email-content prose prose-sm max-w-none`}
-                          dangerouslySetInnerHTML={{ __html: parseEmailContent(conv.content) }}
-                          style={{
-                            wordWrap: 'break-word',
-                            overflowWrap: 'break-word',
-                            lineHeight: '1.6'
-                          }}
-                        />
-                        {conv.status && (
-                          <div className="mt-2">
-                            <span className={`text-xs px-2 py-1 rounded ${
-                              conv.status === 'sent' ? 'bg-purple-100 text-purple-700' :
-                              conv.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                              conv.status === 'read' ? 'bg-pink-100 text-pink-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {conv.status}
-                            </span>
+                            <div
+                              className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} email-content prose prose-sm max-w-none`}
+                              dangerouslySetInnerHTML={{ __html: parseEmailContent(conv.content) }}
+                              style={{
+                                wordWrap: 'break-word',
+                                overflowWrap: 'break-word',
+                                lineHeight: '1.6'
+                              }}
+                            />
+                            {conv.status && (
+                              <div className="mt-2">
+                                <span className={`text-xs px-2 py-1 rounded ${conv.status === 'sent' ? 'bg-purple-100 text-purple-700' :
+                                  conv.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                    conv.status === 'read' ? 'bg-pink-100 text-pink-700' :
+                                      'bg-gray-100 text-gray-700'
+                                  }`}>
+                                  {conv.status}
+                                </span>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    </div>
+                  )}
 
-              {/* WhatsApp Conversations */}
-              {whatsappConversations.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-normal text-white mb-4 flex items-center space-x-2">
-                    <MessageSquare className="w-5 h-5" />
-                    <span>WhatsApp ({whatsappConversations.length})</span>
-                  </h3>
-                  <div className="space-y-3">
-                    {whatsappConversations.map((conv) => (
-                      <div
-                        key={conv.id}
-                        className={`p-4 rounded-lg border w-[90%] ${
-                          conv.sender === 'agent' 
-                            ? `${isDarkMode ? 'bg-purple-900/30 border-purple-800' : 'bg-gradient-to-r from-pink-100 to-purple-100 border-purple-200'} ml-auto` 
-                            : `${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} mr-auto`
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
-                            {conv.sender === 'agent' ? 'You' : lead.name || 'Lead'}
-                          </span>
-                          <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(conv.created_at)}</span>
-                        </div>
-                        <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{conv.content}</p>
-                        {conv.status && (
-                          <div className="mt-2">
-                            <span className={`text-xs px-2 py-1 rounded ${
-                              conv.status === 'sent' ? 'bg-purple-100 text-purple-700' :
-                              conv.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                              conv.status === 'read' ? 'bg-pink-100 text-pink-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {conv.status}
-                            </span>
+                  {/* WhatsApp Conversations */}
+                  {whatsappConversations.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-normal text-white mb-4 flex items-center space-x-2">
+                        <MessageSquare className="w-5 h-5" />
+                        <span>WhatsApp ({whatsappConversations.length})</span>
+                      </h3>
+                      <div className="space-y-3">
+                        {whatsappConversations.map((conv) => (
+                          <div
+                            key={conv.id}
+                            className={`p-4 rounded-lg border w-[90%] ${conv.sender === 'agent'
+                              ? `${isDarkMode ? 'bg-purple-900/30 border-purple-800' : 'bg-gradient-to-r from-pink-100 to-purple-100 border-purple-200'} ml-auto`
+                              : `${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} mr-auto`
+                              }`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                                {conv.sender === 'agent' ? 'You' : lead.name || 'Lead'}
+                              </span>
+                              <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(conv.created_at)}</span>
+                            </div>
+                            <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{conv.content}</p>
+                            {conv.status && (
+                              <div className="mt-2">
+                                <span className={`text-xs px-2 py-1 rounded ${conv.status === 'sent' ? 'bg-purple-100 text-purple-700' :
+                                  conv.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                    conv.status === 'read' ? 'bg-pink-100 text-pink-700' :
+                                      'bg-gray-100 text-gray-700'
+                                  }`}>
+                                  {conv.status}
+                                </span>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    </div>
+                  )}
 
-              {conversations.length === 0 && !loadingConversations && (
-                <div className="text-center py-12">
-                  <MessageCircle className={`w-12 h-12 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'} mx-auto mb-3`} />
-                  <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No conversations yet</p>
-                </div>
-              )}
-              <style>{`
+                  {conversations.length === 0 && !loadingConversations && (
+                    <div className="text-center py-12">
+                      <MessageCircle className={`w-12 h-12 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'} mx-auto mb-3`} />
+                      <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No conversations yet</p>
+                    </div>
+                  )}
+                  <style>{`
                 .email-content p {
                   margin: 0.5rem 0;
                   color: ${isDarkMode ? '#D1D5DB' : '#374151'};
@@ -1420,245 +1583,244 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                   cursor: pointer;
                 }
               `}</style>
-            </div>
-          )}
-
-          {activeTab === 'email' && (
-            <div className="space-y-6">
-              {/* Email Generation Section */}
-              <div className={`${isDarkMode ? 'bg-gradient-to-r from-gray-700 to-gray-600 border-gray-600' : 'bg-gradient-to-r from-pink-50 to-purple-50 border-purple-200'} rounded-lg p-6 border`}>
-                <h3 className={`text-lg font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} mb-4 flex items-center space-x-2`}>
-                  <Sparkles className="w-5 h-5 text-purple-600" />
-                  <span>Generate Personalized Email</span>
-                </h3>
-                
-                {/* Template Selection */}
-                <div className="space-y-4">
-                  <div>
-                    <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                      Email Category
-                    </label>
-                    <select
-                      value={selectedCategory}
-                      onChange={(e) => {
-                        setSelectedCategory(e.target.value)
-                        setGeneratedEmail(null)
-                      }}
-                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100' : 'border-gray-300'}`}
-                    >
-                      <option value="general">General</option>
-                      <option value="welcome">Welcome</option>
-                      <option value="follow-up">Follow-up</option>
-                      <option value="product-inquiry">Product/Service Inquiry</option>
-                      <option value="pricing">Pricing Information</option>
-                      <option value="demo">Demo Request</option>
-                      <option value="support">Support</option>
-                      <option value="newsletter">Newsletter</option>
-                      <option value="promotional">Promotional</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                      Email Template
-                    </label>
-                    <select
-                      value={selectedTemplate}
-                      onChange={(e) => {
-                        setSelectedTemplate(e.target.value)
-                        setGeneratedEmail(null)
-                      }}
-                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100' : 'border-gray-300'}`}
-                    >
-                      {emailTemplates.map(template => (
-                        <option key={template.id} value={template.id}>
-                          {template.name} - {template.description}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Custom Prompt Toggle */}
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="useCustomPrompt"
-                      checked={useCustomPrompt}
-                      onChange={(e) => {
-                        setUseCustomPrompt(e.target.checked)
-                        setGeneratedEmail(null)
-                      }}
-                      className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                    />
-                    <label htmlFor="useCustomPrompt" className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                      Use Custom Prompt
-                    </label>
-                  </div>
-
-                  {/* Custom Prompt Input */}
-                  {useCustomPrompt && (
-                    <div>
-                      <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                        Custom Prompt Instructions
-                      </label>
-                      <textarea
-                        value={customPrompt}
-                        onChange={(e) => setCustomPrompt(e.target.value)}
-                        placeholder="Describe exactly what you want in the email, e.g., 'A friendly follow-up email asking about their interest in our premium plan, mentioning the 30-day free trial, and asking for a call to discuss their needs'"
-                        rows={4}
-                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100 placeholder-gray-400' : 'border-gray-300'}`}
-                      />
-                    </div>
-                  )}
-
-                  {/* Custom Template Input */}
-                  {selectedTemplate === 'custom' && (
-                    <div>
-                      <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                        Custom Template Instructions
-                      </label>
-                      <textarea
-                        value={customTemplate}
-                        onChange={(e) => setCustomTemplate(e.target.value)}
-                        placeholder="Describe the type of email you want to generate, e.g., 'A follow-up email about our premium service offering'"
-                        rows={4}
-                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100 placeholder-gray-400' : 'border-gray-300'}`}
-                      />
-                    </div>
-                  )}
-
-                  {/* Generate Button */}
-                  <button
-                    onClick={handleGenerateEmail}
-                    disabled={generatingEmail || (selectedTemplate === 'custom' && !customTemplate.trim()) || (useCustomPrompt && !customPrompt.trim()) || !lead.email}
-                    className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                  >
-                    {generatingEmail ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Generating...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-5 h-5" />
-                        <span>Generate Email</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Previous Emails Section */}
-              {previousEmails.length > 0 && !generatedEmail && (
-                <div className={`${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-6 border shadow-sm`}>
-                  <h3 className={`text-lg font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} mb-4 flex items-center space-x-2`}>
-                    <MailIcon className="w-5 h-5 text-purple-600" />
-                    <span>Use Previous Email as Template</span>
-                  </h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {previousEmails.map((email) => (
-                      <button
-                        key={email.id}
-                        onClick={() => handleUsePreviousEmail(email)}
-                        className={`w-full text-left p-3 rounded-lg border transition-all ${
-                          selectedPreviousEmail === email.id
-                            ? `${isDarkMode ? 'bg-purple-900/30 border-purple-500' : 'bg-purple-50 border-purple-300'}`
-                            : `${isDarkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} truncate`}>{email.subject}</p>
-                            <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-1 line-clamp-2`}>{email.body.replace(/<[^>]*>/g, '').substring(0, 100)}...</p>
-                          </div>
-                          <span className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-700'} ml-2`}>{new Date(email.date).toLocaleDateString()}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
                 </div>
               )}
 
-              {/* Generated Email Preview */}
-              {generatedEmail && (
-                <div className={`${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-6 border shadow-sm`}>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className={`text-lg font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} flex items-center space-x-2`}>
-                      <FileText className="w-5 h-5 text-purple-600" />
-                      <span>{isEditing ? 'Edit Email' : 'Email Preview'}</span>
+              {activeTab === 'email' && (
+                <div className="space-y-6">
+                  {/* Email Generation Section */}
+                  <div className={`${isDarkMode ? 'bg-gradient-to-r from-gray-700 to-gray-600 border-gray-600' : 'bg-gradient-to-r from-pink-50 to-purple-50 border-purple-200'} rounded-lg p-6 border`}>
+                    <h3 className={`text-lg font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} mb-4 flex items-center space-x-2`}>
+                      <Sparkles className="w-5 h-5 text-purple-600" />
+                      <span>Generate Personalized Email</span>
                     </h3>
-                    <div className="flex items-center space-x-2">
-                      {!isEditing && (
-                        <button
-                          onClick={() => {
-                            setIsEditing(true)
-                            setEditableSubject(generatedEmail.subject)
-                            setEditableBody(generatedEmail.body)
+
+                    {/* Template Selection */}
+                    <div className="space-y-4">
+                      <div>
+                        <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                          Email Category
+                        </label>
+                        <select
+                          value={selectedCategory}
+                          onChange={(e) => {
+                            setSelectedCategory(e.target.value)
+                            setGeneratedEmail(null)
                           }}
-                          className={`px-3 py-1.5 text-sm ${isDarkMode ? 'text-purple-400 hover:bg-purple-900/30 border-purple-800' : 'text-purple-600 hover:bg-purple-50 border-purple-200'} rounded-lg border`}
+                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100' : 'border-gray-300'}`}
                         >
-                          Edit
-                        </button>
+                          <option value="general">General</option>
+                          <option value="welcome">Welcome</option>
+                          <option value="follow-up">Follow-up</option>
+                          <option value="product-inquiry">Product/Service Inquiry</option>
+                          <option value="pricing">Pricing Information</option>
+                          <option value="demo">Demo Request</option>
+                          <option value="support">Support</option>
+                          <option value="newsletter">Newsletter</option>
+                          <option value="promotional">Promotional</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                          Email Template
+                        </label>
+                        <select
+                          value={selectedTemplate}
+                          onChange={(e) => {
+                            setSelectedTemplate(e.target.value)
+                            setGeneratedEmail(null)
+                          }}
+                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100' : 'border-gray-300'}`}
+                        >
+                          {emailTemplates.map(template => (
+                            <option key={template.id} value={template.id}>
+                              {template.name} - {template.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Custom Prompt Toggle */}
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="useCustomPrompt"
+                          checked={useCustomPrompt}
+                          onChange={(e) => {
+                            setUseCustomPrompt(e.target.checked)
+                            setGeneratedEmail(null)
+                          }}
+                          className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        />
+                        <label htmlFor="useCustomPrompt" className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          Use Custom Prompt
+                        </label>
+                      </div>
+
+                      {/* Custom Prompt Input */}
+                      {useCustomPrompt && (
+                        <div>
+                          <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                            Custom Prompt Instructions
+                          </label>
+                          <textarea
+                            value={customPrompt}
+                            onChange={(e) => setCustomPrompt(e.target.value)}
+                            placeholder="Describe exactly what you want in the email, e.g., 'A friendly follow-up email asking about their interest in our premium plan, mentioning the 30-day free trial, and asking for a call to discuss their needs'"
+                            rows={4}
+                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100 placeholder-gray-400' : 'border-gray-300'}`}
+                          />
+                        </div>
                       )}
+
+                      {/* Custom Template Input */}
+                      {selectedTemplate === 'custom' && (
+                        <div>
+                          <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                            Custom Template Instructions
+                          </label>
+                          <textarea
+                            value={customTemplate}
+                            onChange={(e) => setCustomTemplate(e.target.value)}
+                            placeholder="Describe the type of email you want to generate, e.g., 'A follow-up email about our premium service offering'"
+                            rows={4}
+                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100 placeholder-gray-400' : 'border-gray-300'}`}
+                          />
+                        </div>
+                      )}
+
+                      {/* Generate Button */}
                       <button
-                        onClick={() => {
-                          setGeneratedEmail(null)
-                          setEditableSubject('')
-                          setEditableBody('')
-                          setIsEditing(false)
-                        }}
-                        className={`${isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                        onClick={handleGenerateEmail}
+                        disabled={generatingEmail || (selectedTemplate === 'custom' && !customTemplate.trim()) || (useCustomPrompt && !customPrompt.trim()) || !lead.email}
+                        className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                       >
-                        <X className="w-5 h-5" />
+                        {generatingEmail ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>Generating...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-5 h-5" />
+                            <span>Generate Email</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <div>
-                      <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                        Subject
-                      </label>
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editableSubject}
-                          onChange={(e) => setEditableSubject(e.target.value)}
-                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100' : 'border-gray-300'}`}
-                          placeholder="Email subject"
-                        />
-                      ) : (
-                        <div className={`px-4 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-lg`}>
-                          {generatedEmail.subject}
-                        </div>
-                      )}
+                  {/* Previous Emails Section */}
+                  {previousEmails.length > 0 && !generatedEmail && (
+                    <div className={`${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-6 border shadow-sm`}>
+                      <h3 className={`text-lg font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} mb-4 flex items-center space-x-2`}>
+                        <MailIcon className="w-5 h-5 text-purple-600" />
+                        <span>Use Previous Email as Template</span>
+                      </h3>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {previousEmails.map((email) => (
+                          <button
+                            key={email.id}
+                            onClick={() => handleUsePreviousEmail(email)}
+                            className={`w-full text-left p-3 rounded-lg border transition-all ${selectedPreviousEmail === email.id
+                              ? `${isDarkMode ? 'bg-purple-900/30 border-purple-500' : 'bg-purple-50 border-purple-300'}`
+                              : `${isDarkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`
+                              }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} truncate`}>{email.subject}</p>
+                                <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-1 line-clamp-2`}>{email.body.replace(/<[^>]*>/g, '').substring(0, 100)}...</p>
+                              </div>
+                              <span className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-700'} ml-2`}>{new Date(email.date).toLocaleDateString()}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                  )}
 
-                    <div>
-                      <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                        Body
-                      </label>
-                      {isEditing ? (
-                        <textarea
-                          value={editableBody}
-                          onChange={(e) => setEditableBody(e.target.value)}
-                          rows={12}
-                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100' : 'border-gray-300'}`}
-                          placeholder="Email body (HTML supported)"
-                        />
-                      ) : (
-                        <div 
-                          className={`px-4 py-3 ${isDarkMode ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-white border-gray-200 text-gray-900'} border rounded-lg max-h-96 overflow-y-auto email-preview`}
-                          style={{ 
-                            lineHeight: '1.6',
-                            fontSize: '14px'
-                          }}
-                          dangerouslySetInnerHTML={{ 
-                            __html: generatedEmail.body || ''
-                          }}
-                        />
-                      )}
-                      <style>{`
+                  {/* Generated Email Preview */}
+                  {generatedEmail && (
+                    <div className={`${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-6 border shadow-sm`}>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className={`text-lg font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'} flex items-center space-x-2`}>
+                          <FileText className="w-5 h-5 text-purple-600" />
+                          <span>{isEditing ? 'Edit Email' : 'Email Preview'}</span>
+                        </h3>
+                        <div className="flex items-center space-x-2">
+                          {!isEditing && (
+                            <button
+                              onClick={() => {
+                                setIsEditing(true)
+                                setEditableSubject(generatedEmail.subject)
+                                setEditableBody(generatedEmail.body)
+                              }}
+                              className={`px-3 py-1.5 text-sm ${isDarkMode ? 'text-purple-400 hover:bg-purple-900/30 border-purple-800' : 'text-purple-600 hover:bg-purple-50 border-purple-200'} rounded-lg border`}
+                            >
+                              Edit
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setGeneratedEmail(null)
+                              setEditableSubject('')
+                              setEditableBody('')
+                              setIsEditing(false)
+                            }}
+                            className={`${isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                            Subject
+                          </label>
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editableSubject}
+                              onChange={(e) => setEditableSubject(e.target.value)}
+                              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100' : 'border-gray-300'}`}
+                              placeholder="Email subject"
+                            />
+                          ) : (
+                            <div className={`px-4 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-lg`}>
+                              {generatedEmail.subject}
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                            Body
+                          </label>
+                          {isEditing ? (
+                            <textarea
+                              value={editableBody}
+                              onChange={(e) => setEditableBody(e.target.value)}
+                              rows={12}
+                              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm ${isDarkMode ? 'border-gray-500 bg-gray-600 text-gray-100' : 'border-gray-300'}`}
+                              placeholder="Email body (HTML supported)"
+                            />
+                          ) : (
+                            <div
+                              className={`px-4 py-3 ${isDarkMode ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-white border-gray-200 text-gray-900'} border rounded-lg max-h-96 overflow-y-auto email-preview`}
+                              style={{
+                                lineHeight: '1.6',
+                                fontSize: '14px'
+                              }}
+                              dangerouslySetInnerHTML={{
+                                __html: generatedEmail.body || ''
+                              }}
+                            />
+                          )}
+                          <style>{`
                         .email-preview p {
                           margin: 0.75rem 0;
                           color: ${isDarkMode ? '#D1D5DB' : '#374151'};
@@ -1685,87 +1847,87 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                           line-height: 1.6;
                         }
                       `}</style>
-                    </div>
+                        </div>
 
-                    {isEditing && (
-                      <div className="flex space-x-3">
-                        <button
-                          onClick={handleSaveEdits}
-                          className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 shadow-md"
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                          <span>Save Changes</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setIsEditing(false)
-                            setEditableSubject(generatedEmail.subject)
-                            setEditableBody(generatedEmail.body)
-                          }}
-                          className={`px-4 py-2 border rounded-lg ${isDarkMode ? 'border-gray-500 text-gray-300 hover:bg-gray-600' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="flex space-x-3 pt-4">
-                      <button
-                        onClick={handleSendGeneratedEmail}
-                        disabled={sendingEmail || (isEditing && (!editableSubject || !editableBody))}
-                        className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                      >
-                        {sendingEmail ? (
-                          <>
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            <span>Sending...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-5 h-5" />
-                            <span>Send Email</span>
-                          </>
+                        {isEditing && (
+                          <div className="flex space-x-3">
+                            <button
+                              onClick={handleSaveEdits}
+                              className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 shadow-md"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              <span>Save Changes</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsEditing(false)
+                                setEditableSubject(generatedEmail.subject)
+                                setEditableBody(generatedEmail.body)
+                              }}
+                              className={`px-4 py-2 border rounded-lg ${isDarkMode ? 'border-gray-500 text-gray-300 hover:bg-gray-600' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         )}
-                      </button>
-                      {!isEditing && (
-                        <button
-                          onClick={handleGenerateEmail}
-                          disabled={generatingEmail}
-                          className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                        >
-                          {generatingEmail ? (
-                            <>
-                              <Loader2 className="w-5 h-5 animate-spin" />
-                              <span>Regenerating...</span>
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCw className="w-5 h-5" />
-                              <span>Regenerate</span>
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
 
-              {/* No Email Generated State */}
-              {!generatedEmail && (
-                <div className={`text-center py-12 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'} rounded-lg border`}>
-                  <MailIcon className={`w-16 h-16 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'} mx-auto mb-4`} />
-                  <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mb-2`}>No email generated yet</p>
-                  <p className={`text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-700'}`}>Select a template and click "Generate Email" to create a personalized email for this lead</p>
+                        <div className="flex space-x-3 pt-4">
+                          <button
+                            onClick={handleSendGeneratedEmail}
+                            disabled={sendingEmail || (isEditing && (!editableSubject || !editableBody))}
+                            className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                          >
+                            {sendingEmail ? (
+                              <>
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <span>Sending...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="w-5 h-5" />
+                                <span>Send Email</span>
+                              </>
+                            )}
+                          </button>
+                          {!isEditing && (
+                            <button
+                              onClick={handleGenerateEmail}
+                              disabled={generatingEmail}
+                              className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                            >
+                              {generatingEmail ? (
+                                <>
+                                  <Loader2 className="w-5 h-5 animate-spin" />
+                                  <span>Regenerating...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="w-5 h-5" />
+                                  <span>Regenerate</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* No Email Generated State */}
+                  {!generatedEmail && (
+                    <div className={`text-center py-12 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'} rounded-lg border`}>
+                      <MailIcon className={`w-16 h-16 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'} mx-auto mb-4`} />
+                      <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mb-2`}>No email generated yet</p>
+                      <p className={`text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-700'}`}>Select a template and click "Generate Email" to create a personalized email for this lead</p>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
             </div>
           </div>
         </div>
       </div>
-      
+
       <style>{`
         .chatbot-bubble-shadow {
           box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);

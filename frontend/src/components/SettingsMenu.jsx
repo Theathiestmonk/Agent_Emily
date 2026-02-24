@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, CreditCard, User, Download, Moon, Sun, Settings } from 'lucide-react'
+import { X, CreditCard, User, Download, Moon, Sun, Settings, Share2, ExternalLink } from 'lucide-react'
 import { socialMediaService } from '../services/socialMedia'
 import { connectionsAPI } from '../services/connections'
 import { fetchAllConnections } from '../services/fetchConnections'
@@ -68,19 +68,19 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
   const startStatusPolling = (platformId, maxAttempts = 30) => {
     // Stop any existing polling
     stopStatusPolling()
-    
+
     let attempts = 0
-    
+
     const poll = async () => {
       attempts++
-      
+
       try {
         // Force refresh to get latest status
         const updatedConnections = await fetchConnections(true)
         const isNowConnected = updatedConnections.some(
           conn => conn.platform === platformId && conn.connection_status === 'active'
         )
-        
+
         if (isNowConnected) {
           // Connection successful, stop polling
           stopStatusPolling()
@@ -88,7 +88,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
           setLoading(false)
           return
         }
-        
+
         // If max attempts reached, stop polling
         if (attempts >= maxAttempts) {
           stopStatusPolling()
@@ -104,11 +104,11 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
         setLoading(false)
       }
     }
-    
+
     // Start polling every 2 seconds
     const interval = setInterval(poll, 2000)
     pollingIntervalRef.current = interval
-    
+
     // Initial check
     poll()
   }
@@ -166,11 +166,11 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
   const fetchBillingData = async () => {
     try {
       setBillingLoading(true)
-      
+
       // Fetch subscription status
       const statusResponse = await subscriptionAPI.getSubscriptionStatus()
       setSubscriptionStatus(statusResponse.data)
-      
+
       // Fetch billing history
       const historyResponse = await subscriptionAPI.getBillingHistory()
       setBillingHistory(historyResponse.data.billing_history || [])
@@ -252,23 +252,23 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
       const { connectionsCache } = await import('../services/connectionsCache')
       connectionsCache.clearCache()
       await fetchConnections(true)
-      
+
       // If we have a selected platform, start polling for it
       if (selectedPlatform) {
         startStatusPolling(selectedPlatform)
       }
     }
-    
+
     const handleOAuthError = (event) => {
       console.log('OAuth error event received:', event.detail)
       stopStatusPolling()
       setLoading(false)
       setSelectedPlatform('')
     }
-    
+
     window.addEventListener('oauthSuccess', handleOAuthSuccess)
     window.addEventListener('oauthError', handleOAuthError)
-    
+
     return () => {
       window.removeEventListener('oauthSuccess', handleOAuthSuccess)
       window.removeEventListener('oauthError', handleOAuthError)
@@ -281,7 +281,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
 
   const handleToggle = async (platformId) => {
     const isConnected = isPlatformConnected(platformId)
-    
+
     if (isConnected) {
       // Disconnect
       await handleDisconnect(platformId)
@@ -297,7 +297,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
     try {
       setLoading(true)
       setSelectedPlatform(platformId)
-      
+
       if (platformId === 'google') {
         console.log('Connecting to Google...')
         await handleGoogleConnect()
@@ -331,10 +331,10 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
     try {
       setLoading(true)
       setSelectedPlatform(platformId)
-      
+
       // Find the connection
       const connection = connections.find(conn => conn.platform === platformId && conn.connection_status === 'active')
-      
+
       if (!connection) {
         throw new Error('Connection not found')
       }
@@ -343,10 +343,10 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
         // Handle Google disconnect
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
         const baseUrl = API_BASE_URL.replace(/\/+$/, '')
-        const authToken = localStorage.getItem('authToken') || 
-                          localStorage.getItem('token') || 
-                          localStorage.getItem('access_token')
-        
+        const authToken = localStorage.getItem('authToken') ||
+          localStorage.getItem('token') ||
+          localStorage.getItem('access_token')
+
         const response = await fetch(`${baseUrl}/connections/google/disconnect`, {
           method: 'GET',
           headers: {
@@ -354,7 +354,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
             ...(authToken && { 'Authorization': `Bearer ${authToken}` })
           }
         })
-        
+
         const data = await response.json()
         if (!data.success) {
           throw new Error('Failed to disconnect Google')
@@ -364,8 +364,8 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
         const baseUrl = API_BASE_URL.replace(/\/+$/, '')
         const authToken = localStorage.getItem('authToken') ||
-                          localStorage.getItem('token') ||
-                          localStorage.getItem('access_token')
+          localStorage.getItem('token') ||
+          localStorage.getItem('access_token')
 
         const response = await fetch(`${baseUrl}/connections/whatsapp/disconnect`, {
           method: 'DELETE',
@@ -382,10 +382,10 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
         // Handle WordPress disconnect
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
         const baseUrl = API_BASE_URL.replace(/\/+$/, '')
-        const authToken = localStorage.getItem('authToken') || 
-                          localStorage.getItem('token') || 
-                          localStorage.getItem('access_token')
-        
+        const authToken = localStorage.getItem('authToken') ||
+          localStorage.getItem('token') ||
+          localStorage.getItem('access_token')
+
         const response = await fetch(`${baseUrl}/connections/platform/wordpress/delete/${connection.id}`, {
           method: 'DELETE',
           headers: {
@@ -393,7 +393,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
             ...(authToken && { 'Authorization': `Bearer ${authToken}` })
           }
         })
-        
+
         if (!response.ok) {
           throw new Error('Failed to disconnect WordPress')
         }
@@ -405,7 +405,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
           throw new Error('Connection ID not found')
         }
       }
-      
+
       // Clear cache and refresh connections
       const { connectionsCache } = await import('../services/connectionsCache')
       connectionsCache.clearCache()
@@ -435,13 +435,13 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
       const baseUrl = API_BASE_URL.replace(/\/+$/, '')
-      
+
       // Get auth token from Supabase session for better reliability
       const { data: { session } } = await supabase.auth.getSession()
-      const authToken = session?.access_token || 
-                        localStorage.getItem('authToken') || 
-                        localStorage.getItem('token') || 
-                        localStorage.getItem('access_token')
+      const authToken = session?.access_token ||
+        localStorage.getItem('authToken') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('access_token')
 
       const headers = {
         'Content-Type': 'application/json',
@@ -453,22 +453,22 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
         headers
       })
       const reconnectData = await response.json()
-      
+
       if (reconnectData.success && reconnectData.auth_url) {
         // Update the popup location
         popup.location.href = reconnectData.auth_url
-        
+
         const messageHandler = (event) => {
           const allowedOrigins = [
             window.location.origin,
             'https://emily.atsnai.com',
             'https://agent-emily.onrender.com'
           ]
-          
+
           if (!allowedOrigins.includes(event.origin)) {
             return
           }
-          
+
           if (event.data.type === 'OAUTH_SUCCESS') {
             popup.close()
             window.removeEventListener('message', messageHandler)
@@ -482,9 +482,9 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
             setSelectedPlatform('')
           }
         }
-        
+
         window.addEventListener('message', messageHandler)
-        
+
         const checkClosed = setInterval(() => {
           if (popup.closed) {
             clearInterval(checkClosed)
@@ -530,11 +530,11 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
 
       // Get auth token from Supabase session for better reliability
       const { data: { session } } = await supabase.auth.getSession()
-      const authToken = session?.access_token || 
-                        localStorage.getItem('authToken') || 
-                        localStorage.getItem('token') || 
-                        localStorage.getItem('access_token')
-      
+      const authToken = session?.access_token ||
+        localStorage.getItem('authToken') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('access_token')
+
       console.log('Auth token found:', !!authToken)
 
       const headers = {
@@ -629,386 +629,361 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
         className="fixed inset-0 bg-black bg-opacity-50 z-50 transition-opacity"
         onClick={onClose}
       />
-      
+
       {/* Settings Panel */}
       <div
-        className={`fixed top-0 left-0 h-full w-[600px] shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
-          isDarkMode
-            ? 'bg-gray-800 border-r border-gray-700'
-            : 'bg-white'
-        } ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed top-0 left-0 h-full w-[640px] shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${isDarkMode
+          ? 'bg-[#1a1a1a] border-r border-white/[0.05]'
+          : 'bg-white'
+          } ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* Header */}
-        <div className={`p-4 border-b flex items-center justify-between ${
-          isDarkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200'
-        }`}>
-          <h2 className={`text-lg font-bold ${
-            isDarkMode ? 'text-gray-100' : 'text-gray-900'
-          }`}>Settings</h2>
+        <div className={`px-6 py-5 border-b flex items-center justify-between ${isDarkMode ? 'border-white/[0.05]' : 'border-black/[0.05]'
+          }`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-black/[0.05]'
+              }`}>
+              <Settings className={`w-4 h-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`} />
+            </div>
+            <h2 className={`text-[17px] font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'
+              }`}>Settings</h2>
+          </div>
           <button
             onClick={onClose}
-            className={`p-1 rounded transition-colors ${
-              isDarkMode
-                ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`p-2 rounded-lg transition-all ${isDarkMode
+              ? 'text-slate-400 hover:text-white hover:bg-white/5'
+              : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'
+              }`}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Two Column Content */}
-        <div className="flex h-[calc(100vh-64px)] overflow-hidden">
+        <div className="flex flex-1 overflow-hidden">
           {/* Left Column - Tabs */}
-          <div className={`w-1/3 border-r overflow-y-auto ${
-            isDarkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200'
-          }`}>
-            <div className="p-2">
-              <button
-                onClick={() => {
-                  setActiveTab('profile')
-                  fetchProfile()
-                }}
-                className={`w-full flex items-center p-3 mb-2 rounded-lg transition-colors ${
-                  activeTab === 'profile'
-                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
-                    : isDarkMode
-                    ? 'text-gray-300 hover:bg-gray-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <User className="w-4 h-4 mr-2" />
-                <span className="text-sm font-medium">Profile</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('tools')}
-                className={`w-full flex items-center p-3 mb-2 rounded-lg transition-colors ${
-                  activeTab === 'tools'
-                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
-                    : isDarkMode
-                    ? 'text-gray-300 hover:bg-gray-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <span className="text-sm font-medium">Connections</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('billing')}
-                className={`w-full flex items-center p-3 mb-2 rounded-lg transition-colors ${
-                  activeTab === 'billing'
-                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
-                    : isDarkMode
-                    ? 'text-gray-300 hover:bg-gray-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <CreditCard className="w-4 h-4 mr-2" />
-                <span className="text-sm font-medium">Billing</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('preferences')}
-                className={`w-full flex items-center p-3 mb-2 rounded-lg transition-colors ${
-                  activeTab === 'preferences'
-                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
-                    : isDarkMode
-                    ? 'text-gray-300 hover:bg-gray-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <Settings className="w-4 h-4 mr-2" />
-                <span className="text-sm font-medium">Preferences</span>
-              </button>
+          <div className={`w-48 xl:w-56 border-r flex flex-col p-4 ${isDarkMode ? 'border-white/[0.05] bg-[#161616]' : 'border-black/[0.05] bg-slate-50/50'
+            }`}>
+            <div className="space-y-1">
+              {[
+                { id: 'profile', name: 'Identity', icon: User },
+                { id: 'tools', name: 'Connections', icon: Share2 },
+                { id: 'billing', name: 'Subscription', icon: CreditCard },
+                { id: 'preferences', name: 'Appearance', icon: Settings },
+              ].map((tab) => {
+                const Icon = tab.icon || Settings
+                const isActive = activeTab === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveTab(tab.id)
+                      if (tab.id === 'profile') fetchProfile()
+                      if (tab.id === 'billing') fetchBillingData()
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md transition-all text-[13px] font-medium ${isActive
+                      ? isDarkMode
+                        ? 'bg-white/10 text-white shadow-sm'
+                        : 'bg-white border border-black/[0.08] text-slate-900 shadow-sm'
+                      : isDarkMode
+                        ? 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/50'
+                      }`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${isActive ? (isDarkMode ? 'text-white' : 'text-slate-900') : 'text-slate-400'}`} />
+                    {tab.name}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
           {/* Right Column - Tab Content */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className={`flex-1 overflow-y-auto p-8 custom-scrollbar ${isDarkMode ? 'dark-mode' : 'light-mode bg-[#fbfbfa]'}`}>
             {activeTab === 'profile' && (
-              <div>
-                <h3 className={`text-sm font-semibold mb-4 ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                }`}>Profile</h3>
+              <div className="animate-slide-in-up">
+                <div className="flex items-center justify-between mb-8 pb-4 border-b border-black/[0.04]">
+                  <div>
+                    <h3 className={`text-[17px] font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Identity</h3>
+                    <p className={`text-[13px] mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Manage your public profile and business info.</p>
+                  </div>
+                </div>
+
                 {profileLoading ? (
-                  <div className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}>Loading profile...</div>
+                  <div className="flex items-center gap-3 py-12 justify-center">
+                    <div className="w-5 h-5 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
+                    <span className="text-sm text-slate-500">Loading profile...</span>
+                  </div>
                 ) : profile ? (
-                  <div className="space-y-4">
+                  <div className="space-y-8">
                     {/* Basic Information */}
-                    <div className="space-y-3">
-                      {profile.name && (
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 mb-1">Name</div>
-                          <div className={`text-sm ${
-                            isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                          }`}>{profile.name}</div>
-                        </div>
-                      )}
-                      {user?.email && (
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 mb-1">Email</div>
-                          <div className={`text-sm ${
-                            isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                          }`}>{user.email}</div>
-                        </div>
-                      )}
-                      {profile.business_name && (
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 mb-1">Business Name</div>
-                          <div className={`text-sm ${
-                            isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                          }`}>{profile.business_name}</div>
-                        </div>
-                      )}
-                      {profile.business_description && (
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 mb-1">Business Description</div>
-                          <div className={`text-sm ${!isDescriptionExpanded ? 'line-clamp-15' : ''} ${
-                            isDarkMode ? 'text-gray-200' : 'text-gray-900'
+                    <div className="grid grid-cols-1 gap-8">
+                      <div className="group">
+                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Display Name</label>
+                        <div className={`text-[14px] font-medium px-4 py-3 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/10 text-white' : 'bg-white border-black/[0.06] text-slate-900 shadow-sm'
                           }`}>
-                            {profile.business_description}
-                          </div>
-                          {(profile.business_description.length > 750 || profile.business_description.split('\n').length > 15) && (
+                          {profile.name || 'Not set'}
+                        </div>
+                      </div>
+
+                      <div className="group">
+                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Email Address</label>
+                        <div className={`text-[14px] font-medium px-4 py-3 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/10 text-white' : 'bg-white border-black/[0.06] text-slate-900 shadow-sm'
+                          }`}>
+                          {user?.email || 'Not set'}
+                        </div>
+                      </div>
+
+                      <div className="group">
+                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Business Name</label>
+                        <div className={`text-[14px] font-medium px-4 py-3 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/10 text-white' : 'bg-white border-black/[0.06] text-slate-900 shadow-sm'
+                          }`}>
+                          {profile.business_name || 'Not set'}
+                        </div>
+                      </div>
+
+                      <div className="group">
+                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Business Description</label>
+                        <div className={`text-[14px] leading-relaxed px-4 py-3 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/10 text-slate-200' : 'bg-white border-black/[0.06] text-slate-600 shadow-sm'
+                          }`}>
+                          <p className={!isDescriptionExpanded ? 'line-clamp-4' : ''}>
+                            {profile.business_description || 'No description provided.'}
+                          </p>
+                          {(profile.business_description?.length > 200) && (
                             <button
                               onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
-                              className="text-xs text-purple-600 hover:text-purple-700 mt-1 font-medium"
+                              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 mt-2 uppercase tracking-wider"
                             >
-                              {isDescriptionExpanded ? 'See less' : 'See more'}
+                              {isDescriptionExpanded ? 'Show Less' : 'Read More'}
                             </button>
                           )}
                         </div>
-                      )}
-                      {profile.industry && Array.isArray(profile.industry) && profile.industry.length > 0 && (
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 mb-1">Industry</div>
-                          <div className={`text-sm ${
-                            isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                          }`}>{profile.industry.join(', ')}</div>
-                        </div>
-                      )}
+                      </div>
                     </div>
-                    
+
                     {/* Action Button */}
-                    <div className={`pt-4 border-t ${
-                      isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                    }`}>
+                    <div className="pt-6">
                       <button
                         onClick={() => setIsEditModalOpen(true)}
-                        className={`w-full flex items-center justify-center p-3 border rounded-lg transition-colors ${
-                          isDarkMode
-                            ? 'border-gray-600 hover:bg-gray-700 text-gray-200'
-                            : 'border-gray-200 hover:bg-gray-50 text-gray-900'
-                        }`}
+                        className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all shadow-sm ${isDarkMode
+                          ? 'bg-white text-slate-900 hover:bg-slate-100'
+                          : 'bg-slate-900 text-white hover:bg-slate-800'
+                          }`}
                       >
-                        <span className="text-sm font-medium">Edit Profile</span>
+                        <User className="w-4 h-4" /> Edit Profile
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}>No profile data available</div>
+                  <div className="text-center py-12">
+                    <p className="text-sm text-slate-500">No profile data available</p>
+                  </div>
                 )}
               </div>
             )}
 
             {activeTab === 'tools' && (
-              <div>
-                <h3 className={`text-sm font-semibold mb-4 ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                }`}>Connections</h3>
-                
-                 {/* All Platforms as Toggle Switches */}
-                 <div className="space-y-3">
-                   {platforms.map((platform) => {
-                     const isConnected = isPlatformConnected(platform.id)
-                     const isSelected = selectedPlatform === platform.id
-                     const connection = connections.find(conn => 
-                       conn.platform?.toLowerCase() === platform.id.toLowerCase()
-                     )
-                     const pageName = connection?.page_name || connection?.page_username || connection?.site_name || connection?.wordpress_site_name
-                     
-                     return (
-                       <div
-                         key={platform.id}
-                         className="flex items-center justify-between py-2"
-                       >
-                         <span className={`text-sm font-medium ${
-                           isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                         }`}>
-                           {platform.name}
-                           {isConnected && pageName && (
-                             <span className={`font-normal ml-1 ${
-                               isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                             }`}>({pageName})</span>
-                           )}
-                         </span>
-                         <div className="flex items-center">
-                           {loading && isSelected && (
-                             <span className="mr-3 text-xs text-gray-500">
-                               {isConnected ? 'Disconnecting...' : 'Connecting...'}
-                             </span>
-                           )}
-                           {/* Toggle Switch */}
-                           <div 
-                             className="relative inline-block w-12 h-6 cursor-pointer"
-                             onClick={() => !loading && handleToggle(platform.id)}
-                           >
-                             <div
-                               className={`relative w-full h-full rounded-full transition-all duration-300 ${
-                                 isConnected
-                                   ? 'bg-green-500'
-                                   : 'bg-gray-300'
-                               }`}
-                             >
-                               <div
-                                 className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 ${
-                                   isConnected
-                                     ? 'transform translate-x-6'
-                                     : 'transform translate-x-0'
-                                 }`}
-                               />
-                             </div>
-                           </div>
-                         </div>
-                       </div>
-                     )
-                   })}
-                 </div>
-
-                {/* Show message if loading */}
-                {loading && platforms.length === 0 && (
-                  <div className="text-sm text-gray-500 text-center py-8">
-                    Loading platforms...
+              <div className="animate-slide-in-up">
+                <div className="flex items-center justify-between mb-8 pb-4 border-b border-black/[0.04]">
+                  <div>
+                    <h3 className={`text-[17px] font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Connections</h3>
+                    <p className={`text-[13px] mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Sync Emily with your social accounts.</p>
                   </div>
-                )}
+                </div>
+
+                <div className="space-y-4">
+                  {platforms.map((platform) => {
+                    const isConnected = isPlatformConnected(platform.id)
+                    const isSelected = selectedPlatform === platform.id
+                    const connection = connections.find(conn =>
+                      conn.platform?.toLowerCase() === platform.id.toLowerCase()
+                    )
+                    const pageName = connection?.page_name || connection?.page_username || connection?.site_name || connection?.wordpress_site_name
+
+                    if (platform.id === 'google') {
+                      return (
+                        <div
+                          key={platform.id}
+                          className={`group flex items-center justify-between p-4 rounded-xl border transition-all ${isConnected
+                            ? (isDarkMode ? 'bg-white/5 border-white/10 shadow-sm' : 'bg-white border-black/[0.06] shadow-sm')
+                            : (isDarkMode ? 'bg-transparent border-white/[0.05]' : 'bg-transparent border-transparent')
+                            }`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-[10px] font-bold uppercase ${isConnected
+                              ? (isDarkMode ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-600 text-white shadow-sm')
+                              : (isDarkMode ? 'bg-white/5 text-slate-500' : 'bg-slate-100 text-slate-400')
+                              }`}>
+                              GD
+                            </div>
+                            <div className="flex flex-col">
+                              <p className={`text-[14px] font-semibold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                                Google Drive
+                              </p>
+                              {isConnected ? (
+                                <p className="text-[11px] text-emerald-500 font-bold flex items-center gap-1 mt-0.5">
+                                  <span>✅</span> Connected to Google
+                                </p>
+                              ) : (
+                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">Automate your content sync</p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {isConnected ? (
+                              <button
+                                onClick={() => window.open('https://drive.google.com/drive/my-drive', '_blank')}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-widest transition-all ${isDarkMode
+                                  ? 'bg-white/5 text-white border border-white/10 hover:bg-white/10'
+                                  : 'bg-slate-50 text-slate-700 border border-black/[0.05] hover:bg-slate-100 shadow-sm'
+                                  }`}
+                              >
+                                <ExternalLink className="w-3 h-3" /> Open Drive
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => window.location.href = 'https://agent-emily.onrender.com/connections/google'}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-[11px] font-bold uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95"
+                              >
+                                Connect Google Drive
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div
+                        key={platform.id}
+                        className={`group flex items-center justify-between p-4 rounded-xl border transition-all ${isConnected
+                          ? (isDarkMode ? 'bg-white/5 border-white/10 shadow-sm' : 'bg-white border-black/[0.06] shadow-sm')
+                          : (isDarkMode ? 'bg-transparent border-white/[0.05]' : 'bg-transparent border-transparent')
+                          }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-[10px] font-bold uppercase ${isConnected
+                            ? (isDarkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-900 text-white')
+                            : (isDarkMode ? 'bg-white/5 text-slate-500' : 'bg-slate-100 text-slate-400')
+                            }`}>
+                            {platform.id.substring(0, 2)}
+                          </div>
+                          <div>
+                            <p className={`text-[14px] font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                              {platform.name}
+                            </p>
+                            {isConnected && pageName && (
+                              <p className="text-[11px] text-slate-500 font-medium">{pageName}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          {loading && isSelected && (
+                            <div className="w-4 h-4 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
+                          )}
+                          <div
+                            className="relative inline-block w-10 h-5 cursor-pointer"
+                            onClick={() => !loading && handleToggle(platform.id)}
+                          >
+                            <div
+                              className={`relative w-full h-full rounded-full transition-all duration-300 ${isConnected
+                                ? (isDarkMode ? 'bg-indigo-500' : 'bg-slate-900')
+                                : (isDarkMode ? 'bg-white/10' : 'bg-slate-200')
+                                }`}
+                            >
+                              <div
+                                className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 ${isConnected
+                                  ? 'transform translate-x-5'
+                                  : 'transform translate-x-0'
+                                  }`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
 
             {activeTab === 'billing' && (
-              <div>
-                <h3 className={`text-sm font-semibold mb-4 ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                }`}>Billing</h3>
+              <div className="animate-slide-in-up">
+                <div className="flex items-center justify-between mb-8 pb-4 border-b border-black/[0.04]">
+                  <div>
+                    <h3 className={`text-[17px] font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Subscription</h3>
+                    <p className={`text-[13px] mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Manage your plan and billing details.</p>
+                  </div>
+                </div>
+
                 {billingLoading ? (
-                  <div className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}>Loading billing information...</div>
+                  <div className="flex items-center gap-3 py-12 justify-center">
+                    <div className="w-5 h-5 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
+                    <span className="text-sm text-slate-500">Loading billing...</span>
+                  </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-8">
                     {/* Current Plan */}
                     {subscriptionStatus && (
-                      <div className={`p-4 rounded-lg ${
-                        isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
-                      }`}>
-                        <h4 className={`text-xs font-medium mb-3 uppercase ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                        }`}>Current Plan</h4>
-                        <div className="space-y-2">
-                          <div>
-                            <div className="text-xs text-gray-500 mb-1">Plan</div>
-                            <div className={`text-sm font-medium capitalize ${
-                              isDarkMode ? 'text-gray-200' : 'text-gray-900'
+                      <div className={`p-6 rounded-2xl border ${isDarkMode ? 'bg-white/5 border-white/10 shadow-lg' : 'bg-white border-black/[0.06] shadow-md'
+                        }`}>
+                        <div className="flex items-center justify-between mb-6">
+                          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Active Plan</label>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${subscriptionStatus.status === 'active'
+                            ? 'bg-emerald-50 text-emerald-600'
+                            : 'bg-amber-50 text-amber-600'
                             }`}>
-                              {subscriptionStatus.plan || 'No active plan'}
-                            </div>
+                            {subscriptionStatus.status || 'Unknown'}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1 mb-8">
+                          <h4 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                            {subscriptionStatus.plan || 'Free Tier'}
+                          </h4>
+                          <p className="text-[13px] text-slate-500">Billed {subscriptionStatus.billing_cycle || 'monthly'}.</p>
+                        </div>
+
+                        <div className={`pt-6 border-t ${isDarkMode ? 'border-white/5' : 'border-black/[0.04]'} space-y-4`}>
+                          <div className="flex justify-between text-[13px]">
+                            <span className="text-slate-500">Renews on</span>
+                            <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{formatDate(subscriptionStatus.subscription_end_date)}</span>
                           </div>
-                          {subscriptionStatus.status && (
-                            <div>
-                              <div className={`text-xs mb-1 ${
-                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                              }`}>Status</div>
-                              <div className={`text-sm font-medium capitalize ${
-                                isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                              }`}>
-                                {subscriptionStatus.status}
-                              </div>
-                            </div>
-                          )}
-                          {subscriptionStatus.billing_cycle && (
-                            <div>
-                              <div className={`text-xs mb-1 ${
-                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                              }`}>Billing Cycle</div>
-                              <div className={`text-sm font-medium capitalize ${
-                                isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                              }`}>
-                                {subscriptionStatus.billing_cycle}
-                              </div>
-                            </div>
-                          )}
-                          {subscriptionStatus.subscription_end_date && (
-                            <div>
-                              <div className="text-xs text-gray-500 mb-1">Renew Date</div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {formatDate(subscriptionStatus.subscription_end_date)}
-                              </div>
-                            </div>
-                          )}
                         </div>
                       </div>
                     )}
 
-                    {/* Latest Bill Paid */}
+                    {/* Latest Invoice */}
                     {billingHistory && billingHistory.length > 0 && (
-                      <div className={`p-4 rounded-lg ${
-                        isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
-                      }`}>
-                        <h4 className={`text-xs font-medium mb-3 uppercase ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                        }`}>Latest Bill Paid</h4>
-                        {(() => {
-                          const latestBill = billingHistory[0]
-                          return (
-                            <div className="space-y-2">
-                              <div>
-                                <div className={`text-xs mb-1 ${
-                                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                                }`}>Amount</div>
-                                <div className={`text-sm font-medium ${
-                                  isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                                }`}>
-                                  {formatCurrency(latestBill.amount)}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-xs text-gray-500 mb-1">Date</div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {subscriptionStatus?.subscription_start_date 
-                                    ? formatDate(subscriptionStatus.subscription_start_date)
-                                    : formatDate(latestBill.payment_date || latestBill.created_at)}
-                                </div>
-                              </div>
-                              {latestBill.status && (
-                                <div>
-                                  <div className={`text-xs mb-1 ${
-                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                              }`}>Status</div>
-                                  <div className={`text-sm font-medium capitalize ${
-                                isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                              }`}>
-                                    {latestBill.status}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })()}
-                        
-                        {/* Download Bill Button */}
-                        <button
-                          onClick={handleDownloadBill}
-                          className={`w-full mt-4 flex items-center justify-center gap-2 p-3 border rounded-lg transition-colors ${
-                            isDarkMode
-                              ? 'border-gray-600 hover:bg-gray-700 text-gray-200'
-                              : 'border-gray-200 hover:bg-gray-50 text-gray-900'
-                          }`}
-                        >
-                          <Download className={`w-4 h-4 ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`} />
-                          <span className="text-sm font-medium">Download Bill</span>
-                        </button>
+                      <div className={`p-6 rounded-2xl border ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-slate-50/50 border-black/[0.04]'
+                        }`}>
+                        <div className="flex items-center justify-between mb-6">
+                          <h4 className={`text-[14px] font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Recent Invoice</h4>
+                          <button
+                            onClick={handleDownloadBill}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${isDarkMode ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-white border border-black/[0.08] text-slate-700 hover:bg-slate-50 shadow-sm'
+                              }`}
+                          >
+                            <Download className="w-3.5 h-3.5" /> PDF
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-8">
+                          <div>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Amount</p>
+                            <p className={`text-[15px] font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                              {formatCurrency(billingHistory[0].amount)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Date</p>
+                            <p className={`text-[15px] font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                              {formatDate(billingHistory[0].payment_date || billingHistory[0].created_at)}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1017,82 +992,71 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
             )}
 
             {activeTab === 'preferences' && (
-              <div>
-                <h3 className={`text-sm font-semibold mb-4 ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                }`}>Preferences</h3>
+              <div className="animate-slide-in-up">
+                <div className="flex items-center justify-between mb-8 pb-4 border-b border-black/[0.04]">
+                  <div>
+                    <h3 className={`text-[17px] font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Appearance</h3>
+                    <p className={`text-[13px] mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Customize how Emily looks to you.</p>
+                  </div>
+                </div>
 
                 <div className="space-y-6">
                   {/* Theme Settings */}
-                  <div className={`p-4 rounded-lg ${
-                    isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
-                  }`}>
-                    <h4 className={`text-xs font-medium mb-3 uppercase ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                    }`}>Theme</h4>
-
-                    <div className="flex items-center justify-between">
+                  <div className={`p-6 rounded-2xl border ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-white border-black/[0.06] shadow-sm'
+                    }`}>
+                    <div className="flex items-center justify-between mb-6">
                       <div>
-                        <div className={`text-sm font-medium ${
-                          isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                        }`}>
-                          Dark Mode
-                        </div>
-                        <div className={`text-xs mt-1 ${
-                          isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                        }`}>
-                          Toggle between light and dark themes
-                        </div>
+                        <h4 className={`text-[14px] font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Dark Interface</h4>
+                        <p className="text-[12px] text-slate-500 mt-0.5">Reduce eye strain in low light environments.</p>
                       </div>
 
-                      {/* Toggle Switch */}
                       <div
-                        className="relative inline-block w-12 h-6 cursor-pointer"
+                        className="relative inline-block w-10 h-5 cursor-pointer"
                         onClick={toggleDarkMode}
                       >
                         <div
-                          className={`relative w-full h-full rounded-full transition-all duration-300 ${
-                            localDarkMode
-                              ? 'bg-green-500'
-                              : 'bg-gray-300'
-                          }`}
+                          className={`relative w-full h-full rounded-full transition-all duration-300 ${localDarkMode
+                            ? (isDarkMode ? 'bg-indigo-500' : 'bg-slate-900')
+                            : (isDarkMode ? 'bg-white/10' : 'bg-slate-200')
+                            }`}
                         >
                           <div
-                            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 ${
-                              localDarkMode
-                                ? 'transform translate-x-6'
-                                : 'transform translate-x-0'
-                            }`}
+                            className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 ${localDarkMode
+                              ? 'transform translate-x-5'
+                              : 'transform translate-x-0'
+                              }`}
                           />
                         </div>
                       </div>
                     </div>
 
-                    {/* Theme Preview */}
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      <div className={`p-3 rounded-lg border-2 transition-colors ${
-                        !localDarkMode
-                          ? 'border-green-500 bg-white'
-                          : 'border-gray-600 bg-gray-100'
-                      }`}>
-                        <div className="text-xs font-medium text-gray-600 mb-2">Light</div>
-                        <div className="space-y-1">
-                          <div className="h-2 bg-gray-200 rounded"></div>
-                          <div className="h-2 bg-gray-100 rounded w-3/4"></div>
+                    {/* Theme Preview Cards */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        onClick={() => localDarkMode && toggleDarkMode()}
+                        className={`p-4 rounded-xl border-2 transition-all text-left ${!localDarkMode
+                          ? 'border-indigo-500 bg-indigo-50/50'
+                          : 'border-transparent bg-slate-50 hover:bg-slate-100'
+                          }`}>
+                        <div className="w-full h-12 bg-white border border-black/[0.05] rounded-lg mb-3 flex flex-col p-2 gap-1 px-3">
+                          <div className="h-1.5 w-1/2 bg-slate-200 rounded-full" />
+                          <div className="h-1.5 w-3/4 bg-slate-100 rounded-full" />
                         </div>
-                      </div>
+                        <span className="text-[12px] font-bold text-slate-900">Light Mode</span>
+                      </button>
 
-                      <div className={`p-3 rounded-lg border-2 transition-colors ${
-                        localDarkMode
-                          ? 'border-green-500 bg-gray-800'
-                          : 'border-gray-600 bg-gray-800'
-                      }`}>
-                        <div className="text-xs font-medium text-gray-300 mb-2">Dark</div>
-                        <div className="space-y-1">
-                          <div className="h-2 bg-gray-700 rounded"></div>
-                          <div className="h-2 bg-gray-600 rounded w-3/4"></div>
+                      <button
+                        onClick={() => !localDarkMode && toggleDarkMode()}
+                        className={`p-4 rounded-xl border-2 transition-all text-left ${localDarkMode
+                          ? 'border-indigo-400 bg-white/10'
+                          : 'border-transparent bg-slate-900/5 hover:bg-slate-900/10'
+                          }`}>
+                        <div className="w-full h-12 bg-slate-900 border border-white/10 rounded-lg mb-3 flex flex-col p-2 gap-1 px-3">
+                          <div className="h-1.5 w-1/2 bg-white/20 rounded-full" />
+                          <div className="h-1.5 w-3/4 bg-white/10 rounded-full" />
                         </div>
-                      </div>
+                        <span className={`text-[12px] font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Dark Mode</span>
+                      </button>
                     </div>
                   </div>
                 </div>

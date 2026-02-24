@@ -1635,6 +1635,34 @@ async def get_lead(lead_id: str, current_user: dict = Depends(get_current_user))
         logger.error(f"Error getting lead: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/campaign-names")
+async def get_campaign_names(
+    current_user: dict = Depends(get_current_user)
+):
+    """Return distinct, non-empty campaign names used across all leads for this user."""
+    try:
+        result = supabase_admin.table("leads") \
+            .select("campaign_name") \
+            .eq("user_id", current_user["id"]) \
+            .not_.is_("campaign_name", "null") \
+            .execute()
+
+        # Deduplicate, strip blanks, sort
+        seen = set()
+        names = []
+        for row in (result.data or []):
+            name = (row.get("campaign_name") or "").strip()
+            if name and name not in seen:
+                seen.add(name)
+                names.append(name)
+        names.sort(key=str.casefold)
+
+        return {"names": names}
+
+    except Exception as e:
+        logger.error(f"Error fetching campaign names: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.put("/{lead_id}/status")
 async def update_lead_status(
     lead_id: str,
@@ -1740,6 +1768,12 @@ class UpdateLeadRequest(BaseModel):
     email: Optional[str] = None
     phone_number: Optional[str] = None
     source_platform: Optional[str] = None
+    campaign_id: Optional[str] = None
+    campaign_name: Optional[str] = None
+
+class UpdateCampaignRequest(BaseModel):
+    campaign_id: Optional[str] = None  # None to clear
+    campaign_name: Optional[str] = None
 
 @router.put("/{lead_id}/follow-up")
 async def update_follow_up(
@@ -1804,6 +1838,10 @@ async def update_lead(
             update_data["phone_number"] = request.phone_number
         if request.source_platform is not None:
             update_data["source_platform"] = request.source_platform.strip().lower()
+        if request.campaign_id is not None:
+            update_data["campaign_id"] = request.campaign_id if request.campaign_id else None
+        if request.campaign_name is not None:
+            update_data["campaign_name"] = request.campaign_name if request.campaign_name else None
 
         # Perform the update
         result = supabase_admin.table("leads").update(update_data).eq("id", lead_id).execute()
@@ -1817,6 +1855,42 @@ async def update_lead(
         raise
     except Exception as e:
         logger.error(f"Error updating lead: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/{lead_id}/campaign")
+async def update_lead_campaign(
+    lead_id: str,
+    request: UpdateCampaignRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update campaign assignment for a lead (instant, no status history needed)"""
+    try:
+        # Verify lead belongs to user
+        lead = supabase_admin.table("leads").select("id").eq("id", lead_id).eq("user_id", current_user["id"]).execute()
+        if not lead.data:
+            raise HTTPException(status_code=404, detail="Lead not found")
+
+        update_data = {
+            "updated_at": datetime.now().isoformat(),
+            "campaign_id": request.campaign_id or None,
+            "campaign_name": request.campaign_name or None,
+        }
+
+        result = supabase_admin.table("leads").update(update_data).eq("id", lead_id).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to update campaign")
+
+        return {
+            "success": True,
+            "campaign_id": result.data[0].get("campaign_id"),
+            "campaign_name": result.data[0].get("campaign_name"),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating lead campaign: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{lead_id}")
