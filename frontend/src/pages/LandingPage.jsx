@@ -305,59 +305,6 @@ const Page = () => {
         {/* Features Section */}
         <section id="features" className="py-12 sm:py-16 lg:py-20 bg-gray-800">
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
-            <div className="text-center mb-10 sm:mb-12 lg:mb-16">
-              <h2 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-normal mb-3 sm:mb-4 md:mb-6 text-white">
-                Meet our atsn ai agents
-              </h2>
-              <p className="text-sm xs:text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto px-4 font-normal">
-                Our AI agents are designed to work independently, learn from your preferences,
-                and continuously improve their performance.
-              </p>
-            </div>
-
-            {/* Agent Icons Showcase */}
-            <div className="w-full mx-auto px-4 sm:px-6 mb-10 sm:mb-12 lg:mb-16">
-              <div className="flex justify-center">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 lg:gap-12 max-w-4xl">
-                  {/* Emily Icon */}
-                  <div className="flex flex-col items-center group">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 bg-gradient-to-br from-pink-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg hover:shadow-pink-500/25 transition-all duration-300 transform hover:scale-110 mb-3">
-                      <img src="/emily_icon.png" alt="Emily" className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full object-cover" />
-                    </div>
-                    <h3 className="text-white font-normal text-sm sm:text-base md:text-lg text-center">Emily</h3>
-                    <p className="text-gray-400 font-normal text-xs sm:text-sm text-center">Marketing Agent</p>
-                  </div>
-
-                  {/* Leo Icon */}
-                  <div className="flex flex-col items-center group">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg hover:shadow-blue-500/25 transition-all duration-300 transform hover:scale-110 mb-3">
-                      <img src="/leo_logo.png" alt="Leo" className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full object-cover" />
-                    </div>
-                    <h3 className="text-white font-normal text-sm sm:text-base md:text-lg text-center">Leo</h3>
-                    <p className="text-gray-400 font-normal text-xs sm:text-sm text-center">Content Agent</p>
-                  </div>
-
-                  {/* Chase Icon */}
-                  <div className="flex flex-col items-center group">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg hover:shadow-green-500/25 transition-all duration-300 transform hover:scale-110 mb-3">
-                      <img src="/chase_logo.png" alt="Chase" className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full object-cover" />
-                    </div>
-                    <h3 className="text-white font-normal text-sm sm:text-base md:text-lg text-center">Chase</h3>
-                    <p className="text-gray-400 font-normal text-xs sm:text-sm text-center">Lead Agent</p>
-                  </div>
-
-                  {/* Orion Icon */}
-                  <div className="flex flex-col items-center group">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center shadow-lg hover:shadow-purple-500/25 transition-all duration-300 transform hover:scale-110 mb-3">
-                      <img src="/orion.png" alt="Orion" className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full object-cover" />
-                    </div>
-                    <h3 className="text-white font-normal text-sm sm:text-base md:text-lg text-center">Orion</h3>
-                    <p className="text-gray-400 font-normal text-xs sm:text-sm text-center">Analytics Agent</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
               <div className="bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl p-6 sm:p-8 border border-gray-600 hover:border-pink-500/50 transition-all duration-300 shadow-lg hover:shadow-xl">
                 <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 sm:mb-6 mx-auto sm:mx-0">
