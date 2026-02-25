@@ -390,21 +390,16 @@ class ContentFromDriveAgent:
             return state
     
     async def _is_file_already_processed(self, user_id: str, file_id: str = None, file_name: str = None, folder_name: str = None) -> bool:
-        """Check if a file or carousel folder has already been processed by checking content_posts metadata"""
+        """Check if a file or carousel folder has already been processed by checking created_content table"""
         try:
-            # Get campaign ID for this user's drive content
-            campaign_response = self.supabase.table("content_campaigns").select("id").eq("user_id", user_id).eq("campaign_name", "Drive Content").execute()
+            # Check created_content table instead of content_posts
+            # We filter by user_id and then check metadata in memory (or we could use Supabase arrow filter)
+            response = self.supabase.table("created_content").select("metadata").eq("user_id", user_id).execute()
             
-            if not campaign_response.data:
-                # No campaign exists, so no files processed yet
+            if not response.data:
                 return False
             
-            campaign_id = campaign_response.data[0]["id"]
-            
-            # Query posts in this campaign and check metadata
-            posts_response = self.supabase.table("content_posts").select("metadata").eq("campaign_id", campaign_id).execute()
-            
-            for post in posts_response.data:
+            for post in response.data:
                 metadata = post.get("metadata", {})
                 if metadata.get("generated_by") == "content_from_drive_agent":
                     # Check by file_id first (most reliable) for regular images
@@ -555,42 +550,54 @@ class ContentFromDriveAgent:
                 carousel_posts_to_process.extend(carousel_posts)
                 
                 # Then, get regular image files from this folder (excluding carousel folder)
-                # Supported image MIME types
+                # Supported image and video MIME types
                 image_mime_types = [
                     'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 
                     'image/webp', 'image/bmp', 'image/svg+xml'
                 ]
+                video_mime_types = [
+                    'video/mp4', 'video/mpeg', 'video/quicktime', 'video/x-msvideo',
+                    'video/x-flv', 'video/webm', 'video/3gpp'
+                ]
                 
-                mime_query = " or ".join([f"mimeType='{mime}'" for mime in image_mime_types])
+                all_mime_types = image_mime_types + video_mime_types
+                mime_query = " or ".join([f"mimeType='{mime}'" for mime in all_mime_types])
                 # Exclude carousel folder from regular image search
                 query = f"'{folder_id}' in parents and ({mime_query}) and trashed=false"
                 
-                logger.info(f"Searching for regular images in {platform} folder (ID: {folder_id})...")
+                logger.info(f"Searching for regular images and videos in {platform} folder (ID: {folder_id})...")
                 results = service.files().list(q=query, fields="files(id, name, mimeType, size, modifiedTime, webViewLink, thumbnailLink)").execute()
                 files = results.get('files', [])
                 
-                logger.info(f"Found {len(files)} regular image file(s) in {platform} folder")
+                logger.info(f"Found {len(files)} regular file(s) in {platform} folder")
                 
                 for file in files:
                     file_id = file['id']
                     file_name = file['name']
+                    mime_type = file.get('mimeType', '')
                     
                     # Check if file already processed
                     if await self._is_file_already_processed(user_id, file_id, file_name):
                         skipped_files.append(file_name)
                         continue
                     
+                    # Determine if it's an image or video
+                    post_type = "image"
+                    if mime_type in video_mime_types:
+                        post_type = "video"
+                    
                     files_to_process.append({
                         "file_id": file_id,
                         "file_name": file_name,
                         "platform": platform,
-                        "mime_type": file.get('mimeType', ''),
+                        "mime_type": mime_type,
                         "size": file.get('size', 0),
                         "modified_time": file.get('modifiedTime', ''),
                         "web_view_link": file.get('webViewLink', ''),
                         "thumbnail_link": file.get('thumbnailLink', ''),
-                        "post_type": "image"  # Regular image post
+                        "post_type": post_type  # Proper post type
                     })
+                    logger.info(f"  - {file_name} ({mime_type}) - NEW {post_type.upper()}")
                     logger.info(f"  - {file_name} ({file.get('mimeType', 'unknown type')}) - NEW")
             
             if skipped_files:
@@ -785,7 +792,23 @@ class ContentFromDriveAgent:
                     
                     file_id = file_info["file_id"]
                     file_name = file_info["file_name"]
+                    post_type = file_info.get("post_type", "image")
                     
+                    if post_type == "video":
+                        logger.info(f"📹 Processing video file: {file_name}. Skipping vision analysis.")
+                        
+                        # Download video content (limit to max size for upload)
+                        request = service.files().get_media(fileId=file_id)
+                        file_content = request.execute()
+                        file_size = len(file_content)
+                        
+                        analyzed_photos.append({
+                            **file_info,
+                            "analysis": f"Video file: {file_name}. Type: {file_info.get('mime_type')}. Size: {file_size} bytes.",
+                            "image_bytes": file_content if file_size <= (50 * 1024 * 1024) else None # 50MB limit for video upload
+                        })
+                        continue
+
                     logger.info(f"📥 Downloading image: {file_name} (ID: {file_id})")
                     
                     # Download file content from Google Drive
@@ -1149,6 +1172,46 @@ CRITICAL INSTRUCTIONS:
   "hashtags": ["array", "of", "relevant", "hashtags", "for", "{platform}"],
   "call_to_action": "Suggested call to action"
 }}"""
+                    elif post_type == "video":
+                        prompt = f"""Create a compelling {platform} SHORT VIDEO/REEL post with title and caption based on the following information:
+
+VIDEO INFORMATION:
+- Video Filename: {file_name}
+- Video Description (from filename): {description}
+- Metadata: {analysis}
+
+BUSINESS CONTEXT:
+- Business Name: {business_name}
+- Industry: {industry}
+- Business Description: {business_description[:300] if business_description else 'Not specified'}
+- Unique Value Proposition: {unique_value[:200] if unique_value else 'Not specified'}
+- Brand Voice: {brand_voice}
+- Brand Tone: {brand_tone}
+- Target Audience: {target_audience}
+
+PLATFORM: {platform}
+
+REQUIREMENTS:
+
+1. TITLE (CRITICAL):
+   - Generate a catchy title (5-10 words maximum)
+   - MUST NOT repeat the filename "{file_name}" or description "{description}"
+
+2. CAPTION:
+   - Create an engaging caption for a short video or reel
+   - Optimize for {platform} best practices
+   - Match the brand voice ({brand_voice}) and tone ({brand_tone})
+
+3. HASHTAGS:
+   - Include 5-10 relevant hashtags for {platform}
+
+4. CALL TO ACTION:
+   - Suggest an appropriate call to action
+
+CRITICAL INSTRUCTIONS:
+- Return ONLY a valid JSON object
+- Use these exact field names: "title", "caption", "hashtags", "call_to_action"
+"""
                     else:
                         prompt = f"""Create a compelling {platform} post with title and caption based on the following information:
 
@@ -1269,10 +1332,10 @@ CRITICAL INSTRUCTIONS:
                             "first_image_file_name": photo.get("first_image_file_name")
                         })
                     else:
-                        # For regular image posts
+                        # For regular image or video posts
                         generated_posts.append({
                             "platform": platform,
-                            "post_type": "image",
+                            "post_type": post_type,
                             "file_id": photo.get("file_id"),
                             "file_name": photo.get("file_name", ""),
                             "description": description,
@@ -1284,8 +1347,8 @@ CRITICAL INSTRUCTIONS:
                             "scheduled_date": scheduled_date,
                             "image_url": photo.get("web_view_link", ""),
                             "thumbnail_url": photo.get("thumbnail_link", ""),
-                            "image_bytes": photo.get("image_bytes"),  # Include image bytes for Supabase upload
-                            "mime_type": photo.get("mime_type", "image/jpeg")  # Include MIME type
+                            "image_bytes": photo.get("image_bytes"),  # Include bytes for Supabase upload
+                            "mime_type": photo.get("mime_type", "image/jpeg") if post_type == "image" else photo.get("mime_type", "video/mp4")
                         })
                     
                     # Log with appropriate name based on post type
@@ -1329,17 +1392,6 @@ CRITICAL INSTRUCTIONS:
             profile_response = self.supabase.table("profiles").select("*").eq("id", user_id).execute()
             profile = profile_response.data[0] if profile_response.data else None
             business_name = profile.get('business_name', 'Not specified') if profile else 'Not specified'
-            
-            # Get or create campaign
-            campaign_id = await self._get_or_create_drive_content_campaign(user_id)
-            
-            if not campaign_id:
-                logger.error(f"Failed to get or create campaign for user {user_id}")
-                state["error_message"] = "Failed to create campaign for posts. Please try again."
-                state["current_step"] = ProcessingStep.ERROR
-                return state
-            
-            logger.info(f"Using campaign_id: {campaign_id} for user {user_id}")
             
             for idx, post_data in enumerate(generated_posts):
                 try:
@@ -1403,85 +1455,90 @@ CRITICAL INSTRUCTIONS:
                         primary_image_url = carousel_image_urls[0]
                         
                         post_record = {
-                            "campaign_id": campaign_id,
+                            "user_id": user_id,
                             "platform": platform,
-                            "post_type": "carousel",
+                            "content_type": "carousel",
                             "title": generated_title,
                             "content": post_data.get("caption", ""),
                             "hashtags": post_data.get("hashtags", []),
                             "scheduled_date": scheduled_datetime.date().isoformat(),
                             "scheduled_time": scheduled_datetime.time().isoformat(),
+                            "scheduled_at": scheduled_datetime.isoformat(),
                             "status": status,
-                            "primary_image_url": primary_image_url,  # First image for preview
+                            "media_url": primary_image_url,
+                            "images": [primary_image_url],
+                            "carousel_images": carousel_image_urls,
+                            "channel": "Social Media",
                             "metadata": {
                                 "generated_by": "content_from_drive_agent",
-                                "user_id": user_id,
                                 "folder_name": post_data.get("folder_name", ""),
                                 "description": post_data.get("description"),
                                 "analysis": post_data.get("analysis"),
                                 "call_to_action": post_data.get("call_to_action", ""),
-                                "carousel_images": carousel_image_urls,  # All carousel image URLs
                                 "total_images": len(carousel_image_urls),
                                 "carousel_image_source": "drive"
                             }
                         }
                     else:
-                        # Handle regular image post
-                        # Upload image to Supabase if we have image bytes
-                        image_url = post_data.get("image_url", "")
+                        # Map post_type to standard content_type
+                        if post_type == "video":
+                            content_type = "short_video or reel"
+                        else:
+                            content_type = "static_post"
+
+                        # Handle regular image or video post
+                        # Upload to Supabase if we have bytes
+                        media_url = post_data.get("image_url", "")
                         if post_data.get("image_bytes"):
                             try:
-                                mime_type = post_data.get("mime_type", "image/jpeg")
-                                image_url = await self._upload_image_to_supabase(
+                                mime_type = post_data.get("mime_type", "image/jpeg" if post_type == "image" else "video/mp4")
+                                media_url = await self._upload_image_to_supabase(
                                     post_data["image_bytes"],
                                     user_id,
                                     platform,
-                                    post_data.get("file_name", "image"),
+                                    post_data.get("file_name", "media"),
                                     mime_type
                                 )
-                                logger.info(f"Uploaded image to Supabase for post: {image_url}")
+                                logger.info(f"Uploaded media to Supabase for post: {media_url}")
                             except Exception as upload_error:
-                                logger.error(f"Failed to upload image to Supabase, using original URL: {upload_error}")
-                                # Fallback to original image URL if upload fails
-                                image_url = post_data.get("image_url", "") or post_data.get("thumbnail_url", "")
+                                logger.error(f"Failed to upload media to Supabase, using original URL: {upload_error}")
+                                # Fallback to original URL if upload fails
+                                media_url = post_data.get("image_url", "") or post_data.get("thumbnail_url", "")
                         
                         post_record = {
-                            "campaign_id": campaign_id,
+                            "user_id": user_id,
                             "platform": platform,
-                            "post_type": "image",
-                            "title": generated_title,  # Use AI-generated title, not filename
+                            "content_type": content_type,
+                            "title": generated_title,
                             "content": post_data.get("caption", ""),
                             "hashtags": post_data.get("hashtags", []),
                             "scheduled_date": scheduled_datetime.date().isoformat(),
                             "scheduled_time": scheduled_datetime.time().isoformat(),
+                            "scheduled_at": scheduled_datetime.isoformat(),
                             "status": status,
-                            "primary_image_url": image_url,  # Use Supabase URL
+                            "media_url": media_url,
+                            "images": [media_url],
+                            "channel": "Social Media",
                             "metadata": {
                                 "generated_by": "content_from_drive_agent",
-                                "user_id": user_id,
                                 "file_id": post_data.get("file_id"),
                                 "file_name": post_data.get("file_name"),
-                                "description": post_data.get("description"),  # Keep original description in metadata
+                                "description": post_data.get("description"),
                                 "analysis": post_data.get("analysis"),
                                 "call_to_action": post_data.get("call_to_action", ""),
                                 "thumbnail_url": post_data.get("thumbnail_url", ""),
-                                "original_drive_url": post_data.get("image_url", "")  # Keep original URL in metadata
+                                "original_drive_url": post_data.get("image_url", ""),
+                                "post_type_original": post_type
                             }
                         }
                     
-                    # Save to Supabase
-                    if not campaign_id:
-                        logger.error(f"Cannot save post: campaign_id is missing for user {user_id}")
-                        continue
-                    
-                    result = self.supabase.table("content_posts").insert(post_record).execute()
+                    # Save to Supabase (new created_content table)
+                    result = self.supabase.table("created_content").insert(post_record).execute()
                     
                     if result.data:
                         post_id = result.data[0]["id"]
                         saved_posts.append(post_id)
-                        
-                        
-                        logger.info(f"Saved post {idx + 1}/{len(generated_posts)}: {post_id}")
+                        logger.info(f"Saved post {idx + 1}/{len(generated_posts)}: {post_id} to created_content")
                     
                 except Exception as e:
                     logger.error(f"Error saving post {post_data.get('file_name', 'unknown')}: {e}")
@@ -1540,47 +1597,6 @@ CRITICAL INSTRUCTIONS:
         except Exception as e:
             logger.error(f"Error uploading image to Supabase: {e}")
             raise e
-    
-    async def _get_or_create_drive_content_campaign(self, user_id: str) -> str | None:
-        """Get or create a campaign for drive content"""
-        try:
-            # Check if campaign exists (using campaign_name, not name)
-            response = self.supabase.table("content_campaigns").select("id").eq("user_id", user_id).eq("campaign_name", "Drive Content").execute()
-            
-            if response.data and response.data[0]:
-                campaign_id = response.data[0]["id"]
-                logger.info(f"✅ Found existing 'Drive Content' campaign with ID: {campaign_id} for user {user_id}")
-                return campaign_id
-            
-            # Create new campaign
-            from datetime import datetime, timedelta
-            now = datetime.now()
-            week_start = now - timedelta(days=now.weekday())
-            week_end = week_start + timedelta(days=6)
-            
-            campaign_data = {
-                "user_id": user_id,
-                "campaign_name": "Drive Content",
-                "week_start_date": week_start.date().isoformat(),
-                "week_end_date": week_end.date().isoformat(),
-                "status": "active"
-            }
-            
-            result = self.supabase.table("content_campaigns").insert(campaign_data).execute()
-            
-            if result.data and result.data[0]:
-                campaign_id = result.data[0]["id"]
-                logger.info(f"✅ Created new 'Drive Content' campaign with ID: {campaign_id} for user {user_id}")
-                return campaign_id
-            else:
-                logger.error(f"Failed to create campaign: No data returned from insert")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error getting/creating campaign: {e}")
-            logger.error(f"Campaign creation failed for user_id: {user_id}, campaign_data: {campaign_data}")
-            # Return None instead of raising to allow error handling upstream
-            return None
     
     async def complete(self, state: ContentFromDriveState) -> ContentFromDriveState:
         """Mark processing as complete"""

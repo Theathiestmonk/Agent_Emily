@@ -14,7 +14,7 @@ class ContentAPI {
     try {
       const authToken = await this.getAuthToken()
       console.log('Fetching scheduled content with token:', authToken ? 'present' : 'missing')
-      
+
       const response = await fetch(buildApiUrl('/content/scheduled'), {
         method: 'GET',
         headers: {
@@ -24,7 +24,7 @@ class ContentAPI {
       })
 
       console.log('Scheduled content response status:', response.status)
-      
+
       if (!response.ok) {
         const errorText = await response.text()
         console.error('Scheduled content API error:', errorText)
@@ -33,7 +33,7 @@ class ContentAPI {
 
       const data = await response.json()
       console.log('Scheduled content data:', data)
-      
+
       return { data: data.content || [], date: data.date, count: data.count, error: null }
     } catch (error) {
       console.error('Error fetching scheduled content:', error)
@@ -46,7 +46,7 @@ class ContentAPI {
     try {
       const authToken = await this.getAuthToken()
       console.log('Fetching all content with token:', authToken ? 'present' : 'missing')
-      
+
       const response = await fetch(buildApiUrl(`/content/all?limit=${limit}&offset=${offset}`), {
         method: 'GET',
         headers: {
@@ -56,7 +56,7 @@ class ContentAPI {
       })
 
       console.log('All content response status:', response.status)
-      
+
       if (!response.ok) {
         const errorText = await response.text()
         console.error('All content API error:', errorText)
@@ -65,7 +65,7 @@ class ContentAPI {
 
       const data = await response.json()
       console.log('All content data:', data)
-      
+
       return { data: data.content || [], count: data.count, error: null }
     } catch (error) {
       console.error('Error fetching all content:', error)
@@ -137,7 +137,7 @@ class ContentAPI {
     try {
       const authToken = await this.getAuthToken()
       console.log('Fetching content for date:', date, 'with token:', authToken ? 'present' : 'missing')
-      
+
       const response = await fetch(buildApiUrl(`/content/by-date?date=${date}`), {
         method: 'GET',
         headers: {
@@ -147,7 +147,7 @@ class ContentAPI {
       })
 
       console.log('Content by date response status:', response.status)
-      
+
       if (!response.ok) {
         const errorText = await response.text()
         console.error('Content by date API error:', errorText)
@@ -156,7 +156,7 @@ class ContentAPI {
 
       const data = await response.json()
       console.log('Content by date data:', data)
-      
+
       return { data: data.content || [], date: data.date, count: data.count, error: null }
     } catch (error) {
       console.error('Error fetching content by date:', error)
@@ -169,7 +169,7 @@ class ContentAPI {
     try {
       const authToken = await this.getAuthToken()
       console.log('Generating content with token:', authToken ? 'present' : 'missing')
-      
+
       const response = await fetch(buildApiUrl('/content/generate'), {
         method: 'POST',
         headers: {
@@ -182,7 +182,7 @@ class ContentAPI {
       })
 
       console.log('Generate content response status:', response.status)
-      
+
       if (!response.ok) {
         const errorText = await response.text()
         console.error('Generate content API error:', errorText)
@@ -191,7 +191,7 @@ class ContentAPI {
 
       const data = await response.json()
       console.log('Generate content data:', data)
-      
+
       return { data: data, error: null }
     } catch (error) {
       console.error('Error generating content:', error)
@@ -203,7 +203,7 @@ class ContentAPI {
   async updateContent(contentId, updateData) {
     try {
       const authToken = await this.getAuthToken()
-      
+
       const response = await fetch(buildApiUrl(`/content/update/${contentId}`), {
         method: 'PUT',
         headers: {
@@ -230,7 +230,7 @@ class ContentAPI {
   async updateContentStatus(contentId, status) {
     try {
       const authToken = await this.getAuthToken()
-      
+
       const response = await fetch(buildApiUrl(`/content/update-status/${contentId}`), {
         method: 'PUT',
         headers: {
@@ -259,7 +259,7 @@ class ContentAPI {
   async registerScheduledPost(postId, scheduledAt, platform) {
     try {
       const authToken = await this.getAuthToken()
-      
+
       const response = await fetch(buildApiUrl('/content/register-scheduled'), {
         method: 'POST',
         headers: {
@@ -316,7 +316,7 @@ class ContentAPI {
   async approvePostContent(postId) {
     try {
       const authToken = await this.getAuthToken()
-      
+
       const response = await fetch(buildApiUrl(`/content/post-contents/${postId}/approve`), {
         method: 'PUT',
         headers: {
@@ -338,11 +338,62 @@ class ContentAPI {
     }
   }
 
+  // Get status of Google Drive connection and emily folder
+  async getDriveStatus() {
+    try {
+      const authToken = await this.getAuthToken()
+      const response = await fetch(buildApiUrl('/content/drive/status'), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}: ${errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Error getting drive status:', error)
+      return { google_connected: false, emily_folder_found: false, error: error.message }
+    }
+  }
+
+  // Process content from Google Drive
+  async processDriveContent(userId) {
+    try {
+      const authToken = await this.getAuthToken()
+      const response = await fetch(buildApiUrl('/content/drive/process'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          user_id: userId
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}: ${errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Error processing drive content:', error)
+      return { success: false, message: error.message }
+    }
+  }
+
   // Discard post content (delete from database and storage)
   async discardPostContent(postId) {
     try {
       const authToken = await this.getAuthToken()
-      
+
       const response = await fetch(buildApiUrl(`/content/post-contents/${postId}`), {
         method: 'DELETE',
         headers: {
