@@ -60,7 +60,12 @@ import {
   Layers,
   Video,
   Image as ImageIcon,
-  Square
+  Square,
+  HardDrive,
+  HelpCircle,
+  X,
+  ChevronRight,
+  FolderOpen
 } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
@@ -78,10 +83,10 @@ const checkIfVideoMedia = (contentItem) => {
   const videoExtensions = ['.mp4', '.mov', '.avi', '.webm', '.m4v']
 
   return videoExtensions.some(ext => urlWithoutQuery.endsWith(ext)) ||
-         mediaUrl.toLowerCase().includes('video') ||
-         contentType.includes('video') ||
-         contentType.includes('reel') ||
-         contentType.includes('short_video')
+    mediaUrl.toLowerCase().includes('video') ||
+    contentType.includes('video') ||
+    contentType.includes('reel') ||
+    contentType.includes('short_video')
 }
 
 
@@ -100,8 +105,8 @@ const VideoThumbnail = ({ src, alt, className, isDarkMode }) => {
   if (!src || error) {
     return (
       <div className={`${className} flex flex-col items-center justify-center p-4 border transition-colors duration-200
-        ${isDarkMode 
-          ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700/50' 
+        ${isDarkMode
+          ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700/50'
           : 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200'
         }`}>
         <div className="relative mb-3">
@@ -163,24 +168,24 @@ const VideoThumbnail = ({ src, alt, className, isDarkMode }) => {
 // Content type icons
 const getContentTypeIcon = (contentType, contentItem = null) => {
   const type = contentType?.toLowerCase() || ''
-  
+
   // Check if it's a video based on content type
-  const isVideoType = type.includes('reel') || 
-                     type.includes('short_video') || 
-                     type.includes('short video') ||
-                     type.includes('long_video') || 
-                     type.includes('long video') ||
-                     type === 'video' ||
-                     type === 'short_video or reel'
-  
+  const isVideoType = type.includes('reel') ||
+    type.includes('short_video') ||
+    type.includes('short video') ||
+    type.includes('long_video') ||
+    type.includes('long video') ||
+    type === 'video' ||
+    type === 'short_video or reel'
+
   // Also check if media is a video file
   const isVideoMedia = contentItem ? checkIfVideoMedia(contentItem) : false
-  
+
   // If it's a video type or has video media, show video icon
   if (isVideoType || isVideoMedia) {
     return <Video className="w-4 h-4 text-white" />
   }
-  
+
   switch (type) {
     case 'story':
       return <FileText className="w-4 h-4 text-white" />
@@ -209,12 +214,12 @@ const getPlatformIcon = (platformName) => {
     case 'instagram':
       return (
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" fill="url(#instagram-gradient)"/>
+          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" fill="url(#instagram-gradient)" />
           <defs>
             <linearGradient id="instagram-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#833ab4"/>
-              <stop offset="50%" stopColor="#fd1d1d"/>
-              <stop offset="100%" stopColor="#fcb045"/>
+              <stop offset="0%" stopColor="#833ab4" />
+              <stop offset="50%" stopColor="#fd1d1d" />
+              <stop offset="100%" stopColor="#fcb045" />
             </linearGradient>
           </defs>
         </svg>
@@ -222,32 +227,32 @@ const getPlatformIcon = (platformName) => {
     case 'facebook':
       return (
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" fill="#1877F2"/>
+          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" fill="#1877F2" />
         </svg>
       )
     case 'linkedin':
       return (
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" fill="#0077B5"/>
+          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" fill="#0077B5" />
         </svg>
       )
     case 'twitter':
     case 'x':
       return (
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="#000000"/>
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="#000000" />
         </svg>
       )
     case 'youtube':
       return (
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="#FF0000"/>
+          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="#FF0000" />
         </svg>
       )
     case 'tiktok':
       return (
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" fill="#000000"/>
+          <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" fill="#000000" />
         </svg>
       )
     default:
@@ -310,6 +315,8 @@ function CreatedContentDashboard() {
   const [isReelModalOpen, setIsReelModalOpen] = useState(false)
   const [autoOpenImageEditor, setAutoOpenImageEditor] = useState(false)
   const [initialImageEditorUrl, setInitialImageEditorUrl] = useState('')
+  const [isDriveProcessing, setIsDriveProcessing] = useState(false)
+  const [showDriveHelp, setShowDriveHelp] = useState(false)
 
   const contentRef = useRef([])
 
@@ -371,6 +378,49 @@ function CreatedContentDashboard() {
     }
   }, [showError])
 
+  const handleGenerateFromDrive = async () => {
+    try {
+      setIsDriveProcessing(true)
+      showInfo('Checking Google Drive status...')
+
+      // 1. Check if Google is connected and emily folder exists
+      const status = await contentAPI.getDriveStatus()
+
+      if (!status.google_connected) {
+        showError('Google Account Not Connected', 'Please go to Settings and connect your Google account first.')
+        return
+      }
+
+      if (!status.emily_folder_found) {
+        showError('Emily Folder Not Found', 'Please create a folder named "emily" in your Google Drive root and add platform subfolders.')
+        return
+      }
+
+      showInfo('Emily is scanning your Drive folders... This may take a moment.')
+
+      // 2. Process content
+      const result = await contentAPI.processDriveContent(user.id)
+
+      if (result.success) {
+        if (result.posts_created > 0) {
+          showSuccess(`Successfully processed ${result.posts_created} posts from Google Drive!`)
+          // Refresh the list
+          fetchContent(true)
+        } else {
+          showInfo('No new images or carousels were found to process in your "emily" folder.')
+        }
+      } else {
+        showError('Drive Processing Failed', result.message || 'Unknown error occurred')
+      }
+
+    } catch (error) {
+      console.error('Error generating from drive:', error)
+      showError('Error', 'Failed to process Google Drive content.')
+    } finally {
+      setIsDriveProcessing(false)
+    }
+  }
+
   // Debug: Log filter changes
   useEffect(() => {
     console.log(`🔍 Filter state changed - Channel: ${filterChannel}, Platform: ${filterPlatform}, Search: ${searchQuery}`)
@@ -416,8 +466,8 @@ function CreatedContentDashboard() {
         const hashtags = (item.hashtags || []).join(' ')
 
         return title.toLowerCase().includes(query) ||
-               content.toLowerCase().includes(query) ||
-               hashtags.toLowerCase().includes(query)
+          content.toLowerCase().includes(query) ||
+          hashtags.toLowerCase().includes(query)
       })
     }
 
@@ -448,14 +498,14 @@ function CreatedContentDashboard() {
     let mediaUrl = null
     let isVideo = false
     const contentType = contentItem.content_type?.toLowerCase() || ''
-    
+
     // Check if it's carousel content first
     const isCarousel = contentItem.post_type === 'carousel' ||
-                      contentType === 'carousel' ||
-                      contentItem.selected_content_type?.toLowerCase() === 'carousel' ||
-                      (contentItem.metadata && contentItem.metadata.carousel_images && contentItem.metadata.carousel_images.length > 0) ||
-                      (contentItem.carousel_images && Array.isArray(contentItem.carousel_images) && contentItem.carousel_images.length > 0) ||
-                      (contentItem.metadata && contentItem.metadata.total_images && contentItem.metadata.total_images > 1)
+      contentType === 'carousel' ||
+      contentItem.selected_content_type?.toLowerCase() === 'carousel' ||
+      (contentItem.metadata && contentItem.metadata.carousel_images && contentItem.metadata.carousel_images.length > 0) ||
+      (contentItem.carousel_images && Array.isArray(contentItem.carousel_images) && contentItem.carousel_images.length > 0) ||
+      (contentItem.metadata && contentItem.metadata.total_images && contentItem.metadata.total_images > 1)
 
     // Try to find the best media URL
     if (contentItem.media_url) {
@@ -469,12 +519,12 @@ function CreatedContentDashboard() {
     } else if (contentItem.primary_image_url) {
       mediaUrl = contentItem.primary_image_url
     } else if (contentItem.metadata) {
-      mediaUrl = contentItem.metadata.media_url || 
-                 contentItem.metadata.video_url || 
-                 contentItem.metadata.image_url || 
-                 (Array.isArray(contentItem.metadata.carousel_images) && contentItem.metadata.carousel_images[0]) ||
-                 (Array.isArray(contentItem.metadata.images) && contentItem.metadata.images[0])
-      
+      mediaUrl = contentItem.metadata.media_url ||
+        contentItem.metadata.video_url ||
+        contentItem.metadata.image_url ||
+        (Array.isArray(contentItem.metadata.carousel_images) && contentItem.metadata.carousel_images[0]) ||
+        (Array.isArray(contentItem.metadata.images) && contentItem.metadata.images[0])
+
       // Handle carousel images in metadata specifically
       if (!mediaUrl && isCarousel) {
         if (contentItem.metadata.carousel_images && contentItem.metadata.carousel_images.length > 0) {
@@ -490,16 +540,16 @@ function CreatedContentDashboard() {
       const videoExtensions = ['.mp4', '.mov', '.avi', '.webm', '.m4v']
 
       isVideo = videoExtensions.some(ext => urlWithoutQuery.endsWith(ext)) ||
-                String(mediaUrl).toLowerCase().includes('video') ||
-                contentType.includes('video') ||
-                contentType.includes('reel') ||
-                contentType.includes('short_video')
+        String(mediaUrl).toLowerCase().includes('video') ||
+        contentType.includes('video') ||
+        contentType.includes('reel') ||
+        contentType.includes('short_video')
     } else {
       // If no media URL yet, but content type is video/reel, we'll mark as video
       // and let VideoThumbnail handle the empty src (showing "Preview unavailable")
       isVideo = contentType.includes('video') ||
-                contentType.includes('reel') ||
-                contentType.includes('short_video')
+        contentType.includes('reel') ||
+        contentType.includes('short_video')
     }
 
     return { mediaUrl, isVideo }
@@ -513,36 +563,36 @@ function CreatedContentDashboard() {
 
     // Check if it's carousel content - carousel should always open ATSNContentModal
     const isCarousel = contentItem.post_type === 'carousel' ||
-                      contentItem.content_type?.toLowerCase() === 'carousel' ||
-                      contentItem.selected_content_type?.toLowerCase() === 'carousel' ||
-                      (contentItem.metadata && contentItem.metadata.carousel_images && contentItem.metadata.carousel_images.length > 0) ||
-                      (contentItem.carousel_images && Array.isArray(contentItem.carousel_images) && contentItem.carousel_images.length > 0) ||
-                      (contentItem.metadata && contentItem.metadata.total_images && contentItem.metadata.total_images > 1)
+      contentItem.content_type?.toLowerCase() === 'carousel' ||
+      contentItem.selected_content_type?.toLowerCase() === 'carousel' ||
+      (contentItem.metadata && contentItem.metadata.carousel_images && contentItem.metadata.carousel_images.length > 0) ||
+      (contentItem.carousel_images && Array.isArray(contentItem.carousel_images) && contentItem.carousel_images.length > 0) ||
+      (contentItem.metadata && contentItem.metadata.total_images && contentItem.metadata.total_images > 1)
 
     if (isCarousel) {
       return 'content' // Carousel opens ATSNContentModal
     }
 
     // Determine content type from various possible sources
-    const contentType = contentItem.content_type || 
-                       contentItem.raw_data?.content_type || 
-                       contentItem.selected_content_type
+    const contentType = contentItem.content_type ||
+      contentItem.raw_data?.content_type ||
+      contentItem.selected_content_type
 
     if (!contentType) {
       return 'content' // Default to content modal
     }
 
     const contentTypeLower = contentType.toLowerCase().trim()
-    
+
     // Check for short video/reel types - these should open ReelModal
     if (contentTypeLower === 'short_video or reel' ||
-        contentTypeLower === 'reel' ||
-        contentTypeLower === 'short_video' ||
-        contentTypeLower === 'short video' ||
-        (contentTypeLower.includes('reel') && !contentTypeLower.includes('long'))) {
+      contentTypeLower === 'reel' ||
+      contentTypeLower === 'short_video' ||
+      contentTypeLower === 'short video' ||
+      (contentTypeLower.includes('reel') && !contentTypeLower.includes('long'))) {
       return 'reel'
     }
-    
+
     // All other types (long_video, static_post, blog, etc.) should open ContentModal
     return 'content'
   }
@@ -551,7 +601,7 @@ function CreatedContentDashboard() {
     // Open the appropriate modal based on content type
     const modalType = openModalForContentType(contentItem)
     setSelectedContent(contentItem)
-    
+
     if (modalType === 'reel') {
       setIsReelModalOpen(true)
     } else {
@@ -577,7 +627,7 @@ function CreatedContentDashboard() {
     // Open the appropriate modal based on content type
     const modalType = openModalForContentType(contentItem)
     setSelectedContent(contentItem)
-    
+
     if (modalType === 'reel') {
       setIsReelModalOpen(true)
     } else {
@@ -605,7 +655,7 @@ function CreatedContentDashboard() {
   const handleDelete = async (contentItem) => {
     setItemToDelete(contentItem)
     setShowDeleteModal(true)
-    }
+  }
 
   const confirmDelete = async () => {
     if (!itemToDelete) return
@@ -654,6 +704,126 @@ function CreatedContentDashboard() {
     // Open schedule confirmation modal
     setItemToSchedule(contentItem)
     setShowScheduleConfirmModal(true)
+  }
+
+  // Drive Folder Structure Help Modal Component
+  const DriveHelpModal = ({ isOpen, onClose, isDarkMode }) => {
+    if (!isOpen) return null
+
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className={`${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden`}>
+          {/* Header */}
+          <div className={`flex items-center justify-between p-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'}`}>
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                <HardDrive className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold italic">How it Works: Generate from Drive</h2>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Follow this structure to let Emily find your content</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className={`p-2 rounded-xl transition-colors ${isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-8 overflow-y-auto max-h-[70vh]">
+            <div className="space-y-8">
+              {/* Step 1: Root Folder */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold">1</span>
+                  <h3 className="font-bold">The "emily" Folder</h3>
+                </div>
+                <p className={`text-sm ml-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Create a folder named exactly <span className="font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">emily</span> in the root of your Google Drive.
+                </p>
+              </section>
+
+              {/* Step 2: Platform Folders */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold">2</span>
+                  <h3 className="font-bold">Platform Subfolders</h3>
+                </div>
+                <p className={`text-sm ml-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Inside <span className="font-mono">emily/</span>, create folders for each platform:
+                </p>
+                <div className={`ml-8 grid grid-cols-2 md:grid-cols-4 gap-2`}>
+                  {['instagram', 'facebook', 'linkedin', 'tiktok', 'twitter'].map(platform => (
+                    <div key={platform} className={`px-3 py-2 rounded-lg text-xs font-medium border ${isDarkMode ? 'bg-gray-900/50 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
+                      {platform}
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Step 3: File Naming */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold">3</span>
+                  <h3 className="font-bold">Naming for AI Analysis</h3>
+                </div>
+                <p className={`text-sm ml-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Name your files using this format: <span className="italic font-medium">description_date.jpg</span>
+                </p>
+                <div className={`ml-8 p-4 rounded-xl space-y-2 ${isDarkMode ? 'bg-gray-900/50' : 'bg-blue-50/50'}`}>
+                  <div className="flex items-center gap-2 text-sm text-blue-500">
+                    <ImageIcon className="w-4 h-4" />
+                    <span className="font-mono">beach_sunset_20_august.jpg</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-purple-500">
+                    <Video className="w-4 h-4" />
+                    <span className="font-mono">product_demo_15_dec.mp4</span>
+                  </div>
+                </div>
+              </section>
+
+              {/* Step 4: Carousels */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold">4</span>
+                  <h3 className="font-bold">For Carousels</h3>
+                </div>
+                <p className={`text-sm ml-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Create a folder starting with <span className="font-mono">carousel_</span>.
+                </p>
+                <div className="ml-8 border-l-2 border-dashed border-gray-500 pl-4 py-1 space-y-1">
+                  <div className="flex items-center gap-2 text-sm text-gray-400 font-mono">
+                    <FolderOpen className="w-4 h-4 text-amber-500" />
+                    <span>carousel_summer_vibe_5_june/</span>
+                  </div>
+                  <div className="ml-6 flex items-center gap-2 text-xs text-gray-500 font-mono">
+                    <ImageIcon className="w-3 h-3" />
+                    <span>slide1.jpg</span>
+                  </div>
+                  <div className="ml-6 flex items-center gap-2 text-xs text-gray-500 font-mono">
+                    <ImageIcon className="w-3 h-3" />
+                    <span>slide2.jpg</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className={`p-6 border-t ${isDarkMode ? 'border-gray-700 bg-gray-900/30' : 'border-gray-100 bg-gray-50'}`}>
+            <button
+              onClick={onClose}
+              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all shadow-lg shadow-blue-600/20"
+            >
+              Got it, thanks!
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const confirmSchedule = () => {
@@ -757,11 +927,11 @@ function CreatedContentDashboard() {
 
       // Check if this is carousel content
       const isCarousel = itemToPublish.post_type === 'carousel' ||
-                         itemToPublish.content_type?.toLowerCase() === 'carousel' ||
-                         itemToPublish.selected_content_type?.toLowerCase() === 'carousel' ||
-                         (itemToPublish.metadata && itemToPublish.metadata.carousel_images && itemToPublish.metadata.carousel_images.length > 0) ||
-                         (itemToPublish.carousel_images && itemToPublish.carousel_images.length > 0) ||
-                         (itemToPublish.metadata && itemToPublish.metadata.total_images && itemToPublish.metadata.total_images > 1)
+        itemToPublish.content_type?.toLowerCase() === 'carousel' ||
+        itemToPublish.selected_content_type?.toLowerCase() === 'carousel' ||
+        (itemToPublish.metadata && itemToPublish.metadata.carousel_images && itemToPublish.metadata.carousel_images.length > 0) ||
+        (itemToPublish.carousel_images && itemToPublish.carousel_images.length > 0) ||
+        (itemToPublish.metadata && itemToPublish.metadata.total_images && itemToPublish.metadata.total_images > 1)
 
       // Get carousel images if it's carousel content
       let carouselImages = []
@@ -914,15 +1084,13 @@ function CreatedContentDashboard() {
           className="fixed inset-0 bg-black/50 backdrop-blur-sm"
           onClick={() => setShowPublishModal(false)}
         />
-        <div className={`relative max-w-md w-full rounded-2xl shadow-2xl overflow-hidden ${
-          isDarkMode ? 'bg-gray-800' : 'bg-white'
-        }`}>
-          {/* Header */}
-          <div className={`p-6 border-b ${
-            isDarkMode
-              ? 'border-gray-700 bg-gradient-to-r from-pink-900/20 to-rose-900/20'
-              : 'border-gray-200 bg-gradient-to-r from-pink-50 to-rose-50'
+        <div className={`relative max-w-md w-full rounded-2xl shadow-2xl overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'
           }`}>
+          {/* Header */}
+          <div className={`p-6 border-b ${isDarkMode
+            ? 'border-gray-700 bg-gradient-to-r from-pink-900/20 to-rose-900/20'
+            : 'border-gray-200 bg-gradient-to-r from-pink-50 to-rose-50'
+            }`}>
             <div className="flex items-center justify-center space-x-3">
               <div className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -930,9 +1098,8 @@ function CreatedContentDashboard() {
                 </svg>
               </div>
               <div>
-                <h3 className={`text-lg font-normal ${
-                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                }`}>
+                <h3 className={`text-lg font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>
                   Publish Content
                 </h3>
               </div>
@@ -956,21 +1123,18 @@ function CreatedContentDashboard() {
 
               {/* Message */}
               <div className="flex-1">
-                <div className={`relative p-4 rounded-2xl ${
-                  isDarkMode
-                    ? 'bg-gray-700 border border-gray-600'
-                    : 'bg-pink-50 border border-pink-200'
-                }`}>
-                  {/* Speech bubble pointer */}
-                  <div className={`absolute left-0 top-4 transform -translate-x-2 w-0 h-0 ${
-                    isDarkMode
-                      ? 'border-t-8 border-t-gray-700 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
-                      : 'border-t-8 border-t-pink-50 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
-                  }`} />
-
-                  <p className={`text-sm leading-relaxed ${
-                    isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                <div className={`relative p-4 rounded-2xl ${isDarkMode
+                  ? 'bg-gray-700 border border-gray-600'
+                  : 'bg-pink-50 border border-pink-200'
                   }`}>
+                  {/* Speech bubble pointer */}
+                  <div className={`absolute left-0 top-4 transform -translate-x-2 w-0 h-0 ${isDarkMode
+                    ? 'border-t-8 border-t-gray-700 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
+                    : 'border-t-8 border-t-pink-50 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
+                    }`} />
+
+                  <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                    }`}>
                     <span className="font-normal text-pink-500">Emily here!</span> 🚀<br />
                     Ready to publish <strong>"{itemToPublish.title || 'this content'}"</strong> to <strong>{itemToPublish.platform}</strong>?
                     This will share your content with your audience!
@@ -980,11 +1144,10 @@ function CreatedContentDashboard() {
                 <div className="mt-4 flex justify-end space-x-3">
                   <button
                     onClick={() => setShowPublishModal(false)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      isDarkMode
-                        ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
-                        : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${isDarkMode
+                      ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
+                      : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                      }`}
                     disabled={isPublishing}
                   >
                     Cancel
@@ -1027,15 +1190,13 @@ function CreatedContentDashboard() {
           className="fixed inset-0 bg-black/50 backdrop-blur-sm"
           onClick={() => setShowScheduleConfirmModal(false)}
         />
-        <div className={`relative max-w-md w-full rounded-2xl shadow-2xl overflow-hidden ${
-          isDarkMode ? 'bg-gray-800' : 'bg-white'
-        }`}>
-          {/* Header */}
-          <div className={`p-6 border-b ${
-            isDarkMode
-              ? 'border-gray-700 bg-gradient-to-r from-green-900/20 to-emerald-900/20'
-              : 'border-gray-200 bg-gradient-to-r from-green-50 to-emerald-50'
+        <div className={`relative max-w-md w-full rounded-2xl shadow-2xl overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'
           }`}>
+          {/* Header */}
+          <div className={`p-6 border-b ${isDarkMode
+            ? 'border-gray-700 bg-gradient-to-r from-green-900/20 to-emerald-900/20'
+            : 'border-gray-200 bg-gradient-to-r from-green-50 to-emerald-50'
+            }`}>
             <div className="flex items-center justify-center space-x-3">
               <div className="w-12 h-12 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1043,9 +1204,8 @@ function CreatedContentDashboard() {
                 </svg>
               </div>
               <div>
-                <h3 className={`text-lg font-normal ${
-                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                }`}>
+                <h3 className={`text-lg font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>
                   Schedule Content
                 </h3>
               </div>
@@ -1069,21 +1229,18 @@ function CreatedContentDashboard() {
 
               {/* Message */}
               <div className="flex-1">
-                <div className={`relative p-4 rounded-2xl ${
-                  isDarkMode
-                    ? 'bg-gray-700 border border-gray-600'
-                    : 'bg-pink-50 border border-pink-200'
-                }`}>
-                  {/* Speech bubble pointer */}
-                  <div className={`absolute left-0 top-4 transform -translate-x-2 w-0 h-0 ${
-                    isDarkMode
-                      ? 'border-t-8 border-t-gray-700 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
-                      : 'border-t-8 border-t-pink-50 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
-                  }`} />
-
-                  <p className={`text-sm leading-relaxed ${
-                    isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                <div className={`relative p-4 rounded-2xl ${isDarkMode
+                  ? 'bg-gray-700 border border-gray-600'
+                  : 'bg-pink-50 border border-pink-200'
                   }`}>
+                  {/* Speech bubble pointer */}
+                  <div className={`absolute left-0 top-4 transform -translate-x-2 w-0 h-0 ${isDarkMode
+                    ? 'border-t-8 border-t-gray-700 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
+                    : 'border-t-8 border-t-pink-50 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
+                    }`} />
+
+                  <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                    }`}>
                     <span className="font-normal text-pink-500">Emily here!</span> ⏰<br />
                     Ready to schedule <strong>"{itemToSchedule.title || 'this content'}"</strong> for later?
                     I'll help you pick the perfect time to share it!
@@ -1093,11 +1250,10 @@ function CreatedContentDashboard() {
                 <div className="mt-4 flex justify-end space-x-3">
                   <button
                     onClick={() => setShowScheduleConfirmModal(false)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      isDarkMode
-                        ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
-                        : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${isDarkMode
+                      ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
+                      : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                      }`}
                   >
                     Cancel
                   </button>
@@ -1129,15 +1285,13 @@ function CreatedContentDashboard() {
           className="fixed inset-0 bg-black/50 backdrop-blur-sm"
           onClick={() => setShowDeleteModal(false)}
         />
-        <div className={`relative max-w-md w-full rounded-2xl shadow-2xl overflow-hidden ${
-          isDarkMode ? 'bg-gray-800' : 'bg-white'
-        }`}>
-          {/* Header */}
-          <div className={`p-6 border-b ${
-            isDarkMode
-              ? 'border-gray-700 bg-gradient-to-r from-red-900/20 to-red-800/20'
-              : 'border-gray-200 bg-gradient-to-r from-red-50 to-red-100'
+        <div className={`relative max-w-md w-full rounded-2xl shadow-2xl overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'
           }`}>
+          {/* Header */}
+          <div className={`p-6 border-b ${isDarkMode
+            ? 'border-gray-700 bg-gradient-to-r from-red-900/20 to-red-800/20'
+            : 'border-gray-200 bg-gradient-to-r from-red-50 to-red-100'
+            }`}>
             <div className="flex items-center justify-center space-x-3">
               <div className="w-12 h-12 rounded-full bg-gradient-to-r from-red-500 to-red-600 flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1145,9 +1299,8 @@ function CreatedContentDashboard() {
                 </svg>
               </div>
               <div>
-                <h3 className={`text-lg font-normal ${
-                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                }`}>
+                <h3 className={`text-lg font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>
                   Delete Content
                 </h3>
               </div>
@@ -1171,21 +1324,18 @@ function CreatedContentDashboard() {
 
               {/* Message */}
               <div className="flex-1">
-                <div className={`relative p-4 rounded-2xl ${
-                  isDarkMode
-                    ? 'bg-gray-700 border border-gray-600'
-                    : 'bg-red-50 border border-red-200'
-                }`}>
-                  {/* Speech bubble pointer */}
-                  <div className={`absolute left-0 top-4 transform -translate-x-2 w-0 h-0 ${
-                    isDarkMode
-                      ? 'border-t-8 border-t-gray-700 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
-                      : 'border-t-8 border-t-red-50 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
-                  }`} />
-
-                  <p className={`text-sm leading-relaxed ${
-                    isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                <div className={`relative p-4 rounded-2xl ${isDarkMode
+                  ? 'bg-gray-700 border border-gray-600'
+                  : 'bg-red-50 border border-red-200'
                   }`}>
+                  {/* Speech bubble pointer */}
+                  <div className={`absolute left-0 top-4 transform -translate-x-2 w-0 h-0 ${isDarkMode
+                    ? 'border-t-8 border-t-gray-700 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
+                    : 'border-t-8 border-t-red-50 border-r-8 border-r-transparent border-b-8 border-b-transparent border-l-8 border-l-transparent'
+                    }`} />
+
+                  <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                    }`}>
                     <span className="font-semibold text-red-500">Leo here!</span> ⚠️<br />
                     Are you sure you want to delete <strong>"{itemToDelete.title || 'this content'}"</strong>?
                     This action cannot be undone and will permanently remove the content.
@@ -1195,11 +1345,10 @@ function CreatedContentDashboard() {
                 <div className="mt-4 flex justify-end space-x-3">
                   <button
                     onClick={() => setShowDeleteModal(false)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      isDarkMode
-                        ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
-                        : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${isDarkMode
+                      ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
+                      : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                      }`}
                     disabled={isDeleting}
                   >
                     Cancel
@@ -1238,9 +1387,8 @@ function CreatedContentDashboard() {
 
     return (
       <div
-        className={`fixed inset-0 flex items-center justify-center z-50 ${
-          isDarkMode ? 'bg-black bg-opacity-60' : 'bg-black bg-opacity-50'
-        }`}
+        className={`fixed inset-0 flex items-center justify-center z-50 ${isDarkMode ? 'bg-black bg-opacity-60' : 'bg-black bg-opacity-50'
+          }`}
         onClick={(e) => {
           if (e.target === e.currentTarget) {
             setShowScheduleModal(false)
@@ -1248,49 +1396,43 @@ function CreatedContentDashboard() {
         }}
       >
         <div
-          className={`rounded-lg p-6 max-w-md w-full mx-4 shadow-xl ${
-            isDarkMode
-              ? 'bg-gray-800 border border-gray-700'
-              : 'bg-white border border-gray-200'
-          }`}
+          className={`rounded-lg p-6 max-w-md w-full mx-4 shadow-xl ${isDarkMode
+            ? 'bg-gray-800 border border-gray-700'
+            : 'bg-white border border-gray-200'
+            }`}
           onClick={(e) => e.stopPropagation()}
         >
-          <h3 className={`text-xl font-semibold mb-4 ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>Schedule Content</h3>
+          <h3 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>Schedule Content</h3>
           <div className="space-y-4">
             <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>Date</label>
+              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}>Date</label>
               <input
                 type="date"
                 value={scheduleData.date}
                 onChange={(e) => setScheduleData(prev => ({ ...prev, date: e.target.value }))}
                 min={new Date().toISOString().split('T')[0]}
-                className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
-                  isDarkMode
-                    ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500 placeholder-gray-400'
-                    : 'bg-white border-gray-300 text-gray-900 focus:ring-green-500 focus:border-green-500'
-                }`}
+                className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 transition-colors ${isDarkMode
+                  ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500 placeholder-gray-400'
+                  : 'bg-white border-gray-300 text-gray-900 focus:ring-green-500 focus:border-green-500'
+                  }`}
                 style={isDarkMode ? {
                   colorScheme: 'dark'
                 } : {}}
               />
             </div>
             <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>Time</label>
+              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}>Time</label>
               <input
                 type="time"
                 value={scheduleData.time}
                 onChange={(e) => setScheduleData(prev => ({ ...prev, time: e.target.value }))}
-                className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
-                  isDarkMode
-                    ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500 placeholder-gray-400'
-                    : 'bg-white border-gray-300 text-gray-900 focus:ring-green-500 focus:border-green-500'
-                }`}
+                className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 transition-colors ${isDarkMode
+                  ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500 placeholder-gray-400'
+                  : 'bg-white border-gray-300 text-gray-900 focus:ring-green-500 focus:border-green-500'
+                  }`}
                 style={isDarkMode ? {
                   colorScheme: 'dark'
                 } : {}}
@@ -1300,22 +1442,20 @@ function CreatedContentDashboard() {
           <div className="flex gap-3 mt-6">
             <button
               onClick={() => setShowScheduleModal(false)}
-              className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${
-                isDarkMode
-                  ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 border border-gray-600'
-                  : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-              }`}
+              className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${isDarkMode
+                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 border border-gray-600'
+                : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                }`}
             >
               Cancel
             </button>
             <button
               onClick={handleScheduleConfirm}
               disabled={isScheduling || !scheduleData.date || !scheduleData.time}
-              className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-md transition-colors flex items-center justify-center gap-2 ${
-                isScheduling || !scheduleData.date || !scheduleData.time
-                  ? 'bg-gray-400 text-gray-200 cursor-not-allowed opacity-50'
-                  : 'bg-green-600 text-white hover:bg-green-700'
-              } ${isDarkMode && !(isScheduling || !scheduleData.date || !scheduleData.time) ? 'hover:bg-green-600' : ''}`}
+              className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-md transition-colors flex items-center justify-center gap-2 ${isScheduling || !scheduleData.date || !scheduleData.time
+                ? 'bg-gray-400 text-gray-200 cursor-not-allowed opacity-50'
+                : 'bg-green-600 text-white hover:bg-green-700'
+                } ${isDarkMode && !(isScheduling || !scheduleData.date || !scheduleData.time) ? 'hover:bg-green-600' : ''}`}
             >
               {isScheduling ? (
                 <>
@@ -1339,404 +1479,428 @@ function CreatedContentDashboard() {
       {renderPublishModal()}
       {renderScheduleConfirmModal()}
       <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
-      <SideNavbar />
-      <MobileNavigation
-        handleGenerateContent={() => {}}
-        generating={false}
-        fetchingFreshData={false}
-      />
+        <SideNavbar />
+        <MobileNavigation
+          handleGenerateContent={() => { }}
+          generating={false}
+          fetchingFreshData={false}
+        />
 
-      <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen">
-        {/* Header */}
-        <div className={`shadow-sm border-b sticky top-0 z-20 ${
-          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white'
-        }`}>
-          <div className="px-4 lg:px-6 py-3 lg:py-4">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              {/* Title and Stats */}
-              <div className="flex items-center gap-4">
-                <div>
-                  <h1 className={`text-xl ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                    <span className="font-bold">Created Content</span> | <span className="font-normal text-sm">{filteredContent.length} of {totalContentCount} items</span>
-                  </h1>
+        <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen">
+          {/* Header */}
+          <div className={`shadow-sm border-b sticky top-0 z-20 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white'
+            }`}>
+            <div className="px-4 lg:px-6 py-3 lg:py-4">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                {/* Title and Stats */}
+                <div className="flex items-center gap-4">
+                  <div>
+                    <h1 className={`text-xl ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                      <span className="font-bold">Created Content</span> | <span className="font-normal text-sm">{filteredContent.length} of {totalContentCount} items</span>
+                    </h1>
+                  </div>
                 </div>
-              </div>
 
-              {/* Filters */}
-              <div className="flex flex-wrap gap-2">
-                {/* All Button */}
-                <button
-                  onClick={() => {
-                    setFilterChannel('all')
-                    setFilterPlatform('all')
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                    filterChannel === 'all' && filterPlatform === 'all'
+                {/* Filters */}
+                <div className="flex flex-wrap gap-2">
+                  {/* All Button */}
+                  <button
+                    onClick={() => {
+                      setFilterChannel('all')
+                      setFilterPlatform('all')
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${filterChannel === 'all' && filterPlatform === 'all'
                       ? isDarkMode
                         ? 'bg-white text-gray-900 shadow-md'
                         : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md'
                       : isDarkMode
-                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                  }`}
-                >
-                  All
-                </button>
+                        ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                      }`}
+                  >
+                    All
+                  </button>
 
-                {/* Instagram Button */}
-                <button
-                  onClick={() => {
-                    setFilterChannel('social media')
-                    setFilterPlatform('instagram')
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                    filterPlatform === 'instagram'
+                  {/* Instagram Button */}
+                  <button
+                    onClick={() => {
+                      setFilterChannel('social media')
+                      setFilterPlatform('instagram')
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${filterPlatform === 'instagram'
                       ? isDarkMode
                         ? 'bg-white text-gray-900 shadow-md'
                         : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md'
                       : isDarkMode
-                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                  }`}
-                >
-                  Instagram
-                </button>
+                        ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                      }`}
+                  >
+                    Instagram
+                  </button>
 
-                {/* Facebook Button */}
-                <button
-                  onClick={() => {
-                    setFilterChannel('social media')
-                    setFilterPlatform('facebook')
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                    filterPlatform === 'facebook'
+                  {/* Facebook Button */}
+                  <button
+                    onClick={() => {
+                      setFilterChannel('social media')
+                      setFilterPlatform('facebook')
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${filterPlatform === 'facebook'
                       ? isDarkMode
                         ? 'bg-white text-gray-900 shadow-md'
                         : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md'
                       : isDarkMode
-                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                  }`}
-                >
-                  Facebook
-                </button>
+                        ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                      }`}
+                  >
+                    Facebook
+                  </button>
 
-                {/* LinkedIn Button */}
-                <button
-                  onClick={() => {
-                    setFilterChannel('social media')
-                    setFilterPlatform('linkedin')
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                    filterPlatform === 'linkedin'
+                  {/* LinkedIn Button */}
+                  <button
+                    onClick={() => {
+                      setFilterChannel('social media')
+                      setFilterPlatform('linkedin')
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${filterPlatform === 'linkedin'
                       ? isDarkMode
                         ? 'bg-white text-gray-900 shadow-md'
                         : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md'
                       : isDarkMode
-                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                  }`}
-                >
-                  LinkedIn
-                </button>
+                        ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                      }`}
+                  >
+                    LinkedIn
+                  </button>
 
-                {/* YouTube Button */}
-                <button
-                  onClick={() => {
-                    setFilterChannel('social media')
-                    setFilterPlatform('youtube')
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                    filterPlatform === 'youtube'
+                  {/* YouTube Button */}
+                  <button
+                    onClick={() => {
+                      setFilterChannel('social media')
+                      setFilterPlatform('youtube')
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${filterPlatform === 'youtube'
                       ? isDarkMode
                         ? 'bg-white text-gray-900 shadow-md'
                         : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md'
                       : isDarkMode
-                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                  }`}
-                >
-                  YouTube
-                </button>
+                        ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                      }`}
+                  >
+                    YouTube
+                  </button>
 
-                {/* Blogs Button */}
-                <button
-                  onClick={() => {
-                    setFilterChannel('blog')
-                    setFilterPlatform('all')
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                    filterChannel === 'blog'
+                  {/* Blogs Button */}
+                  <button
+                    onClick={() => {
+                      setFilterChannel('blog')
+                      setFilterPlatform('all')
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${filterChannel === 'blog'
                       ? isDarkMode
                         ? 'bg-white text-gray-900 shadow-md'
                         : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md'
                       : isDarkMode
-                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                  }`}
-                >
-                  Blogs
-                </button>
+                        ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                      }`}
+                  >
+                    Blogs
+                  </button>
 
-                {/* Search */}
-                <div className="relative">
-                  <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`} />
-                  <input
-                    type="text"
-                    placeholder="Search content..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className={`pl-10 pr-4 py-2 rounded-lg border text-sm w-64 ${
-                      isDarkMode
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      }`} />
+                    <input
+                      type="text"
+                      placeholder="Search content..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className={`pl-10 pr-4 py-2 rounded-lg border text-sm w-64 ${isDarkMode
                         ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400'
                         : 'bg-white border-gray-300 text-gray-700 placeholder-gray-500'
-                    }`}
-                  />
+                        }`}
+                    />
+                  </div>
+
+
+                  {/* Generate from Drive Button */}
+                  <button
+                    onClick={handleGenerateFromDrive}
+                    disabled={isDriveProcessing}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${isDarkMode
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                      } ${isDriveProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Generate posts from Google Drive"
+                  >
+                    {isDriveProcessing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <HardDrive className="w-4 h-4" />
+                    )}
+                    <span>{isDriveProcessing ? 'Processing Drive...' : 'Generate from Drive'}</span>
+                  </button>
+
+                  {/* Help Icon for Drive Structure */}
+                  <button
+                    onClick={() => setShowDriveHelp(true)}
+                    className={`p-2 rounded-lg transition-all ${isDarkMode
+                      ? 'hover:bg-blue-900/20 text-blue-400'
+                      : 'hover:bg-blue-50 text-blue-600'
+                      }`}
+                    title="How to structure your Google Drive"
+                  >
+                    <HelpCircle className="w-5 h-5 transition-transform hover:scale-110" />
+                  </button>
+
+                  {/* Refresh Button */}
+                  <button
+                    onClick={() => fetchContent(true)}
+                    className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'
+                      }`}
+                    title="Refresh content"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
                 </div>
-
-
-                {/* Refresh Button */}
-                <button
-                  onClick={() => fetchContent(true)}
-                  className={`p-2 rounded-lg transition-colors ${
-                    isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'
-                  }`}
-                  title="Refresh content"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Main Content */}
-        <div className="flex-1 p-6 lg:p-8">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <span className={`text-lg ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                Loading content...
-              </span>
-            </div>
-          ) : filteredContent.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <FileText className={`w-16 h-16 mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`} />
-              <h3 className={`text-lg font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {content.length === 0 ? 'No content created yet' : 'No content matches your filters'}
-              </h3>
-              <p className={`text-center max-w-md ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {content.length === 0
-                  ? 'Start creating content with our AI-powered tools to see your content here.'
-                  : 'Try adjusting your filters or search terms to find what you\'re looking for.'
-                }
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {Array.isArray(filteredContent) && filteredContent.map((contentItem) => {
-                const { mediaUrl, isVideo } = getMediaInfo(contentItem)
-                const hasMedia = mediaUrl && mediaUrl.trim()
-                const thumbnailUrl = getThumbnailUrl(mediaUrl)
+          {/* Main Content */}
+          <div className="flex-1 p-6 lg:p-8">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <span className={`text-lg ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  Loading content...
+                </span>
+              </div>
+            ) : filteredContent.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <FileText className={`w-16 h-16 mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+                <h3 className={`text-lg font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {content.length === 0 ? 'No content created yet' : 'No content matches your filters'}
+                </h3>
+                <p className={`text-center max-w-md ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {content.length === 0
+                    ? 'Start creating content with our AI-powered tools to see your content here.'
+                    : 'Try adjusting your filters or search terms to find what you\'re looking for.'
+                  }
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {Array.isArray(filteredContent) && filteredContent.map((contentItem) => {
+                  const { mediaUrl, isVideo } = getMediaInfo(contentItem)
+                  const hasMedia = mediaUrl && mediaUrl.trim()
+                  const thumbnailUrl = getThumbnailUrl(mediaUrl)
 
-                // Check if this is reel or video content that should show video
-                const isReelOrVideoContent = contentItem.content_type?.toLowerCase() === 'reel' ||
-                                           contentItem.content_type?.toLowerCase() === 'short_video' ||
-                                           contentItem.content_type?.toLowerCase() === 'short video' ||
-                                           contentItem.content_type?.toLowerCase() === 'short_video or reel' ||
-                                           contentItem.content_type?.toLowerCase() === 'video' ||
-                                           contentItem.content_type?.toLowerCase() === 'long_video' ||
-                                           contentItem.content_type?.toLowerCase() === 'long video'
+                  // Check if this is reel or video content that should show video
+                  const isReelOrVideoContent = contentItem.content_type?.toLowerCase() === 'reel' ||
+                    contentItem.content_type?.toLowerCase() === 'short_video' ||
+                    contentItem.content_type?.toLowerCase() === 'short video' ||
+                    contentItem.content_type?.toLowerCase() === 'short_video or reel' ||
+                    contentItem.content_type?.toLowerCase() === 'video' ||
+                    contentItem.content_type?.toLowerCase() === 'long_video' ||
+                    contentItem.content_type?.toLowerCase() === 'long video'
 
-                // Show all posts, even without media (text-only posts are valid)
-                return (
-                  <div
-                    key={contentItem.id}
-                    className="relative aspect-square group cursor-pointer overflow-hidden bg-gray-200"
-                    onClick={() => handlePreview(contentItem)}
-                  >
-                    {hasMedia || isReelOrVideoContent ? (
-                      <>
-                        {isVideo || isReelOrVideoContent ? (
-                          <VideoThumbnail
-                            src={mediaUrl || contentItem.media_url}
-                            alt={contentItem.title || 'Video content'}
-                            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-                            isDarkMode={isDarkMode}
-                          />
-                        ) : (
-                          <img
-                            src={thumbnailUrl || mediaUrl}
-                            alt={contentItem.title || 'Content'}
-                            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-                            onError={(e) => {
-                              // Fallback to original URL if thumbnail fails
-                              if (e.target.src !== mediaUrl) {
-                                e.target.src = mediaUrl;
-                              } else {
-                                e.target.style.display = 'none';
-                              }
-                            }}
-                          />
-                        )}
-                      </>
-                    ) : (
-                      // Show text-only post or carousel with content preview
-                      <div className={`w-full h-full flex flex-col items-center justify-center p-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                        {/* Check if it's carousel content */}
-                        {(() => {
-                          const isCarousel = contentItem.post_type === 'carousel' ||
-                                            contentItem.content_type?.toLowerCase() === 'carousel' ||
-                                            contentItem.selected_content_type?.toLowerCase() === 'carousel' ||
-                                            (contentItem.metadata && contentItem.metadata.carousel_images && contentItem.metadata.carousel_images.length > 0) ||
-                                            (contentItem.carousel_images && Array.isArray(contentItem.carousel_images) && contentItem.carousel_images.length > 0) ||
-                                            (contentItem.metadata && contentItem.metadata.total_images && contentItem.metadata.total_images > 1)
-                          
-                          const carouselCount = contentItem.metadata?.carousel_images?.length || 
-                                                contentItem.carousel_images?.length || 
-                                                contentItem.metadata?.total_images || 
-                                                0
-
-                          return isCarousel ? (
-                            <>
-                              <Layers className={`w-12 h-12 mb-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                              <p className={`text-xs text-center font-medium line-clamp-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                                {contentItem.title || 'Carousel Post'}
-                              </p>
-                              {carouselCount > 0 && (
-                                <span className={`mt-2 text-xs px-2 py-1 rounded ${isDarkMode ? 'bg-blue-600 text-gray-100' : 'bg-blue-100 text-blue-700'}`}>
-                                  {carouselCount} images
-                                </span>
-                              )}
-                            </>
+                  // Show all posts, even without media (text-only posts are valid)
+                  return (
+                    <div
+                      key={contentItem.id}
+                      className="relative aspect-square group cursor-pointer overflow-hidden bg-gray-200"
+                      onClick={() => handlePreview(contentItem)}
+                    >
+                      {hasMedia || isReelOrVideoContent ? (
+                        <>
+                          {isVideo || isReelOrVideoContent ? (
+                            <VideoThumbnail
+                              src={mediaUrl || contentItem.media_url}
+                              alt={contentItem.title || 'Video content'}
+                              className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                              isDarkMode={isDarkMode}
+                            />
                           ) : (
+                            <img
+                              src={thumbnailUrl || mediaUrl}
+                              alt={contentItem.title || 'Content'}
+                              className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                              onError={(e) => {
+                                // Fallback to original URL if thumbnail fails
+                                if (e.target.src !== mediaUrl) {
+                                  e.target.src = mediaUrl;
+                                } else {
+                                  e.target.style.display = 'none';
+                                }
+                              }}
+                            />
+                          )}
+                        </>
+                      ) : (
+                        // Show text-only post or carousel with content preview
+                        <div className={`w-full h-full flex flex-col items-center justify-center p-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                          {/* Check if it's carousel content */}
+                          {(() => {
+                            const isCarousel = contentItem.post_type === 'carousel' ||
+                              contentItem.content_type?.toLowerCase() === 'carousel' ||
+                              contentItem.selected_content_type?.toLowerCase() === 'carousel' ||
+                              (contentItem.metadata && contentItem.metadata.carousel_images && contentItem.metadata.carousel_images.length > 0) ||
+                              (contentItem.carousel_images && Array.isArray(contentItem.carousel_images) && contentItem.carousel_images.length > 0) ||
+                              (contentItem.metadata && contentItem.metadata.total_images && contentItem.metadata.total_images > 1)
+
+                            const carouselCount = contentItem.metadata?.carousel_images?.length ||
+                              contentItem.carousel_images?.length ||
+                              contentItem.metadata?.total_images ||
+                              0
+
+                            return isCarousel ? (
+                              <>
+                                <Layers className={`w-12 h-12 mb-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                                <p className={`text-xs text-center font-medium line-clamp-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                  {contentItem.title || 'Carousel Post'}
+                                </p>
+                                {carouselCount > 0 && (
+                                  <span className={`mt-2 text-xs px-2 py-1 rounded ${isDarkMode ? 'bg-blue-600 text-gray-100' : 'bg-blue-100 text-blue-700'}`}>
+                                    {carouselCount} images
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <FileText className={`w-12 h-12 mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                                <p className={`text-xs text-center font-medium line-clamp-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                  {contentItem.title || contentItem.content?.substring(0, 50) || 'Text-only post'}
+                                </p>
+                              </>
+                            )
+                          })()}
+                          {contentItem.platform && (
+                            <span className={`mt-2 text-xs px-2 py-1 rounded ${isDarkMode ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
+                              {contentItem.platform}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+
+                      {/* Action Buttons Overlay */}
+                      <div className={`absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex flex-col items-center justify-center ${isDarkMode ? 'group-hover:bg-opacity-60' : ''
+                        }`} style={{ pointerEvents: 'none' }}>
+                        {/* Title Display */}
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white text-center p-2 mb-2" style={{ pointerEvents: 'none' }}>
+                          <div className="text-sm font-medium truncate max-w-full">
+                            {contentItem.title || `Content for ${contentItem.platform}`}
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-2" style={{ pointerEvents: 'auto' }}>
+                          {contentItem.status !== 'published' && (
                             <>
-                              <FileText className={`w-12 h-12 mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-                              <p className={`text-xs text-center font-medium line-clamp-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                                {contentItem.title || contentItem.content?.substring(0, 50) || 'Text-only post'}
-                              </p>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleEdit(contentItem); }}
+                                className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
+                                title="Edit content"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleSchedule(contentItem); }}
+                                className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors"
+                                title="Schedule content"
+                              >
+                                <Clock className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handlePublish(contentItem); }}
+                                className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-full transition-colors"
+                                title="Publish content"
+                                disabled={isPublishing}
+                              >
+                                {isPublishing ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Send className="w-4 h-4" />
+                                )}
+                              </button>
                             </>
-                          )
-                        })()}
-                        {contentItem.platform && (
-                          <span className={`mt-2 text-xs px-2 py-1 rounded ${isDarkMode ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
-                            {contentItem.platform}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-
-                    {/* Action Buttons Overlay */}
-                    <div className={`absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex flex-col items-center justify-center ${
-                      isDarkMode ? 'group-hover:bg-opacity-60' : ''
-                    }`} style={{ pointerEvents: 'none' }}>
-                      {/* Title Display */}
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white text-center p-2 mb-2" style={{ pointerEvents: 'none' }}>
-                        <div className="text-sm font-medium truncate max-w-full">
-                          {contentItem.title || `Content for ${contentItem.platform}`}
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDelete(contentItem); }}
+                            className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
+                            title="Delete content"
+                            disabled={isDeleting}
+                          >
+                            {isDeleting ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-2" style={{ pointerEvents: 'auto' }}>
-                        {contentItem.status !== 'published' && (
-                          <>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleEdit(contentItem); }}
-                              className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
-                              title="Edit content"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleSchedule(contentItem); }}
-                              className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors"
-                              title="Schedule content"
-                            >
-                              <Clock className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handlePublish(contentItem); }}
-                              className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-full transition-colors"
-                              title="Publish content"
-                              disabled={isPublishing}
-                            >
-                              {isPublishing ? (
-                                <RefreshCw className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Send className="w-4 h-4" />
-                              )}
-                            </button>
-                          </>
-                        )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDelete(contentItem); }}
-                          className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
-                          title="Delete content"
-                          disabled={isDeleting}
-                        >
-                          {isDeleting ? (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
+                      {/* Platform indicator */}
+                      <div className="absolute top-2 right-2 bg-black bg-opacity-50 rounded-full p-1">
+                        {getPlatformIcon(contentItem.platform)}
                       </div>
-                    </div>
 
-                    {/* Platform indicator */}
-                    <div className="absolute top-2 right-2 bg-black bg-opacity-50 rounded-full p-1">
-                      {getPlatformIcon(contentItem.platform)}
-                    </div>
-
-                    {/* Status indicator */}
-                    <div className="absolute top-2 left-2">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        contentItem.status === 'published'
+                      {/* Status indicator */}
+                      <div className="absolute top-2 left-2">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${contentItem.status === 'published'
                           ? 'bg-green-500 text-white'
                           : contentItem.status === 'scheduled'
-                          ? 'bg-blue-500 text-white'
-                          : contentItem.status === 'draft'
-                          ? 'bg-yellow-500 text-white'
-                          : 'bg-gray-500 text-white'
-                      }`}>
-                        {contentItem.status ? contentItem.status.charAt(0).toUpperCase() + contentItem.status.slice(1) : 'Draft'}
-                      </span>
-                    </div>
+                            ? 'bg-blue-500 text-white'
+                            : contentItem.status === 'draft'
+                              ? 'bg-yellow-500 text-white'
+                              : 'bg-gray-500 text-white'
+                          }`}>
+                          {contentItem.status ? contentItem.status.charAt(0).toUpperCase() + contentItem.status.slice(1) : 'Draft'}
+                        </span>
+                      </div>
 
-                    {/* Content type indicator */}
-                    <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 rounded-full p-1.5">
-                      {getContentTypeIcon(contentItem.content_type || contentItem.post_type || contentItem.selected_content_type, contentItem)}
+                      {/* Content type indicator */}
+                      <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 rounded-full p-1.5">
+                        {getContentTypeIcon(contentItem.content_type || contentItem.post_type || contentItem.selected_content_type, contentItem)}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* ATSN Content Modal */}
+        {isContentModalOpen && selectedContent && (
+          <ATSNContentModal
+            content={selectedContent}
+            onClose={handleCloseModal}
+            autoOpenImageEditor={autoOpenImageEditor}
+            initialImageEditorUrl={initialImageEditorUrl}
+            onImageEditorOpened={handleImageEditorOpened}
+          />
+        )}
+
+        {/* Reel Modal */}
+        {isReelModalOpen && selectedContent && (
+          <ReelModal
+            content={selectedContent}
+            onClose={handleCloseReelModal}
+          />
+        )}
       </div>
-
-      {/* ATSN Content Modal */}
-      {isContentModalOpen && selectedContent && (
-        <ATSNContentModal
-          content={selectedContent}
-          onClose={handleCloseModal}
-          autoOpenImageEditor={autoOpenImageEditor}
-          initialImageEditorUrl={initialImageEditorUrl}
-          onImageEditorOpened={handleImageEditorOpened}
-        />
-      )}
-
-      {/* Reel Modal */}
-      {isReelModalOpen && selectedContent && (
-        <ReelModal
-          content={selectedContent}
-          onClose={handleCloseReelModal}
-        />
-      )}
-    </div>
+      {/* Drive Structure Help Modal */}
+      <DriveHelpModal
+        isOpen={showDriveHelp}
+        onClose={() => setShowDriveHelp(false)}
+        isDarkMode={isDarkMode}
+      />
     </>
   )
 }

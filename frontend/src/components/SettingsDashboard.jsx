@@ -25,7 +25,6 @@ import SideNavbar from './SideNavbar'
 import MobileNavigation from './MobileNavigation'
 import DisconnectConfirmationModal from './DisconnectConfirmationModal'
 import WordPressInstructionsModal from './WordPressInstructionsModal'
-import GoogleDriveCard from './GoogleDriveCard'
 // Using URL-based approach for logos
 
 const SettingsDashboard = () => {
@@ -58,7 +57,6 @@ const SettingsDashboard = () => {
   })
   const [showWordPressInstructions, setShowWordPressInstructions] = useState(false)
 
-  // Google Drive state is now managed by <GoogleDriveCard />
 
   // Validation functions
   const validateWordPressCredentials = () => {
@@ -687,7 +685,6 @@ const SettingsDashboard = () => {
     }
   }
 
-  // Google Drive helpers are now in <GoogleDriveCard />
 
   const handleTokenConnect = async (e) => {
     e.preventDefault()
@@ -1177,18 +1174,6 @@ const SettingsDashboard = () => {
             </div>
           </section>
 
-          {/* Automation/Google Drive Section */}
-          <section className="space-y-8">
-            <div className="flex items-end justify-between border-b border-black/[0.04] pb-4">
-              <div>
-                <h2 className="text-[17px] font-bold text-slate-900 tracking-tight">Automation</h2>
-                <p className="text-[13px] text-slate-500 mt-1">Supercharge your workflow with direct integrations.</p>
-              </div>
-            </div>
-            <GoogleDriveCard onStatusChange={(status) => {
-              if (status?.connected) fetchConnections()
-            }} />
-          </section>
         </div>
       </main>
 
