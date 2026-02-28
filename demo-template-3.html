@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARGO | Intelligent Motion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap');
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #000;
+            color: #fff;
+        }
+
+        .brutal-border {
+            border: 3px solid #fff;
+            box-shadow: 8px 8px 0px #FF3B30;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .brutal-border:hover {
+            transform: translate(4px, 4px);
+            box-shadow: 4px 4px 0px #FF3B30;
+        }
+
+        .brutal-card {
+            background-color: #111;
+            border: 2px solid #333;
+            transition: all 0.3s ease;
+        }
+
+        .brutal-card:hover {
+            background-color: #FF3B30;
+            border-color: #FF3B30;
+            transform: skew(-2deg);
+        }
+
+        .brutal-card:hover * {
+            color: #000 !important;
+        }
+
+        .marquee-container {
+            overflow: hidden;
+            white-space: nowrap;
+            background: #fff;
+            color: #000;
+            padding: 1rem 0;
+            border-top: 4px solid #000;
+            border-bottom: 4px solid #000;
+        }
+
+        .marquee {
+            display: inline-block;
+            animation: marquee 20s linear infinite;
+            font-weight: 800;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+        }
+
+        @keyframes marquee {
+            0% {
+                transform: translateX(0);
+            }
+
+            100% {
+                transform: translateX(-50%);
+            }
+        }
+
+        .grid-bg {
+            background-size: 40px 40px;
+            background-image:
+                linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+        }
+    </style>
+</head>
+
+<body class="antialiased overflow-x-hidden">
+
+    <nav
+        class="p-6 flex justify-between items-center border-b-2 border-white/10 relative z-50 bg-black/80 backdrop-blur-md">
+        <div class="text-3xl font-black tracking-tighter uppercase italic">ARGO<span class="text-[#FF3B30]">_</span>
+        </div>
+        <button class="brutal-border bg-white text-black font-bold uppercase py-2 px-6 text-sm">Pre-Order</button>
+    </nav>
+
+    <!-- Section 1: Hero -->
+    <header class="min-h-[85vh] relative flex flex-col items-center justify-center pt-10 pb-20 grid-bg overflow-hidden">
+        <!-- Abstract shape -->
+        <div
+            class="absolute top-1/4 right-10 w-64 h-64 bg-[#FF3B30] rounded-full mix-blend-screen filter blur-3xl opacity-40 animate-pulse">
+        </div>
+        <div
+            class="absolute bottom-1/4 left-10 w-80 h-80 bg-blue-600 rounded-full mix-blend-screen filter blur-3xl opacity-30">
+        </div>
+
+        <div class="max-w-7xl mx-auto px-6 w-full text-center relative z-10 flex flex-col items-center">
+
+            <div
+                class="inline-block border-2 border-white/20 px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest mb-10 bg-black/50 backdrop-blur-sm">
+                Next Generation Robotics
+            </div>
+
+            <h1 class="text-6xl md:text-8xl lg:text-[10rem] font-black uppercase leading-[0.85] tracking-tighter mb-8">
+                Intelligent<br />
+                <span class="text-transparent" style="-webkit-text-stroke: 2px #fff;">Motion.</span>
+            </h1>
+
+            <h2 class="text-2xl md:text-4xl font-semibold mb-6 text-[#FF3B30]">Autonomous Future.</h2>
+            <p class="text-xl md:text-2xl font-light mb-12 max-w-2xl text-gray-400">Let's Build the Future Together.</p>
+
+            <img src="/argo.png" alt="Argo Robot"
+                class="w-full max-w-2xl object-contain drop-shadow-[0_0_30px_rgba(255,59,48,0.4)] hover:scale-105 transition-transform duration-500"
+                onerror="this.src='https://images.unsplash.com/photo-1546776310-eef45dd6d414?auto=format&fit=crop&q=80&w=800'">
+        </div>
+    </header>
+
+    <div class="marquee-container -mt-4 relative z-20">
+        <div class="marquee">
+            MEET ARGO // INTELLIGENT MOTION // AUTONOMOUS FUTURE // PURPOSE-BUILT // MEET ARGO // INTELLIGENT MOTION //
+            AUTONOMOUS FUTURE // PURPOSE-BUILT //
+            MEET ARGO // INTELLIGENT MOTION // AUTONOMOUS FUTURE // PURPOSE-BUILT //
+        </div>
+    </div>
+
+    <!-- Section 2: Meet Argo -->
+    <section class="py-32 relative bg-[#0a0a0a]">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="flex flex-col md:flex-row gap-16 xl:gap-24">
+
+                <div class="md:w-5/12 flex flex-col justify-center">
+                    <h2 class="text-5xl md:text-7xl font-black uppercase tracking-tighter mb-6 leading-none">
+                        Meet<br /><span class="text-[#FF3B30]">Argo</span></h2>
+                    <p class="text-xl font-light text-gray-400 leading-relaxed mb-10 border-l-4 border-[#FF3B30] pl-6">
+                        ARGO (Autonomous Robot for Goods and Operations) is designed to move intelligently from one
+                        point to another, handling dynamic environments and real-world perturbations with ease.
+                    </p>
+                    <button
+                        class="w-max brutal-border bg-black text-white font-bold uppercase py-4 px-8 text-sm flex items-center gap-3">
+                        Technical Specs <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+
+                <div class="md:w-7/12 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- Card 1 -->
+                    <div class="brutal-card p-8 aspect-square flex flex-col justify-end relative overflow-hidden group">
+                        <i
+                            class="fa-solid fa-satellite-dish absolute top-8 right-8 text-5xl text-gray-700 group-hover:text-black transition-colors duration-300"></i>
+                        <h3 class="text-2xl font-black uppercase mb-3 text-white">Autonomous<br />Navigation</h3>
+                        <p class="text-sm text-gray-400 font-light group-hover:text-black/80">Independently plans and
+                            executes movement from origin to destination without manual intervention.</p>
+                    </div>
+
+                    <!-- Card 2 -->
+                    <div class="brutal-card p-8 aspect-square flex flex-col justify-end relative overflow-hidden group">
+                        <i
+                            class="fa-solid fa-bolt absolute top-8 right-8 text-5xl text-gray-700 group-hover:text-black transition-colors duration-300"></i>
+                        <h3 class="text-2xl font-black uppercase mb-3 text-white">Adaptive To<br />Change</h3>
+                        <p class="text-sm text-gray-400 font-light group-hover:text-black/80">Responds to obstacles,
+                            movement shifts, and environmental variations in real time.</p>
+                    </div>
+
+                    <!-- Card 3 -->
+                    <div class="brutal-card p-8 aspect-square flex flex-col justify-end relative overflow-hidden group">
+                        <i
+                            class="fa-solid fa-people-arrows absolute top-8 right-8 text-5xl text-gray-700 group-hover:text-black transition-colors duration-300"></i>
+                        <h3 class="text-2xl font-black uppercase mb-3 text-white">Human-Centric<br />Design</h3>
+                        <p class="text-sm text-gray-400 font-light group-hover:text-black/80">Built to operate safely
+                            and naturally within human spaces and structured indoor environments.</p>
+                    </div>
+
+                    <!-- Card 4 -->
+                    <div class="brutal-card p-8 aspect-square flex flex-col justify-end relative overflow-hidden group">
+                        <i
+                            class="fa-solid fa-pallet absolute top-8 right-8 text-5xl text-gray-700 group-hover:text-black transition-colors duration-300"></i>
+                        <h3 class="text-2xl font-black uppercase mb-3 text-white">Purpose-Built<br />For Goods</h3>
+                        <p class="text-sm text-gray-400 font-light group-hover:text-black/80">Designed to transport
+                            items efficiently, reducing repetitive manual effort in everyday operations.</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Section 3: Argo for Industries -->
+    <section class="py-32 bg-white text-black border-t-[10px] border-[#FF3B30] relative overflow-hidden">
+
+        <div class="max-w-7xl mx-auto px-6 relative z-10">
+            <h2 class="text-6xl md:text-8xl font-black uppercase tracking-tighter mb-16 text-center">
+                Argo For <br /> <span
+                    class="text-transparent bg-clip-text bg-[url('https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800')] bg-cover bg-center"
+                    style="-webkit-text-stroke: 2px #000;">Industries</span>
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Industry 1: Hotels -->
+                <div
+                    class="group relative overflow-hidden border-4 border-black aspect-[16/9] lg:aspect-auto h-80 flex items-center justify-center">
+                    <div
+                        class="absolute inset-0 bg-black/80 z-10 group-hover:bg-black/40 transition-colors duration-500">
+                    </div>
+                    <img src="https://images.unsplash.com/photo-1542314831-c6a420325142?auto=format&fit=crop&q=80&w=800"
+                        class="absolute inset-0 w-full h-full object-cover filter grayscale group-hover:grayscale-0 transition-all duration-500 scale-100 group-hover:scale-110">
+
+                    <div
+                        class="relative z-20 text-center p-8 transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                        <i class="fa-solid fa-concierge-bell text-5xl text-white mb-4 drop-shadow-md"></i>
+                        <h3 class="text-4xl font-black uppercase text-white drop-shadow-md">Hotels</h3>
+                        <div class="h-1 w-0 bg-[#FF3B30] mx-auto mt-4 group-hover:w-16 transition-all duration-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Industry 2: Warehouses -->
+                <div
+                    class="group relative overflow-hidden border-4 border-black aspect-[16/9] lg:aspect-auto h-80 flex items-center justify-center">
+                    <div
+                        class="absolute inset-0 bg-black/80 z-10 group-hover:bg-black/40 transition-colors duration-500">
+                    </div>
+                    <img src="https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&q=80&w=800"
+                        class="absolute inset-0 w-full h-full object-cover filter grayscale group-hover:grayscale-0 transition-all duration-500 scale-100 group-hover:scale-110">
+
+                    <div
+                        class="relative z-20 text-center p-8 transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                        <i class="fa-solid fa-truck-fast text-5xl text-white mb-4 drop-shadow-md"></i>
+                        <h3 class="text-4xl font-black uppercase text-white drop-shadow-md">Warehouses</h3>
+                        <div class="h-1 w-0 bg-[#FF3B30] mx-auto mt-4 group-hover:w-16 transition-all duration-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Industry 3: Restaurants -->
+                <div
+                    class="group relative overflow-hidden border-4 border-black aspect-[16/9] lg:aspect-auto h-80 flex items-center justify-center">
+                    <div
+                        class="absolute inset-0 bg-black/80 z-10 group-hover:bg-black/40 transition-colors duration-500">
+                    </div>
+                    <img src="https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&q=80&w=800"
+                        class="absolute inset-0 w-full h-full object-cover filter grayscale group-hover:grayscale-0 transition-all duration-500 scale-100 group-hover:scale-110">
+
+                    <div
+                        class="relative z-20 text-center p-8 transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                        <i class="fa-solid fa-burger text-5xl text-white mb-4 drop-shadow-md"></i>
+                        <h3 class="text-4xl font-black uppercase text-white drop-shadow-md mx-auto">Restaurants <br>&
+                            Cafes</h3>
+                        <div class="h-1 w-0 bg-[#FF3B30] mx-auto mt-4 group-hover:w-16 transition-all duration-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Industry 4: Household -->
+                <div
+                    class="group relative overflow-hidden border-4 border-black aspect-[16/9] lg:aspect-auto h-80 flex items-center justify-center">
+                    <div
+                        class="absolute inset-0 bg-black/80 z-10 group-hover:bg-black/40 transition-colors duration-500">
+                    </div>
+                    <img src="https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&q=80&w=800"
+                        class="absolute inset-0 w-full h-full object-cover filter grayscale group-hover:grayscale-0 transition-all duration-500 scale-100 group-hover:scale-110">
+
+                    <div
+                        class="relative z-20 text-center p-8 transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                        <i class="fa-solid fa-couch text-5xl text-white mb-4 drop-shadow-md"></i>
+                        <h3 class="text-4xl font-black uppercase text-white drop-shadow-md">Household Support</h3>
+                        <div class="h-1 w-0 bg-[#FF3B30] mx-auto mt-4 group-hover:w-16 transition-all duration-500">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</body>
+
+</html>

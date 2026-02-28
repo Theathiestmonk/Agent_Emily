@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARGO - Premium Robotics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            gold: '#D4AF37',
+                            dark: '#0f1115',
+                            charcoal: '#1a1d24',
+                            light: '#fcfcfc'
+                        }
+                    },
+                    fontFamily: {
+                        serif: ['Playfair Display', 'serif'],
+                        sans: ['Lato', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
+        body {
+            font-family: 'Lato', sans-serif;
+            background-color: #0f1115;
+            color: #fcfcfc;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4,
+        .font-serif {
+            font-family: 'Playfair Display', serif;
+        }
+
+        .gold-gradient {
+            background: linear-gradient(135deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .gold-border {
+            border-color: #D4AF37;
+        }
+
+        .gold-bg {
+            background-color: #D4AF37;
+        }
+
+        .elegant-card {
+            background: rgba(26, 29, 36, 0.6);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            backdrop-filter: blur(10px);
+            transition: all 0.5s ease;
+        }
+
+        .elegant-card:hover {
+            border-color: rgba(212, 175, 55, 0.8);
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .industry-item {
+            position: relative;
+            padding: 2rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .industry-item:hover {
+            padding-left: 2rem;
+            border-bottom-color: #D4AF37;
+        }
+
+        .industry-item .icon-wrapper {
+            opacity: 0;
+            transform: translateX(-20px);
+            transition: all 0.3s ease;
+        }
+
+        .industry-item:hover .icon-wrapper {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .ken-burns {
+            animation: kenBurns 20s ease-out infinite alternate;
+        }
+
+        @keyframes kenBurns {
+            0% {
+                transform: scale(1);
+            }
+
+            100% {
+                transform: scale(1.1);
+            }
+        }
+    </style>
+</head>
+
+<body class="antialiased">
+
+    <nav class="absolute w-full z-50 py-8">
+        <div class="max-w-7xl mx-auto px-8 flex justify-between items-center">
+            <div class="text-3xl font-serif font-bold tracking-widest gold-gradient">ARGO</div>
+            <div class="hidden md:flex gap-10 text-sm tracking-widest uppercase">
+                <a href="#vision" class="hover:text-brand-gold transition-colors">Vision</a>
+                <a href="#engineering" class="hover:text-brand-gold transition-colors">Engineering</a>
+                <a href="#sectors" class="hover:text-brand-gold transition-colors">Sectors</a>
+            </div>
+            <button
+                class="border border-brand-gold text-brand-gold hover:bg-brand-gold hover:text-brand-dark px-6 py-2 tracking-widest uppercase text-xs transition-all duration-300">
+                Inquire
+            </button>
+        </div>
+    </nav>
+
+    <!-- Section 1: Hero -->
+    <header class="relative min-h-screen flex items-center justify-center overflow-hidden">
+        <!-- Background Dark Gradient -->
+        <div class="absolute inset-0 bg-gradient-to-b from-brand-dark via-brand-dark/90 to-brand-dark z-10"></div>
+
+        <!-- Background Image -->
+        <div class="absolute inset-0 w-full h-full z-0 overflow-hidden opacity-30">
+            <img src="https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&q=80&w=2000"
+                class="w-full h-full object-cover ken-burns" alt="Abstract Lines">
+        </div>
+
+        <div class="relative z-20 max-w-5xl mx-auto px-8 w-full text-center">
+            <h2 class="text-brand-gold tracking-[0.3em] uppercase text-sm md:text-base mb-6">The Pinnacle of Robotics
+            </h2>
+
+            <h1 class="text-6xl md:text-8xl font-serif mb-6 leading-tight">
+                <span class="block text-white">Intelligent Motion.</span>
+                <span class="block gold-gradient italic">Autonomous Future.</span>
+            </h1>
+
+            <p class="text-xl md:text-2xl font-light text-gray-300 mb-12 tracking-wide">
+                Let's Build the Future Together.
+            </p>
+
+            <div class="w-px h-24 bg-gradient-to-b from-brand-gold to-transparent mx-auto"></div>
+        </div>
+    </header>
+
+    <!-- Section 2: Meet Argo -->
+    <section id="vision" class="py-32 bg-brand-dark relative z-20">
+        <div class="max-w-7xl mx-auto px-8">
+            <div class="flex flex-col lg:flex-row gap-20 items-center">
+
+                <div class="w-full lg:w-1/2 relative">
+                    <div class="absolute -inset-4 border border-brand-gold/30 p-4"></div>
+                    <img src="/argo.png" alt="ARGO"
+                        class="w-full h-auto object-cover filter drop-shadow-[0_20px_50px_rgba(212,175,55,0.15)] relative z-10 p-8"
+                        onerror="this.src='https://images.unsplash.com/photo-1546776310-eef45dd6d414?auto=format&fit=crop&q=80&w=800'">
+                </div>
+
+                <div class="w-full lg:w-1/2">
+                    <h2 class="text-4xl md:text-5xl font-serif mb-8 leading-tight">Meet <span
+                            class="gold-gradient italic">Argo</span></h2>
+                    <p class="text-lg text-gray-400 font-light leading-relaxed mb-12">
+                        ARGO (Autonomous Robot for Goods and Operations) is designed to move intelligently from one
+                        point to another, handling dynamic environments and real-world perturbations with uncompromising
+                        precision and ease.
+                    </p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                        <!-- Card 1 -->
+                        <div class="elegant-card p-6">
+                            <i class="fa-solid fa-diamond text-2xl text-brand-gold mb-4"></i>
+                            <h3 class="text-xl font-serif mb-2 text-white">Autonomous Navigation</h3>
+                            <p class="text-sm font-light text-gray-400">Independently plans and executes movement from
+                                origin to destination without manual intervention.</p>
+                        </div>
+
+                        <!-- Card 2 -->
+                        <div class="elegant-card p-6">
+                            <i class="fa-solid fa-infinity text-2xl text-brand-gold mb-4"></i>
+                            <h3 class="text-xl font-serif mb-2 text-white">Adaptive to Change</h3>
+                            <p class="text-sm font-light text-gray-400">Responds to obstacles, movement shifts, and
+                                environmental variations in real time.</p>
+                        </div>
+
+                        <!-- Card 3 -->
+                        <div class="elegant-card p-6">
+                            <i class="fa-solid fa-user-shield text-2xl text-brand-gold mb-4"></i>
+                            <h3 class="text-xl font-serif mb-2 text-white">Human-Centric Design</h3>
+                            <p class="text-sm font-light text-gray-400">Built to operate safely and naturally within
+                                human spaces and structured indoor environments.</p>
+                        </div>
+
+                        <!-- Card 4 -->
+                        <div class="elegant-card p-6">
+                            <i class="fa-solid fa-box-open text-2xl text-brand-gold mb-4"></i>
+                            <h3 class="text-xl font-serif mb-2 text-white">Purpose-Built for Goods</h3>
+                            <p class="text-sm font-light text-gray-400">Designed to transport items efficiently,
+                                reducing repetitive manual effort in everyday operations.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Section 3: Argo for Industries -->
+    <section id="sectors" class="py-32 bg-brand-charcoal relative border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-8 relative z-10 flex flex-col md:flex-row gap-16">
+
+            <div class="md:w-1/3">
+                <h2 class="text-5xl md:text-6xl font-serif mb-6 sticky top-32">
+                    Argo for <br /><span class="gold-gradient italic">Industries</span>
+                </h2>
+                <p class="text-gray-400 font-light sticky top-[250px]">
+                    Engineered to elevate operational efficiency across premier sectors.
+                </p>
+            </div>
+
+            <div class="md:w-2/3">
+                <!-- Industry 1 -->
+                <div class="industry-item group flex justify-between items-center">
+                    <div>
+                        <span class="text-brand-gold text-sm tracking-widest font-serif block mb-2">01</span>
+                        <h3 class="text-3xl md:text-4xl font-serif group-hover:text-brand-gold transition-colors">Luxury
+                            Hotels</h3>
+                    </div>
+                    <div
+                        class="icon-wrapper w-16 h-16 rounded-full border border-brand-gold flex items-center justify-center text-brand-gold">
+                        <i class="fa-solid fa-bell-concierge text-xl"></i>
+                    </div>
+                </div>
+
+                <!-- Industry 2 -->
+                <div class="industry-item group flex justify-between items-center">
+                    <div>
+                        <span class="text-brand-gold text-sm tracking-widest font-serif block mb-2">02</span>
+                        <h3 class="text-3xl md:text-4xl font-serif group-hover:text-brand-gold transition-colors">Smart
+                            Warehouses</h3>
+                    </div>
+                    <div
+                        class="icon-wrapper w-16 h-16 rounded-full border border-brand-gold flex items-center justify-center text-brand-gold">
+                        <i class="fa-solid fa-boxes-stacked text-xl"></i>
+                    </div>
+                </div>
+
+                <!-- Industry 3 -->
+                <div class="industry-item group flex justify-between items-center">
+                    <div>
+                        <span class="text-brand-gold text-sm tracking-widest font-serif block mb-2">03</span>
+                        <h3 class="text-3xl md:text-4xl font-serif group-hover:text-brand-gold transition-colors">Fine
+                            Dining & Cafes</h3>
+                    </div>
+                    <div
+                        class="icon-wrapper w-16 h-16 rounded-full border border-brand-gold flex items-center justify-center text-brand-gold">
+                        <i class="fa-solid fa-utensils text-xl"></i>
+                    </div>
+                </div>
+
+                <!-- Industry 4 -->
+                <div class="industry-item group flex justify-between items-center">
+                    <div>
+                        <span class="text-brand-gold text-sm tracking-widest font-serif block mb-2">04</span>
+                        <h3 class="text-3xl md:text-4xl font-serif group-hover:text-brand-gold transition-colors">
+                            Premium Household</h3>
+                    </div>
+                    <div
+                        class="icon-wrapper w-16 h-16 rounded-full border border-brand-gold flex items-center justify-center text-brand-gold">
+                        <i class="fa-solid fa-house-chimney text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+</body>
+
+</html>

@@ -31,6 +31,7 @@ import { onboardingAPI } from './services/onboarding'
 import NotificationWindow from './components/NotificationWindow'
 //  Components
 import LandingPage from './pages/LandingPage.jsx'
+import AboutPage from './pages/AboutPage.jsx'
 import PrivacyPolicy from './pages/PrivacyPolicy.jsx'
 import TermsAndConditions from './pages/TermsAndConditions.jsx'
 import CancellationAndRefunds from './pages/CancellationAndRefunds.jsx'
@@ -61,7 +62,7 @@ function ProtectedRoute({ children }) {
           const subResponse = await subscriptionAPI.getSubscriptionStatus()
           console.log('Subscription status response:', subResponse.data)
           setSubscriptionStatus(subResponse.data)
-          
+
           // Only check onboarding if user has active subscription
           if (subResponse.data.has_active_subscription) {
             console.log('User has active subscription, checking onboarding status')
@@ -164,40 +165,41 @@ function AppContent() {
             <Navigate to="/dashboard" replace /> :
             <LandingPage />
         } />
+        <Route path="/about" element={<AboutPage />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsAndConditions />} />
         <Route path="/cancellation-refunds" element={<CancellationAndRefunds />} />
         <Route path="/shipping" element={<Shipping />} />
         <Route path="/contact" element={<ContactUs />} />
-        <Route 
-          path="/add-blog" 
+        <Route
+          path="/add-blog"
           element={
             <BlogProtectedRoute>
               <AddBlogPage />
             </BlogProtectedRoute>
-          } 
+          }
         />
         <Route path="/blog" element={<BlogListingPage />} />
         <Route path="/blog/:slug" element={<BlogDetailPage />} />
-        
+
         {/* App Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/reset-password" element={<ForgotPassword />} />
-        
+
         {/* Subscription Routes */}
         <Route path="/subscription" element={<SubscriptionSelector />} />
         <Route path="/payment/success" element={<PaymentSuccess />} />
-        <Route 
-          path="/dashboard" 
+        <Route
+          path="/dashboard"
           element={
             <ProtectedRoute>
               <EmilyDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/emily" 
+        <Route
+          path="/emily"
           element={
             <ProtectedRoute>
               <EmilyDashboard />
@@ -210,7 +212,7 @@ function AppContent() {
             <ProtectedRoute>
               <CreatedContentDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
         <Route
           path="/social"
@@ -242,19 +244,19 @@ function AppContent() {
             <ProtectedRoute>
               <PostSuggestionsDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/atsn" 
+        <Route
+          path="/atsn"
           element={
             <ProtectedRoute>
               <ATSNDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/onboarding" 
-          element={<Onboarding />} 
+        <Route
+          path="/onboarding"
+          element={<Onboarding />}
         />
         <Route
           path="/edit-profile"
@@ -264,50 +266,50 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
-        <Route 
-          path="/profile" 
+        <Route
+          path="/profile"
           element={
             <ProtectedRoute>
               <Profile />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/google-callback" 
-          element={<GoogleCallback />} 
+        <Route
+          path="/google-callback"
+          element={<GoogleCallback />}
         />
-        <Route 
-          path="/auth/callback" 
-          element={<TokenExchangeHandler />} 
+        <Route
+          path="/auth/callback"
+          element={<TokenExchangeHandler />}
         />
-        <Route 
-          path="/billing" 
+        <Route
+          path="/billing"
           element={
             <ProtectedRoute>
               <BillingDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/settings" 
+        <Route
+          path="/settings"
           element={
             <ProtectedRoute>
               <SettingsDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/admin" 
+        <Route
+          path="/admin"
           element={
             <AdminProtectedRoute>
               <AdminDashboard />
             </AdminProtectedRoute>
-          } 
+          }
         />
       </Routes>
-      
+
       {/* Global Notification Window */}
-      <NotificationWindow 
+      <NotificationWindow
         notifications={notifications}
         onClose={removeNotification}
         onMarkAsRead={markAsRead}

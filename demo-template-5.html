@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARGO • Intelligent Motion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #fce7f3;
+        }
+
+        .blob-bg {
+            background-image:
+                radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
+                radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 1) 0, transparent 50%),
+                radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 1) 0, transparent 50%);
+            background-color: #111827;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #f43f5e, #8b5cf6, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-size: 200% 200%;
+            animation: gradient-shift 5s ease infinite;
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        .bento-box {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 2rem;
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            border: 2px solid white;
+        }
+
+        .bento-box:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 30px 50px -15px rgba(244, 63, 94, 0.2);
+            z-index: 10;
+        }
+
+        .hover-bg {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(244, 63, 94, 0.1), rgba(139, 92, 246, 0.1));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 0;
+        }
+
+        .bento-box:hover .hover-bg {
+            opacity: 1;
+        }
+
+        .blob-shape {
+            animation: mutate 10s ease-in-out infinite alternate;
+        }
+
+        @keyframes mutate {
+            0% {
+                border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+            }
+
+            50% {
+                border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+            }
+
+            100% {
+                border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+            }
+        }
+
+        .pill-badge {
+            background: linear-gradient(90deg, #f43f5e, #ec4899);
+            color: white;
+            padding: 8px 24px;
+            border-radius: 9999px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 14px 0 rgba(244, 63, 94, 0.39);
+        }
+    </style>
+</head>
+
+<body class="antialiased overflow-x-hidden">
+
+    <nav class="fixed w-full z-50 p-4">
+        <div
+            class="max-w-7xl mx-auto bg-white/80 backdrop-blur-xl rounded-full px-8 py-4 flex justify-between items-center shadow-sm border border-white/50">
+            <div class="text-2xl font-black tracking-tight flex items-center gap-2">
+                <div
+                    class="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-500 to-violet-500 flex items-center justify-center text-white text-sm">
+                    <i class="fa-solid fa-robot"></i>
+                </div>
+                ARGO
+            </div>
+            <div class="hidden md:flex gap-8 font-semibold text-gray-600">
+                <a href="#about" class="hover:text-rose-500 transition-colors">About</a>
+                <a href="#features" class="hover:text-violet-500 transition-colors">Features</a>
+                <a href="#industries" class="hover:text-blue-500 transition-colors">Industries</a>
+            </div>
+            <button
+                class="bg-gray-900 text-white px-6 py-2.5 rounded-full font-semibold hover:bg-gray-800 transition-all transform hover:scale-105 active:scale-95">
+                Get Started
+            </button>
+        </div>
+    </nav>
+
+    <!-- Section 1: Hero -->
+    <section
+        class="min-h-screen pt-32 pb-20 px-6 relative flex flex-col items-center justify-center text-center overflow-hidden">
+
+        <!-- Abstract gradient background blobs -->
+        <div
+            class="absolute top-20 right-[10%] w-96 h-96 bg-rose-300 rounded-full mix-blend-multiply filter blur-3xl opacity-50 blob-shape">
+        </div>
+        <div class="absolute bottom-20 left-[10%] w-96 h-96 bg-violet-300 rounded-full mix-blend-multiply filter blur-3xl opacity-50 blob-shape"
+            style="animation-delay: -5s;"></div>
+        <div
+            class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-40 -z-10">
+        </div>
+
+        <div class="relative z-10 max-w-5xl mx-auto flex flex-col items-center">
+            <div class="pill-badge mb-8 animate-bounce">
+                <span>Introducing Generation 2</span> <i class="fa-solid fa-sparkles text-yellow-300"></i>
+            </div>
+
+            <h1 class="text-6xl md:text-8xl font-black tracking-tighter mb-6 leading-[1.1] text-gray-900">
+                Intelligent Motion. <br />
+                <span class="gradient-text">Autonomous Future.</span>
+            </h1>
+
+            <p
+                class="text-xl md:text-2xl font-medium text-gray-600 mb-12 max-w-2xl bg-white/50 backdrop-blur-sm py-2 px-6 rounded-full inline-block border border-white">
+                Let's Build the Future Together 🤝
+            </p>
+
+            <div class="flex gap-4">
+                <button
+                    class="bg-gradient-to-r from-rose-500 to-violet-500 text-white px-8 py-4 rounded-full font-bold text-lg hover:shadow-lg hover:shadow-rose-500/30 transform hover:-translate-y-1 transition-all">
+                    Meet Argo
+                </button>
+            </div>
+        </div>
+
+        <div class="w-full max-w-4xl mx-auto mt-16 relative z-20">
+            <div class="absolute inset-0 bg-gradient-to-b from-transparent to-[#fce7f3] z-10 top-1/2"></div>
+            <img src="/argo.png" alt="ARGO Robot"
+                class="w-full h-auto max-h-[50vh] object-contain relative z-0 transform hover:scale-105 transition-transform duration-700 filter drop-shadow-2xl"
+                onerror="this.src='https://images.unsplash.com/photo-1546776310-eef45dd6d414?auto=format&fit=crop&q=80&w=800'">
+        </div>
+    </section>
+
+    <!-- Section 2: Meet Argo -->
+    <section id="features" class="py-24 px-6 relative z-20 -mt-20">
+        <div class="max-w-7xl mx-auto">
+
+            <div class="text-center mb-16">
+                <h2 class="text-4xl md:text-6xl font-black text-gray-900 mb-6">Meet <span
+                        class="text-violet-500">Argo</span></h2>
+                <div
+                    class="bg-white p-6 rounded-3xl shadow-xl max-w-3xl mx-auto text-lg md:text-xl font-medium text-gray-700 leading-relaxed border border-gray-100">
+                    <span class="text-2xl font-bold text-rose-500 mr-2">ARGO</span>
+                    (Autonomous Robot for Goods and Operations) is designed to move intelligently from one point to
+                    another, handling dynamic environments and real-world perturbations with ease. ✨
+                </div>
+            </div>
+
+            <!-- Bento Box Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-[250px]">
+
+                <!-- Card 1 -->
+                <div class="bento-box p-8 flex flex-col justify-between group lg:col-span-2">
+                    <div class="hover-bg"></div>
+                    <div class="relative z-10">
+                        <div
+                            class="w-14 h-14 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center text-white text-2xl mb-6 shadow-lg shadow-blue-500/30 transform group-hover:rotate-12 transition-transform">
+                            <i class="fa-solid fa-map-location-dot"></i>
+                        </div>
+                        <h3 class="text-3xl font-bold text-gray-900 mb-3">Autonomous<br />Navigation</h3>
+                        <p class="text-gray-600 font-medium text-lg max-w-md">Independently plans and executes movement
+                            from origin to destination without manual intervention.</p>
+                    </div>
+                </div>
+
+                <!-- Card 2 -->
+                <div
+                    class="bento-box p-8 flex flex-col justify-between group bg-gradient-to-br from-violet-50 to-fuchsia-50">
+                    <div class="hover-bg"></div>
+                    <div class="relative z-10 h-full flex flex-col">
+                        <div
+                            class="w-14 h-14 bg-gradient-to-br from-violet-400 to-fuchsia-500 rounded-2xl flex items-center justify-center text-white text-2xl mb-auto shadow-lg shadow-violet-500/30 transform group-hover:-rotate-12 transition-transform">
+                            <i class="fa-solid fa-code-merge"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-900 mb-2">Adaptive<br />to Change</h3>
+                            <p class="text-gray-600 font-medium">Responds to obstacles, shifts, and variations in real
+                                time.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 3 -->
+                <div
+                    class="bento-box p-8 flex flex-col justify-between group bg-gradient-to-br from-rose-50 to-orange-50 lg:col-span-1">
+                    <div class="hover-bg"></div>
+                    <div class="relative z-10 h-full flex flex-col">
+                        <div
+                            class="w-14 h-14 bg-gradient-to-br from-rose-400 to-orange-500 rounded-2xl flex items-center justify-center text-white text-2xl mb-auto shadow-lg shadow-rose-500/30 transform group-hover:scale-110 transition-transform">
+                            <i class="fa-regular fa-face-smile"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-900 mb-2">Human<br />Centric</h3>
+                            <p class="text-gray-600 font-medium">Built to operate safely within human spaces naturally.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 4 -->
+                <div class="bento-box p-8 flex flex-col justify-between group lg:col-span-2 overflow-hidden">
+                    <div class="hover-bg"></div>
+
+                    <div
+                        class="absolute right-0 bottom-0 w-64 h-64 bg-emerald-100 rounded-tl-full -z-0 opacity-50 group-hover:scale-110 transition-transform duration-500">
+                    </div>
+
+                    <div class="relative z-10 flex h-full items-center">
+                        <div class="flex-1 pr-8">
+                            <div
+                                class="w-14 h-14 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center text-white text-2xl mb-6 shadow-lg shadow-emerald-500/30">
+                                <i class="fa-solid fa-box-open"></i>
+                            </div>
+                            <h3 class="text-3xl font-bold text-gray-900 mb-3">Purpose-Built for Goods 📦</h3>
+                            <p class="text-gray-600 font-medium text-lg">Designed to transport items efficiently,
+                                reducing repetitive manual effort in everyday operations.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Section 3: Argo for Industries -->
+    <section id="industries" class="py-24 px-6 blob-bg text-white relative border-t-8 border-white">
+        <div class="max-w-7xl mx-auto">
+
+            <div class="text-center mb-16 relative z-10">
+                <span
+                    class="bg-white/10 text-white border border-white/20 px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider mb-6 inline-block backdrop-blur-md">Where
+                    we thrive</span>
+                <h2 class="text-5xl md:text-7xl font-black mb-4">Argo for <span
+                        class="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-violet-400">Industries</span>
+                </h2>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
+
+                <!-- Card 1 -->
+                <div
+                    class="bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-[2rem] hover:-translate-y-4 transition-transform duration-300 group">
+                    <div
+                        class="text-5xl mb-6 group-hover:scale-125 transition-transform duration-500 origin-left inline-block">
+                        🛎️</div>
+                    <h3 class="text-2xl font-bold mb-3">Hotels</h3>
+                    <p class="text-gray-300 font-medium text-sm">Elevating guest experiences with autonomous room
+                        deliveries and services.</p>
+                </div>
+
+                <!-- Card 2 -->
+                <div
+                    class="bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-[2rem] hover:-translate-y-4 transition-transform duration-300 delay-100 group">
+                    <div
+                        class="text-5xl mb-6 group-hover:scale-125 transition-transform duration-500 origin-left inline-block">
+                        🏭</div>
+                    <h3 class="text-2xl font-bold mb-3">Warehouses</h3>
+                    <p class="text-gray-300 font-medium text-sm">Optimizing logistics and internal transport for peak
+                        warehouse efficiency.</p>
+                </div>
+
+                <!-- Card 3 -->
+                <div
+                    class="bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-[2rem] hover:-translate-y-4 transition-transform duration-300 delay-200 group">
+                    <div
+                        class="text-5xl mb-6 group-hover:scale-125 transition-transform duration-500 origin-left inline-block">
+                        ☕</div>
+                    <h3 class="text-2xl font-bold mb-3">Restaurants<br />& Cafes</h3>
+                    <p class="text-gray-300 font-medium text-sm">Supporting staff by handling repetitive transport tasks
+                        effortlessly.</p>
+                </div>
+
+                <!-- Card 4 -->
+                <div
+                    class="bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-[2rem] hover:-translate-y-4 transition-transform duration-300 delay-300 group">
+                    <div
+                        class="text-5xl mb-6 group-hover:scale-125 transition-transform duration-500 origin-left inline-block">
+                        🏡</div>
+                    <h3 class="text-2xl font-bold mb-3">Household<br />Support</h3>
+                    <p class="text-gray-300 font-medium text-sm">Your reliable companion for chores and moving items
+                        safely at home.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+</body>
+
+</html>
