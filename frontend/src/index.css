@@ -5,8 +5,12 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    @apply overflow-x-hidden;
+  }
+
   body {
-    @apply font-sans text-slate-900 bg-[#fbfbfa];
+    @apply font-sans text-slate-900 bg-[#fbfbfa] overflow-x-hidden;
     /* Soft off-white like Notion */
   }
 }

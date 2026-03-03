@@ -231,15 +231,15 @@ const Page = () => {
 
 
         {/* Section 2: Meet Argo */}
-        <section id="argo" className="pt-12 pb-12 px-4 sm:px-6 relative z-20 border-t border-white/5 overflow-hidden backdrop-blur-sm">
+        <section id="argo" className="pt-8 pb-8 md:pt-12 md:pb-12 px-4 sm:px-6 relative z-20 border-t border-white/5 overflow-hidden backdrop-blur-sm">
           <div className="absolute inset-0 bg-gradient-to-br from-pink-900/30 via-purple-900/30 to-blue-900/30 pointer-events-none"></div>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(236,72,153,0.15),transparent_70%)] pointer-events-none"></div>
 
           <div className="max-w-7xl mx-auto relative z-10">
-            <div className="text-center mb-10 lg:mb-16">
-              <h2 className="text-[42px] md:text-[68px] font-black text-white mb-8">Meet <span className="text-pink-500">Argo</span></h2>
+            <div className="text-center mb-2 lg:mb-4">
+              <h2 className="text-[42px] md:text-[68px] font-black text-white mb-4 sm:mb-6">Meet <span className="text-pink-500">Argo</span></h2>
 
-              <div className="flex flex-col lg:flex-row items-center justify-between gap-12 lg:gap-20">
+              <div className="flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-12">
                 <div className="lg:w-1/2 flex flex-col items-start text-left text-[16px] md:text-[26px] font-medium text-gray-300 leading-relaxed md:leading-loose">
                   <div>
                     <span className="font-bold text-pink-500 mr-2">ARGO</span>
@@ -261,7 +261,7 @@ const Page = () => {
             </div>
 
             {/* Launch Banner */}
-            <div className="mt-12 sm:mt-16 w-full flex justify-center pb-4">
+            <div className="mt-4 sm:mt-6 mb-8 sm:mb-10 w-full flex justify-center">
               <div className="inline-flex items-center gap-2 px-5 py-2 sm:px-8 sm:py-3 rounded-full bg-[#1e1333] border border-pink-500/30 text-pink-400 font-medium text-[16px] md:text-[18px] shadow-[0_0_15px_rgba(236,72,153,0.1)] hover:shadow-[0_0_25px_rgba(236,72,153,0.2)] transition-shadow duration-300 cursor-default">
                 <Zap className="w-5 h-5 md:w-6 md:h-6" />
                 <span>Launching globally this May 16th</span>
@@ -375,8 +375,8 @@ const Page = () => {
 
               {/* Why atsn ai Card */}
               <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 lg:p-10 flex flex-col h-full hover:-translate-y-4 transition-all duration-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_8px_30px_rgb(0,0,0,0.12)]">
-                <h3 className="text-[26px] font-bold mb-4 flex items-center gap-2 text-white leading-tight">
-                  Why atsn <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">ai?</span>
+                <h3 className="text-[26px] font-bold mb-4 text-white leading-tight">
+                  Why atsn ai?
                 </h3>
                 <p className="text-[16px] text-gray-400 font-medium leading-relaxed">Indoor movement of goods and repetitive operations are still dependent on humans. This leads to inefficiency, higher costs, and fatigue. We bridge this gap.</p>
               </div>
