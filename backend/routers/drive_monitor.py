@@ -207,7 +207,13 @@ def _build_drive_service(creds):
 def _find_emily_folder(service) -> Optional[str]:
     for name in ("Emily", "emily", "EMILY"):
         q = f"name='{name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        resp = service.files().list(q=q, fields="files(id,name)", pageSize=10).execute()
+        resp = service.files().list(
+            q=q, 
+            fields="files(id,name)", 
+            pageSize=10,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
+        ).execute()
         files = resp.get("files", [])
         if files:
             return files[0]["id"]
@@ -387,7 +393,13 @@ def _compute_schedule_slots(
 def _list_subfolders(service, parent_id: str) -> List[dict]:
     """Return immediate child folders of parent_id."""
     q = f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-    resp = service.files().list(q=q, fields="files(id,name)", pageSize=200).execute()
+    resp = service.files().list(
+        q=q, 
+        fields="files(id,name)", 
+        pageSize=200,
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True
+    ).execute()
     return resp.get("files", [])
 
 
@@ -397,7 +409,13 @@ def _list_files_in_folder(service, folder_id: str) -> List[dict]:
     page_token = None
     while True:
         q = f"'{folder_id}' in parents and trashed=false and mimeType != 'application/vnd.google-apps.folder'"
-        kwargs = dict(q=q, fields="nextPageToken,files(id,name,mimeType,webContentLink,webViewLink,thumbnailLink)", pageSize=100)
+        kwargs = dict(
+            q=q, 
+            fields="nextPageToken,files(id,name,mimeType,webContentLink,webViewLink,thumbnailLink)", 
+            pageSize=100,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
+        )
         if page_token:
             kwargs["pageToken"] = page_token
         resp = service.files().list(**kwargs).execute()

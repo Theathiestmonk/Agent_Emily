@@ -1480,16 +1480,16 @@ async def get_leads(
 ):
     """Get all leads for current user with pagination"""
     try:
-        # Build base query for counting
-        count_query = supabase_admin.table("leads").select("*", count="exact").eq("user_id", current_user["id"])
+        # Build base query for counting (only fetch 'id' to keep response small)
+        count_query = supabase_admin.table("leads").select("id", count="exact").eq("user_id", current_user["id"])
         
         if status:
             count_query = count_query.eq("status", status)
         if source_platform:
             count_query = count_query.eq("source_platform", source_platform)
         
-        # Get total count
-        count_result = count_query.execute()
+        # Get total count — execute with limit=0 so no rows are transferred
+        count_result = count_query.limit(0).execute()
         total_count = count_result.count if hasattr(count_result, 'count') else 0
         
         # Build query for fetching leads
@@ -1500,7 +1500,9 @@ async def get_leads(
         if source_platform:
             query = query.eq("source_platform", source_platform)
         
-        query = query.order("created_at", desc=True).limit(limit).offset(offset)
+        # Cap limit at 10000 to prevent oversized responses
+        safe_limit = min(limit, 10000)
+        query = query.order("created_at", desc=True).limit(safe_limit).offset(offset)
         
         result = query.execute()
         leads = result.data if result.data else []
@@ -1509,18 +1511,40 @@ async def get_leads(
         if leads:
             lead_ids = [lead["id"] for lead in leads]
             
-            # Get all status histories for these leads, ordered by created_at desc
-            # We'll filter for the most recent one with a remark per lead
-            status_history_result = supabase_admin.table("lead_status_history").select("lead_id, reason, created_at").in_("lead_id", lead_ids).order("created_at", desc=True).execute()
+            # Batched status history fetch to avoid 400 Bad Request (URL too long)
+            status_history_data = []
+            batch_size = 50 # Smaller batch size to stay well within URL limits
             
-            # Create a map of lead_id to last remark
+            for i in range(0, len(lead_ids), batch_size):
+                batch = lead_ids[i:i + batch_size]
+                try:
+                    # For each batch, we still limit the results to avoid huge payloads per batch
+                    batch_limit = len(batch) * 5
+                    batch_result = supabase_admin.table("lead_status_history") \
+                        .select("lead_id, reason, created_at") \
+                        .in_("lead_id", batch) \
+                        .order("created_at", desc=True) \
+                        .limit(batch_limit) \
+                        .execute()
+                    
+                    if batch_result.data:
+                        status_history_data.extend(batch_result.data)
+                except Exception as e:
+                    logger.error(f"Error fetching status history batch {i//batch_size}: {e}")
+                    # Continue to next batch even if one fails
+                    continue
+            
+            # Create a map of lead_id to last remark using gathered data
             last_remarks = {}
             seen_leads = set()
             
-            if status_history_result.data:
-                for history in status_history_result.data:
+            if status_history_data:
+                # Since we ordered each batch by created_at desc, we still need to be careful if we have overlaps,
+                # but typically lead entries don't overlap across batches of IDs.
+                # However, within the global status_history_data, entries for the SAME lead will be grouped together
+                # and the first one encountered will be the most recent because of the SQL ORDER BY.
+                for history in status_history_data:
                     lead_id = history["lead_id"]
-                    # Only take the first (most recent) entry with a remark for each lead
                     if lead_id not in seen_leads and history.get("reason"):
                         last_remarks[lead_id] = history["reason"]
                         seen_leads.add(lead_id)
@@ -1533,9 +1557,9 @@ async def get_leads(
         return {
             "leads": leads,
             "total": total_count,
-            "limit": limit,
+            "limit": safe_limit,
             "offset": offset,
-            "has_more": (offset + limit) < total_count
+            "has_more": (offset + safe_limit) < total_count
         }
         
     except Exception as e:

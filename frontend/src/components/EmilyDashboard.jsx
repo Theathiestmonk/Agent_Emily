@@ -442,6 +442,8 @@ function EmilyDashboard() {
 
     setTodaysLeadsLoading(true)
     try {
+      // Ensure session is fresh before making parallel calls to prevent 401 race conditions
+      await supabase.auth.getSession()
       // Try cache first
       if (!forceRefresh) {
         const cached = localStorage.getItem(CACHE_KEY)
@@ -530,6 +532,8 @@ function EmilyDashboard() {
 
     setFollowUpLeadsLoading(true)
     try {
+      // Ensure session is fresh before making parallel calls to prevent 401 race conditions
+      await supabase.auth.getSession()
       // Check if we have cached data from today
       if (!forceRefresh) {
         const cachedData = localStorage.getItem(CACHE_KEY)

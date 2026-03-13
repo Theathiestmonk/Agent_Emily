@@ -304,14 +304,25 @@ class ContentFromDriveAgent:
             # Search for folder named 'emily' (case-insensitive search)
             # First try exact match
             query = "name='emily' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-            results = service.files().list(q=query, fields="files(id, name, parents)").execute()
+            results = service.files().list(
+                q=query, 
+                fields="files(id, name, parents)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True
+            ).execute()
             files = results.get('files', [])
             
             # If not found, try case-insensitive by getting all folders and filtering
             if not files:
                 logger.info("Exact match not found, searching all folders...")
                 query = "mimeType='application/vnd.google-apps.folder' and trashed=false"
-                all_folders = service.files().list(q=query, fields="files(id, name, parents)", pageSize=1000).execute()
+                all_folders = service.files().list(
+                    q=query, 
+                    fields="files(id, name, parents)", 
+                    pageSize=1000,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True
+                ).execute()
                 all_files = all_folders.get('files', [])
                 
                 # Filter for folders named 'emily' (case-insensitive)
@@ -352,7 +363,12 @@ class ContentFromDriveAgent:
             
             # Get all folders inside emily folder
             query = f"'{emily_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-            results = service.files().list(q=query, fields="files(id, name)").execute()
+            results = service.files().list(
+                q=query, 
+                fields="files(id, name)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True
+            ).execute()
             folders = results.get('files', [])
             
             logger.info(f"Found {len(folders)} folder(s) inside 'emily' folder: {[f['name'] for f in folders]}")
@@ -431,7 +447,12 @@ class ContentFromDriveAgent:
             
             # Get all folders inside platform folder and filter for those starting with "carousel"
             all_folders_query = f"'{platform_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-            all_folders = service.files().list(q=all_folders_query, fields="files(id, name)").execute()
+            all_folders = service.files().list(
+                q=all_folders_query, 
+                fields="files(id, name)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True
+            ).execute()
             
             # Filter folders that start with "carousel" (case-insensitive)
             carousel_folders = []
@@ -479,7 +500,12 @@ class ContentFromDriveAgent:
                 mime_query = " or ".join([f"mimeType='{mime}'" for mime in image_mime_types])
                 images_query = f"'{subfolder_id}' in parents and ({mime_query}) and trashed=false"
                 
-                images = service.files().list(q=images_query, fields="files(id, name, mimeType, size, modifiedTime, webViewLink, thumbnailLink)").execute()
+                images = service.files().list(
+                    q=images_query, 
+                    fields="files(id, name, mimeType, size, modifiedTime, webViewLink, thumbnailLink)",
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True
+                ).execute()
                 image_files = images.get('files', [])
                 
                 if not image_files:
@@ -566,7 +592,12 @@ class ContentFromDriveAgent:
                 query = f"'{folder_id}' in parents and ({mime_query}) and trashed=false"
                 
                 logger.info(f"Searching for regular images and videos in {platform} folder (ID: {folder_id})...")
-                results = service.files().list(q=query, fields="files(id, name, mimeType, size, modifiedTime, webViewLink, thumbnailLink)").execute()
+                results = service.files().list(
+                    q=query, 
+                    fields="files(id, name, mimeType, size, modifiedTime, webViewLink, thumbnailLink)",
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True
+                ).execute()
                 files = results.get('files', [])
                 
                 logger.info(f"Found {len(files)} regular file(s) in {platform} folder")
@@ -812,7 +843,10 @@ class ContentFromDriveAgent:
                     logger.info(f"📥 Downloading image: {file_name} (ID: {file_id})")
                     
                     # Download file content from Google Drive
-                    request = service.files().get_media(fileId=file_id)
+                    request = service.files().get_media(
+                        fileId=file_id,
+                        supportsAllDrives=True
+                    )
                     file_content = request.execute()
                     
                     logger.info(f"✅ Downloaded {len(file_content)} bytes for {file_name}")
